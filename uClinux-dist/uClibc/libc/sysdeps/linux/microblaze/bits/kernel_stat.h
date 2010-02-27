@@ -27,8 +27,8 @@ struct kernel_stat
 	unsigned int	st_mtime_nsec;
 	int		st_ctime;
 	unsigned int	st_ctime_nsec;
-	unsigned long  __unused4;
-	unsigned long  __unused5;
+	unsigned long	__unused4;
+	unsigned long	__unused5;
 };
 
 struct kernel_stat64

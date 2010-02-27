@@ -1240,9 +1240,9 @@ static void xenet_change_rx_flags(struct net_device *dev, int change)
 	{
 	  XLlTemac_Start(InstancePtr);
 	}
-
-	}
-
+      
+    }
+  
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -1441,9 +1441,9 @@ static void poll_gmii(unsigned long data)
 			 LED_STATE_OFF);
 	if(lp->phy_timer.function == &poll_gmii)
 	  {
-	/* Set up the timer so we'll get called again in 2 seconds. */
-	lp->phy_timer.expires = jiffies + 2 * HZ;
-	add_timer(&lp->phy_timer);
+	    /* Set up the timer so we'll get called again in 2 seconds. */
+	    lp->phy_timer.expires = jiffies + 2 * HZ;
+	    add_timer(&lp->phy_timer);
 	  }
 }
 

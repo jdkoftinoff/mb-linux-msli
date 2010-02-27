@@ -1422,7 +1422,7 @@ config UCLIBC_HAS_STDIO_AUTO_RW_TRANSITION
 	  fflush function or to a file positioning function (fseek, fsetpos,
 	  or rewind), and input shall not be directly followed by output without
 	  an intervening call to a file positioning function, unless the input
-	  operation encounters end­of­file.
+	  operation encounters end of file.
 
 	  Most people will answer Y.
 

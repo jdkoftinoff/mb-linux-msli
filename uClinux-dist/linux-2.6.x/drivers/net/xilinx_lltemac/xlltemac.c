@@ -868,128 +868,128 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
  ******************************************************************************/
 int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
-	u32 Reg;		/* Generic */
-	u32 RegRcw1;		/* Reflects original contents of RCW1 */
-	u32 RegTc;		/* Reflects original contents of TC  */
-	u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
-	u32 RegNewTc;		/* Reflects new contents of TC  */
-
-	XASSERT_NONVOID(InstancePtr != NULL);
-	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
-	/*
-	 * If the mutual exclusion is enforced properly in the calling code, we
-	 * should never get into the following case.
-	 */
-	XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
-					 XTE_RDY_OFFSET) &
-			XTE_RDY_HARD_ACS_RDY_MASK);
-
+  u32 Reg;		/* Generic */
+  u32 RegRcw1;		/* Reflects original contents of RCW1 */
+  u32 RegTc;		/* Reflects original contents of TC  */
+  u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
+  u32 RegNewTc;		/* Reflects new contents of TC  */
+  
+  XASSERT_NONVOID(InstancePtr != NULL);
+  XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
+  /*
+   * If the mutual exclusion is enforced properly in the calling code, we
+   * should never get into the following case.
+   */
+  XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+				   XTE_RDY_OFFSET) &
+		  XTE_RDY_HARD_ACS_RDY_MASK);
+  
   xdbg_printf(XDBG_DEBUG_GENERAL, "ClearOptions 0x%08x\n",Options);
-	xdbg_printf(XDBG_DEBUG_GENERAL, "Xtemac_ClearOptions: 0x%08x\n",
-		    Options);
-	/* Be sure device has been stopped */
-	if (InstancePtr->IsStarted == XCOMPONENT_IS_STARTED) {
-		return (XST_DEVICE_IS_STARTED);
-	}
-
-	/* Many of these options will change the RCW1 or TC registers.
-	 * Group these options here and change them all at once. What we are
-	 * trying to accomplish is to reduce the amount of IO to the device
-	 */
-
-	/* Grab current register contents */
-	RegRcw1 = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					   XTE_RCW1_OFFSET);
-	RegTc = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					 XTE_TC_OFFSET);
-	RegNewRcw1 = RegRcw1;
-	RegNewTc = RegTc;
-
-	/* Turn off jumbo packet support for both Rx and Tx */
-	if (Options & XTE_JUMBO_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling jumbo\n");
-		RegNewTc &= ~XTE_TC_JUM_MASK;
-		RegNewRcw1 &= ~XTE_RCW1_JUM_MASK;
-	}
-
-	/* Turn off VLAN packet support for both Rx and Tx */
-	if (Options & XTE_VLAN_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling vlan\n");
-		RegNewTc &= ~XTE_TC_VLAN_MASK;
-		RegNewRcw1 &= ~XTE_RCW1_VLAN_MASK;
-	}
-
-	/* Turn off FCS stripping on receive packets */
-	if (Options & XTE_FCS_STRIP_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling fcs strip\n");
-		RegNewRcw1 |= XTE_RCW1_FCS_MASK;
-	}
-
-	/* Turn off FCS insertion on transmit packets */
-	if (Options & XTE_FCS_INSERT_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling fcs insert\n");
-		RegNewTc |= XTE_TC_FCS_MASK;
-	}
-
-	/* Turn off length/type field checking on receive packets */
-	if (Options & XTE_LENTYPE_ERR_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling lentype err\n");
-		RegNewRcw1 |= XTE_RCW1_LT_DIS_MASK;
-	}
-
-	/* Disable transmitter */
-	if (Options & XTE_TRANSMITTER_ENABLE_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling transmitter\n");
-		RegNewTc &= ~XTE_TC_TX_MASK;
-	}
-
-	/* Disable receiver */
-	if (Options & XTE_RECEIVER_ENABLE_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling receiver\n");
-		RegNewRcw1 &= ~XTE_RCW1_RX_MASK;
-	}
-
-	/* Change the TC and RCW1 registers if they need to be
-	 * modified
-	 */
-	if (RegTc != RegNewTc) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: setting TC: 0x%0x\n",
-			    RegNewTc);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_TC_OFFSET, RegNewTc);
-	}
-
-	if (RegRcw1 != RegNewRcw1) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: setting RCW1: 0x%0x\n",
-			    RegNewRcw1);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_RCW1_OFFSET, RegNewRcw1);
-	}
-
-	/* Rest of options twiddle bits of other registers. Handle them one at
-	 * a time
-	 */
-
-	/* Turn off flow control */
-	if (Options & XTE_FLOW_CONTROL_OPTION) {
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_FCC_OFFSET);
-		Reg &= ~XTE_FCC_FCRX_MASK;
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_FCC_OFFSET, Reg);
-	}
-
-	/* Turn off promiscuous frame filtering */
-	if (Options & XTE_PROMISC_OPTION) {
+  xdbg_printf(XDBG_DEBUG_GENERAL, "Xtemac_ClearOptions: 0x%08x\n",
+	      Options);
+  /* Be sure device has been stopped */
+  if (InstancePtr->IsStarted == XCOMPONENT_IS_STARTED) {
+    return (XST_DEVICE_IS_STARTED);
+  }
+  
+  /* Many of these options will change the RCW1 or TC registers.
+   * Group these options here and change them all at once. What we are
+   * trying to accomplish is to reduce the amount of IO to the device
+   */
+  
+  /* Grab current register contents */
+  RegRcw1 = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				     XTE_RCW1_OFFSET);
+  RegTc = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				   XTE_TC_OFFSET);
+  RegNewRcw1 = RegRcw1;
+  RegNewTc = RegTc;
+  
+  /* Turn off jumbo packet support for both Rx and Tx */
+  if (Options & XTE_JUMBO_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling jumbo\n");
+    RegNewTc &= ~XTE_TC_JUM_MASK;
+    RegNewRcw1 &= ~XTE_RCW1_JUM_MASK;
+  }
+  
+  /* Turn off VLAN packet support for both Rx and Tx */
+  if (Options & XTE_VLAN_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling vlan\n");
+    RegNewTc &= ~XTE_TC_VLAN_MASK;
+    RegNewRcw1 &= ~XTE_RCW1_VLAN_MASK;
+  }
+  
+  /* Turn off FCS stripping on receive packets */
+  if (Options & XTE_FCS_STRIP_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling fcs strip\n");
+    RegNewRcw1 |= XTE_RCW1_FCS_MASK;
+  }
+  
+  /* Turn off FCS insertion on transmit packets */
+  if (Options & XTE_FCS_INSERT_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling fcs insert\n");
+    RegNewTc |= XTE_TC_FCS_MASK;
+  }
+  
+  /* Turn off length/type field checking on receive packets */
+  if (Options & XTE_LENTYPE_ERR_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling lentype err\n");
+    RegNewRcw1 |= XTE_RCW1_LT_DIS_MASK;
+  }
+  
+  /* Disable transmitter */
+  if (Options & XTE_TRANSMITTER_ENABLE_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling transmitter\n");
+    RegNewTc &= ~XTE_TC_TX_MASK;
+  }
+  
+  /* Disable receiver */
+  if (Options & XTE_RECEIVER_ENABLE_OPTION) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: disabling receiver\n");
+    RegNewRcw1 &= ~XTE_RCW1_RX_MASK;
+  }
+  
+  /* Change the TC and RCW1 registers if they need to be
+   * modified
+   */
+  if (RegTc != RegNewTc) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: setting TC: 0x%0x\n",
+		RegNewTc);
+    XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+			      XTE_TC_OFFSET, RegNewTc);
+  }
+  
+  if (RegRcw1 != RegNewRcw1) {
+    xdbg_printf(XDBG_DEBUG_GENERAL,
+		"Xtemac_ClearOptions: setting RCW1: 0x%0x\n",
+		RegNewRcw1);
+    XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+			      XTE_RCW1_OFFSET, RegNewRcw1);
+  }
+  
+  /* Rest of options twiddle bits of other registers. Handle them one at
+   * a time
+   */
+  
+  /* Turn off flow control */
+  if (Options & XTE_FLOW_CONTROL_OPTION) {
+    Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				   XTE_FCC_OFFSET);
+    Reg &= ~XTE_FCC_FCRX_MASK;
+    XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+			      XTE_FCC_OFFSET, Reg);
+  }
+  
+  /* Turn off promiscuous frame filtering */
+  if (Options & XTE_PROMISC_OPTION) {
     /*
       if we don't have multicast enabled, or don't use extended
       filtering, or turning those options off, disable promiscuous mode
@@ -999,16 +999,16 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
        || (Options & XTE_EXT_FILTER_OPTION)
        || ! (InstancePtr->Options & XTE_EXT_FILTER_OPTION))
       {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling promiscuous mode\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_AFM_OFFSET);
-		Reg &= ~XTE_AFM_PM_MASK;
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: setting AFM: 0x%0x\n", Reg);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_AFM_OFFSET, Reg);
-	}
+	xdbg_printf(XDBG_DEBUG_GENERAL,
+		    "Xtemac_ClearOptions: disabling promiscuous mode\n");
+	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				       XTE_AFM_OFFSET);
+	Reg &= ~XTE_AFM_PM_MASK;
+	xdbg_printf(XDBG_DEBUG_GENERAL,
+		    "Xtemac_ClearOptions: setting AFM: 0x%0x\n", Reg);
+	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+				  XTE_AFM_OFFSET, Reg);
+      }
     else
       {
 	/*
@@ -1023,22 +1023,22 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
       }
   }
 
-	/* Disable broadcast address filtering */
-	if (Options & XTE_BROADCAST_OPTION) {
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg |= XTE_RAF_BCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
-	}
-
-	/* Disable multicast address filtering */
-	if (Options & XTE_MULTICAST_OPTION) {
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg |= XTE_RAF_MCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
+  /* Disable broadcast address filtering */
+  if (Options & XTE_BROADCAST_OPTION) {
+    Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+			   XTE_RAF_OFFSET);
+    Reg |= XTE_RAF_BCSTREJ_MASK;
+    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		      XTE_RAF_OFFSET, Reg);
+  }
+  
+  /* Disable multicast address filtering */
+  if (Options & XTE_MULTICAST_OPTION) {
+    Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+			   XTE_RAF_OFFSET);
+    Reg |= XTE_RAF_MCSTREJ_MASK;
+    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		      XTE_RAF_OFFSET, Reg);
     
     /*
      * If extended filtering is enabled, and promiscuous mode is not,
@@ -1082,19 +1082,19 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 				      XTE_AFM_OFFSET, Reg);
 	    
 	  }
-	}
+      }
 
-	/* The remaining options not handled here are managed elsewhere in the
-	 * driver. No register modifications are needed at this time. Reflecting the
-	 * option in InstancePtr->Options is good enough for now.
-	 */
-
-	/* Set options word to its new value */
-	InstancePtr->Options &= ~Options;
+  /* The remaining options not handled here are managed elsewhere in the
+   * driver. No register modifications are needed at this time. Reflecting the
+   * option in InstancePtr->Options is good enough for now.
+   */
+  
+  /* Set options word to its new value */
+  InstancePtr->Options &= ~Options;
   xdbg_printf(XDBG_DEBUG_GENERAL, "ClearOptions result: 0x%08x\n",
 	      InstancePtr->Options);
-
-	return (XST_SUCCESS);
+  
+  return (XST_SUCCESS);
 }
 
 /*****************************************************************************/
