@@ -1,0 +1,98 @@
+# Common definitions for all architectures
+# Included from the various <arch>/config.arch files
+
+# We could include a lot more here, but for now, just the libraries
+
+UCLINUX_COMMON_LIB = 0
+
+ifdef UCLINUX_BUILD_LIB
+	UCLINUX_COMMON_LIB = 1
+endif
+
+ifdef UCLINUX_BUILD_USER
+	UCLINUX_COMMON_LIB = 1
+endif
+
+ifeq ($(UCLINUX_COMMON_LIB),1)
+	# Static versions of libraries
+	SLIBFLEX	=	-lfl
+	SLIBC		=	-lc
+	SLIBM		=	-lm
+	SLIBNETOLD		=	-lnetold
+	SLIBPCAP	=	-lpcap
+	ifdef DISABLE_SHARED_SSL
+		SLIBSSL		=	-Wl,-Bstatic -lssl -Wl,-Bdynamic
+		SLIBCRYPTO	=	-Wl,-Bstatic -lcrypto -Wl,-Bdynamic
+	else
+		SLIBSSL		=	-lssl
+		SLIBCRYPTO	=	-lcrypto
+	endif
+	SLIBATM		=	-latm
+	ifdef CONFIG_LIB_LIBCRYPT_OLD
+		SLIBCRYPT	=	-Wl,-Bstatic -lcrypt_old -Wl,-Bstatic -lcrypt
+	else
+		SLIBCRYPT	=	-Wl,-Bstatic -Wl,-Bstatic -lcrypt
+	endif
+	SLIBEXPAT	=	-lexpat
+	SLIBIXML	=	-lixml
+	SLIBJPEG	=	-ljpeg
+	SLIBPNG		=	-lpng
+	ifdef CONFIG_LIB_STLPORT_SHARED
+		SLIBSTDCPP	=	-lstdc++
+	else
+		SLIBSTDCPP	=	-Wl,-Bstatic -lstdc++ -Wl,-Bdynamic
+	endif
+	SLIBTHREADUTIL	=	-lthreadutil
+	SLIBPTHREAD	=	-lpthread
+	SLIBUPNP	=	-lupnp
+	SLIBZ		=	-lz
+
+	# Dynamic versions
+	LIBFLEX		=	$(SLIBFLEX)
+	LIBC		=	$(SLIBC)
+	LIBM		=	$(SLIBM)
+	LIBNETOLD		=	$(SLIBNETOLD)
+	LIBPCAP		=	$(SLIBPCAP)
+	LIBSSL		=	$(SLIBSSL)
+	LIBCRYPTO	=	$(SLIBCRYPTO)
+	LIBATM		=	$(SLIBATM)
+	ifdef CONFIG_LIB_LIBCRYPT_OLD
+		LIBCRYPT	=	-lcrypt_old	-lcrypt
+	else
+		LIBCRYPT	=	-lcrypt
+	endif
+	LIBDL		=	-ldl
+	LIBEXPAT	=	-lexpat
+	LIBGCC		=	-lgcc
+	LIBIBERTY	?=	-liberty
+	LIBIO		=	-lio
+	LIBIOSTREAM	=	-liostream
+	LIBIXML		=	$(SLIBIXML)
+	LIBJPEG		=	$(SLIBJPEG)
+	LIBPNG		=	$(SLIBPNG)
+	LIBSTDCPP	=	$(SLIBSTDCPP)
+	LIBTCL		=	-ltcl
+	LIBTHREADUTIL	=	$(SLIBTHREADUTIL)
+	LIBPTHREAD	=	$(SLIBPTHREAD)
+	LIBUPNP		=	$(SLIBUPNP)
+	LIBZ		=	$(SLIBZ)
+	ifeq ($(findstring glibc,$(LIBCDIR)),glibc)
+		LIBRESOLV	=	-lresolv
+	endif
+	ifneq ($(LIBCDIR),libc)
+		LIBUTIL		=	-lutil
+	endif
+
+	# STLPort
+	# Note that STL_INCDIR is not included by default since
+	# it can cause conflicts
+	STL_INCDIR=$(ROOTDIR)/include/STLport
+	STL_LIBDIR=$(ROOTDIR)/lib/STLport/lib
+
+	# Some make-foo to add the --fatal-warnings linker option, if supported
+	# (with thanks to Kbuild in 2.6)
+	# LDFLAGS += $(shell if $(CC) -Wl,--fatal-warnings -nostdlib -xc /dev/null -o /tmp/$$$$.out > /dev/null 2>&1; then echo "-Wl,--fatal-warnings"; rm /tmp/$$$$.out; fi;)
+
+	PKG_CONFIG_LIBDIR=$(ROOTDIR)/lib
+	GLIBJ_ZIP=$(ROOTDIR)/lib/classpath/install/share/classpath/glibj.zip
+endif

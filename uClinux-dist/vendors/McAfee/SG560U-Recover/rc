@@ -1,0 +1,34 @@
+echo "/etc/rc processing ..."
+mount -t proc proc /proc
+echo 2 >/proc/cpu/alignment
+hostname SG560U-Recover
+echo "Mounting Filesystems ..."
+mount -t sysfs none /sys
+mount -t tmpfs -o size=512k tmpfs /var
+mount -t tmpfs -o size=512k tmpfs /etc/config
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/dev
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+mount -t devpts devpts /dev/pts
+mount -t squashfs /dev/mtdblock2 /var/mnt
+mount -t tmpfs tmpfs /var/mnt/etc/config
+echo "Setting system clock ..."
+hwclock --hctosys --utc
+echo "Creating Default Config ..."
+flatfsd -w 
+echo "Restoring flash config to temporary directory ..."
+flatfsd -n -r -d /var/mnt/etc/config
+echo "Loading network drivers."
+modprobe ixp400
+cat /etc/IxNpeMicrocode.dat >/dev/ixNpe
+modprobe ixp400_eth
+setmac -p
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+echo "Loading USB drivers."
+mount -t usbfs none /proc/bus/usb
+ifconfig lo 127.0.0.1
+echo "/etc/rc complete."

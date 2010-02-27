@@ -1,0 +1,55 @@
+.\"     Title: IPSEC_VERIFY
+.\"    Author: 
+.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+.\"      Date: 11/14/2008
+.\"    Manual: 8 June 2002
+.\"    Source: 8 June 2002
+.\"
+.TH "IPSEC_VERIFY" "8" "11/14/2008" "8 June 2002" "8 June 2002"
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+ipsec verify - see if FreeSWAN has been installed correctly
+.SH "SYNOPSIS"
+.HP 6
+\fBipsec\fR \fIverify\fR [\-\-host\ \fIname\fR]
+.SH "DESCRIPTION"
+.PP
+Invoked without argument,
+\fIverify\fR
+examines the local system for a number of common system faults: IPsec not in path, no secrets file generated, pluto not running, and IPsec support not present in kernel (or IPsec module not loaded)\. If two or more interfaces are found, it performs checks relevant on an IPsec gateway: whether IP forwarding is allowed, and if so, whether MASQ or NAT rules are in play\.
+.PP
+In addition,
+\fIverify\fR
+performs checks relevant to Opportunistic Encryption\. It looks in forward DNS for a TXT record for the system\'s hostname, and in reverse DNS for a TXT record for the system\'s IP addresses\. It checks whether the system has a public IP\.
+.PP
+The
+\fB\-\-host\fR
+option causes
+\fBverify\fR
+to look for a TXT record for
+\fIname\fR
+in forward and reverse DNS\.
+.SH "FILES"
+.sp
+.RS 4
+.nf
+/proc/net/ipsec_eroute
+/etc/ipsec\.secrets
+.fi
+.RE
+.sp
+.SH "HISTORY"
+.PP
+Written for the Linux FreeS/WAN project <\fIhttp://www\.freeswan\.org\fR> by Michael Richardson\.
+.SH "BUGS"
+.PP
+\fIVerify\fR
+does not check for
+\fBipchains\fR
+masquerading\.
+.PP
+\fIVerify\fR
+does not look for TXT records for Opportunistic clients behind the system\.

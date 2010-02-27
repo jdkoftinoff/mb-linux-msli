@@ -1,0 +1,40 @@
+#!/usr/bin/vmware
+displayName                      = "McAfee SGSupport Emulator"
+guestOS                          = "other26xlinux"
+memsize                          = "128"
+config.version                   = "8"
+virtualHW.version                = "4"
+vmi.present                      = "TRUE"
+
+MemAllowAutoScaleDown            = "FALSE"
+MemTrimRate                      = "-1"
+
+uuid.action                      = "create"
+checkpoint.vmState               = ""
+
+ethernet0.present                = "TRUE"
+ethernet0.connectionType         = "bridged"
+ethernet0.virtualDev             = "vmxnet"
+
+ethernet1.present                = "TRUE"
+ethernet1.connectionType         = "bridged"
+ethernet1.virtualDev             = "vmxnet"
+
+usb.present                      = "FALSE"
+sound.present                    = "FALSE"
+floppy0.present                  = "FALSE"
+ide0:0.present                   = "FALSE"
+ide0:1.present                   = "FALSE"
+ide1:0.present                   = "FALSE"
+ide1:1.present                   = "FALSE"
+
+scsi0.present                    = "TRUE"
+scsi0:0.present                  = "TRUE"
+scsi0:0.fileName                 = "SGSupport.hdd.vmdk"
+scsi0:0.deviceType               = "disk"
+scsi0:0.autodetect               = "TRUE"
+scsi0:0.startConnected           = "TRUE"
+scsi0:0.mode                     = "persistent"
+scsi0:0.redo                     = ""
+scsi0:0.writeThrough             = "TRUE"
+scsi0:1.present                  = "FALSE"

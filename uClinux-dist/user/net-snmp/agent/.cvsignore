@@ -1,0 +1,11 @@
+.pure
+.purify
+.nfs*
+.gdb.auto.init
+.gdbinit
+.index
+mib.txt
+snmpd
+.libs
+*.lo
+*.la

@@ -1,0 +1,7 @@
+verbose "Initialising DHCP mode on eth0"
+set eth0dev [config ref ethernet<devname=eth0>]
+
+set eth0lan [config new dhcp_client interface $eth0dev]
+config set $eth0lan name "LAN"
+config set $eth0dev conn $eth0lan
+config set $eth0dev enabled 1

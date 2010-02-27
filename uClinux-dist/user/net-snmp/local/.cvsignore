@@ -1,0 +1,4 @@
+snmpcheck
+*.made
+*.c
+*.h

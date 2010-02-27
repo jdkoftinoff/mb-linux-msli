@@ -1,0 +1,4 @@
+verbose "Initialising SGSupport specific config"
+
+config set system.console enabled 1
+config set system.console executable /bin/cmdline.tcl

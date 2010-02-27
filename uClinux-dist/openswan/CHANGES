@@ -1,0 +1,687 @@
+
+Note that listings are in chronological order of release times, not in order
+of version numbers, so you will find 2.5.x and 2.6.x releases intersperced.
+
+See also docs/KNOWN_BUGS and http://bugs.openswan.org/
+
+v2.6.22
+* Malicious X.509 certificates could crash the asn.1 parser.
+  Found by Orange Labs vulnerability research team. Patches via
+  an irresponsible 0-day public announcement by Andreas Steffen 
+* NSS support via USE_LIBNSS updated [Avesh Agarwal]
+* Added USE_FIPSCHECK. [Avesh Agarwal]
+* NAT-T cleanup (no nat-t patch needed for >= 2.6.23) [Harald Jenny/David]
+* Enabled USE_DYNAMICDNS per default. Disabled USE_LWRES. [Paul]
+* Fix for gcc 4.4 errors [Avesh Agarwal]
+* AVC Denail with /var/tmp and openswan ipsec service [Avesh Agarwal]
+  (see https://bugzilla.redhat.com/show_bug.cgi?id=489113)
+* misc. fixes to the build system [mcr]
+* Updated various Copyrights [Paul]
+* Fix for DYNAMICDNS when dns name was unknown on initial load [David]
+* Fix for ttoaddr when passing AF_INET/AF_INET6 [David]
+* newer CA's (openssl) now use a crlnumber. Create one with 01 [Paul]
+* Fixes to new nat-t code (HAVE_UDP_ENCAP_CONVERT ) [mcr]
+* Some ipsec_tunnel KLIPS cleanups [mcr]
+* Implement a fallback to SW for failed HW requests [David]
+* Make sure that ipsec starts after the crypto layer [David]
+* Fix compilation without OCF and cryptoapi instead [David]
+* Fixes to compile with 2.6.29 [David]
+* Fixed to compile on 2.6.30 [Harald Jenny]
+* Fix for the default assigned of "ipsec0" to all packets [David]
+* Fix for concurrent ISAKMP negotiations from different hosts to a
+  single host with nhelpers>=1 [Anthony Tong]
+* UDP port 501 encaps to interop with Lucent in contrib/lucent
+  Contributed by  Rolando Zappacosta <zappacor@yahoo.com.ar>
+* Various warnings fixed in pluto [Gilles Espinasse]
+* Bugtracker bugs fixed:
+   #1031: Fail to compile KLIPS module on RHEL5.3 or CentOS5.3 [Mark Keir]
+   #1030: aggressive mode & dead peer detection fails [Tim Horsburgh]
+   #1023: Oops due to improper ipsec_sa destruction [Nick Jones]
+   #1036: sysctl variables are not correctly set anymore [David]
+
+v2.6.21
+* Fix for CVE-2009-0790 DPD crasher [Gerd v. Egidy/Paul]
+* Fix remaining SADB_EXT_MAX -> K_SADB_EXT_MAX entries. ["bencsathb"]
+* Fix ipsec setup --status not showing amount of tunnels with netkey [Tuomo]
+* Bugtracker bugs fixed:
+   #1016: rightid=%fromcert without rightcert causes crash 
+
+v2.6.20
+* Added support for USE_NSS (default false) [Avesh Agarwal]
+* USE_IPSEC_CONNECTION_LIMIT (default false) support for those who have to
+  deal with export restrictions [David]
+* Added "metric=" keyword to the conn section to allow host failover
+  from another interface to ipsec using route management. [David]
+* Split crypto calls off into liboswcrypto for easier FIPS handling [David]
+* Fix sprintf warning in init_crypto_helper [Owen Jacobson]
+* KLIPS could not be unloaded (requires updated nat-t patch) [David]
+* Fix crasher with disassociated pending (async) crypto requests [David]
+* Make pluto more verbose on aborting for embedded systems [David]
+* Fix for ipsec_kversion.h on kernels > 2.6.22 non-RHEL/SLE [David]
+* New parser was missing keep_alive= and force_keepalive= options [Paul]
+* Fix for ipsec whack --listevents [Shingo Yamawaki]
+* Fix compiling without OCF [David]
+* Fix for using kernel cryptoapi algs causing bad packets [David]
+* Fix ESP+IPCOMP processing [David]
+* Only calculate (expensive) irs->sa_len when debug is enabled [David]
+* Repaired missing code responsible for sending IPCOMP request to peer [David]
+* Make sure we only set NEXT_NONE on the last VID entry that we add [David]
+* Fix NETKEY with transport mode and NAT-T [Paul]
+  (does not yet fully fix bug #1004, as the wrong IP (inside vs outsid)
+   is used in the policy)
+* Fix for KLIPS with NAT-t so decrypted packets do not appear to come
+  from the hardcoded ipsec0 interface [Hiren Joshi]
+* Send the remote host address to PAM during XAUTH so that it may be used
+  for better logging/authentication purposes at the PAM end. [Ken Wilson]
+* Using Main and Aggressive mode could pick the wrong policy and fail [David]
+* Fix for main_inI2_outR2_tail() when compiled without DEBUG [Shingo Yamawaki]
+* Fix for bogus "discarding packet received during asynchronous work
+  (DNS or crypto)". We were queueing/dropping packets that were needed to
+  get the tunnel going [David]
+* The pluto event loop behaves more predictable under heavy load.
+* Fix for sending wrong state/cookies with async crypto  [David]
+* Do not sent duplicate status changes to the stats daemon [David]
+* Disable the warning if DH operations take more than 200ms [David]
+* Use K_SADB_EXT_MAX, not SADB_EXT_MAX in eroute.c [Carsten Schlote]
+* Fix for fmt_common_shell_out() using long PLUTO* vars [Carsten Schlote]
+* Bugtracker bugs fixed:
+   #1015: no building of ipsec.conf.5 manpage on 2.6.20dr2 
+   #1018: ipsec eroute --clear segfaults (KLIPS) [Carsten Schlote]
+   #1004: [partial fix] ipsec/l2tp server behind NAT/port forward broken [Paul]
+   #1014: compress=yes on initiator does not propose IPcomp [David]
+   #0982: kernel panic with compression=yes  [Florian Westphal]
+   #0949: not able to set nhelpers=0 [Shingo Yamawaki]
+
+v2.6.19
+* Fix for L2TP/IPsec with Windows machines having their packets
+  disgarded by accident [Hiren Joshi]
+* Workaround for bad "%v:" virtual_private= entries [paul]
+* Fixes to interop with SoftRemote/aggressive mode [David McCullough]
+* Fix for ERROR: Module xfrm6_tunnel is in use by ipcomp6 [paul]
+* Fix for using MODPROBE=insmod where insmod does not support -q [paul]
+* Enable all wins/dns options as specified in man pages [david]
+* build support for all WINS/DNS options as mentioned in the man pages [david]
+* Removed obsolete keywords: firewall (linux 2.0), spibase, spi,espenckey,
+  espauthkey and espreplay_window (manual keying) [paul]
+* Fix unneccesary and bogus connection switching with NAT [Shingo Yamawaki]
+  (this might relate to several reported bugs in the tracker)
+* Added cisco-decrypt utility for PCF obfuscation in contrib/ [paul]
+* Fix for crasher when the leftcert= filename was not found [paul]
+* Patch for "route already in use" when using two different IP's
+  to talk to the same remote IP using two tunnels [Avesh Agarwal]
+* Fixes to init scripts [Avesh/Tuomo]
+  See also: RedHat bugzilla #466861.
+* Bugtracker bugs fixed:
+   #992: keyingretries default changed from %forever to 3 [ken]
+         (bug was introduced in 2.6.x)
+   #981: plutodebug=all klipsdebug=all not operate. [paul]
+   #994: Not having leftid=%fromcert results in a pluto segmentation [paul]
+  #1003: virtual_private broken? [paul]
+
+v2.6.18
+* Fix for compiling KLIPS on RHEL/Centos 2.6.18-92.1.10.el5 [dhr/paul]
+* Fix in deleting connections that might have caused some of our Delete
+  Notifies to have gotten lost. Introduced in openswan 2.5.01 [paul]
+* Rekey= inverted yes/no, causing rekey=no to be rekey=yes [Shingo Yamawaki]
+* Some memory leaks / refcount fixes [Shingo Yamawaki]
+* Removed most of #ifdef CONFIG_KLIPS_DEBUG conditionals. We now always
+  compile in DEBUG support. [paul]
+* No longer use the assembly version of des_encrypt (dx86unix.S). It
+  is i386-i686 specific, requires framepointers and does not work with
+  CONFIG_REGPARM=y, which is the unconditional default for 2.6.17+ [paul]
+* Fix memory leak when we run out of descriptors [David McCullough]
+* Various memory leak fixes for pluto (from #macosx) [Ilia Sotnikov]
+* LEAK_DETECTIVE should report better now [Ilia Sotnikov]
+* Add support for USE_DMALLOC [Ilia Sotnikov]
+* Update stats to show dropped packets [David McCullough]
+* Allow session migration of OCF devices [Brad Vrabete]
+* DNS/WINS ModeConfig fixes [David McCullough]
+* refineconnection bug fix. This might cover various problems where
+  the right conn was not picked (eg rightca="%any" workaround, but
+  perhaps also some rekey issues) [paul]
+* unregister_netdevice: waiting for ppp2 to become free. Usage
+  count = -1 on kernels < 2.6.24 [Martin Schiller]
+* Fix for parallel building, eg with rpmbuild [tuomo]
+* Bugtracker bugs fixed:
+  #989: Patch for fixing type-punned compiler warnings [Alin Nastac]
+  #979: Two errors in debian/ packaging files (fix included) [ruben]
+  #978: ipsec.conf man page has typo in virtual_private sample line [tuomo]
+  #975: ipsec_setup: Unknown socket write error 96. [paul]
+  #231: In Aggressive Mode with NAT-T,initiator should switch port [hiren joshi]
+  #228: Problems with %any matching in ipsec.secrets? [David McCullough]
+  #984: OpenSwan 2.4.13: Wrong ipsec_dev_get(x) function for Kernels < 2.6.24 
+
+v2.6.17 [will be skipped due to bad tag]
+
+v2.6.16
+* Merged in David McCullough's OCF patch [david/paul]
+  Requires kernel patch, see http://ocf-linux.sourceforge.net/
+* dpdaction=restart_by_peer support added [david]
+* dynamic dns support (do dns lookup at restart conn, eg after dpd) [david]
+  Uses USE_DYNAMICDNS=
+* Added USE_SINGLE_CONF_DIR= [david]
+* KLIPS support for 2.6.24 / 2.6.25 [david]
+* Fix for "Unknown sysctl binary path" [david]
+* rekeyfuzz is percentage, not integer [david]
+* Added HAVE_STATSD= support to log state changes (for webgui etc) [david]
+  (disabled per default)
+* Wrapper to handle more then 2048 NETKEY tunnels [david]
+* fixes for parser warnings [dhr]
+* Fix rmmod calls not to use -s since busybox rmmod does not support it [paul]
+* Fixes to KLIPS for newer 2.4 kernels [greg/davidm]
+* Road Warrior behind NAT - Aggressive Mode: wrong NAT-T decision [hiren joshi]
+* Added documentation for leftxauthusername= and XAUTH passwd support [paul]
+* Bugtracker bugs fixed:
+  #977: KLIPS doesn't work when wan interface is a tagged vlan interface
+        Regression from 2.4? [Tino Keitel / Krisztian KOVACS]
+  #972: Aggressive mode connection breaks after DPD timeout for NATed peer
+  #965: xmlto man fails to generate ipsec.conf.5 man page  [tuomo]
+
+v2.6.15
+* Patch to support NETKEY backport on Debian kernels [Rene Mayrhofer]
+* Fix a crasher when using right=%any with plutodebug=controlmore [paul]
+* Fix a crasher when deleting connections in NETKEY [ken]
+* Added disable_port_floating support to scripts and parser and
+  repair the default back to allow port floating [paul]
+* Change (back) defaults of plutorestartoncrash and uniqueids from
+  no to yes. The new parser mistakenly did not set these [paul]
+* Revert af family code in find_host_pair causing some connections to not
+  be found in find_host_connection2() [paul]
+* Fixes to _updown.mast, _realsetup (mast) and startklips [paul]
+* Fixed to saref code so we can build on OSX again [paul]
+* Use PREROUTING instead of OUTPUT/FORWARD for mast [mcr]
+* NETKEY support for eroute_idle using get_sa_info() [herbert/andreas]
+* Do not send DPD "R_Y_THERE" when eroute not idle [andreas]
+* Support for Relative Distinguished Name "unstructuredName"/"UN"
+  in ID_DER_ASN1_DN identities (eg leftid="UN=John Doe") [andreas]
+* Removed forwardcontrol= and rp_filter= options. Ignore if present
+  in config file. Use /etc/sysctl.conf [paul]
+* Fix for left="%defaultroute" when using NETKEY [tuomo]
+* Fix for KLIPS on SMP systems (missing SOCKOPS_WRAP for pfkey_ops) [dhr/paul]
+* Merged in some IPsec SAref related code [mcr/paul]
+* Merged in packaging/suse for building rpms on SLES [paul]
+* Bugtracker bugs fixed:
+  #784 / #928 : openswan (pfs=yes) to vista (pfs=no) crasher [paul/dhr]
+  #934: mem leak in klips:ipsec_rcv_decap [Wolfgang Nothdurft]
+  #935: 935: Openswan 2.6.14rc5 refuses to start after carsh  [paul]
+  #939: Openswan 2.6.14rc5 crashes on startup if dns is not reachable [andreas]
+        (curl issue on 64bit platforms when dns is not available)
+  #953: disable_port_floating defaults to yes and config parser... [paul]
+  #954: patch to support DEFAULT_SOURCE using netkey [mdw21]
+  #957: pluto always gets --disable_port_floating parameter... [paul]
+  #963: rp_filter=%unchanged option causes assertion failure  [paul]
+  #964: make -j4 programs fail [tuomo]
+
+v2.6.14
+* Fix for integ vs prf mixup [herbert/antony] 
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=439771
+* Merged in v2.5.18 (see entries below) [paul]
+* Merged in v2.5.17 (see entries below) [paul]
+* Merged in v2.5.12-v2.5.16 (see entries below) [paul]
+* NETKEY and crypto modules did not get loaded automatically [paul]
+* Updated "clear" policy file for L root nameserver's new IP for OE. [paul]
+* Added testcase interop-ikev2-strongswan-06-aes192 [paul]
+* Removed "interfaces= is ignored when using the NETKEY stack" warning
+  as it caused confusion and a wrong patch in Fedora 9. [paul]
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=445179
+* Fix for a few warnings of using "en" uninitialised [dhr]
+* Various fixes on strnat, chdir, fwrite, fgets, etc. [paul]
+* Fix for a potential crasher when displaying status using certs [paul]
+* Removed obsoleted and unused  hardware random related defines [paul]
+* Maintanance on IKEv2 properties and names [paul]
+* IKEv2 rekey fix for initiator [herbert]
+* KLIPS fixes to compile on 2.6.24+ [david/paul]
+* Added AES-CCM support [herbert]
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=441383
+* Support for KLIPS on 2.6.24+ [david]
+* Bugtracker bugs fixed:
+  #943: Openswan 2.6.14rc5 pluto crash at ikev1_main.c:1145 
+  #936: EXPECTATION FAILED kernel_ops->eroute_idle != NULL [paul]
+  #930: 'best.len' and 'cur.len' may be uninitialised. [Michal Nazarewicz]
+  #781: %defaultroute detection broken on netkey for 2.5.x [paul]
+
+
+* Above 2.5.x merges brings in userland IPsec SAref support. Requires
+  kernel support, currently only supported with USE_MAST.(KLIPSNG)
+  Also requires kernel modification to add IP_IPSEC_REFINFO support 
+  This adds support for overlapip, allowing multiple clients behind the
+  same NAT router and multi clients on identical IP's behind different
+  NAT routers. For possible deployments, see doc/ipsecsaref.png
+
+v2.6.13
+* RFC4306 Section 3.3.5 IKEv2 Attribute KEY_LENGTH support [herbert/paul]
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=444166
+   https://bugzilla.redhat.com/show_bug.cgi?id=439771
+* Support for ESP_NULL and AH_NULL [herbert/paul]
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=442955
+   https://bugzilla.redhat.com/show_bug.cgi?id=442956
+* Close on file descriptors on exec (fixes SElinux avc denials) [Neil Horman]
+  See:
+   https://bugzilla.redhat.com/show_bug.cgi?id=442333
+* Fix a memory leak by removing unused variables alg_esp and alg_ike [dhr]
+* linux/include/crypto renamed to linux/include/klips-crypto [paul]
+* Fix for IKEv1-only policies attempting bogus IKEv2 rekeys [Miloslav Trmac]
+* Bugtracker bugs fixed:
+  #198: Connection not coming up automatically, plutowait=yes workaround [tuomo]
+  #622: pluto memory leak [dhr]
+  #916: KLIPS kmod fails to compile 2.6.22 based kernel (...) [paul]
+  #917: pluto fails to compile when using pam. xauth [Tamas Pal]
+  #922: pluto crashes on rekey failure [Miloslav Trmac]
+
+v2.6.12
+* Add aes-*-modp1024 proposals to default responder policy db [antony]
+  This is bug https://bugzilla.redhat.com/show_bug.cgi?id=439985
+* Fix for ikev1 continuation segfault (only the first helper's continuations
+  were cleaned up properly (eg. on dpd, sa expires..) [Anthony Tong]
+* Redid fix for leftsourceip/rightsourceip getting deleted [paul]
+  This is bug https://bugzilla.redhat.com/show_bug.cgi?id=432821
+* As per RFC 4309, use modp2048 as default for PSK with IKEv2 [paul]
+  Relates to https://bugzilla.redhat.com/show_bug.cgi?id=441588
+* Added workaround for INITIATOR/RESPONDER keys being swapped [herbert]
+* Preliminary work to support IKEv2_ENCR_AES_CCM__* algos [paul]
+* modprobe the AES ccm kernel module on startup [paul]
+
+v2.6.11
+* Fix state machine to pick proper Responder STATE_UNDEFINED state
+  when receiving R1 NO_PROPOSAL_CHOSEN [dhr/paul/antony]
+* Fixes to some enum tables that caused (null)'s in logs [dhr/paul]
+* Starting the prf+ counter from 1 instead of 0 [herbert]
+* Removed wrong Gr check [antony]
+* Added IKEv2 NO_PROPOSAL_CHOSEN processing [antony]
+* Clone st_ni/st_nr chunks for child SA [herbert]
+* Various smal logging changes - mostly to fix (null)'s [paul/dhr]
+* AUTH_ALGORITHM_HMAC_SHA2_* are now logged properly [paul]
+* interop-* testcase output updated [paul]
+
+
+v2.6.10
+* Includes fallback from IKEv2->IKEv1 [mcr]
+* IKEv2 bid-down attack recovery [mcr]
+* changes to I1 retransmission timers [mcr]
+* Only check for bid-down when POLICY_IKEV2_PROPOSE to avoid two ikev2
+  capable ikev1 instances from false detecting a biddown [paul]
+* Fix ikev2_trans struct (redhat bug #438826) [dhr/paul]
+* Revisit of 2.6.06 NOTIFY crasher - fixed again [paul]
+
+v2.6.09
+* Completed IKEv2 6msg exchange support [antony]
+
+v2.6.08
+* IKEv2 6msg exchange (responder, partially for initiator) [antony]
+* IKEv2 notify support [antony]
+* Some pullups from #testing related to NETKEY [paul/tuomo]
+* Added force_busy option for testing 6msg exchange [paul]
+* OSX compile fixes [paul]
+* sourceip= option fixed with NETKEY [paul]
+* ipsec setup restart with NETKEY fix [paul]
+* NETKEY, strongswan, racoon2 support in test harnass [paul/antony]
+
+v2.6.07
+* IKEv2 retransmit fixes [mcr]
+
+v2.5.18
+* Do not use the KMEM_CACHE macro for now, so KLIPS works on 2.6.23 [paul]
+* Sha2 support for X.509 certificates in pluto [Daniel Mueller]
+* Various memory leaks
+* uclibc workaround for malloc(0) abort. Fixes to not malloc 0 [paul]
+* Bugtracker bugs fixed
+ #917: pluto fails to compile when using pam. xauth [folti]
+ #919: Invalid memory access in show_dnskey of showhostkey.c [paul]
+
+v2.5.17
+* Implemented netlink_shunt_eroute() [paul]
+* Simplified _updown.netkey [tuomo]
+* Bugtracker bugs fixed
+  #460: Fix bogus header with delayed MAIN I2->R2 [Herbert Xu]
+  #496: kernel_alg_esp_auth_ok() call fixed - [gernot]
+  #761: pluto crashes after removing interface [Tillman Baumann]
+  #897/731: crash in alg_info_snprint() - ["Deep Throat"]
+  #889: backport from #ikev2 branch to fix ipsec_delete_sa with NETKEY [mcr]
+
+v2.6.06
+* Added IKEv2 X.509 CERTREQ [antony]
+* Interop fix for IKEv2 PSK - Use correct IETF Key Pad without \0 [paul]
+* Fixed a few IKEv2 related crashers on receiving a NOTIFY in R1 [paul]
+
+v2.6.05
+* Added IKEv2 X.509 CERT [antony/paul]
+
+v2.6.04
+* Added IKEv2 PSK AUTH [antony/paul]
+
+v2.6.03
+* Added IKEv2 RSA AUTH [mcr]
+
+#ikev2 (v2.6.01)
+* IKEv2 support
+
+#stable
+* Merged in XAUTH DNS/WINS server-side patch from Anna Wiejak [paul]
+  See: http://popoludnica.pl/?id=10100110 
+* Various fixes to the scripts for NETKEY [paul]
+* KLIPS support for the 2.6.23+ UDP ENCAP sockets [mcr]
+  Userland support not yet finished. This should obsolete the NAT-T patch
+  when finished.
+* incorporated changes between 2.4.8 and 2.4.9
+* incorporated changes between 2.4.9 and 2.4.10
+* Notice and gracefully fail to load KLIPS when we try to load esp/ah/ipcomp
+  protocol and another module already has registered these (eg esp4, ah4,
+  ipcomp) [paul]
+* Fix for KLIPS NAT-T dropping all packets on 64bit big endian machines [dhr]
+* FIx for KLIPS on 2.6.23.1 without CONFIG_NF_CONNTRACK* [paul]
+* Bugtracker bugs fixed:
+  #600: multiple definitions of passert_fail when cross-compiling.
+  #852: dd_connection() fails with ...not AH+ESP for type=passthrough conns
+  #708: vanilla kernel-2.6.19, KLIPS compile error (sock_unregister) [sergeil]
+  #654: XAUTH strips space out of username/password + patch [Dustin Lang]
+  #641: Herein patches to fix warnings if -Wshadow is used [andygay/paul]
+  #580: kernel 2.4.x cryptoapi broken [espakman]
+  #582: Cannot initiate on demand a connection with traffic selectors [Ilia Sotnikov]
+  #590: serpent lib used private kernel header [paul]
+  #544: the following error should only show up for x509 debugging: ... [paul]
+  #185: Deadlock in function "scx_release()" daemon pluto.(SMARTCARD) [Kurodo]
+
+v2.5.16
+* Implemented netlink_shunt_eroute() [paul]
+* Simplified _updown.netkey [tuomo]
+
+v2.5.15
+   change ipsec_breakroute to permit non-existant eroute's to be replaced.  
+   fix for NAT-T negotiation with IP address changes during negotiation.
+   adjusted addconn to support nat-t debug keywords.
+
+v2.5.14
+   failed attempt to fix ipsec_breakroute.
+   fixed leftsendcert= to be implemented in keyword parser.
+   introduced startnetkey functions.
+   UML kernel configuration canonicalization updated.
+
+v2.5.13
+   move DNS lookups from libipsecconf into pluto, where they belong. DNS lookups
+	are still only done once during conn load time, and are done synchronously.
+
+v2.5.12
+   A fix to detect that XEN has been patched into the kernel, and set
+   some of the 2.6.18 changes.
+   never log starter_log() things to stdout, they always go to stderr.
+   when a packet is passed through, do not call NF_IP_LOCAL_OUT, as it has already 
+	passed through the output hooks, and doing it again, confuses things
+	causing ip_route_me_harder() which creates a look, since it does the flow
+	lookup again. (This doesn't happen if the kernel hasn't got XFRM support)
+   fixed parsing of config file so that "version 2" is accepted.
+   fixed addconn to respect "right/left"sourceip=, new test case sourceip-01 
+   fixed processing of "first"/"last" packet for %trap/%hold conns in KLIPS, it now
+	properly forwards the packets when the packet is released.
+   
+
+v2.5.11
+   Some fixes in KLIPS for "ipsec eroute --clear" bug. It is not clear
+   why this suddendly became an issue, or if it would have been an issue
+   previously, given the right compiler optimization.
+   
+v2.5.10
+   Includes fixes for xmlto generation for _confread directory.
+
+v2.5.09
+   Minor fix to build process, updated CHANGES file.
+
+v2.5.08
+   Correct release.
+   Includes some changes to permit OE to work without nexthop,
+   however this seems to cause it to return an unreachable on 
+   the first message.
+
+v2.5.07	-dud due to release script error.
+
+v2.5.06
+   set LANGUAGE, LANG and LC_ALL in setup script.
+   change OE off by default note and scripts.
+   Merge of additional code from 2.4.
+   
+v2.5.05
+   2.5.03 and 2.5.04 were not properly released, and 2.5.05 now
+   is properly released and includes below items
+    
+v2.5.04
+    zero peer_ca to avoid crashes.
+    (include glob's may still not work correctly)
+
+v2.5.0sbs5
+    fixed issues with libwhack not getting built with VIRTUAL_IP.
+    adjusted programs/pluto/Makefile to depend upon libraries better
+
+v2.5.0sbs4
+    When a template conn is instantiated for a phase 1 configuration, it
+	may still need to be adjusted to a virtual IP address. In addition,
+	change the order of the virtual IP address setting and the
+	port-wildcard processing.
+        This patch also provides some additional debugging of the proposal
+	which actually processed by the machinery.
+
+    tests for L2TP+X.509 L2TP configuration --- 2 clients behind the
+        same NAT with certificates that need to have their connection both
+        instantiated (in phase 1) and virtualized (in phase 2).
+
+v2.5.03
+
+    ipsec.conf parsing should ignore keywords that start with x-
+	they are a form of structured comment.
+    added in forceencaps= keyword.
+    process wildcards with glob() in include statements.
+
+v2.5.02
+    fixed bug in ipsec.conf parser, where it could not read values
+       that had = in them (such as base64 encoded keys)
+    fixed bug in key continuation code that could cause a crash
+	if the DNS request timed out after the state was deleted
+	for other reasons.
+ 
+v2.5.01
+    merged xauthusername code base + multinet tests in.
+    removed /dev/hw_random from list of valid random sources on linux.
+        use "rngd" instead to feed /dev/random.
+
+v2.5.00 
+    fixed various bugs with lifetime values in ipsec.conf parser
+    AES-128 (group 5, MD5 or SHA1 for PRF) is now accepted for phase 1,
+	and it is now the preferred cipher as well. This should be the
+	case for Main mode, Aggressive mode, and for XAUTH client and
+	XAUTH server, and PSK and RSA sig mode.
+
+    fixes so that starter will now compile
+    move whacklib to lib/libwhack
+    adjust makefiles to work with OBJDIR version of Makefile.program
+    switch to OBJDIR in programs/* and lib/* if it is defined
+
+    added sanitizer for PID files
+    be smarter about including git version info into version
+    We need to use /dev/urandom first, as it has more random than /dev/random.
+       Otherwise, we run out really fast (within a few minutes)
+    Use endian.h when comiling out-of-kernel
+    patch to turn error about 17/500,0/0 vs 17/0 error with Cisco VPN3000
+       into a warning.
+    remove test for NAT-T VID vs NATD payload test. It fails for reasons
+       that are unknown at this time, and this check is really being pedantic.
+    MAJOR: use starter code for "addconn"
+    MAJOR: always use OBJDIRs, and compile on Windows (no kernel)
+    MAJOR: includes "Taproom" code --- TCL call outs from pluto at IKE
+		transition states. 
+
+v2.4.10
+* Fix for sock.sk_stamp type change in 2.6.22 [dhr]
+* Workaround for implementations that propose port 0 for l2tp to allow
+  us to connect to all their ports (instead of only 1701). This happens
+  with Cisco VPN 3000, OSX and Windows XP. This relates to various
+  reported bugs about rightprotoport=17/%any and CK_INSTANCE crashers [mcr]
+  Use the workaround for OSX clients using rightprotoport=17/0
+* Backport of fix for xauth name containing a space [paul]
+* Fix for final next payload in Aggressive Mode [David McCullough]
+* Fixes for compliling against 2.6.22 [David McCullough / Hugh Redelmeier]
+  (note: NAT-T KLIPS patch will not work on 2.6.23+)
+* Speed gains in the scripts on systems with many interfaces [David McCullough]
+* passert declaration fix [David McCullough]
+* A missed nfmark -> mark case in ipsec_sa.h [David McCullough]
+* Fix for ktime_to_timeval to use proper kernel versions [paul]
+* Added back -DCONFIG_KLIPS_ALG in KLIPSCOMPILE, which we require when not
+  building KLIPS with David's OCF patch [paul]
+* Added SElinux patch in contrib/ [Venkat Yekkirala]
+* Bugtracker bugs fixed:
+  #449: 17/%any is a template conn problem [mcr]
+  #708: vanilla kernel-2.6.19, KLIPS compile error (sock_unregister) [sergeil]
+  #796: can't compile 2.4.8 on kernel 2.4.34 (module_param fix) [sergeil]
+  #802: Error: "our client ID returned doesn't match my proposal" [mcr/paul]
+  #813: incorporate tuomo's lsb patch [tuomo]
+  #824: defaultroute detection fails with PPP default route [sergeil]
+  (this is also the bug introduced in 2.4.9 that causes failed subnet tunnels)
+  #855: Pluto restart impossible on busybox [paul]
+
+v2.4.9
+* Fix for Aggressive Mode with NAT-T (no negotiation in aggrmode) [mcr]
+* Integrated most openwrt workarounds - tested on whiterussian  [paul]
+* Typofix for smartcard support [andreas zwicker]
+* Fix for when responder PSK incorrectly uses pfs and has nhelpers=0
+  [Matthias Haas]
+  #801: Patch for fixing type-punned compiler warnings [Alin Nastac]
+  #811: Patch for using custom algs with CONFIG_KLIPS_ALG [iamscard]
+  #812: Bogus defaultroute nexthop for PPPoE (& PPP?) [BruceS]
+
+v2.4.10
+* Fix for sock.sk_stamp type change in 2.6.22 [dhr]
+* Workaround for implementations that propose port 0 for l2tp to allow
+  us to connect to all their ports (instead of only 1701). This happens
+  with Cisco VPN 3000, OSX and Windows XP. This relates to various
+  reported bugs about rightprotoport=17/%any and CK_INSTANCE crashers [mcr]
+  Use the workaround for OSX clients using rightprotoport=17/0
+* Backport of fix for xauth name containing a space [paul]
+* Fix for final next payload in Aggressive Mode [David McCullough]
+* Fixes for compliling against 2.6.22 [David McCullough / Hugh Redelmeier]
+  (note: NAT-T KLIPS patch will not work on 2.6.23+)
+* Speed gains in the scripts on systems with many interfaces [David McCullough]
+* passert declaration fix [David McCullough]
+* A missed nfmark -> mark case in ipsec_sa.h [David McCullough]
+* Fix for ktime_to_timeval to use proper kernel versions [paul]
+* Added back -DCONFIG_KLIPS_ALG in KLIPSCOMPILE, which we require when not
+  building KLIPS with David's OCF patch [paul]
+* Added SElinux patch in contrib/ [Venkat Yekkirala]
+* Bugtracker bugs fixed:
+  #449: 17/%any is a template conn problem [mcr]
+  #708: vanilla kernel-2.6.19, KLIPS compile error (sock_unregister) [sergeil]
+  #796: can't compile 2.4.8 on kernel 2.4.34 (module_param fix) [sergeil]
+  #802: Error: "our client ID returned doesn't match my proposal" [mcr/paul]
+  #813: incorporate tuomo's lsb patch [tuomo]
+  #824: defaultroute detection fails with PPP default route [sergeil]
+  (this is also the bug introduced in 2.4.9 that causes failed subnet tunnels)
+  #855: Pluto restart impossible on busybox [paul]
+
+v2.4.9
+* Fix for Aggressive Mode with NAT-T (no negotiation in aggrmode) [mcr]
+* Integrated most openwrt workarounds - tested on whiterussian  [paul]
+* Typofix for smartcard support [andreas zwicker]
+* Fix for when responder PSK incorrectly uses pfs and has nhelpers=0
+  [Matthias Haas]
+  #801: Patch for fixing type-punned compiler warnings [Alin Nastac]
+  #811: Patch for using custom algs with CONFIG_KLIPS_ALG [iamscard]
+  #812: Bogus defaultroute nexthop for PPPoE (& PPP?) [BruceS]
+
+v2.4.5
+* Fix for compiling on 2.6.14 kernels 
+* Refactored natd_lookup / hash code, probably fixes lot of NAT related bugs
+  #401 l2tp connection is not work with 2.6 build in IPSEC
+  #442 Pluto uses wrong port in NAT-D calculation
+  #450 macosx (possible generic PSK+NAT-T rekey bug: eroute already in use.
+  #462 updated patch for Openswan and OS X with NAT-T
+  #509 KLIPS compilation fail with kernel-2.6.14.2 
+
+
+v2.4.4
+  #487 ASSERTION FAILED at state.c:120:IS_ISAKMP_ENCRYPTED(isakmp_sa->st_state) 
+  (see http://www.openswan.org/niscc2/)
+  (proper fix in pluto_constants.h)
+* Fix for kernels having strstr
+* Various gcc4 warning fixes
+* disable CONFIG_IPSEC_NAT_TRAVERSAL per default so we can build KLIPS on
+  Fedora systems.
+* questionable spin_unlock commented out. Might fix reported SMP crashers.
+* update to permit alg code without module support
+* Fix for detecting proper kernel source/header directory on fedora
+* Various bugfixes as reported on http://bugs.openswan.org/
+  #499: check for module support in kernel for IPsec Modular Extensions
+  #500: recent awk breaks on 'setdefault' command
+
+
+v2.4.3
+  #487 ASSERTION FAILED at state.c:120:IS_ISAKMP_ENCRYPTED(isakmp_sa->st_state) 
+  (see http://www.openswan.org/niscc2/)
+  (incorrect fixed. version not released)
+
+v2.4.2
+* Fixes for compiling on 2.6.14 by David McCullough
+* Minor fixes to accomodate FC4 2.6.11 kernels.
+* Fix for compilation of KLIPS on 2.4.x kernels.
+* Fix for NAT-T on 2.4.31
+* Fix for 'short' packets with KLIPS on 2.4.x
+* Merged in Jacco's l2tp configuration examples
+* Various bugfixes as reported on http://bugs.openswan.org/
+  #286 Incorrect links in intro.html
+  #344 netkey-acquire patch
+  #376 install_ipsec_sa and install_inbound_ipsec_sa
+  #486 ASSERTION FAILED at crypto.c:258: key_size==(DES_CBC_BLOCK_SIZE * 3)
+  (see http://www.openswan.org/niscc2/)
+
+v2.4.1
+* Not publically released
+
+v2.4.0
+* NAT-T support for KLIPS on 2.6 (Sponsored by Astaro)
+* Additional Cipher support with KLIPS on 2.6 (Sponsored by Astaro)
+* Fix for NAT-T/PSK rekey (Ulrich @ Astaro)
+* Various bugfixes: #269, #328, #342, #350, #355, #357, #361, #363
+
+v2.3.1
+* NAT-T RFC support (mlafon/mcr)
+* NAT-T Server Side rewrite - handles rekeying alot better
+* NAT-T Client Side rekey bug fixed
+* Removed HowTo (obselete)
+* IPKG packaging updates
+* Log message updates
+* dpdaction=restart support 
+
+v2.3.0
+* KLIPS for 2.6 support (Experimental)
+  [ good results on FC3-AMD and vanilla/debian kernel source, but not
+    FC3-intel. Might be the grsecurity patch  ]
+* Aggressive Mode Support (client and server)
+* IKE Mode Config support (Experimental)
+* Cisco VPN 3xxx client Interop (Experimental)
+* Cryptographic helpers framework
+* Fixes for NAT-T on 2.4.28+ kernels.
+
+v2.2.0
+* Added RFC 3706 DPD support (see README.DPD)
+* Added AES from JuanJo's ALG patches
+* Fixes for /proc filesystem issues that started to appear in 2.4.25
+
+v2.1.2
+* Fix loading of 2.6 modules 
+* Fix for snprintfs() in /proc, new for 2.4.25 kernels (dhr/pw)
+* Fix checks for some log files/dirs in case they are sockets or pipes (pw)
+* Fix for crl.pem crash/core (dhr/as/kb)
+
+v2.1.1
+* Fix _pluto_adns installation path (kb)
+* Fix sending of X.509 CR's when no CA present (mcr)
+
+v2.1.0
+* NAT-T support (Mathieu Lafon - Arkoon)
+* X.509 fixes (Andreas Steffan)
+* New configuration file directive, {left|right}sourceip=#.#.#.# 
+  This will set the source address when talking to a particular 
+  connection.  This is very usefull to assign a static IP to your laptop 
+  while travelling.  This is based on Tuomo Soini's Advanced Routing 
+  patch.
+

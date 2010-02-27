@@ -1,0 +1,10 @@
+SG560-i2c PLL PROGRAMER
+-----------------------
+
+See the usage files in the specific target vendor directories.
+For example:
+
+  new-wave/vendors/McAfee/SG590/README.pll
+  new-wave/vendors/McAfee/SG8200/README.pll
+
+

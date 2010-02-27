@@ -1,0 +1,5 @@
+.libs
+*.lo
+*.la
+.gdb.auto.init
+.gdbinit

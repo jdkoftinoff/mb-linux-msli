@@ -1,0 +1,32 @@
+.EXPORT_ALL_VARIABLES:
+############################################################################
+
+VENDOR_CFLAGS = -DCONFIG_SNAPGEAR
+
+BUILD_NETtel = 1
+LINUXTARGET = bzImage
+
+# Get the version.
+include $(ROOTDIR)/vendors/$(CONFIG_VENDOR)/config.version
+
+# To override the vendor-global version do something like:
+# VERSIONPKG = 2.3.5u1
+
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/i386/config.arch
+
+RELFILES := images/bzImage images/configs.tar.gz images/initrd.gz \
+			images/SGSupport-com1-ide-hdd.zip,-com1-ide-hdd.zip \
+			images/SGSupport-com1-ide-hdd.sgu,-com1-ide-hdd.sgu \
+			images/SGSupport-vga-ide-hdd.zip,-vga-ide-hdd.zip \
+			images/SGSupport-vga-ide-hdd.sgu,-vga-ide-hdd.sgu \
+			images/SGSupport-vga-scsi-hdd.zip,-vga-scsi-hdd.zip \
+			images/SGSupport-vga-scsi-hdd.sgu,-vga-scsi-hdd.sgu \
+			images/SGSupport-vga-scsi-hdd-ovf.zip,-vga-scsi-hdd-ovf.zip \
+			images/SGSupport-vga-iso.zip,-vga-iso.zip \
+			images/SGSupport-com1-iso.zip,-com1-iso.zip
+
+############################################################################

@@ -1,0 +1,43 @@
+.\"     Title: IPSEC_VERSION
+.\"    Author: 
+.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+.\"      Date: 11/14/2008
+.\"    Manual: 29 Jun 2000
+.\"    Source: 29 Jun 2000
+.\"
+.TH "IPSEC_VERSION" "5" "11/14/2008" "29 Jun 2000" "29 Jun 2000"
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+ipsec_version - lists KLIPS version information
+.SH "SYNOPSIS"
+.HP 4
+\fBcat\fR \fI/proc/net/ipsec_version\fR
+.SH "OBSOLETE"
+.PP
+Note that ipsec_version is only supported on the classic KLIPS stack\. It is not supported on any other stack\.
+.SH "DESCRIPTION"
+.PP
+\fI/proc/net/ipsec_version\fR
+is a read\-only file which lists the currently running KLIPS version information\.
+.SH "EXAMPLES"
+.PP
+\fBFreeS/WAN version: 1\.4\fR
+.RS 4
+.RE
+.PP
+shows that the currently loaded
+\fBKLIPS\fR
+is from
+\fBFreeS/WAN 1\.4\.\fR
+.SH "FILES"
+.PP
+/proc/net/ipsec_version
+.SH "SEE ALSO"
+.PP
+ipsec(8), ipsec_manual(8), ipsec_eroute(5), ipsec_spi(5), ipsec_spigrp(5), ipsec_klipsdebug(5), ipsec_tncfg(8), ipsec_pf_key(5)
+.SH "HISTORY"
+.PP
+Written for the Linux FreeS/WAN project <\fIhttp://www\.freeswan\.org/\fR> by Richard Guy Briggs\.
