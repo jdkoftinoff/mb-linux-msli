@@ -77,8 +77,11 @@ TARGET_SUBARCH:=$(shell grep -s '^TARGET_SUBARCH' $(top_builddir)/.config | $(SE
 TARGET_SUBARCH:=$(strip $(subst ",, $(strip $(TARGET_SUBARCH))))
 RUNTIME_PREFIX:=$(strip $(subst //,/, $(subst ,/, $(subst ",, $(strip $(RUNTIME_PREFIX))))))
 DEVEL_PREFIX:=$(strip $(subst //,/, $(subst ,/, $(subst ",, $(strip $(DEVEL_PREFIX))))))
+KERNEL_HEADERS:=$(shell pwd | tr -d '\n' ; echo "/../linux-2.6.x/include")
+KERNEL_ASM_HEADERS:=$(shell pwd |tr -d '\n' ; echo "/../linux-2.6.x/arch/$(TARGET_ARCH)/include")
 KERNEL_HEADERS:=$(strip $(subst //,/, $(subst ,/, $(subst ",, $(strip $(KERNEL_HEADERS))))))
-export RUNTIME_PREFIX DEVEL_PREFIX KERNEL_HEADERS
+KERNEL_ASM_HEADERS:=$(strip $(subst //,/, $(subst ,/, $(subst ",, $(strip $(KERNEL_ASM_HEADERS))))))
+export RUNTIME_PREFIX DEVEL_PREFIX KERNEL_HEADERS KERNEL_ASM_HEADERS
 
 
 # Now config hard core
@@ -486,7 +489,7 @@ CFLAGS := -include $(top_builddir)include/libc-symbols.h \
 
 # Make sure that we can be built with non-C99 compilers, too.
 # Use __\1__ instead.
-CFLAGS += $(call check_gcc,-fno-asm,)
+CFLAGS += $(call check_gcc,)
 ifneq ($(strip $(UCLIBC_EXTRA_CFLAGS)),"")
 CFLAGS += $(subst ",, $(UCLIBC_EXTRA_CFLAGS))
 endif
@@ -629,7 +632,7 @@ else
 	PTNAME :=
 	PTINC  :=
 endif
-CFLAGS += -I$(KERNEL_HEADERS)
+CFLAGS += -I$(KERNEL_HEADERS) -I$(KERNEL_ASM_HEADERS)
 
 #CFLAGS += -iwithprefix include-fixed -iwithprefix include
 CC_IPREFIX:=$(shell $(CC) --print-file-name=include)

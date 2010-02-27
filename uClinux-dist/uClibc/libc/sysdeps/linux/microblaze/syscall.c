@@ -26,26 +26,21 @@ syscall (long num, arg_t a1, arg_t a2, arg_t a3, arg_t a4, arg_t a5, arg_t a6)
      off the stack even for (the majority of) system calls with fewer
      arguments; hopefully this won't cause any problems.  A1-A4 are in
      registers, so they're OK.  */
-  register arg_t a __asm__ (SYSCALL_ARG0) = a1;
-  register arg_t b __asm__ (SYSCALL_ARG1) = a2;
-  register arg_t c __asm__ (SYSCALL_ARG2) = a3;
-  register arg_t d __asm__ (SYSCALL_ARG3) = a4;
-  register arg_t e __asm__ (SYSCALL_ARG4) = a5;
-  register arg_t f __asm__ (SYSCALL_ARG5) = a6;
-  register unsigned long syscall __asm__ (SYSCALL_NUM) = num;
-  register unsigned long ret __asm__ (SYSCALL_RET);
-	unsigned long ret_sav;
+  register unsigned long ret;
 
-  *((unsigned long *)0xFFFF4004) = (unsigned int)('+');
-  __asm__ ("brlid r17, 08x; nop;"
+  asm (	"addk	r5, r0, %2	\n\t"
+	"addk	r6, r0, %3	\n\t"
+	"addk	r7, r0, %4	\n\t"
+	"addk	r8, r0, %5	\n\t"
+	"addk	r9, r0, %6	\n\t"
+	"addk	r10,r0, %7	\n\t"
+	"addk	r12,r0, %1	\n\t"
+	"brki	r14, 0x08	\n\t"
+	"addk	%0, r0, r3	\n\t"
        : "=r" (ret)
-       : "r" (syscall), "r" (a), "r" (b), "r" (c), "r" (d), "r" (e), "r" (f)
-       : SYSCALL_CLOBBERS);
-
-  ret_sav=ret;
-  *((unsigned long *)0xFFFF4004) = (unsigned int)('-');
-
-
+       : "r" (syscall), "r" (a1), "r" (a2), "r" (a3), "r" (a4), "r" (a5),
+		"r" (a6)
+       : "r3", "r5", "r6", "r7", "r8", "r9", "r10", "r12", "r14", "cc");
 
   __syscall_return (long, ret);
 }

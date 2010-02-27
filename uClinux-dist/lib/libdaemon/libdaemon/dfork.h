@@ -60,7 +60,7 @@ extern "C" {
  * parent's context, no child process will be created, and errno will
  * be set appropriately.
  */
-pid_t daemon_fork(void);
+pid_t daemon_vfork(int argc, char **argv);
 
 /** Allocate and initialize resources required by the
  * daemon_retval_xxx() functions. These functions allow the child to

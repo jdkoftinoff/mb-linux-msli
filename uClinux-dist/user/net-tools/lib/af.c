@@ -224,7 +224,10 @@ void aftrans_def(char *tool, char *argv0, char *dflt)
     free(buf);
 }
 
-
+static char *index(const char *s, int c)
+{
+return strchr(s, c);
+}
 /* Check our protocol family table for this family. */
 struct aftype *get_aftype(const char *name)
 {

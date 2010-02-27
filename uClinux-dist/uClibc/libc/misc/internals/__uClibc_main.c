@@ -99,12 +99,14 @@ extern void _dl_app_init_array(void);
 extern void _dl_app_fini_array(void);
 # ifndef SHARED
 /* These magic symbols are provided by the linker.  */
+#if 0
 extern void (*__preinit_array_start []) (void) attribute_hidden;
 extern void (*__preinit_array_end []) (void) attribute_hidden;
 extern void (*__init_array_start []) (void) attribute_hidden;
 extern void (*__init_array_end []) (void) attribute_hidden;
 extern void (*__fini_array_start []) (void) attribute_hidden;
 extern void (*__fini_array_end []) (void) attribute_hidden;
+#endif
 # endif
 #endif
 
@@ -254,7 +256,7 @@ void __uClibc_fini(void)
      * by __app_fini.  */
 # ifdef SHARED
     _dl_app_fini_array();
-# elif !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
+# elif 0 // !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
     size_t i = __fini_array_end - __fini_array_start;
     while (i-- > 0)
 	(*__fini_array_start [i]) ();
@@ -362,7 +364,7 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
 
     /* If __UCLIBC_FORMAT_SHARED_FLAT__, all array initialisation is handled
      * by __app_init.  */
-# if !defined (SHARED) && !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
+# if !defined (SHARED) && 0 // !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
     /* For dynamically linked executables the preinit array is executed by
        the dynamic linker (before initializing any shared object).
        For static executables, preinit happens rights before init.  */
@@ -381,7 +383,7 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
      * by __app_init.  */
 # ifdef SHARED
     _dl_app_init_array();
-# elif !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
+# elif 0 // !defined (__UCLIBC_FORMAT_SHARED_FLAT__)
     {
 	const size_t size = __init_array_end - __init_array_start;
 	size_t i;

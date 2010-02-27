@@ -18,7 +18,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 ifeq (.config,$(wildcard .config))
 include .config
 
-all: tools automake subdirs romfs image
+all: tools automake subdirs romfs
 else
 all: config_error
 endif
@@ -223,7 +223,7 @@ oldconfig_uClibc:
 #
 
 .PHONY: romfs
-romfs: romfs.newlog romfs.subdirs modules_install romfs.post
+romfs: romfs.newlog romfs.subdirs romfs.post # modules_install is excluded for now
 
 .PHONY: romfs.newlog
 romfs.newlog:

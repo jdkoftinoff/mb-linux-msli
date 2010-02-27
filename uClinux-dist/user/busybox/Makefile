@@ -281,8 +281,8 @@ MAKEFLAGS += -rR
 #AR		= $(CROSS_COMPILE)ar
 #NM		= $(CROSS_COMPILE)nm
 #STRIP		= $(CROSS_COMPILE)strip
-#OBJCOPY		= $(CROSS_COMPILE)objcopy
-#OBJDUMP		= $(CROSS_COMPILE)objdump
+OBJCOPY		= $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CROSS_COMPILE)objdump
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 DEPMOD		= /sbin/depmod
@@ -702,12 +702,12 @@ busybox_unstripped: $(busybox-all) FORCE
 	$(Q)rm -f .old_version
 
 busybox: busybox_unstripped
-ifeq ($(SKIP_STRIP),y)
+#ifeq ($(SKIP_STRIP),y)
 	$(Q)cp $< $@
-else
-	$(Q)$(STRIP) -s --remove-section=.note --remove-section=.comment \
-		busybox_unstripped -o $@
-endif
+#else
+#	$(Q)$(STRIP) -s --remove-section=.note --remove-section=.comment \
+#		busybox_unstripped -o $@
+#endif
 
 # The actual objects are generated when descending,
 # make sure no implicit rule kicks in

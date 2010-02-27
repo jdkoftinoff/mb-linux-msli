@@ -55,8 +55,17 @@ void write_packet() {
 	buffer * writebuf = NULL;
 	
 	TRACE(("enter write_packet"));
-	assert(!isempty(&ses.writequeue));
 
+// FIXME -- assert() gives false positives here
+#if 0
+	assert(!isempty(&ses.writequeue));
+#else
+	if(isempty(&ses.writequeue))
+	  {
+	    dropbear_exit("internal error: no packet to write");
+	    return;
+	  }
+#endif
 	/* Get the next buffer in the queue of encrypted packets to write*/
 	writebuf = (buffer*)examine(&ses.writequeue);
 

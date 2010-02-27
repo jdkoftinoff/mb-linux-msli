@@ -23,6 +23,11 @@
 #include <config.h>
 #endif
 
+/* FIXME -- chroot helper is not supported yet */
+#ifdef ENABLE_CHROOT
+#undef ENABLE_CHROOT
+#endif
+
 #include <assert.h>
 #include <getopt.h>
 #include <string.h>
@@ -1434,7 +1439,7 @@ int main(int argc, char *argv[]) {
         if (config.daemonize) {
             daemon_retval_init();
 
-            if ((pid = daemon_fork()) < 0)
+            if ((pid = daemon_vfork(argc,argv)) < 0)
                 goto finish;
             else if (pid != 0) {
                 int ret;

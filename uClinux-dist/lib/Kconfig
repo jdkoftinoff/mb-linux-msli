@@ -220,6 +220,18 @@ config LIB_EXPAT
 	help
 	  Force libexpat to be built.
 
+config LIB_LIBDAEMON
+	bool "Build libdaemon"
+	default n
+	help
+	  Force libdaemon to be built.
+
+config LIB_LIBCAP
+	bool "Build libcap"
+	default n
+	help
+	  Force libcap to be built.
+
 config LIB_ADNS
 	bool "Build adns"
 	default n

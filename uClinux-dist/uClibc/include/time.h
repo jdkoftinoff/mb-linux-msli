@@ -340,7 +340,7 @@ extern int nanosleep (__const struct timespec *__requested_time,
 
 /* Get resolution of clock CLOCK_ID.  */
 extern int clock_getres (clockid_t __clock_id, struct timespec *__res) __THROW;
-libc_hidden_proto(clock_getres)
+//libc_hidden_proto(clock_getres)
 
 /* Get current value of clock CLOCK_ID and store it in TP.  */
 extern int clock_gettime (clockid_t __clock_id, struct timespec *__tp) __THROW;
@@ -436,7 +436,7 @@ __END_DECLS
 
 #ifdef UCLIBC_INTERNAL
 /* Experiment. Grep for 'libc_hidden_proto(time)' if need to revert */
-libc_hidden_proto(time)
+//libc_hidden_proto(time)
 #endif
 
 

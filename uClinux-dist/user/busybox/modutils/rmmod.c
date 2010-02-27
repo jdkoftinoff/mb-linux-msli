@@ -10,6 +10,10 @@
 #include "libbb.h"
 #include <sys/syscall.h>
 
+#ifndef __NR_delete_module
+#define __NR_delete_module	129
+#endif
+
 #if ENABLE_FEATURE_2_6_MODULES
 static inline void filename2modname(char *modname, const char *afterslash)
 {

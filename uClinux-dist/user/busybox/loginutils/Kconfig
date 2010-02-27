@@ -162,10 +162,10 @@ config USER_BUSYBOX_LOGIN_SCRIPTS
 	  Enable this if you want login to execute $LOGIN_PRE_SUID_SCRIPT
 	  just prior to switching from root to logged-in user.
 
-config FEATURE_NOLOGIN
+config USER_BUSYBOX_FEATURE_NOLOGIN
 	bool "Support for /etc/nologin"
 	default y
-	depends on LOGIN
+	depends on USER_BUSYBOX_LOGIN
 	help
 	  The file /etc/nologin is used by (some versions of) login(1).
 	  If it exists, non-root logins are prohibited.

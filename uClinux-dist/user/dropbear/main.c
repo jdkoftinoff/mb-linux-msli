@@ -48,7 +48,14 @@ int main(int argc, char ** argv)
 {
 	
 	runopts * opts;
-
+        int errfd;
+	close(2);
+	errfd=open("/dev/console",O_WRONLY);
+        if(errfd<0) return 1;
+        if(errfd!=2) {
+	  dup2(errfd,2);
+          close(errfd);
+        }
 	/* get commandline options */
 	opts = getrunopts(argc, argv);
 

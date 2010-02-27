@@ -49,6 +49,11 @@ static int _init(void) {
             return -1;
         }
 
+        fcntl(_signal_pipe[0],F_SETFD,
+              fcntl(_signal_pipe[0],F_GETFD,0)|FD_CLOEXEC);
+        fcntl(_signal_pipe[1],F_SETFD,
+              fcntl(_signal_pipe[1],F_GETFD,0)|FD_CLOEXEC);
+
         if (daemon_nonblock(_signal_pipe[0], 1) < 0 || daemon_nonblock(_signal_pipe[1], 1) < 0) {
             daemon_signal_done();
             return -1;
@@ -153,3 +158,8 @@ int daemon_signal_next(void) {
 int daemon_signal_fd(void) {
     return _signal_pipe[0];
 }
+
+int _daemon_signal_write_fd(void) {
+    return _signal_pipe[1];
+}
+

@@ -5,7 +5,7 @@
  */
 
 #include <features.h>
-#include <alloca.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
 #include <dirent.h>
@@ -48,6 +48,8 @@ ssize_t __getdents64 (int fd, char *buf, size_t nbytes)
     ssize_t retval;
     size_t red_nbytes;
     struct kernel_dirent64 *skdp, *kdp;
+    char *tmpptr;
+    int tmp_errno;
     const size_t size_diff = (offsetof (struct dirent64, d_name)
 	    - offsetof (struct kernel_dirent64, d_name));
 
@@ -56,14 +58,22 @@ ssize_t __getdents64 (int fd, char *buf, size_t nbytes)
 	    nbytes - size_diff);
 
     dp = (struct dirent64 *) buf;
-    skdp = kdp = alloca (red_nbytes);
-
+    const size_t alignment = __alignof__ (struct dirent64);
+    tmpptr=(char*)malloc(red_nbytes+alignment-1);
+    if (!tmpptr) {
+      __set_errno (ENOMEM);
+      return -1;
+    }
+    skdp = kdp = (struct kernel_dirent64*)
+      (((unsigned long)tmpptr+alignment - 1)& ~(alignment - 1));
     retval = __syscall_getdents64(fd, (unsigned char *)kdp, red_nbytes);
-    if (retval == -1)
+    if (retval == -1) {
+        tmp_errno=errno;
+        free(tmpptr);
+	__set_errno (tmp_errno);
 	return -1;
-
+    }
     while ((char *) kdp < (char *) skdp + retval) {
-	const size_t alignment = __alignof__ (struct dirent64);
 	/* Since kdp->d_reclen is already aligned for the kernel structure
 	   this may compute a value that is bigger than necessary.  */
 	size_t new_reclen = ((kdp->d_reclen + size_diff + alignment - 1)
@@ -77,6 +87,7 @@ ssize_t __getdents64 (int fd, char *buf, size_t nbytes)
 	    if ((char *) dp == buf) {
 		/* The buffer the user passed in is too small to hold even
 		   one entry.  */
+	        free(tmpptr);
 		__set_errno (EINVAL);
 		return -1;
 	    }
@@ -93,6 +104,7 @@ ssize_t __getdents64 (int fd, char *buf, size_t nbytes)
 	dp = (struct dirent64 *) ((char *) dp + new_reclen);
 	kdp = (struct kernel_dirent64 *) (((char *) kdp) + kdp->d_reclen);
     }
+    free(tmpptr);
     return (char *) dp - buf;
 }
 

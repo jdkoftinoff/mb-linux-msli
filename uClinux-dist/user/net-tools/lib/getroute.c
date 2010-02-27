@@ -72,6 +72,10 @@ void getroute_init(void)
     x25_aftype.rprint = X25_rprint;
 #endif
 }
+static char *index(const char *s, int c)
+{
+return strchr(s, c);
+}
 
 int route_info(const char *afname, int options)
 {

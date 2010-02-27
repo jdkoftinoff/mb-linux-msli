@@ -27,7 +27,7 @@ die_if_not_dir "$top_builddir"
 
 
 # Just copy (no sanitization) some kernel headers.
-eval `grep ^KERNEL_HEADERS "$top_builddir/.config"`
+#eval `grep ^KERNEL_HEADERS "$top_builddir/.config"`
 if ! test "$KERNEL_HEADERS" \
 || ! test -d "$KERNEL_HEADERS/asm" \
 || ! test -d "$KERNEL_HEADERS/linux" \
@@ -53,6 +53,7 @@ if test "`(cd "$KERNEL_HEADERS"; env pwd)`" != "`(cd "$2"; env pwd)`"; then
 	# This is intended.
 	# (NB: you need busybox 1.11.x for this. earlier ones are slightly buggy)
 	cp -RHL "$KERNEL_HEADERS/asm"/*   "$2/asm"   || exit 1
+	cp -RHL "$KERNEL_ASM_HEADERS/asm"/* "$2/asm" || exit 1
 	cp -RHL "$KERNEL_HEADERS/linux"/* "$2/linux" || exit 1
 	# Linux 2.4 doesn't have it
 	if test -d "$KERNEL_HEADERS/asm-generic"; then

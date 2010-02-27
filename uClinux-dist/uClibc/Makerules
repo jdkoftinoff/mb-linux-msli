@@ -350,32 +350,33 @@ $(CRTRELOC): $(top_builddir)lib/%.o : $(top_srcdir)libc/sysdeps/linux/$(TARGET_A
 endif
 
 ifneq ($(wildcard $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/initfini.c),)
-CFLAGS-initfini.s := -S -g0 $(PICFLAG) -fno-inline-functions -finhibit-size-directive
+CFLAGS-initfini.s := -S -g0 $(PICFLAG) -fno-inline-functions #-finhibit-size-directive
 $(top_builddir)lib/initfini.s: $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/initfini.c
-	$(compile.c)
+	ucfront-gcc mb-gcc $(CFLAGS-initfini.s) -o $@ $<
 
 $(top_builddir)lib/defs.h: $(top_builddir)lib/initfini.s
 	$(Q)sed -n -e '/@TESTS_BEGIN/,/@TESTS_END/p' $< | \
 		gawk -f $(top_srcdir)extra/scripts/defs.awk > $@.tmp
 	$(Q)mv $@.tmp $@
 
-$(top_builddir)lib/crti.S: $(top_builddir)lib/initfini.s $(top_builddir)lib/defs.h
-	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
-		-e '/@_.*_PROLOG_BEGINS/,/@_.*_PROLOG_ENDS/p' \
-		-e '/@TRAILER_BEGINS/,$$p' $< > $@
+#$(top_builddir)lib/crti.S: $(top_builddir)lib/initfini.s $(top_builddir)lib/defs.h
+#	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
+#	       -e '/@_.*_PROLOG_BEGINS/,/@_.*_PROLOG_ENDS/p' \
+#	       -e '/@TRAILER_BEGINS/,$$p' $< > $@
 
-$(top_builddir)lib/crtn.S: $(top_builddir)lib/initfini.s
-	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
-		-e '/@_.*_EPILOG_BEGINS/,/@_.*_EPILOG_ENDS/p' \
-		-e '/@TRAILER_BEGINS/,$$p' $< > $@
+$(top_builddir)lib/crtn.S $(top_builddir)lib/crti.S: $(top_builddir)lib/initfini.s
+	@cd $(top_builddir)lib/ ; gawk -f ../libc/sysdeps/linux/$(TARGET_ARCH)/initfini.awk < initfini.s 
+#	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
+#	       -e '/@_.*_EPILOG_BEGINS/,/@_.*_EPILOG_ENDS/p' \
+#	       -e '/@TRAILER_BEGINS/,$$p' $< > $@
 
 $(CTOR_TARGETS): $(top_builddir)lib/%.o : $(top_builddir)lib/%.S
 	$(Q)$(INSTALL) -d $(dir $@)
-	$(compile.S) $(PICFLAG) $(SSP_DISABLE_FLAGS)
+	ucfront-gcc mb-gcc -c $(PICFLAG) $(SSP_DISABLE_FLAGS) -o $@ $<
 else
 $(CTOR_TARGETS): $(top_builddir)lib/%.o : $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/%.S
 	$(Q)$(INSTALL) -d $(dir $@)
-	$(compile.S) $(PICFLAG) $(SSP_DISABLE_FLAGS)
+	ucfront-gcc mb-gcc -c $(PICFLAG) $(SSP_DISABLE_FLAGS) -o $@ $<
 endif
 
 #ifeq ($(TARGET_ARCH),nios)

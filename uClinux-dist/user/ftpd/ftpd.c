@@ -1669,12 +1669,14 @@ static void
 dolog (struct sockaddr_in *sin, struct credentials *pcred)
 {
   const char *name;
+#if 0
   struct hostent *hp = gethostbyaddr ((char *)&sin->sin_addr,
 				      sizeof (struct in_addr), AF_INET);
 
   if (hp)
     name = hp->h_name;
   else
+#endif
     name = inet_ntoa (sin->sin_addr);
 
   if (pcred->remotehost)

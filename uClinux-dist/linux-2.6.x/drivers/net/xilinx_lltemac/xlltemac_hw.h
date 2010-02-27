@@ -86,6 +86,12 @@ extern "C" {
 #define XTE_LSW_OFFSET  0x00000024  /**< Least significant word data */
 #define XTE_CTL_OFFSET  0x00000028  /**< Control */
 #define XTE_RDY_OFFSET  0x0000002C  /**< Ready status */
+
+/* The following two registers only work in extended filtering mode */
+#define XTE_UAWL_OFFSET 0x00000030  /**< Unicast address word lower */
+#define XTE_UAWU_OFFSET 0x00000034  /**< Unicast address word upper */
+
+#define XTE_TEMAC1_OFFSET 0x00000040  /**< Start of TEMAC1 registers block */
 /*@}*/
 
 
@@ -105,6 +111,7 @@ extern "C" {
 #define XTE_EMMC_OFFSET         0x00000300  /**< EMAC mode configuration */
 #define XTE_PHYC_OFFSET         0x00000320  /**< RGMII/SGMII configuration */
 #define XTE_MC_OFFSET           0x00000340  /**< Management configuration */
+/* The following four registers only work without extended filtering mode */
 #define XTE_UAW0_OFFSET         0x00000380  /**< Unicast address word 0 */
 #define XTE_UAW1_OFFSET         0x00000384  /**< Unicast address word 1 */
 #define XTE_MAW0_OFFSET         0x00000388  /**< Multicast address word 0 */
@@ -114,6 +121,11 @@ extern "C" {
 #define XTE_TIE_OFFSET          0x000003A4  /**< Interrupt enable */
 #define XTE_MIIMWD_OFFSET       0x000003B0  /**< MII management write data */
 #define XTE_MIIMAI_OFFSET       0x000003B4  /**< MII management access initiate */
+
+/* Multicast tables (only used in extended filtering mode) */
+#define XTE_MCAST0_TABLE_OFFSET 0x00020000
+#define XTE_MCAST1_TABLE_OFFSET 0x00060000
+#define XTE_MCAST_TABLE_SIZE    0x00020000
 /*@}*/
 
 
@@ -130,6 +142,9 @@ extern "C" {
 #define XTE_RAF_HTRST_MASK       0x00000001 /**< Hard TEMAC Reset */
 #define XTE_RAF_MCSTREJ_MASK     0x00000002 /**< Reject receive multicast destination address */
 #define XTE_RAF_BCSTREJ_MASK     0x00000004 /**< Reject receive broadcast destination address */
+#define XTE_RAF_NEWFUNC_MASK     0x00000800 /**< New functions enable */
+#define XTE_RAF_EXT_FILTER_MASK  0x00001000 /**< Extended destination address filtering mode */
+
 /*@}*/
 
 /** @name Transmit Pause Frame Register (TPF)
@@ -290,6 +305,14 @@ extern "C" {
                                                     Station address bits [31:0] 
                                                     are stored in register
                                                     UAW0 */
+
+/** @name EMAC Unicast Address Word Upper (UAWU)
+ * @{
+ */
+#define XTE_UAWU_UNICASTADDR_MASK 0x0000FFFF   /**< Station address bits [47:32]
+                                                    Station address bits [31:0] 
+                                                    are stored in register
+                                                    UAWL */
 /*@}*/
 
 
@@ -323,6 +346,51 @@ extern "C" {
 #define XTE_MIIM_PHYAD_SHIFT    5	/**< MII Shift bits for PHYAD */
 /*@}*/
 
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+
+/*
+ * Those constants are specific to MARVELL 88E1111 PHY chip on
+ * many Xilinx boards and assumes GMII interface is being used
+ * by the TEMAC.
+ */
+
+#define MARVELL_88E1111_PHY_SPECIFIC_STATUS_REG_OFFSET  17
+#define MARVELL_88E1111_LINKSPEED_MARK                  0xC000
+#define MARVELL_88E1111_LINKSPEED_SHIFT                 14
+#define MARVELL_88E1111_LINKSPEED_1000M                 0x0002
+#define MARVELL_88E1111_LINKSPEED_100M                  0x0001
+#define MARVELL_88E1111_LINKSPEED_10M                   0x0000
+#define MARVELL_88E1111_LINK_DUPLEX                     0x2000
+#define MARVELL_88E1111_LINK_RESOLVED                   0x1000
+#define MARVELL_88E1111_LINK_UP                         0x0400
+
+#define MARVELL_88E1112_PAGE_REG                        22
+#endif
+
+/*
+ * Constants for Marvell 88E1111 RGMII
+ */
+
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII
+#define MARVELL_88E1111_EXTENDED_PHY_CTL_REG_OFFSET  20
+#define MARVELL_88E1111_EXTENDED_PHY_STATUS_REG_OFFSET  27
+#endif
+
+/*
+ * Constants for National DP83865
+ */
+#ifdef CONFIG_XILINX_LLTEMAC_NATIONAL_DP83865_GMII
+#define NATIONAL_DP83865_CONTROL_INIT       0x9200
+#define NATIONAL_DP83865_CONTROL            0
+#define NATIONAL_DP83865_STATUS             1
+#define NATIONAL_DP83865_STATUS_LINK        0x04
+#define NATIONAL_DP83865_STATUS_AUTONEGEND  0x20
+#define NATIONAL_DP83865_STATUS_AUTONEG     0x11
+#define NATIONAL_DP83865_LINKSPEED_1000M    0x10
+#define NATIONAL_DP83865_LINKSPEED_100M     0x8
+#define NATIONAL_DP83865_LINKSPEED_MASK     0x18
+#define NATIONAL_DP83865_RETRIES            5
+#endif
 
 /** @name Checksum offload buffer descriptor extensions
  * @{

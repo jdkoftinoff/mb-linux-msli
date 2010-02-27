@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 	if (lstat(argv[i], &stbuf) != 0) {
 	    fprintf(stderr, "%s (%s)\n", argv[i], strerror(errno));
 	} else if (recursive) {
-	    nftw(argv[i], do_getcap, 20, FTW_PHYS);
+	    //FIXME nftw(argv[i], do_getcap, 20, FTW_PHYS);
 	} else {
 	    int tflag = S_ISREG(stbuf.st_mode) ? FTW_F :
 		(S_ISLNK(stbuf.st_mode) ? FTW_SL : FTW_NS);

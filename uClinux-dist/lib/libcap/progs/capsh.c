@@ -294,7 +294,7 @@ int main(int argc, char *argv[], char *envp[])
 	    if (value == 0) {
 		goto usage;
 	    }
-	    child = fork();
+	    child = vfork();
 	    if (child < 0) {
 		perror("unable to fork()");
 	    } else if (!child) {

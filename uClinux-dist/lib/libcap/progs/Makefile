@@ -16,6 +16,8 @@ LDFLAGS += --static
 endif
 LDLIBS += -lcap
 
+LDFLAGS +=-Wl,-elf2flt
+
 all: $(BUILD)
 
 $(BUILD): %: %.o

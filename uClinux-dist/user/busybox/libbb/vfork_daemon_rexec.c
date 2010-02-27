@@ -201,7 +201,7 @@ int spawn_and_wait(char **argv)
 }
 
 #if !BB_MMU
-void re_exec(char **argv)
+void re_exec_me(char **argv)
 {
 	/* high-order bit of first char in argv[0] is a hidden
 	 * "we have (already) re-execed, don't do it again" flag */
@@ -223,7 +223,7 @@ void forkexit_or_rexec(char **argv)
 	if (pid) /* parent */
 		exit(0);
 	/* child - re-exec ourself */
-	re_exec(argv);
+	re_exec_me(argv);
 }
 #else
 /* Dance around (void)...*/

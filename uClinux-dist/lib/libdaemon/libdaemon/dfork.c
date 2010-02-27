@@ -128,13 +128,20 @@ static int move_fd_up(int *fd) {
 static void sigchld(int s) {
 }
 
-pid_t daemon_fork(void) {
-    pid_t pid;
-    int pipe_fds[2] = {-1, -1};
+/* 
+   vfork() support -- modified for vfork() and restart.
+   Child process restarts the executable.
+
+   If called in restarted executable, pipe is re-initialized, and
+   function returns 0.
+*/
+pid_t daemon_vfork(int argc, char **argv) {
+    pid_t pid; 
+    volatile pid_t dpid=(pid_t)-1;
+    char tmpstr[21],*pipestring;
     struct sigaction sa_old, sa_new;
     sigset_t ss_old, ss_new;
     int saved_errno;
-
     memset(&sa_new, 0, sizeof(sa_new));
     sa_new.sa_handler = sigchld;
     sa_new.sa_flags = SA_RESTART;
@@ -164,23 +171,58 @@ pid_t daemon_fork(void) {
         return (pid_t) -1;
     }
 
-    if (pipe(pipe_fds) < 0) {
-        daemon_log(LOG_ERR, "pipe() failed: %s", strerror(errno));
+    if(getenv("DAEMON_PROCESS"))
+      {
+        _daemon_retval_pipe[0]=-1;
+	pipestring=getenv("DAEMON_PIPE");
+	if(pipestring != NULL)
+          {
+            if(sscanf(pipestring,"%d",&_daemon_retval_pipe[1])!=1)
+              {
+                _daemon_retval_pipe[1]=-1;
+              }
+          }
+        else
+          {
+             _daemon_retval_pipe[1]=-1;
+          }
+	if (sigaction(SIGCHLD, &sa_old, NULL) < 0) {
+	  daemon_log(LOG_ERR, "close() failed: %s", strerror(errno));
+	  goto fail;
+	}
+	
+	if (sigprocmask(SIG_SETMASK, &ss_old, NULL) < 0) {
+	  daemon_log(LOG_ERR, "sigprocmask() failed: %s", strerror(errno));
+	  goto fail;
+	}
+	
+	if (signal(SIGTTOU, SIG_IGN) == SIG_ERR) {
+	  daemon_log(LOG_ERR, "signal(SIGTTOU, SIG_IGN) failed: %s", strerror(errno));
+	  goto fail;
+	}
+	
+	if (signal(SIGTTIN, SIG_IGN) == SIG_ERR) {
+	  daemon_log(LOG_ERR, "signal(SIGTTIN, SIG_IGN) failed: %s", strerror(errno));
+	  goto fail;
+	}
+	
+	if (signal(SIGTSTP, SIG_IGN) == SIG_ERR) {
+	  daemon_log(LOG_ERR, "signal(SIGTSTP, SIG_IGN) failed: %s", strerror(errno));
+	  goto fail;
+	}
+	
+	return (pid_t) 0;
+      }
+
+    if (_daemon_retval_pipe[0] >= 0 && move_fd_up(&_daemon_retval_pipe[0]) < 0)
+        goto fail;
+    if (_daemon_retval_pipe[1] >= 0 && move_fd_up(&_daemon_retval_pipe[1]) < 0)
+        goto fail;
+
+    if ((pid = vfork()) < 0) { /* First vfork */
+        daemon_log(LOG_ERR, "First vfork() failed: %s", strerror(errno));
 
         saved_errno = errno;
-        sigaction(SIGCHLD, &sa_old, NULL);
-        sigprocmask(SIG_SETMASK, &ss_old, NULL);
-        errno = saved_errno;
-
-        return (pid_t) -1;
-    }
-
-    if ((pid = fork()) < 0) { /* First fork */
-        daemon_log(LOG_ERR, "First fork() failed: %s", strerror(errno));
-
-        saved_errno = errno;
-        close(pipe_fds[0]);
-        close(pipe_fds[1]);
         sigaction(SIGCHLD, &sa_old, NULL);
         sigprocmask(SIG_SETMASK, &ss_old, NULL);
         errno = saved_errno;
@@ -188,29 +230,19 @@ pid_t daemon_fork(void) {
         return (pid_t) -1;
 
     } else if (pid == 0) {
-        pid_t dpid;
-
         /* First child. Now we are sure not to be a session leader or
          * process group leader anymore, i.e. we know that setsid()
          * will succeed. */
 
         if (daemon_log_use & DAEMON_LOG_AUTO)
             daemon_log_use = DAEMON_LOG_SYSLOG;
-
-        if (close(pipe_fds[0]) < 0) {
-            daemon_log(LOG_ERR, "close() failed: %s", strerror(errno));
-            goto fail;
-        }
-
-        /* Move file descriptors up*/
-        if (move_fd_up(&pipe_fds[1]) < 0)
-            goto fail;
-
-        if (_daemon_retval_pipe[0] >= 0 && move_fd_up(&_daemon_retval_pipe[0]) < 0)
-            goto fail;
-        if (_daemon_retval_pipe[1] >= 0 && move_fd_up(&_daemon_retval_pipe[1]) < 0)
-            goto fail;
-
+        if (_daemon_retval_pipe[0]>=0)
+          {
+            /* close read side of the pipe, keep _daemon_retval_pipe[0]
+               variable set to the original value because after vfork()
+               this memory is shared with the parent process */
+            close(_daemon_retval_pipe[0]);
+          }
         if (_null_open(O_RDONLY, 0) < 0) {
             daemon_log(LOG_ERR, "Failed to open /dev/null for STDIN: %s", strerror(errno));
             goto fail;
@@ -242,8 +274,8 @@ pid_t daemon_fork(void) {
             goto fail;
         }
 
-        if ((pid = fork()) < 0) { /* Second fork */
-            daemon_log(LOG_ERR, "Second fork() failed: %s", strerror(errno));
+        if ((pid = vfork()) < 0) { /* Second vfork */
+            daemon_log(LOG_ERR, "Second vfork() failed: %s", strerror(errno));
             goto fail;
 
         } else if (pid == 0) {
@@ -278,77 +310,76 @@ pid_t daemon_fork(void) {
                 daemon_log(LOG_ERR, "signal(SIGTSTP, SIG_IGN) failed: %s", strerror(errno));
                 goto fail;
             }
-
+            /* pid value is shared with the parents, so it will be
+               filled when control will be passed to the original process */
             dpid = getpid();
-            if (atomic_write(pipe_fds[1], &dpid, sizeof(dpid)) != sizeof(dpid)) {
-                daemon_log(LOG_ERR, "write() failed: %s", strerror(errno));
-                goto fail;
-            }
 
-            if (close(pipe_fds[1]) < 0) {
-                daemon_log(LOG_ERR, "close() failed: %s", strerror(errno));
-                goto fail;
-            }
-
-            return 0;
+            /* set the environment and re-exec the current executable */
+	    setenv("DAEMON_PROCESS","1",1);
+	    snprintf(tmpstr,sizeof(tmpstr),"%d",_daemon_retval_pipe[1]);
+	    setenv("DAEMON_PIPE",tmpstr,1);
+	    execv("/proc/self/exe", argv);
+            return (pid_t) -1;
 
         } else {
             /* Second father */
-            close(pipe_fds[1]);
             _exit(0);
         }
 
     fail:
-        dpid = (pid_t) -1;
-
-        if (atomic_write(pipe_fds[1], &dpid, sizeof(dpid)) != sizeof(dpid))
-            daemon_log(LOG_ERR, "Failed to write error PID: %s", strerror(errno));
-
-        close(pipe_fds[1]);
         _exit(0);
 
     } else {
         /* First father */
-        pid_t dpid;
-
-        close(pipe_fds[1]);
-
+#if 0
+	// FIXME -- for some reason waitpid() blocks forever here
         if (waitpid(pid, NULL, WUNTRACED) < 0) {
             saved_errno = errno;
-            close(pipe_fds[0]);
             sigaction(SIGCHLD, &sa_old, NULL);
             sigprocmask(SIG_SETMASK, &ss_old, NULL);
             errno = saved_errno;
-            return -1;
+            return (pid_t) -1;
         }
-
+#endif
         sigprocmask(SIG_SETMASK, &ss_old, NULL);
         sigaction(SIGCHLD, &sa_old, NULL);
 
-        if (atomic_read(pipe_fds[0], &dpid, sizeof(dpid)) != sizeof(dpid)) {
-            daemon_log(LOG_ERR, "Failed to read daemon PID.");
-            dpid = (pid_t) -1;
-            errno = EINVAL;
-        } else if (dpid == (pid_t) -1)
-            errno = EIO;
-
-        saved_errno = errno;
-        close(pipe_fds[0]);
-        errno = saved_errno;
-
+        /* close the write side of the pipe, set _daemon_retval_pipe[1]
+           variable to -1 because child process is re-executed */
+        close(_daemon_retval_pipe[1]);
+        _daemon_retval_pipe[1]=-1; 
         return dpid;
     }
 }
 
 int daemon_retval_init(void) {
-
-    if (_daemon_retval_pipe[0] < 0 || _daemon_retval_pipe[1] < 0) {
-
-        if (pipe(_daemon_retval_pipe) < 0) {
+char *pipestring;
+    if(getenv("DAEMON_PROCESS"))
+      {
+        _daemon_retval_pipe[0]=-1;
+        pipestring=getenv("DAEMON_PIPE");
+        if(pipestring != NULL)
+          {
+            if(sscanf(pipestring,"%d",&_daemon_retval_pipe[1])!=1)
+              {
+                _daemon_retval_pipe[1]=-1;
+              }
+          }
+        else
+          {
+             _daemon_retval_pipe[1]=-1;
+          }
+      }
+    else
+      {
+	if (_daemon_retval_pipe[0] < 0 || _daemon_retval_pipe[1] < 0) {
+	  
+	  if (pipe(_daemon_retval_pipe) < 0) {
             daemon_log(LOG_ERR, "pipe(): %s", strerror(errno));
             return -1;
-        }
-    }
+	  }
+	}
+      }
 
     return 0;
 }
@@ -362,6 +393,7 @@ void daemon_retval_done(void) {
     if (_daemon_retval_pipe[1] >= 0)
         close(_daemon_retval_pipe[1]);
 
+    setenv("DAEMON_PIPE","-1",1);
     _daemon_retval_pipe[0] = _daemon_retval_pipe[1] = -1;
 
     errno = saved_errno;
@@ -398,6 +430,9 @@ int daemon_retval_wait(int timeout) {
     ssize_t r;
     int i;
 
+    if(_daemon_retval_pipe[0] < 0 )
+      return -1;
+
     if (timeout > 0) {
         struct timeval tv;
         int s;
@@ -409,7 +444,8 @@ int daemon_retval_wait(int timeout) {
         FD_ZERO(&fds);
         FD_SET(_daemon_retval_pipe[0], &fds);
 
-        if ((s = select(FD_SETSIZE, &fds, 0, 0, &tv)) != 1) {
+        if ((s = select(_daemon_retval_pipe[0]+1,
+                        &fds, NULL, NULL, &tv)) != 1) {
 
             if (s < 0)
                 daemon_log(LOG_ERR, "select() failed while waiting for return value: %s", strerror(errno));
@@ -422,8 +458,8 @@ int daemon_retval_wait(int timeout) {
         }
     }
 
-    if ((r = atomic_read(_daemon_retval_pipe[0], &i, sizeof(i))) != sizeof(i)) {
-
+    if ((r = atomic_read(_daemon_retval_pipe[0],
+                         &i, sizeof(i))) != sizeof(i)) {
         if (r < 0)
             daemon_log(LOG_ERR, "read() failed while reading return value from pipe: %s", strerror(errno));
         else if (r == 0) {
@@ -438,7 +474,6 @@ int daemon_retval_wait(int timeout) {
     }
 
     daemon_retval_done();
-
     return i;
 }
 
@@ -527,9 +562,6 @@ int daemon_close_allv(const int except_fds[]) {
             if (fd == dirfd(d))
                 continue;
 
-            if (fd == _daemon_retval_pipe[1])
-                continue;
-
             found = 0;
             for (i = 0; except_fds[i] >= 0; i++)
                 if (except_fds[i] == fd) {
@@ -540,16 +572,24 @@ int daemon_close_allv(const int except_fds[]) {
             if (found)
                 continue;
 
-            if (close(fd) < 0) {
+/* with vfork(), just set close on exec, and set "-1" in the environment */
+            if (fd == _daemon_retval_pipe[0] || fd == _daemon_retval_pipe[1])
+              {
+	        fcntl(fd,F_SETFD,
+                      fcntl(fd,F_GETFD,0)|FD_CLOEXEC);
+                if (fd == _daemon_retval_pipe[1])
+                  {
+                    setenv("DAEMON_PIPE","-1",1);
+                  }
+              }
+             else if (close(fd) < 0) {
                 saved_errno = errno;
                 closedir(d);
                 errno = saved_errno;
 
                 return -1;
-            }
+            }  
 
-            if (fd == _daemon_retval_pipe[0])
-                _daemon_retval_pipe[0] = -1;    /* mark as closed */
         }
 
         closedir(d);
@@ -566,9 +606,6 @@ int daemon_close_allv(const int except_fds[]) {
     for (fd = 3; fd < maxfd; fd++) {
         int i, found;
 
-        if (fd == _daemon_retval_pipe[1])
-            continue;
-
         found = 0;
         for (i = 0; except_fds[i] >= 0; i++)
             if (except_fds[i] == fd) {
@@ -579,11 +616,18 @@ int daemon_close_allv(const int except_fds[]) {
         if (found)
             continue;
 
-        if (close(fd) < 0 && errno != EBADF)
+/* with vfork(), just set close on exec, and set "-1" in the environment */
+        if (fd == _daemon_retval_pipe[0] || fd == _daemon_retval_pipe[1])
+          {
+            fcntl(fd,F_SETFD,
+                  fcntl(fd,F_GETFD,0)|FD_CLOEXEC);
+            if (fd == _daemon_retval_pipe[1])
+              {
+                setenv("DAEMON_PIPE","-1",1);
+              }
+          }
+         else if (close(fd) < 0 && errno != EBADF)
             return -1;
-
-        if (fd == _daemon_retval_pipe[0])
-            _daemon_retval_pipe[0] = -1;        /* mark as closed */
     }
 
     return 0;

@@ -731,7 +731,7 @@ enum {
 # define bb_daemonize_or_rexec(flags, argv) bb_daemonize_or_rexec(flags)
 # define bb_daemonize(flags)                bb_daemonize_or_rexec(flags, bogus)
 #else
-  void re_exec(char **argv) ATTRIBUTE_NORETURN;
+  void re_exec_me(char **argv) ATTRIBUTE_NORETURN;
   void forkexit_or_rexec(char **argv);
   extern bool re_execed;
   int  BUG_fork_is_unavailable_on_nommu(void);

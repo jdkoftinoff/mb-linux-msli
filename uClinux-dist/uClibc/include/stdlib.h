@@ -97,20 +97,23 @@ typedef union
 
 __BEGIN_NAMESPACE_STD
 /* Returned by `div'.  */
+#if 0
 typedef struct
   {
     int quot;			/* Quotient.  */
     int rem;			/* Remainder.  */
   } div_t;
-
+#endif
 /* Returned by `ldiv'.  */
 #ifndef __ldiv_t_defined
+#if 0
 typedef struct
   {
     long int quot;		/* Quotient.  */
     long int rem;		/* Remainder.  */
   } ldiv_t;
 # define __ldiv_t_defined	1
+#endif
 #endif
 __END_NAMESPACE_STD
 
@@ -676,6 +679,22 @@ __extension__ extern long long int llabs (long long int __x)
 
 
 __BEGIN_NAMESPACE_STD
+
+typedef struct
+  {
+    int quot;                   /* Quotient.  */
+    int rem;                    /* Remainder.  */
+  } div_t;
+
+#ifndef __ldiv_t_defined
+typedef struct
+  {
+    long int quot;              /* Quotient.  */
+    long int rem;               /* Remainder.  */
+  } ldiv_t;
+# define __ldiv_t_defined       1
+#endif
+
 /* Return the `div_t', `ldiv_t' or `lldiv_t' representation
    of the value of NUMER over DENOM. */
 /* GCC may have built-ins for these someday.  */
@@ -814,7 +833,7 @@ extern void setkey (__const char *__key) __THROW __nonnull ((1));
 #ifdef __USE_XOPEN2K
 /* Return a master pseudo-terminal handle.  */
 extern int posix_openpt (int __oflag) __wur;
-libc_hidden_proto(posix_openpt)
+//libc_hidden_proto(posix_openpt)
 #endif
 
 #ifdef __USE_XOPEN

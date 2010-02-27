@@ -25,7 +25,13 @@ MAJLIBNAME=$(LIBNAME).$(VERSION)
 MINLIBNAME=$(MAJLIBNAME).$(MINOR)
 GPERF_OUTPUT = _caps_output.gperf
 
-all: $(MINLIBNAME) $(STALIBNAME)
+INSTALL=install
+libdir=$(ROOTDIR)/lib
+includedir=$(ROOTDIR)/include
+
+all: $(STALIBNAME)
+	$(INSTALL) libcap.a $(libdir)
+	$(INSTALL) *.h $(includedir)
 
 ifeq ($(shell gperf --version > /dev/null 2>&1 && echo yes),yes)
 USE_GPERF_OUTPUT = $(GPERF_OUTPUT)
@@ -33,7 +39,7 @@ INCLUDE_GPERF_OUTPUT = -include $(GPERF_OUTPUT)
 endif
 
 _makenames: _makenames.c cap_names.list.h
-	$(BUILD_CC) $(BUILD_CFLAGS) $< -o $@
+	gcc -Iinclude $(BUILD_CFLAGS) $< -o $@
 
 cap_names.h: _makenames
 	./_makenames > cap_names.h

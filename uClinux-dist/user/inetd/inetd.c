@@ -580,7 +580,7 @@ read_config_lines(FILE *cfp)
 	    fprintf(stderr, "Malloc failed\n");
 	    continue;
     }
-    bzero(p, sz);
+    memset(p, 0, sz);
 
     /* copy in the args and exec path. */
     /* No possible overrun here as we've already calculated the sizes */

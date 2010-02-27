@@ -34,6 +34,7 @@ dir_  =
 dir_$(CONFIG_JFFS_FS)                       += mtd-utils
 dir_$(CONFIG_JFFS2_FS)                      += mtd-utils
 
+dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld
 dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty
 dir_$(CONFIG_USER_APPWEB_APPWEB)            += appWeb
 dir_$(CONFIG_USER_ARJ_ARJ)                  += arj
@@ -438,6 +439,8 @@ dir_$(CONFIG_USER_ZEBRA_BGPD_BGPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_OSPFD_OSPFD)        += zebra
 dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
+dir_$(CONFIG_USER_MIDILOOPBACK_MIDILOOPBACK) += midiloopback
+dir_$(CONFIG_USER_AVAHI_AVAHI)              += avahi 
 
 dir_y += games
 

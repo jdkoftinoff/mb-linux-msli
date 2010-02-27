@@ -150,7 +150,8 @@ static enum {
     DAEMON_REFRESH,
     DAEMON_VERSION,
     DAEMON_HELP,
-    DAEMON_CHECK
+    DAEMON_CHECK,
+    DAEMON_REEXEC
 } command = DAEMON_RUN;
 
 typedef enum CalloutEvent {
@@ -821,39 +822,93 @@ static struct timeval *elapse_time(struct timeval *tv, unsigned msec, unsigned j
     return tv;
 }
 
-static FILE* fork_dispatcher(void) {
+static FILE* fork_dispatcher(int reexec) {
     FILE *ret;
-    int fds[2];
+    int fds[2]={-1,-1};
     pid_t pid;
 
-    if (pipe(fds) < 0) {
-        daemon_log(LOG_ERR, "pipe() failed: %s", strerror(errno));
-        goto fail;
-    }
+    if(reexec)
+      {
+	fds[0]=0;
+	fds[1]=0;
+      }
+    else
+      {
+	if (pipe(fds) < 0) {
+	  daemon_log(LOG_ERR, "pipe() failed: %s", strerror(errno));
+	  goto fail;
+	}
+      }
 
-    if ((pid = fork()) < 0)
+    if(reexec)
+      {
+	pid=0;
+      }
+    else
+      {
+	pid=vfork();
+      }
+
+    if (pid < 0)
         goto fail;
     else if (pid == 0) {
         FILE *f = NULL;
         int r = 1;
+	    /* Please note that the signal pipe is not closed at this
+	     * point, signals will thus be dispatched in the main
+	     * process. */
 
-        /* Please note that the signal pipe is not closed at this
-         * point, signals will thus be dispatched in the main
-         * process. */
+            /* AB -- in vfork() version signals are handled in this
+               process */
 
-        daemon_retval_done();
+            if(reexec)
+              {
+	        daemon_retval_done();
+              }
+	    setsid();
+	    
+	    avahi_set_proc_title(argv0, "%s: [%s] callout dispatcher", argv0, interface_name);
+	    
+	if(!reexec)
+	  {
+	    close(fds[1]);
+	    if(fds[0]!=0)
+	      {
+		close(0);
+		dup(fds[0]);
+		close(fds[0]);
+	      }
 
-        setsid();
+	    /* restart this executable */
+	    if(daemonize)
+	      {
+		execlp("/proc/self/exe",argv0,"-D","-t", action_script,
+		       "-R", interface_name);
+	      }
+	    else
+	      {
+		execlp("/proc/self/exe",argv0,"-t", action_script,
+		       "-R", interface_name);
+	      }
+	    _exit(1);
+	  }
 
-        avahi_set_proc_title(argv0, "%s: [%s] callout dispatcher", argv0, interface_name);
-
-        close(fds[1]);
+	/* restarted executable continues from this point */
 
         if (!(f = fdopen(fds[0], "r"))) {
             daemon_log(LOG_ERR, "fdopen() failed: %s", strerror(errno));
             goto dispatcher_fail;
         }
 
+        /* redirect signal pipe to /dev/null,
+        so signals will be handled and ignored */
+
+        int nullfd,signalpipefd;
+        signalpipefd=dup(_daemon_signal_write_fd());
+        if((nullfd=open("/dev/null",O_WRONLY))<0)
+            goto dispatcher_fail;
+
+	dup2(nullfd,_daemon_signal_write_fd());
         for (;;) {
             CalloutEventInfo info;
             char name[IFNAMSIZ], buf[64];
@@ -873,23 +928,24 @@ static FILE* fork_dispatcher(void) {
                 daemon_log(LOG_ERR, "if_indextoname() failed: %s", strerror(errno));
                 continue;
             }
-
+            dup2(signalpipefd,_daemon_signal_write_fd()); 
             if (daemon_exec("/", &k,
                             action_script, action_script,
                             callout_event_table[info.event],
                             name,
                             inet_ntop(AF_INET, &info.address, buf, sizeof(buf)), NULL) < 0) {
-
+                dup2(nullfd,_daemon_signal_write_fd());
                 daemon_log(LOG_ERR, "Failed to run script: %s", strerror(errno));
                 continue;
             }
-
+            dup2(nullfd,_daemon_signal_write_fd());
             if (k != 0)
                 daemon_log(LOG_WARNING, "Script execution failed with return value %i", k);
         }
 
         r = 0;
-
+        close(nullfd);
+        close(signalpipefd);
     dispatcher_fail:
 
         if (f)
@@ -899,7 +955,7 @@ static FILE* fork_dispatcher(void) {
         /* If the main process is trapped inside a chroot() we have to
          * remove the PID file for it */
 
-        if (!no_chroot && wrote_pid_file)
+        if (!no_chroot && (wrote_pid_file || reexec))
             daemon_pid_file_remove();
 #endif
 
@@ -1071,7 +1127,12 @@ static int drop_privs(void) {
     return 0;
 }
 
-static int loop(int iface, uint32_t addr) {
+/*
+  vfork() support:
+  reexec!=0 indicates running in a restarted process 
+*/
+
+static int loop(int iface, uint32_t addr,int reexec) {
     enum {
         FD_ARP,
         FD_IFACE,
@@ -1099,7 +1160,7 @@ static int loop(int iface, uint32_t addr) {
 
     daemon_signal_init(SIGINT, SIGTERM, SIGCHLD, SIGHUP,0);
 
-    if (!(dispatcher = fork_dispatcher()))
+    if (!(dispatcher = fork_dispatcher(reexec)))
         goto fail;
 
     if ((fd = open_socket(iface, hw_address)) < 0)
@@ -1510,7 +1571,7 @@ static int parse_command_line(int argc, char *argv[]) {
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "hDskrcVS:t:w", long_options, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "hDskrcVS:t:wR", long_options, NULL)) >= 0) {
 
         switch(c) {
             case 's':
@@ -1522,6 +1583,9 @@ static int parse_command_line(int argc, char *argv[]) {
             case 'D':
                 daemonize = 1;
                 break;
+            case 'R':
+                command = DAEMON_REEXEC;
+		break;
             case 'k':
                 command = DAEMON_KILL;
                 break;
@@ -1577,6 +1641,7 @@ static int parse_command_line(int argc, char *argv[]) {
     }
 
     if (command == DAEMON_RUN ||
+        command == DAEMON_REEXEC ||
         command == DAEMON_KILL ||
         command == DAEMON_REFRESH ||
         command == DAEMON_CHECK) {
@@ -1609,7 +1674,7 @@ int main(int argc, char*argv[]) {
     char *log_ident = NULL;
 
     signal(SIGPIPE, SIG_IGN);
-
+    
     if ((argv0 = strrchr(argv[0], '/')))
         argv0 = avahi_strdup(argv0 + 1);
     else
@@ -1627,7 +1692,7 @@ int main(int argc, char*argv[]) {
     daemon_pid_file_proc = pid_file_proc;
     pid_file_name = avahi_strdup_printf(AVAHI_RUNTIME_DIR"/avahi-autoipd.%s.pid", interface_name);
 
-    if (command == DAEMON_RUN) {
+    if (command == DAEMON_RUN || command == DAEMON_REEXEC) {
         pid_t pid;
         int ifindex;
 
@@ -1642,16 +1707,24 @@ int main(int argc, char*argv[]) {
             daemon_log(LOG_ERR, "This program is intended to be run as root.");
             goto finish;
         }
-
-        if ((pid = daemon_pid_file_is_running()) >= 0) {
-            daemon_log(LOG_ERR, "Daemon already running on PID %u", pid);
-            goto finish;
-        }
+	if(command == DAEMON_REEXEC)
+	  {
+	    if(daemonize)
+	      {
+		daemon_retval_init();
+	      }
+	  }
+	if(command != DAEMON_REEXEC)
+	  {
+	    if ((pid = daemon_pid_file_is_running()) >= 0) {
+	      daemon_log(LOG_ERR, "Daemon already running on PID %u", pid);
+	      goto finish;
+	    }
 
         if (daemonize) {
             daemon_retval_init();
 
-            if ((pid = daemon_fork()) < 0)
+            if ((pid = daemon_vfork(argc, argv)) < 0)
                 goto finish;
             else if (pid != 0) {
                 int ret;
@@ -1667,25 +1740,25 @@ int main(int argc, char*argv[]) {
             }
 
             /* Child */
-        }
-
-        if (use_syslog || daemonize)
-            daemon_log_use = DAEMON_LOG_SYSLOG;
-
-        chdir("/");
-
-        if (daemon_pid_file_create() < 0) {
-            daemon_log(LOG_ERR, "Failed to create PID file: %s", strerror(errno));
-
-            if (daemonize)
+	}
+	    if (use_syslog || daemonize)
+	      daemon_log_use = DAEMON_LOG_SYSLOG;
+	    
+	    chdir("/");
+	    
+	    if (daemon_pid_file_create() < 0) {
+	      daemon_log(LOG_ERR, "Failed to create PID file: %s", strerror(errno));
+	      
+	      if (daemonize)
                 daemon_retval_send(1);
-            goto finish;
-        } else
-            wrote_pid_file = 1;
+	      goto finish;
+	    } else
+	      wrote_pid_file = 1;
+	    
+	    avahi_set_proc_title(argv0, "%s: [%s] starting up", argv0, interface_name);
+	  }
 
-        avahi_set_proc_title(argv0, "%s: [%s] starting up", argv0, interface_name);
-
-        if (loop(ifindex, start_address) < 0)
+        if (loop(ifindex, start_address, command==DAEMON_REEXEC) < 0)
             goto finish;
 
         r = 0;

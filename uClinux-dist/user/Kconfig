@@ -8,6 +8,11 @@
 
 menu "Core Applications"
 
+config USER_DMITRIPANELD
+	bool "D-Mitri Panel daemon - dmitripaneld"
+	help
+	  Include the D-Mitri panel server.
+
 config USER_INIT_INIT
 	bool "init"
 	help
@@ -127,6 +132,16 @@ config USER_VERSION_VERSION
 	help
 	  Print the version of the system software.
 	  Approx. binary size: 6k
+
+config USER_MIDILOOPBACK_MIDILOOPBACK
+	bool "midiloopback"
+	help
+	  MIDI Loopback
+
+config USER_AVAHI_AVAHI
+	bool "avahi"
+	help
+	  Avahi
 
 config USER_LOGIN_LOGIN
 	bool "login"
@@ -1144,7 +1159,6 @@ config USER_DNSMASQ2_RESOLVE_AS_SERVER
 
 config USER_DROPBEAR_DROPBEAR
 	bool "dropbear"
-	depends on USER_INETD_INETD
 	select LIB_ZLIB
 	help
 	  Dropbear-SSH ist a small sshd-replacement, that does not depend on

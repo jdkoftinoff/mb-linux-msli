@@ -59,8 +59,8 @@ int daemon_execv(const char *dir, int *ret, const char *prog, va_list ap) {
         return -1;
     }
 
-    if ((pid = fork()) < 0) {
-        daemon_log(LOG_ERR, "fork() failed: %s", strerror(errno));
+    if ((pid = vfork()) < 0) {
+        daemon_log(LOG_ERR, "vfork() failed: %s", strerror(errno));
 
         saved_errno = errno;
         close(p[0]);
@@ -75,14 +75,14 @@ int daemon_execv(const char *dir, int *ret, const char *prog, va_list ap) {
 
         if (p[1] != 1)
             if (dup2(p[1], 1) < 0) {
-                daemon_log(LOG_ERR, "dup2: %s", strerror(errno));
-                goto fail;
+	      daemon_log(LOG_ERR, "dup2: %s", strerror(errno));
+	      goto fail;
             }
 
         if (p[1] != 2)
             if (dup2(p[1], 2) < 0) {
-                daemon_log(LOG_ERR, "dup2: %s", strerror(errno));
-                goto fail;
+	      daemon_log(LOG_ERR, "dup2: %s", strerror(errno));
+	      goto fail;
             }
 
 
@@ -95,20 +95,26 @@ int daemon_execv(const char *dir, int *ret, const char *prog, va_list ap) {
         close(0);
 
         if (open("/dev/null", O_RDONLY) != 0) {
-            daemon_log(LOG_ERR, "Unable to open /dev/null as STDIN");
-            goto fail;
+	  daemon_log(LOG_ERR, "Unable to open /dev/null as STDIN");
+	  goto fail;
         }
 
         daemon_close_all(-1);
-        daemon_reset_sigs(-1);
+	/* 
+	   FIXME -- for some reason the program hangs and loops if 
+	   signals are reset at this point
+	*/
+        /*daemon_reset_sigs(-1);*/
         daemon_unblock_sigs(-1);
 
         umask(0022); /* Set up a sane umask */
 
         if (dir && chdir(dir) < 0) {
-            daemon_log(LOG_WARNING, "Failed to change to directory '%s'", dir);
-            chdir("/");
+	  daemon_log(LOG_WARNING, "Failed to change to directory '%s'", dir);
+	  chdir("/");
         }
+
+	unsetenv("DAEMON_PROCESS");
 
         for (i = 0; i < MAX_ARGS-1; i++)
             if (!(args[i] = va_arg(ap, char*)))
@@ -125,7 +131,6 @@ int daemon_execv(const char *dir, int *ret, const char *prog, va_list ap) {
     }
 
     close(p[1]);
-
     FD_ZERO(&fds);
     FD_SET(p[0], &fds);
     sigfd = daemon_signal_fd();
@@ -194,7 +199,7 @@ int daemon_execv(const char *dir, int *ret, const char *prog, va_list ap) {
     close(p[0]);
 
     for (;;) {
-        if (waitpid(pid, &r, 0) < 0) {
+      if (waitpid(pid, &r, 0) < 0) {
 
             if (errno == EINTR)
                 continue;

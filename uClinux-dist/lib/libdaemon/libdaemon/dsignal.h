@@ -67,6 +67,7 @@ int daemon_signal_next(void);
  * @return The file descriptor or negative on failure
  */
 int daemon_signal_fd(void);
+int _daemon_signal_write_fd(void);
 
 #ifdef __cplusplus
 }

@@ -393,10 +393,11 @@ void __init prepare_namespace(void)
 		if (strncmp(root_device_name, "/dev/", 5) == 0)
 			root_device_name += 5;
 	}
-
+/* Reverse the order of loading -- check for floppy/md first */
+/*
 	if (initrd_load())
 		goto out;
-
+*/
 	/* wait for any asynchronous scanning to complete */
 	if ((ROOT_DEV == 0) && root_wait) {
 		printk(KERN_INFO "Waiting for root device %s...\n",
@@ -407,10 +408,13 @@ void __init prepare_namespace(void)
 		async_synchronize_full();
 	}
 
-	is_floppy = MAJOR(ROOT_DEV) == FLOPPY_MAJOR;
+	is_floppy = 1 /*MAJOR(ROOT_DEV) == FLOPPY_MAJOR*/;
 
 	if (is_floppy && rd_doload && rd_load_disk(0))
 		ROOT_DEV = Root_RAM0;
+	else
+		if(initrd_load())
+			goto out;
 
 	mount_root();
 out:

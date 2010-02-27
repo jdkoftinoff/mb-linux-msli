@@ -84,7 +84,7 @@ localhost (void)
       free (buf);
       buf = 0;
     }
-
+#if 0
   /* Determine FQDN */
   {
     struct hostent *hp = gethostbyname(buf);
@@ -101,5 +101,6 @@ localhost (void)
 	  }
       }
   }
+#endif
   return buf;
 }

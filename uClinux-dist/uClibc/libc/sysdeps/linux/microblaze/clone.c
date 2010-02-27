@@ -19,32 +19,36 @@
 int
 clone (int (*fn)(void *arg), void *child_stack, int flags, void *arg)
 {
-  register unsigned long rval __asm__ (SYSCALL_RET) = -EINVAL;
+  register unsigned long rval = -EINVAL;
 
   if (fn && child_stack)
     {
-      register unsigned long syscall __asm__ (SYSCALL_NUM);
-      register unsigned long arg0 __asm__ (SYSCALL_ARG0);
-      register unsigned long arg1 __asm__ (SYSCALL_ARG1);
+      register unsigned long arg0;
+      register unsigned long arg1;
 
       /* Clone this thread.  */
       arg0 = flags;
       arg1 = (unsigned long)child_stack;
-      syscall = __NR_clone;
-      __asm__ __volatile__ ("bralid r17, trap;nop;"
-		    : "=r" (rval), "=r" (syscall)
-		    : "1" (syscall), "r" (arg0), "r" (arg1)
-		    : SYSCALL_CLOBBERS);
+      asm volatile (	"addik	r12, r0, %1	\n\t"
+			"addk	r5, r0, %2	\n\t"
+			"addk	r6, r0, %3	\n\t"
+			"brki	r14, 0x08	\n\t"
+			"addk	%0, r3, r0	\n\t"
+		    : "=r" (rval)
+		    : "i" (__NR_clone), "r" (arg0), "r" (arg1)
+		    : "r3", "r5", "r6", "r12", "r14", "cc");
 
       if (rval == 0)
 	/* In child thread, call FN and exit.  */
 	{
 	  arg0 = (*fn) (arg);
-	  syscall = __NR_exit;
-	  __asm__ __volatile__ ("bralid r17, trap;nop;"
-			: "=r" (rval), "=r" (syscall)
-			: "1" (syscall), "r" (arg0)
-			: SYSCALL_CLOBBERS);
+	  asm volatile ("addik	r12, r0, %1	\n\t"
+			"addk	r5, r0, %2	\n\t"
+			"brki	r14, 0x08	\n\t"
+			"addk	%0, r0, r3	\n\t"
+			: "=r" (rval)
+			: "i" (__NR_exit), "r" (arg0)
+			: "r3", "r5", "r12", "r14", "cc");
 	}
     }
 

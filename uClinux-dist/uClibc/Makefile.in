@@ -161,7 +161,7 @@ include/bits/sysnum.h: $(top_srcdir)extra/scripts/gen_bits_syscall_h.sh
 	cd $(top_builddir); \
 	tmp=`mktemp include/bits/sysnum.h.XXXXXX 2>/dev/null || true`; \
 	[ -z "$$tmp" ] && tmp='include/bits/sysnum.h.new'; \
-	KERNEL_HEADERS="${KERNEL_HEADERS}" top_builddir=. CC="$(CC) $(CPU_CFLAGS)" $(SHELL) extra/scripts/gen_bits_syscall_h.sh > $$tmp; \
+	KERNEL_HEADERS="`pwd`/../linux-2.6.x/include" KERNEL_ASM_HEADERS="`pwd`/../linux-2.6.x/arch/$(TARGET_ARCH)/include" top_builddir=. CC="$(CC) $(CPU_CFLAGS)" $(SHELL) extra/scripts/gen_bits_syscall_h.sh > $$tmp; \
 	if cmp include/bits/sysnum.h $$tmp >/dev/null 2>&1; then \
 		$(RM) $$tmp; \
 	else \
@@ -523,3 +523,32 @@ test check: test_compile
 
 test_compile: $(LOCAL_INSTALL_PATH)
 	$(Q)$(MAKE) -C test compile
+
+#
+# Target for uClinux distro
+#
+UCLIBC_VERSION := $(MAJOR_VERSION).$(MINOR_VERSION).$(SUBLEVEL)
+.PHONY: romfs
+romfs:
+	[ -e $(ROMFSDIR)/lib ] || mkdir $(ROMFSDIR)/lib
+	if [ "$(SHARED_TARGET)" ]; then \
+		$(ROMFSINST) $(SHARED_TARGET) /lib/lib$(LIBID).so; \
+	fi
+ifeq ($(strip $(HAVE_SHARED)),y)
+	set -e; for i in lib/lib*-$(UCLIBC_VERSION).so lib/*.so.*; do \
+		if [ -L $$i ]; then \
+			$(ROMFSINST) -s `readlink $$i` /$$i; \
+		else \
+			$(ROMFSINST) -p 755 $$i /lib; \
+		fi; \
+	done
+	set -e; if [ -x lib/ld-uClibc-$(UCLIBC_VERSION).so ] ; then \
+	    $(ROMFSINST) -p 755 lib/ld-uClibc-$(UCLIBC_VERSION).so /lib; \
+		$(ROMFSINST) -s \
+			/lib/ld-uClibc-$(UCLIBC_VERSION).so \
+			/lib/ld-linux.so.2; \
+		$(ROMFSINST) -s \
+			/lib/ld-uClibc-$(UCLIBC_VERSION).so \
+			/lib/ld.so.1; \
+	fi
+endif

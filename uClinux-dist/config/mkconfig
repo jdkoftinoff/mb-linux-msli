@@ -26,7 +26,7 @@ default_vendor()
 	if [ -f config/vendor-default ] ; then
 		fix_name "`cat config/vendor-default`"
 	else
-		fix_name McAfee
+		fix_name MeyerSound
 	fi
 }
 

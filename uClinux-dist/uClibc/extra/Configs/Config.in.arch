@@ -181,19 +181,6 @@ config UCLIBC_HAS_LONG_DOUBLE_MATH
 	  long double math library features, then answer Y. Don't enable it
 	  for sparc w/ 32bit ABI.
 
-config KERNEL_HEADERS
-	string "Linux kernel header location"
-	default "/usr/include"
-	help
-	  The kernel source you use to compile with should be the same
-	  as the Linux kernel you run your apps on.  uClibc doesn't even
-	  try to achieve binary compatibility across kernel versions.
-	  So don't expect, for example, uClibc compiled with Linux kernel
-	  2.0.x to implement lchown properly, since 2.0.x can't do that.
-	  Similarly, if you compile uClibc vs Linux 2.4.x kernel headers,
-	  but then run on Linux 2.0.x, lchown will be compiled into uClibc,
-	  but won't work at all.  You have been warned.
-
 config UCLIBC_UCLINUX_BROKEN_MUNMAP
 	bool
 	depends on !ARCH_USE_MMU

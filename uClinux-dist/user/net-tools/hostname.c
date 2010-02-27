@@ -83,6 +83,14 @@ static void setnname(char *nname)
     }
 }
 #endif /* HAVE_AFDECnet */
+static char *index(const char *s, int c)
+{
+return strchr(s, c);
+}
+static char *rindex(const char *s, int c)
+{
+return strrchr(s, c);
+}
 
 static void sethname(char *hname)
 {

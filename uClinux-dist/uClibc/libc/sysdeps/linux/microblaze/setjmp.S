@@ -16,7 +16,7 @@
 #define _ASM
 #include <bits/setjmp.h>
 
-#include <clinkage.h>
+#include <asm/clinkage.h>
 
 	.text
 C_ENTRY(setjmp):
@@ -33,19 +33,22 @@ C_SYMBOL_NAME(__sigsetjmp):
 	/* Save registers relative to r5 (arg0)*/
 	swi	r1, r5, 0			/* stack pointer */
 	swi	r15, r5, 4			/* link register */
-	swi	r18, r5, 8			/* assembler temp */
-	swi	r19, r5, 12			/* now call-preserved regs */
-	swi	r20, r5, 16
-	swi	r21, r5, 20
-	swi	r22, r5, 24
-	swi	r23, r5, 28
-	swi	r24, r5, 32
-	swi	r25, r5, 36
-	swi	r26, r5, 40
-	swi	r27, r5, 44
-	swi	r28, r5, 48
-	swi	r29, r5, 52
-	swi	r30, r5, 56
+	swi	r2,  r5, 8			/* SDA and SDA2 ptrs */
+	swi	r13, r5, 12
+	swi	r18, r5, 16			/* assembler temp */
+	swi	r19, r5, 20			/* now call-preserved regs */
+	swi	r20, r5, 24
+	swi	r21, r5, 28
+	swi	r22, r5, 32
+	swi	r23, r5, 36 
+	swi	r24, r5, 40
+	swi	r25, r5, 44
+	swi	r26, r5, 48
+	swi	r27, r5, 52
+	swi	r28, r5, 56
+	swi	r29, r5, 60
+	swi	r30, r5, 64
+	swi	r31, r5, 68
 
 	/* Make a tail call to __sigjmp_save; it takes the same args.  */
 	braid	C_SYMBOL_NAME(__sigjmp_save)

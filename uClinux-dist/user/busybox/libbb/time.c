@@ -10,7 +10,7 @@
 #include "libbb.h"
 #include <sys/syscall.h>
 
-#if defined(ENABLE_MONOTONIC_SYSCALL) && defined(__NR_clock_gettime)
+#if  0 //defined(ENABLE_MONOTONIC_SYSCALL) && defined(__NR_clock_gettime)
 
 /* libc has incredibly messy way of doing this,
  * typically requiring -lrt. We just skip all this mess */

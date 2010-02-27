@@ -302,10 +302,10 @@ int avahi_chroot_helper_start(const char *argv0) {
         return -1;
     }
     
-    if ((pid = fork()) < 0) {
+    if ((pid = vfork()) < 0) {
         close(sock[0]);
         close(sock[1]);
-        avahi_log_error(__FILE__": fork() failed: %s", strerror(errno));
+        avahi_log_error(__FILE__": vfork() failed: %s", strerror(errno));
         return -1;
     } else if (pid == 0) {
 

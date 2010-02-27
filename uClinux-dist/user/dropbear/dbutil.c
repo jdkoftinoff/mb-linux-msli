@@ -162,7 +162,7 @@ static void _dropbear_log(int priority, const char* format, va_list param) {
 					localtime(&timesec)) == 0) {
 			datestr[0] = '?'; datestr[1] = '\0';
 		}
-		fprintf(stderr, "[%d] %s %s\n", getpid(), datestr, printbuf);
+		fprintf(stderr, "[%d] %s %s\r\n", getpid(), datestr, printbuf);
 	}
 }
 

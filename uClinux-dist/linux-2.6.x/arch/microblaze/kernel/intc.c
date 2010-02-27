@@ -104,6 +104,7 @@ unsigned int get_irq(struct pt_regs *regs)
 
 void __init init_IRQ(void)
 {
+        int *ofintptr;
 	u32 i, j, intr_type;
 	struct device_node *intc = NULL;
 #ifdef CONFIG_SELFMOD_INTC
@@ -135,10 +136,15 @@ void __init init_IRQ(void)
 
 	intc_baseaddr = *(int *) of_get_property(intc, "reg", NULL);
 	intc_baseaddr = (unsigned long) ioremap(intc_baseaddr, PAGE_SIZE);
-	nr_irq = *(int *) of_get_property(intc, "xlnx,num-intr-inputs", NULL);
 
-	intr_type =
-		*(int *) of_get_property(intc, "xlnx,kind-of-intr", NULL);
+	ofintptr = (int *) of_get_property(intc, "xlnx,num-intr-inputs", NULL);
+	nr_irq = ofintptr ? *ofintptr : 0;
+
+	ofintptr = (int *) of_get_property(intc, "xlnx,kind-of-intr", NULL);
+	intr_type = ofintptr ? * ofintptr : 0;
+
+	if (intr_type >= (1 << (nr_irq + 1)))
+		printk(KERN_INFO " ERROR: Mismatch in kind-of-intr param\n");
 
 #ifdef CONFIG_SELFMOD_INTC
 	selfmod_function((int *) arr_func, intc_baseaddr);

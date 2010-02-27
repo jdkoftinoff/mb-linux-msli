@@ -13,36 +13,35 @@
  * Microblaze port by John Williams
  */
 
-#ifndef __MICROBLAZE_POSIX_TYPES_H__
-#define __MICROBLAZE_POSIX_TYPES_H__
-
-typedef unsigned int	__kernel_dev_t;
+#ifndef _ASM_MICROBLAZE_POSIX_TYPES_H
+#define _ASM_MICROBLAZE_POSIX_TYPES_H
 typedef unsigned long	__kernel_ino_t;
-typedef unsigned long long __kernel_ino64_t;
-typedef unsigned int	__kernel_mode_t;
+typedef unsigned short	__kernel_mode_t;
 typedef unsigned int	__kernel_nlink_t;
 typedef long		__kernel_off_t;
-typedef long long	__kernel_loff_t;
 typedef int		__kernel_pid_t;
-typedef unsigned short	__kernel_ipc_pid_t;
+typedef unsigned int	__kernel_ipc_pid_t;
 typedef unsigned int	__kernel_uid_t;
 typedef unsigned int	__kernel_gid_t;
-typedef unsigned int	__kernel_size_t;
-typedef int		__kernel_ssize_t;
+typedef unsigned long	__kernel_size_t;
+typedef long		__kernel_ssize_t;
 typedef int		__kernel_ptrdiff_t;
 typedef long		__kernel_time_t;
 typedef long		__kernel_suseconds_t;
 typedef long		__kernel_clock_t;
+typedef int		__kernel_timer_t;
+typedef int		__kernel_clockid_t;
 typedef int		__kernel_daddr_t;
-typedef char *		__kernel_caddr_t;
+typedef char 		*__kernel_caddr_t;
 typedef unsigned short	__kernel_uid16_t;
 typedef unsigned short	__kernel_gid16_t;
 typedef unsigned int	__kernel_uid32_t;
 typedef unsigned int	__kernel_gid32_t;
 
-typedef unsigned short	__kernel_old_uid_t;
-typedef unsigned short	__kernel_old_gid_t;
-typedef __kernel_dev_t	__kernel_old_dev_t;
+typedef unsigned int	__kernel_old_uid_t;
+typedef unsigned int	__kernel_old_gid_t;
+typedef unsigned int	__kernel_old_dev_t;
+typedef unsigned int	__kernel_dev_t;
 
 typedef struct {
 #ifdef __USE_ALL
@@ -52,4 +51,4 @@ typedef struct {
 #endif
 } __kernel_fsid_t;
 
-#endif /* __MICROBLAZE_POSIX_TYPES_H__ */
+#endif /* _ASM_MICROBLAZE_POSIX_TYPES_H */

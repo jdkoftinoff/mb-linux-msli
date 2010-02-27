@@ -9,7 +9,7 @@ TOPDIR=../../../../
 include $(TOPDIR)Rules.mak
 
 #FIXME -- this arch should include its own crti.S and crtn.S
-UCLIBC_CTOR_DTOR=n
+UCLIBC_CTOR_DTOR=y
 
 CFLAGS += -I..
 ASFLAGS += -I.. -D__ASSEMBLER -DASM_GLOBAL_DIRECTIVE=.globl
@@ -23,7 +23,7 @@ CTOR_TARGETS := $(TOPDIR)lib/crti.o $(TOPDIR)lib/crtn.o
 SSRC := setjmp.S __longjmp.S vfork.S
 SOBJ := $(patsubst %.S,%.o, $(SSRC))
 
-CSRC := mmap.c syscall.c clone.c
+CSRC := mmap.c syscall.c clone.c fixdfsi.c
 COBJ := $(patsubst %.c,%.o, $(CSRC))
 
 OBJS := $(SOBJ) $(COBJ)
@@ -65,3 +65,4 @@ headers:
 
 clean:
 	$(RM) *.o *~ core
+

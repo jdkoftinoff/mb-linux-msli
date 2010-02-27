@@ -28,14 +28,8 @@ ifndef CONSOLE_BAUD_RATE
 CONSOLE_BAUD_RATE = 9600
 endif
 
-ifndef EXTRA_MODULE_DIRS
 ifeq ($(ROOTDIR)/modules,$(wildcard $(ROOTDIR)/modules))
-ifneq ($(filter-out linux-2.0% linux-2.2% linux-2.4%, $(LINUXDIR)),)
-EXTRA_MODULE_DIRS = $(ROOTDIR)/modules/
-else
 EXTRA_MODULE_DIRS = $(ROOTDIR)/modules
-endif
-endif
 endif
 
 ifndef VERSIONPKG
@@ -59,17 +53,36 @@ endif
 ENDIAN        = big
 MACHINE       = microblaze
 ARCH          = microblaze
-CROSS_COMPILE = mb-
+## Choose cross-compiler on whether or not we are tagetting MMU-full system
+## ugly, but will do for now
+#ifeq ($(CONFIG_MMU),)
+#CROSS_COMPILE = mb-
+#else
+#CROSS_COMPILE = mb-
+#endif
+
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = mb
 
 CONFIG_UCLINUX=y
 
-CC        = ucfront-gcc $(CROSS_COMPILE)gcc $(CPUFLAGS)
+# If using local uClibc, we need ucfront
+ifdef CONFIG_DEFAULTS_LIBC_UCLIBC
+FORCE_UCFRONT=1
+endif
+
+# Default to not use ucfront, but user can override if they want
+ifdef FORCE_UCFRONT
+  CC        = ucfront-gcc $(CROSS_COMPILE)gcc $(CPUFLAGS)
+  CXX       = ucfront-g++ $(CROSS_COMPILE)g++ $(CPUFLAGS)
+  LD        = ucfront-ld $(CROSS_COMPILE)ld
+else
+  CC        = $(CROSS_COMPILE)gcc $(CPUFLAGS)
+  CXX       = $(CROSS_COMPILE)g++ $(CPUFLAGS)
+  LD        = $(CROSS_COMPILE)ld
+endif
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
-CXX       = ucfront-g++ $(CROSS_COMPILE)g++ $(CPUFLAGS)
 AR        = $(CROSS_COMPILE)ar
-LD        = ucfront-ld $(CROSS_COMPILE)ld
 OBJCOPY   = $(CROSS_COMPILE)objcopy
 RANLIB    = $(CROSS_COMPILE)ranlib
 ELF2FLT   = $(CROSS_COMPILE)elf2flt
@@ -81,115 +94,61 @@ UCLINUX_BUILD_SET = 0					# have we set a special config below
 # Pull in common definitions
 include $(ROOTDIR)/vendors/config/common/config.arch
 
+# These can be used by configure.
+# Either configure $(CONFIGURE_OPTS)
+# or     configure --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
+#
+TARGETARCH    := microblaze-linux
+HOSTARCH      := $(shell sh $(ROOTDIR)/tools/config.guess)
+CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
+
+
 ifndef DISABLE_SHARED_LIBS
   ifeq ($(CONFIG_BINFMT_SHARED_FLAT),y)
 	BUILD_SHARED = 1
   endif
+else
+  CONFIGURE_OPTS += --disable-shared
 endif
 
 # Use the various processor config options to determine special
 # compiler flags
 # this is common to both apps and libs
 
-# find where $(CROSS)gcc is living
-GCC_DIR = $(shell $(CC) -v 2>&1|grep specs|sed -e 's/.* \(.*\)specs/\1\./')
-
-# work out which gcc version we are using
-GCC_VER = $(shell $(CC) -v 2>&1|grep version|cut -d " " -f 3)
-
-# split into major and minor numbers
-GCC_MAJOR = $(shell echo $(GCC_VER) | cut -d '.' -f 1)
-GCC_MINOR = $(shell echo $(GCC_VER) | cut -d '.' -f 2)
-
 # Clear the XILINX_EDK variable - it confuses mb-gcc.. ugh
 XILINX_EDK=
 
-# old style CONFIG defines...
-ifdef CONFIG_MICROBLAZE_HARD_MULT
-	HAS_HARD_MULT := y
+# What CPU vesion are we building for, and crack it open
+# as major.minor.rev
+CPU_VER=$(subst ",,$(CONFIG_XILINX_MICROBLAZE0_HW_VER) )
+CPU_MAJOR=$(shell echo $(CPU_VER) | cut -d '.' -f 1)
+CPU_MINOR=$(shell echo $(CPU_VER) | cut -d '.' -f 2)
+CPU_REV=$(shell echo $(CPU_VER) | cut -d '.' -f 3)
+
+# Work out HW multipler support.  This is icky.
+# 1. Spartan2 has no HW multiplers.
+# 2. MicroBlaze v3.x always uses them, except in Spartan 2
+# 3. All other FPGa/CPU ver combos, we can trust the CONFIG_ settings
+ifeq (,$(findstring spartan2,$(CONFIG_XILINX_MICROBLAZE0_FAMILY)))
+  ifeq ($(CPU_MAJOR),3)
+    ARCH_CPUFLAGS-1 += -mno-xl-soft-mul
+  else
+    # USE_HW_MUL can be 0, 1, or 2, defining a heirarchy of HW Mul support.
+    #ARCH_CPUFLAGS-$(subst 1,,$(CONFIG_XILINX_MICROBLAZE0_USE_HW_MUL)) += -mxl-multiply-high
+    ARCH_CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_HW_MUL) += -mno-xl-soft-mul
+  endif
 endif
 
-ifdef CONFIG_MICROBLAZE_HARD_DIV
-	HAS_HARD_DIV := y
-endif
+ARCH_CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_DIV) += -mno-xl-soft-div
+ARCH_CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_BARREL) += -mxl-barrel-shift
+ARCH_CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_PCMP) += -mxl-pattern-compare
+ARCH_CPUFLAGS-$(CONFIG_XILINX_MICROBLAZE0_USE_FPU) += -mhard-float
 
-ifdef CONFIG_MICROBLAZE_HARD_BARREL
-	HAS_HARD_BARREL := y
-endif
+# Pass in the CPU version to get a nice optimised compile
+ARCH_CPUFLAGS-1 += -mcpu=v$(subst ",,$(CONFIG_XILINX_MICROBLAZE0_HW_VER))
 
-# and the new style
-# Is the HW multiply instruction available?
-# check if C_FAMILY contains spartan3, virtex2 or virtex4
-ifneq (,$(findstring virtex2,$(CONFIG_XILINX_MICROBLAZE0_FAMILY)))
-	HAS_HARD_MULT := y
-endif
-ifneq (,$(findstring virtex4,$(CONFIG_XILINX_MICROBLAZE0_FAMILY)))
-	HAS_HARD_MULT := y
-endif
-ifneq (,$(findstring spartan3,$(CONFIG_XILINX_MICROBLAZE0_FAMILY)))
-	HAS_HARD_MULT := y
-endif
-
-ifeq ($(CONFIG_XILINX_MICROBLAZE0_USE_BARREL),1)
-	HAS_HARD_BARREL := y
-endif
-
-ifeq ($(CONFIG_XILINX_MICROBLAZE0_USE_DIV),1)
-	HAS_HARD_DIV := y
-endif
-
-ifeq ($(CONFIG_XILINX_MICROBLAZE0_USE_FPU),1)
-	HAS_FPU := y
-endif
-
-ifeq ($(CONFIG_XILINX_MICROBLAZE0_USE_PCMP_INSTR),1)
-	HAS_PCMP_INSTR := y
-endif
-
-# Take the HAS_HARD_{BARREL|MUL|DIV} vars and convert into CFLAGS etc
-ARCH_CPUFLAGS :=
-
-# Hardware floating point support
-ifeq ($(HAS_FPU),y)
-	ARCH_CPUFLAGS += -mhard-float
-else
-	ARCH_CPUFLAGS += -msoft-float
-endif
-
-# Hardware comparison support
-ifeq ($(HAS_PCMP_INSTR),y)
-	ARCH_CPUFLAGS += -mxl-pattern-compare
-endif
-
-# Hardware multiplier
-ifeq ($(HAS_HARD_MULT),y)
-	ARCH_CPUFLAGS += -mno-xl-soft-mul
-	LIBC_SUFFIX := _hard
-else
-	ARCH_CPUFLAGS += -mxl-soft-mul
-	LIBC_SUFFIX := _soft
-endif
-
-# Hardware barrel shifter
-ifeq ($(HAS_HARD_BARREL),y)
-	ARCH_CPUFLAGS += -mxl-barrel-shift
-	LIBC_SUFFIX := $(LIBC_SUFFIX)_shift
-endif
-
-# Hardware integer divide unit
-ifeq ($(HAS_HARD_DIV),y)
-	ARCH_CPUFLAGS += -mno-xl-soft-div
-else
-	ARCH_CPUFLAGS += -mxl-soft-div
-endif
-
-GCC_LIB = $(GCC_DIR)/libgcc.a $(GCC_DIR)/../../../../microblaze/lib/libc$(LIBC_SUFFIX).a 
-
-# Set the UCFRONT_LINK_SUFFIX variable to have this tacked onto the 
-# end of the ucfront command line.  This is such a hack.
-ifeq ($(GCC_MAJOR),2)
-	UCFRONT_LINK_SUFFIX = -lc $(GCC_LIB) -lc
-endif
+ARCH_CPUFLAGS := $(ARCH_CPUFLAGS-1)
+ARCH_CPUFLAGS += $(ARCH_CPUFLAGS-2)
 
 ############################################################################
 #
@@ -202,11 +161,18 @@ ifdef UCLINUX_BUILD_LIB
   ifdef CONFIG_LIB_DEBUG
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g -fomit-frame-pointer #-O2
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += $(ARCH_CPUFLAGS) $(VENDOR_CFLAGS) -DEMBED
+
+	# If we aren't using UCFRONT, then make sure that the local include 
+	# and lib paths are still set
+  ifndef FORCE_UCFRONT
+	CFLAGS += -I$(ROOTDIR) -I$(ROOTDIR)/include
+	LDFLAGS += -L$(ROOTDIR)/lib
+  endif
 
   ifdef BUILD_SHARED
 	CFLAGS  += -mid-shared-library
@@ -217,11 +183,21 @@ ifdef UCLINUX_BUILD_LIB
   endif
 
 	# don't want all the CFLAGS for uClibc/Config
-	ARCH_CFLAGS := $(CPUFLAGS) $(CFLAGS)
+	ARCH_CFLAGS := $(ARCH_CPUFLAGS) $(CFLAGS)
 
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
+  ifeq ($(CONFIG_MMU),)
 	CFLAGS  += -D__uClinux__
+  endif
+
+  ifeq ($(CONFIG_MMU),)
+  ifdef FORCE_UCFRONT
 	LDFLAGS += -Wl,-elf2flt
+  endif
+  endif
+
+	CXXFLAGS = $(CFLAGS) 
+	CXXSUP :=
 
   ifndef DISABLE_MOVE_RODATA
   	LDFLAGS += -Wl,-move-rodata
@@ -250,18 +226,39 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += $(ARCH_CPUFLAGS) $(VENDOR_CFLAGS) -DEMBED
 
+	# If we aren't using UCFRONT, then make sure that the local include 
+	# and lib paths are still set
+  ifndef FORCE_UCFRONT
+	CFLAGS += -I$(ROOTDIR) -I$(ROOTDIR)/include
+	LDFLAGS += -L$(ROOTDIR)/lib
+	CFLAGS += -I$(ROOTDIR)/include
+  endif
 
 	# don't want all the CFLAGS for uClibc/Config
 	ARCH_CFLAGS := $(CFLAGS)
 
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
+  ifeq ($(CONFIG_MMU),)
 	CFLAGS  += -D__uClinux__
+  endif
+	CFLAGS  += -DLINUX
 
-	CXXFLAGS = $(CFLAGS) -nostdinc++ -fno-exceptions
+	CXXFLAGS = $(CFLAGS) 
 	CXXSUP :=
 
-#	LDFLAGS += -nostartfiles $(ROOTDIR)/$(LIBCDIR)/lib/crt0.o
+	# Make sure arch cpu flags are passed to linker, to get right version
+	# of multilib'd C libraries (noMMU/uClibc only)
+  ifeq ($(CONFIG_MMU),)
+	LDFLAGS += $(ARCH_CPUFLAGS)
+	CXX_LDFLAGS += $(ARCH_CPUFLAGS)
+  endif
+
+  ifeq ($(CONFIG_MMU),)
+  ifdef FORCE_UCFRONT
 	LDFLAGS += -Wl,-elf2flt
+	CXX_LDFLAGS += -Wl,-elf2flt
+  endif
+  endif
 
   ifndef FLTFLAGS
 	FLTFLAGS :=
@@ -282,7 +279,7 @@ endif
 ifeq ($(UCLINUX_BUILD_SET),1)
 	EXTRA_CFLAGS := $(CPUFLAGS)
 
-	CXXLIBS =
+	CXXLIBS = $(LIBSTDCPP) $(CXXSUP)
 
 	LDLIBS = $(LIBBIND)
 endif

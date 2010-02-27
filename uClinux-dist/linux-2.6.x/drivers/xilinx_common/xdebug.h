@@ -1,7 +1,6 @@
 #ifndef XDEBUG
 #define XDEBUG
-
-#undef DEBUG
+#include <linux/kernel.h>
 
 #if defined(DEBUG) && !defined(NDEBUG)
 

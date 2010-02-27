@@ -326,6 +326,9 @@ static void process_args(int argc, char **argv)
 	}
 
 	if (!nostdlib) {
+	/* "-nostdlib" is misinterpreted as "-n -o stdlib" by the linker from
+	microblaze binutils */
+		if(strlen(argv[0])>2&&memcmp(argv[0]+strlen(argv[0])-2,"ld",2))
 		args_add(stripped_args, "-nostdlib");
 
 		if(libc_libdir) {

@@ -383,6 +383,171 @@
 
 #define __NR_syscalls		365
 
+/*
+ * user-visible error numbers are in the range -1 - -128: see
+ * <asm-generic/errno.h>
+ *
+ * both i386 and microblaze use generic version * of errno.h. the
+ * generic version of errno.h has more than 128 of * numbers. not
+ * sure what the comment means.
+ *
+ * following code is taken from mb 2.4
+ */
+#define __syscall_return(type, res)					\
+do {									\
+	/* user-visible error numbers are in the range -1 - -124:	\
+	 see <asm-microblaze/errno.h> */				\
+	if ((unsigned long)(res) >= (unsigned long)(-125)) {		\
+		errno = -(res);						\
+		res = -1;						\
+	}								\
+	return (type) (res);						\
+} while (0)
+
+#define _syscall0(type, name)						\
+type name(void)								\
+{									\
+	long __ret;							\
+	asm volatile ("addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall1(type, name, type1, arg1)				\
+type name(type1 arg1)							\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall2(type, name, type1, arg1, type2, arg2)			\
+type name(type1 arg1, type2 arg2)					\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addk	r6, r0, %3	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1),				\
+			"r" ((long)arg2)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall3(type, name, type1, arg1, type2, arg2, type3, arg3)	\
+type name(type1 arg1, type2 arg2, type3 arg3)				\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addk	r6, r0, %3	\n\t"			\
+			"addk	r7, r0, %4	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1),				\
+			"r" ((long)arg2),				\
+			"r" ((long)arg3)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall4(type, name, type1, arg1, type2, arg2, type3, arg3,	\
+			type4, arg4)					\
+type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4)		\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addk	r6, r0, %3	\n\t"			\
+			"addk	r7, r0, %4	\n\t"			\
+			"addk	r8, r0, %5	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1),				\
+			"r" ((long)arg2),				\
+			"r" ((long)arg3),				\
+			"r" ((long)arg4)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall5(type, name, type1, arg1, type2, arg2, type3, arg3,	\
+			type4, arg4, type5, arg5)			\
+type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5)	\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addk	r6, r0, %3	\n\t"			\
+			"addk	r7, r0, %4	\n\t"			\
+			"addk	r8, r0, %5	\n\t"			\
+			"addk	r9, r0, %6	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1),				\
+			"r" ((long)arg2),				\
+			"r" ((long)arg3),				\
+			"r" ((long)arg4),				\
+			"r" ((long)arg5)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
+#define _syscall6(type, name, type1, arg1, type2, arg2, type3, arg3,	\
+			type4, arg4, type5, arg5, type6, arg6)		\
+type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5,	\
+			type6 arg6)					\
+{									\
+	long __ret;							\
+	asm volatile ("addk	r5, r0, %2	\n\t"			\
+			"addk	r6, r0, %3	\n\t"			\
+			"addk	r7, r0, %4	\n\t"			\
+			"addk	r8, r0, %5	\n\t"			\
+			"addk	r9, r0, %6	\n\t"			\
+			"addk	r10, r0, %7	\n\t"			\
+			"addik	r12, r0, %1	\n\t"			\
+			"brki	r14, 0x8	\n\t"			\
+			"addk	%0, r3, r0	\n\t"			\
+			: "=r" (__ret)					\
+			: "i" (__NR_##name),				\
+			"r" ((long)arg1),				\
+			"r" ((long)arg2),				\
+			"r" ((long)arg3),				\
+			"r" ((long)arg4),				\
+			"r" ((long)arg5),				\
+			"r" ((long)arg6)				\
+			: "r3", "r4", "r5", "r6", "r7", "r8", "r9",	\
+				"r10", "r12", "r14", "cc");		\
+	__syscall_return(type, __ret);					\
+}
+
 #ifdef __KERNEL__
 #ifndef __ASSEMBLY__
 

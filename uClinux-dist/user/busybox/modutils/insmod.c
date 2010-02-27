@@ -67,6 +67,10 @@
 #define FILENAME_MAX NAME_MAX
 #endif
 
+#ifndef __NR_init_module
+#define __NR_init_module        128
+#endif
+
 #if !ENABLE_FEATURE_2_4_MODULES && !ENABLE_FEATURE_2_6_MODULES
 #undef ENABLE_FEATURE_2_4_MODULES
 #define ENABLE_FEATURE_2_4_MODULES 1

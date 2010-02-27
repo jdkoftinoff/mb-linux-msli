@@ -158,6 +158,12 @@ struct net_local {
 #endif
 	u8 gmii_addr;		/* The GMII address of the PHY */
 
+        u8 led_blink;           /* slow blink state */
+
+        u8 reset_flag;          /* reset flag -- originally 0,
+				   set to 1 to indicate that subsequent phy
+				   resets will be necessary  */
+
 	/* The underlying OS independent code needs space as well.  A
 	 * pointer to the following XLlTemac structure will be passed to
 	 * any XLlTemac_ function that requires it.  However, we treat the
@@ -377,6 +383,22 @@ static inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+static inline void _XLlTemac_PhyReadPage(XLlTemac *InstancePtr, u32 PhyAddress,
+					 u32 RegisterNum, u16 *PhyDataPtr, u8 Page)
+{
+	unsigned long flags;
+	u16 pagetmp;
+
+	spin_lock_irqsave(&XTE_spinlock, flags);
+	XLlTemac_PhyRead(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, &pagetmp);
+	XLlTemac_PhyWrite(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, (pagetmp&0x7f00)|(u16)Page);
+	XLlTemac_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
+	XLlTemac_PhyWrite(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, pagetmp);
+	spin_unlock_irqrestore(&XTE_spinlock, flags);
+}
+#endif
+
 static inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 				      u32 RegisterNum, u16 PhyData)
 {
@@ -387,6 +409,33 @@ static inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+static inline void _XLlTemac_PhyWritePage(XLlTemac *InstancePtr, u32 PhyAddress,
+					  u32 RegisterNum, u16 PhyData, u8 Page)
+{
+	unsigned long flags;
+	u16 pagetmp;
+
+	spin_lock_irqsave(&XTE_spinlock, flags);
+	XLlTemac_PhyRead(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, &pagetmp);
+	XLlTemac_PhyWrite(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, (pagetmp&0x7f00)|(u16)Page);
+	XLlTemac_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
+	XLlTemac_PhyWrite(InstancePtr, PhyAddress, MARVELL_88E1112_PAGE_REG, pagetmp);
+	spin_unlock_irqrestore(&XTE_spinlock, flags);
+}
+#endif
+
+static inline int _XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry)
+{
+	int status;
+	unsigned long flags;
+
+	spin_lock_irqsave(&XTE_spinlock, flags);
+	status = XLlTemac_MulticastAdd(InstancePtr, AddressPtr, Entry);
+	spin_unlock_irqrestore(&XTE_spinlock, flags);
+
+	return status;
+}
 
 static inline int _XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry)
 {
@@ -448,14 +497,176 @@ static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
 	return status;
 }
 
+/* Ethernet LEDs */
 
-#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII
-#define MARVELL_88E1111_EXTENDED_PHY_CTL_REG_OFFSET  20
-#define MARVELL_88E1111_EXTENDED_PHY_STATUS_REG_OFFSET  27
-#endif
+typedef enum {
+  LED_STATE_OFF,
+  LED_STATE_10M,
+  LED_STATE_100M,
+  LED_STATE_1G,
+  LED_STATE_NSTATES
+} led_state;
 
-#define DEBUG_ERROR KERN_ERR
-#define DEBUG_LOG(level, ...) printk(level __VA_ARGS__)
+#define  LED_STATE_FLAG_BLINK          0x01
+#define  LED_STATE_FLAG_BLINK_ACTIVITY 0x02
+#define  LED_STATE_FLAG_BLINK_SLOW     0x04
+#define  LED_STATE_FLAG_BLINK_FLIP     0x08
+#define  LED_STATE_FLAG_GREEN          0x10
+#define  LED_STATE_FLAG_YELLOW         0x20
+
+static unsigned int led_state_flags[LED_STATE_NSTATES]=
+  {
+    0,
+    LED_STATE_FLAG_GREEN 
+     | LED_STATE_FLAG_BLINK_SLOW | LED_STATE_FLAG_BLINK_ACTIVITY,
+    LED_STATE_FLAG_YELLOW | LED_STATE_FLAG_GREEN 
+     | LED_STATE_FLAG_BLINK_SLOW | LED_STATE_FLAG_BLINK_ACTIVITY,
+    LED_STATE_FLAG_GREEN | LED_STATE_FLAG_BLINK_ACTIVITY
+  };
+
+static int led_state_polarity=0;
+
+static int eth_leds_setup(char *s)
+{
+
+  led_state curr_state;
+  unsigned int new_led_state_flags,flags_defined,i;
+  curr_state=LED_STATE_OFF;
+  new_led_state_flags=0;
+  flags_defined=0;
+  for(i=0;s[i];i++)
+    {
+      switch(s[i])
+	{
+	case ',':
+	  flags_defined=1;
+	  led_state_flags[curr_state]=new_led_state_flags;
+	  curr_state++;
+	  if(curr_state>=LED_STATE_NSTATES)
+	    {
+	      printk(KERN_ERR
+		     "XLlTemac: too many LED states on the command line\n");
+	      return 0;
+	    }
+	  new_led_state_flags=0;
+	  break;
+	case '+':
+	  led_state_polarity=0;
+	  break;
+	case '-':
+	  led_state_polarity=-1;
+	  break;
+	case 'y':
+	case 'Y':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_YELLOW;
+	  break;
+	case 'g':
+	case 'G':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_GREEN;
+	  break;
+	case 'b':
+	case 'B':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_BLINK;
+	  break;
+	case 'a':
+	case 'A':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_BLINK_ACTIVITY;
+	  break;
+	case 's':
+	case 'S':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_BLINK_SLOW;
+	  break;
+	case 'f':
+	case 'F':
+	  flags_defined=1;
+	  new_led_state_flags|=LED_STATE_FLAG_BLINK_FLIP;
+	  break;
+	case '0':
+	  flags_defined=1;
+	  new_led_state_flags=0;
+	  break;
+	default:
+	  printk(KERN_ERR
+		 "XLlTemac: unknown LED flag '%c'\n",s[i]);
+	}
+    }
+  if(curr_state<LED_STATE_NSTATES&&flags_defined)
+    {
+      led_state_flags[curr_state]=new_led_state_flags;
+    }
+  return 0;
+}
+
+static void initialize_leds(struct net_local *lp,int phy_addr,led_state state)
+{
+  u32 led_reg16=0;
+  lp->led_blink^=1;
+  if((led_state_flags[state]&LED_STATE_FLAG_BLINK_SLOW) && lp->led_blink)
+    {
+      led_reg16=(0x08<<12)|(0x08<<4);
+    }
+  else
+    {
+      if((led_state_flags[state]&LED_STATE_FLAG_GREEN)
+	 ||((led_state_flags[state]&LED_STATE_FLAG_BLINK_FLIP)
+	    && lp->led_blink))
+	{
+	  if(led_state_flags[state]&LED_STATE_FLAG_BLINK_ACTIVITY)
+	    {
+	      led_reg16|=0x1<<12;
+	    }
+	  else
+	    {
+	      if(led_state_flags[state]&LED_STATE_FLAG_BLINK)
+		{
+		  led_reg16|=0xb<<12;
+		}
+	      else
+		{
+		  led_reg16|=0x9<<12;
+		}
+	    }
+	}
+      else
+	{
+	  led_reg16|=0x8<<12;
+	}
+
+
+      if((led_state_flags[state]&LED_STATE_FLAG_YELLOW)
+	 ||((led_state_flags[state]&LED_STATE_FLAG_BLINK_FLIP)
+	    && !lp->led_blink))
+	{
+	  if(led_state_flags[state]&LED_STATE_FLAG_BLINK_ACTIVITY)
+	    {
+	      led_reg16|=0x1<<4;
+	    }
+	  else
+	    {
+	      if(led_state_flags[state]&LED_STATE_FLAG_BLINK)
+		{
+		  led_reg16|=0xb<<4;
+		}
+	      else
+		{
+		  led_reg16|=0x9<<4;
+		}
+	    }
+	}
+      else
+	{
+	  led_reg16|=0x8<<4;
+	}
+    }
+  _XLlTemac_PhyWritePage(&lp->Emac, phy_addr, 17, 
+			 led_state_polarity ? 0x0044 : 0, 3);
+  _XLlTemac_PhyWritePage(&lp->Emac, phy_addr, 16, led_reg16 ,3);
+};
 
 /*
  * Perform any necessary special phy setup. In the gmii case, nothing needs to
@@ -463,6 +674,49 @@ static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
  */
 static void phy_setup(struct net_local *lp)
 {
+#ifdef CONFIG_XILINX_LLTEMAC_NATIONAL_DP83865_GMII
+
+    u16 RegValue;
+
+    printk(KERN_INFO "NATIONAL DP83865 PHY\n");
+    RegValue = NATIONAL_DP83865_CONTROL_INIT;
+    /*Do not reset phy*/
+    _XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr,
+              NATIONAL_DP83865_CONTROL, RegValue);
+
+    _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+             NATIONAL_DP83865_STATUS, &RegValue);
+
+    _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+             NATIONAL_DP83865_STATUS, &RegValue);
+#endif
+
+#ifdef PHY_VITESSE_8211_SGMII
+        u16 Register;
+	/* Setup the MAC into SGMII mode */
+        Register = 0xAA23;
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 31, 0x0000);
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 23, Register);
+
+	/* Set SIGDET as an input */
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 31, 0x0001);
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 19, 0x0002);
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 31, 0x0000);
+
+	/* Signal all possible autonegotiation modes */
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr,  MII_ADVERTISE,
+		ADVERTISE_ALL);
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_EXADVERTISE,
+		ADVERTISE_1000FULL| ADVERTISE_1000HALF);
+
+	/*
+	 * Reset the PHY
+	 */
+	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
+	Register |= BMCR_RESET;
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
+#endif
+
 #ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII
 	u16 Register;
 
@@ -511,12 +765,109 @@ static void phy_setup(struct net_local *lp)
 	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
 
 #endif /* CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII */
-}
 
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+
+	u16 Register;
+	/* LEDs */
+	// FIXME -- LED controls are specific to 88e1112
+	initialize_leds(lp, lp->gmii_addr, LED_STATE_OFF);
+
+	/*
+	 * Enable autonegotiation, Reset the PHY if it's not the first time
+	 */
+	XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
+	
+	Register |= BMCR_ANENABLE;
+	if(lp->reset_flag)
+	  {
+	    printk(KERN_INFO
+		   "%s: XLlTemac: Autonegotiation on, Reset\n",
+		   lp->ndev->name);
+	    Register |= BMCR_RESET;
+	  }
+	else
+	  {
+	    printk(KERN_INFO
+		   "%s: XLlTemac: Autonegotiation on\n",
+		   lp->ndev->name);
+	    lp->reset_flag=1;
+	  }
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
+
+	/* configure copper interface and enable phy register 4 */
+	// FIXME -- copper is hardcoded here
+	_XLlTemac_PhyReadPage(&lp->Emac, lp->gmii_addr, 16, &Register,2);
+	Register&=0xfc7f;
+	Register|=0x0280;
+	_XLlTemac_PhyWritePage(&lp->Emac, lp->gmii_addr, 16, Register,2);
+
+	/* detect DTE, report DTE drop with 5s delay */
+	/*
+	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, 26, &Register);
+	Register&=0x7e01;
+	Register|=0x0110;
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 26, Register);
+	*/
+#endif
+}
 
 typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
 
-int renegotiate_speed(struct net_device *dev, int speed, DUPLEX duplex)
+int renegotiate_speed_init(struct net_device *dev, int speed, DUPLEX duplex)
+{
+	struct net_local *lp = (struct net_local *) netdev_priv(dev);
+	u16 phy_reg0 = BMCR_ANENABLE | BMCR_ANRESTART;
+	u16 phy_reg4;
+	u16 phy_reg9 = 0;
+
+
+	/*
+	 * It appears that the 10baset full and half duplex settings
+	 * are overloaded for gigabit ethernet
+	 */
+	if (speed == 0) {
+	  phy_reg4 = ADVERTISE_10FULL | ADVERTISE_10HALF 
+	    | ADVERTISE_100FULL | ADVERTISE_100HALF | ADVERTISE_CSMA;
+	  phy_reg9 = EX_ADVERTISE_1000FULL | EX_ADVERTISE_1000HALF;
+
+	}
+	else if ((duplex == FULL_DUPLEX) && (speed == 10)) {
+		phy_reg4 = ADVERTISE_10FULL | ADVERTISE_CSMA;
+	}
+	else if ((duplex == FULL_DUPLEX) && (speed == 100)) {
+		phy_reg4 = ADVERTISE_100FULL | ADVERTISE_CSMA;
+	}
+	else if ((duplex == FULL_DUPLEX) && (speed == 1000)) {
+		phy_reg4 = ADVERTISE_CSMA;
+		phy_reg9 = EX_ADVERTISE_1000FULL;
+	}
+	else if (speed == 10) {
+		phy_reg4 = ADVERTISE_10HALF | ADVERTISE_CSMA;
+	}
+	else if (speed == 100) {
+		phy_reg4 = ADVERTISE_100HALF | ADVERTISE_CSMA;
+	}
+	else if (speed == 1000) {
+		phy_reg4 = ADVERTISE_CSMA;
+		phy_reg9 = EX_ADVERTISE_1000HALF;
+	}
+	else {
+		printk(KERN_ERR
+		       "%s: XLlTemac: unsupported speed requested: %d\n",
+		       dev->name, speed);
+		return -1;
+	}
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_ADVERTISE, phy_reg4);
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_EXADVERTISE, phy_reg9);
+	/* initiate an autonegotiation of the speed */
+	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, phy_reg0);
+	printk(KERN_INFO
+		   "%s: XLlTemac: Autonegotiation started\n", dev->name);
+	return 0;
+}
+
+int renegotiate_speed_wait(struct net_device *dev, int speed, DUPLEX duplex)
 {
 	struct net_local *lp = (struct net_local *) netdev_priv(dev);
 	int retries = 2;
@@ -531,7 +882,13 @@ int renegotiate_speed(struct net_device *dev, int speed, DUPLEX duplex)
 	 * It appears that the 10baset full and half duplex settings
 	 * are overloaded for gigabit ethernet
 	 */
-	if ((duplex == FULL_DUPLEX) && (speed == 10)) {
+	if (speed == 0) {
+	  phy_reg4 = ADVERTISE_10FULL | ADVERTISE_10HALF 
+	    | ADVERTISE_100FULL | ADVERTISE_100HALF | ADVERTISE_CSMA;
+	  phy_reg9 = EX_ADVERTISE_1000FULL | EX_ADVERTISE_1000HALF;
+
+	}
+	else if ((duplex == FULL_DUPLEX) && (speed == 10)) {
 		phy_reg4 = ADVERTISE_10FULL | ADVERTISE_CSMA;
 	}
 	else if ((duplex == FULL_DUPLEX) && (speed == 100)) {
@@ -576,7 +933,7 @@ int renegotiate_speed(struct net_device *dev, int speed, DUPLEX duplex)
 		/* initiate an autonegotiation of the speed */
 		_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, phy_reg0);
 
-		wait_count = 5;	/* so we don't loop forever */
+		wait_count = 20;	/* so we don't loop forever */
 		while (wait_count--) {
 			/* wait a bit for the negotiation to complete */
 			mdelay(500);
@@ -619,19 +976,55 @@ void set_mac_speed(struct net_local *lp)
 	u16 phylinkspeed;
 	struct net_device *dev = lp->ndev;
 
+#ifdef CONFIG_XILINX_LLTEMAC_NATIONAL_DP83865_GMII
+    u16 RegValue;
+    int i;
+
+    for (i = 0; i < NATIONAL_DP83865_RETRIES*10; i++) {
+        _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+                 NATIONAL_DP83865_STATUS, &RegValue);
+        if (RegValue & (NATIONAL_DP83865_STATUS_AUTONEGEND
+                    |NATIONAL_DP83865_STATUS_LINK))
+            break;
+        udelay(1 * 100000);
+    }
+
+    _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+             NATIONAL_DP83865_STATUS_AUTONEG, &RegValue);
+    /* Get current link speed */
+    phylinkspeed = (RegValue & NATIONAL_DP83865_LINKSPEED_MASK);
+
+    /* Update TEMAC speed accordingly */
+    switch (phylinkspeed) {
+    case (NATIONAL_DP83865_LINKSPEED_1000M):
+        _XLlTemac_SetOperatingSpeed(&lp->Emac, 1000);
+        printk(KERN_INFO "XLlTemac: speed set to 1000Mb/s\n");
+	lp->cur_speed = 1000;
+        break;
+    case (NATIONAL_DP83865_LINKSPEED_100M):
+        _XLlTemac_SetOperatingSpeed(&lp->Emac, 100);
+        printk(KERN_INFO "XLlTemac: speed set to 100Mb/s\n");
+	lp->cur_speed = 100;
+        break;
+    default:
+        _XLlTemac_SetOperatingSpeed(&lp->Emac, 10);
+        printk(KERN_INFO "XLlTemac: speed set to 10Mb/s\n");
+	lp->cur_speed = 10;
+        break;
+    }
+
+    return;
+
+
+#else
 #ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+
 	/*
 	 * This function is specific to MARVELL 88E1111 PHY chip on
 	 * many Xilinx boards and assumes GMII interface is being used
 	 * by the TEMAC.
 	 */
 
-#define MARVELL_88E1111_PHY_SPECIFIC_STATUS_REG_OFFSET  17
-#define MARVELL_88E1111_LINKSPEED_MARK                  0xC000
-#define MARVELL_88E1111_LINKSPEED_SHIFT                 14
-#define MARVELL_88E1111_LINKSPEED_1000M                 0x0002
-#define MARVELL_88E1111_LINKSPEED_100M                  0x0001
-#define MARVELL_88E1111_LINKSPEED_10M                   0x0000
 	u16 RegValue;
 
 	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
@@ -684,7 +1077,7 @@ void set_mac_speed(struct net_local *lp)
 	 * Try to renegotiate the speed until something sticks
 	 */
 	while (phylinkspeed > 1) {
-		ret = renegotiate_speed(dev, phylinkspeed, FULL_DUPLEX);
+		ret = renegotiate_speed_wait(dev, phylinkspeed, FULL_DUPLEX);
 		/*
 		 * ret == 1 - try it again
 		 * ret == 0 - it worked
@@ -718,6 +1111,139 @@ void set_mac_speed(struct net_local *lp)
 	       phylinkspeed);
 	lp->cur_speed = phylinkspeed;
 #endif
+#endif
+}
+
+/*
+ * Configure all multicast address entries 
+ */
+static void xenet_set_multicast_list(struct net_device *dev)
+{
+  unsigned long flags;
+  int i,wasstarted;
+  /* int j; */
+  XLlTemac *InstancePtr;
+  struct dev_addr_list *p;
+
+  u32 Reg;
+  unsigned int multicasttableoffset,bitoffset;
+
+  spin_lock_irqsave(&XTE_spinlock, flags);
+
+  InstancePtr = &((struct net_local *) netdev_priv(dev))->Emac;
+
+  wasstarted=InstancePtr->IsStarted;
+  if(wasstarted)
+    {
+      XLlTemac_Stop(InstancePtr);
+    }
+  if(InstancePtr->Config.ExtFilter)
+    {
+/*
+      printk(KERN_INFO "%s: Variable-length multicast list\n", dev->name);
+*/
+      /* Multicast tables offsets are different for TEMAC 0 and 1 */
+      multicasttableoffset=(InstancePtr->Config.BaseAddress
+			    &  XTE_TEMAC1_OFFSET)?
+	(XTE_MCAST1_TABLE_OFFSET- XTE_TEMAC1_OFFSET):
+	XTE_MCAST0_TABLE_OFFSET;
+      memset((char*)(InstancePtr->Config.BaseAddress + multicasttableoffset),
+	     0,XTE_MCAST_TABLE_SIZE);
+      SYNCHRONIZE_IO;
+
+      for(p=dev->mc_list,i=0;p;p=p->next,i++)
+	{
+	  /* 
+	  printk(KERN_INFO "%s: Multicast address #%d ", dev->name,i);
+	  for(j=0;j<5;j++) printk("%02x:",p->dmi_addr[j]);
+	  printk("%02x\n",p->dmi_addr[5]);
+	  */
+	  bitoffset=((((unsigned int)p->dmi_addr[4])|
+		     (((unsigned int)p->dmi_addr[3])<<8)) & 0x7fff)<<2;
+	  Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+				 multicasttableoffset+bitoffset);
+	  Reg |= 1;
+	  XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+			    multicasttableoffset+bitoffset, Reg);
+	}
+/*
+      printk(KERN_INFO "%s: Total %d multicast addresses\n", dev->name,i);
+*/
+    }
+  else
+    {
+      for(p=dev->mc_list,i=0;
+	  i<XTE_MULTI_MAT_ENTRIES && i<dev->mc_count;
+	  p=p->next,i++)
+	{
+	  XLlTemac_MulticastAdd(InstancePtr,(void*)(&p->dmi_addr),i);
+	/*
+	  printk(KERN_INFO "%s: Multicast address #%d ", dev->name,i);
+	  for(j=0;j<5;j++) printk("%02x:",p->dmi_addr[j]);
+	  printk("%02x\n",p->dmi_addr[5]);
+	 */
+	}
+      for(;i<XTE_MULTI_MAT_ENTRIES;i++)
+	{
+	  XLlTemac_MulticastClear(InstancePtr,i);
+/*
+	  printk(KERN_INFO "%s: Multicast address #%d is clear\n",dev->name,i);
+*/
+	}
+    }
+
+  if(wasstarted)
+    {
+      XLlTemac_Start(InstancePtr);
+    }
+
+  spin_unlock_irqrestore(&XTE_spinlock, flags);
+}
+
+static void xenet_change_rx_flags(struct net_device *dev, int change)
+{
+  unsigned long flags;
+  int wasstarted;
+
+  XLlTemac *InstancePtr;
+  u32 Options, oldOptions;
+
+  spin_lock_irqsave(&XTE_spinlock, flags);
+  
+  InstancePtr = &((struct net_local *) netdev_priv(dev))->Emac;
+  Options = XLlTemac_GetOptions(InstancePtr);
+  oldOptions=Options;
+  
+  if(change & IFF_PROMISC)
+    {
+      if(dev->flags & IFF_PROMISC)
+	{
+	  Options |= XTE_PROMISC_OPTION;
+	}
+      else
+	{
+	  Options &= ~XTE_PROMISC_OPTION;
+	}
+    }
+  if(oldOptions!=Options)
+    {
+      wasstarted=InstancePtr->IsStarted;
+      if(wasstarted)
+	{
+	  XLlTemac_Stop(InstancePtr);
+	}
+      printk(KERN_INFO "%s: XLlTemac: Options: 0x%x -> 0x%x\n",
+	     dev->name, oldOptions,Options);
+      (int) XLlTemac_SetOptions(InstancePtr, Options);
+      (int) XLlTemac_ClearOptions(InstancePtr, ~Options);
+      if(wasstarted)
+	{
+	  XLlTemac_Start(InstancePtr);
+	}
+
+	}
+
+  spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
 /*
@@ -769,7 +1295,8 @@ static void reset(struct net_device *dev, u32 line_num)
 
 	/* Reset on TEMAC also resets PHY. Give it some time to finish negotiation
 	 * before we move on */
-	mdelay(2000);
+	//mdelay(2000);
+	mdelay(200);
 
 	/*
 	 * The following four functions will return an error if the
@@ -777,6 +1304,7 @@ static void reset(struct net_device *dev, u32 line_num)
 	 * _XLlTemac_Reset() so we can safely ignore the return values.
 	 */
 	(int) _XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr);
+	xenet_set_multicast_list(dev);
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
 	Options = XLlTemac_GetOptions(&lp->Emac);
@@ -834,9 +1362,34 @@ static int get_phy_status(struct net_device *dev, DUPLEX * duplex, int *linkup)
 	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &reg);
 	*duplex = FULL_DUPLEX;
 
+#ifdef CONFIG_XILINX_LLTEMAC_NATIONAL_DP83865_GMII
+	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+                 NATIONAL_DP83865_STATUS, &reg);
+	*linkup=(reg & NATIONAL_DP83865_STATUS_LINK) != 0;
+
+#else
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &reg);
+	if(reg & BMSR_LSTATUS)
+	  {
+	    _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr,
+			      MARVELL_88E1111_PHY_SPECIFIC_STATUS_REG_OFFSET,
+			      &reg);
+	    if((reg & MARVELL_88E1111_LINK_DUPLEX) == 0)
+	      {
+		*duplex = HALF_DUPLEX;
+	      }
+	    *linkup = (reg & MARVELL_88E1111_LINK_UP) != 0;
+	  }
+	else
+	  {
+	    *linkup = 0;
+	  }
+#else
 	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &reg);
 	*linkup = (reg & BMSR_LSTATUS) != 0;
-
+#endif
+#endif
 	return 0;
 }
 
@@ -868,7 +1421,7 @@ static void poll_gmii(unsigned long data)
 		if (phy_carrier) {
 			set_mac_speed(lp);
 			printk(KERN_INFO
-			       "%s: XLlTemac: PHY Link carrier restored.\n",
+			       "%s: XLlTemac: PHY Link carrier detected.\n",
 			       dev->name);
 			netif_carrier_on(dev);
 		}
@@ -878,10 +1431,20 @@ static void poll_gmii(unsigned long data)
 			netif_carrier_off(dev);
 		}
 	}
-
+	initialize_leds(lp,lp->gmii_addr,
+			netif_carrier_ok(dev)?
+			 lp->cur_speed==1000?
+			  LED_STATE_1G:
+			  lp->cur_speed==100?
+			   LED_STATE_100M:
+                           LED_STATE_10M:
+			 LED_STATE_OFF);
+	if(lp->phy_timer.function == &poll_gmii)
+	  {
 	/* Set up the timer so we'll get called again in 2 seconds. */
 	lp->phy_timer.expires = jiffies + 2 * HZ;
 	add_timer(&lp->phy_timer);
+	  }
 }
 
 static irqreturn_t xenet_temac_interrupt(int irq, void *dev_id)
@@ -1115,6 +1678,313 @@ static irqreturn_t xenet_dma_tx_interrupt(int irq, void *dev_id)
  *        cases, should be faster.
  */
 
+/* Detect the PHY address by scanning addresses 0 to 31 and
+ * looking at the MII status register (register 1) and assuming
+ * the PHY supports 10Mbps full/half duplex. Feel free to change
+ * this code to match your PHY, or hardcode the address if needed.
+ */
+/* Use MII register 1 (MII status register) to detect PHY */
+#define PHY_DETECT_REG  1
+
+/* Mask used to verify certain PHY features (or register contents)
+ * in the register above:
+ *  0x1000: 10Mbps full duplex support
+ *  0x0800: 10Mbps half duplex support
+ *  0x0008: Auto-negotiation support
+ */
+#define PHY_DETECT_MASK 0x1808
+
+static int detect_phy(struct net_local *lp, char *dev_name)
+{
+	u16 phy_reg;
+	u32 phy_addr;
+
+	for (phy_addr = 1; phy_addr <= 31; phy_addr++) {
+		_XLlTemac_PhyRead(&lp->Emac, phy_addr, PHY_DETECT_REG, &phy_reg);
+
+		if ((phy_reg != 0xFFFF) &&
+		    ((phy_reg & PHY_DETECT_MASK) == PHY_DETECT_MASK)) {
+			/* Found a valid PHY address */
+			printk(KERN_INFO "XTemac: PHY detected at address %d.\n", phy_addr);
+			return phy_addr;
+		}
+	}
+
+	printk(KERN_WARNING "XTemac: No PHY detected.\n");
+	return 0;		/* default to zero */
+}
+
+/*
+ * The following structure describes PHYs connected to MDIO interface.
+ * Usually it's the same interface as the MAC, however it is handled
+ * separatelly, so it will be possible to describe various MDIO bus
+ * topologies.
+ */
+
+typedef struct xtenet_phy_bus
+{
+  struct xtenet_phy_bus *next;
+  u32 BaseAddress;
+  unsigned char n_phys;
+  unsigned char use_mask;
+  unsigned char phys[31];
+} xtenet_phy_bus_t;
+
+xtenet_phy_bus_t *xtenet_phy_bus=NULL;
+
+spinlock_t xtenet_phy_bus_spinlock = SPIN_LOCK_UNLOCKED;
+
+
+void remove_phy(struct net_local *lp)
+{
+  unsigned long flags;
+  xtenet_phy_bus_t *phy_bus,**curr_phy_bus_ptr;
+  int i;
+  unsigned char mask;
+  if(lp==NULL) return;
+
+  spin_lock_irqsave(&xtenet_phy_bus_spinlock,flags);
+
+  /* find a bus */
+  for(curr_phy_bus_ptr=&xtenet_phy_bus;
+      curr_phy_bus_ptr&&*curr_phy_bus_ptr
+	&&(*curr_phy_bus_ptr)->BaseAddress!=lp->Emac.Config.PhyBaseAddress;
+      curr_phy_bus_ptr=&(*curr_phy_bus_ptr)->next);
+
+  if(curr_phy_bus_ptr&&(*curr_phy_bus_ptr))
+    {
+      phy_bus=*curr_phy_bus_ptr;
+
+      /* look for the PHY */
+      for(i=0,mask=1;i<phy_bus->n_phys;i++,mask<<=1)
+	{
+	  if(phy_bus->phys[i]==lp->gmii_addr)
+	    {
+	      /* free this PHY */
+	      phy_bus->use_mask&=~mask;
+	      printk(KERN_INFO
+		     "XLlTemac: PHY 0x%02x removed from the bus for 0x%08x\n",
+			 phy_bus->phys[i],phy_bus->BaseAddress);
+	      /* if there are no other PHYs used on this bus,
+		 remove the bus */
+	      if(phy_bus->use_mask=='\0')
+		{
+		  *curr_phy_bus_ptr=phy_bus->next;
+		  printk(KERN_INFO "XLlTemac: Deleting PHY bus for 0x%08x\n",
+			 phy_bus->BaseAddress);
+		  kfree(phy_bus);
+		}
+	      spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+	      return;
+	    }
+	}
+      printk(KERN_ERR
+	     "XLlTemac: Can't find PHY 0x%02x on the bus for 0x%08x\n",
+	     lp->gmii_addr,lp->Emac.Config.PhyBaseAddress);
+    }
+  else
+    {
+      printk(KERN_ERR "XLlTemac: Can't find a PHY bus for 0x%08x\n",
+	     lp->Emac.Config.PhyBaseAddress);
+    }
+  spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+}
+
+static int add_phy(struct net_local *lp)
+{
+  unsigned long flags;
+  u16 phy_reg;
+  int phy_addr,i,finished;
+  unsigned char mask;
+  xtenet_phy_bus_t *phy_bus,*curr_phy_bus;
+
+  spin_lock_irqsave(&xtenet_phy_bus_spinlock,flags);
+
+  /* do we already know a bus for this address? */
+  for(phy_bus=xtenet_phy_bus;
+      phy_bus && phy_bus->BaseAddress!=lp->Emac.Config.BaseAddress;
+      phy_bus=phy_bus->next);
+
+  if(phy_bus)
+    {
+      /* if we do, only look for the PHY here */
+      lp->Emac.Config.PhyBaseAddress=phy_bus->BaseAddress;
+
+      finished=0;
+      phy_addr=0;
+      /* look for the first available PHY */
+      for(i=0,mask=1;i<phy_bus->n_phys;i++,mask<<=1)
+	{
+	  if((phy_bus->use_mask&mask)==0)
+	    {
+	      phy_bus->use_mask|=mask;
+	      lp->Emac.Config.PhyBaseAddress=phy_bus->BaseAddress;
+	      phy_addr=phy_bus->phys[i];
+	      i=phy_bus->n_phys;
+	      finished=1;
+	    }
+	}
+      if(finished)
+	{
+	  printk(KERN_INFO
+		 "XLlTemac: PHY bus for 0x%08x found at 0x%08x, phy 0x%02x\n",
+		 lp->Emac.Config.BaseAddress,
+		 lp->Emac.Config.PhyBaseAddress,phy_addr);
+	}     
+      else
+	{
+	  /* error, return local address and broadcast */
+	  printk(KERN_ERR
+ "XLlTemac: bus for 0x%08x is found, however there are no unused PHYs on it\n",
+		 lp->Emac.Config.BaseAddress);
+	  lp->Emac.Config.PhyBaseAddress=lp->Emac.Config.BaseAddress;
+	  spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+	  return 0;
+	}
+    }
+  else
+    {
+      /* create and scan the bus */
+      phy_bus=kmalloc(sizeof(xtenet_phy_bus_t), GFP_KERNEL);
+      if(phy_bus==NULL)
+	{
+	  /* error, return local address and broadcast */
+	  printk(KERN_ERR
+	 "XLlTemac: can't allocate memory for PHY bus descriptor for 0x%08x\n",
+		 lp->Emac.Config.BaseAddress);
+	  lp->Emac.Config.PhyBaseAddress=lp->Emac.Config.BaseAddress;
+	  spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+	  return 0;
+	}
+      phy_bus->next=NULL;
+      phy_bus->BaseAddress=lp->Emac.Config.BaseAddress;
+      phy_bus->n_phys=0;
+      phy_bus->use_mask=0;
+      for(phy_addr=1;phy_addr<=31;phy_addr++)
+	{
+	  _XLlTemac_PhyRead(&lp->Emac, phy_addr, PHY_DETECT_REG, &phy_reg);
+	  if ((phy_reg != 0xFFFF) &&
+	      ((phy_reg & PHY_DETECT_MASK) == PHY_DETECT_MASK))
+	    {
+	      phy_bus->phys[phy_bus->n_phys]=phy_addr;
+	      initialize_leds(lp,phy_addr, LED_STATE_OFF);
+	      phy_bus->n_phys++;
+	    }
+	  
+	}
+      if(phy_bus->n_phys>0)
+	{
+	  /* if any PHYs are found, register this bus */
+	  lp->Emac.Config.PhyBaseAddress=phy_bus->BaseAddress;
+	  phy_addr=phy_bus->phys[0];
+	  phy_bus->use_mask=1;
+
+	  if(xtenet_phy_bus)
+	    {
+	      for(curr_phy_bus=xtenet_phy_bus;
+		  curr_phy_bus->next;
+		  curr_phy_bus=curr_phy_bus->next);
+	      curr_phy_bus->next=phy_bus;
+	    }
+	  else
+	    {
+	      xtenet_phy_bus=phy_bus;
+	    }
+	  printk(KERN_INFO
+	     "XLlTemac: PHY bus found at 0x%08x, phys: ",
+	     lp->Emac.Config.BaseAddress);
+	  for(i=0;i<phy_bus->n_phys;i++)
+	    {
+	      printk("0x%02x",phy_bus->phys[i]);
+	      if(i==0)
+		{
+		  printk("(local)");
+		}
+	      if(i<phy_bus->n_phys-1)
+		{
+		  printk(", ");
+		}
+	    }
+	  printk("\n");
+	}
+      else
+	{
+	  /* if no PHYs found, don't register this bus, look for PHYs
+	     elsewhere */
+	  kfree(phy_bus);
+
+	  /* find a bus on the same adapter with the address 0x40 less than
+	     the current base address */
+
+	  for(phy_bus=xtenet_phy_bus;
+	      phy_bus && phy_bus->BaseAddress+0x40!=
+		lp->Emac.Config.BaseAddress;
+	      phy_bus=phy_bus->next);
+
+
+	  /* if no such bus, use the first bus */
+	  if(phy_bus==NULL)
+	    {
+	      phy_bus=xtenet_phy_bus;
+	    }
+
+	  finished=0;
+	  while(!finished)
+	    {
+	      if(phy_bus)
+		{
+		  /* look for the first available PHY */
+		  for(i=0,mask=1;i<phy_bus->n_phys;i++,mask<<=1)
+		    {
+		      if((phy_bus->use_mask&mask)==0)
+			{
+			  phy_bus->use_mask|=mask;
+			  lp->Emac.Config.PhyBaseAddress=phy_bus->BaseAddress;
+			  phy_addr=phy_bus->phys[i];
+			  i=phy_bus->n_phys;
+			  finished=1;
+			}
+		    }
+		  if(finished)
+		    {
+		      printk(KERN_INFO
+	          "XLlTemac: PHY bus for 0x%08x found at 0x%08x, phy 0x%02x\n",
+			     lp->Emac.Config.BaseAddress,
+			     lp->Emac.Config.PhyBaseAddress,phy_addr);
+		      
+		    }
+		  else
+		    {
+		      /* if found nothing, look at the first bus, or 
+			 if found nothing on the first bus, return an error */
+		      if(phy_bus==xtenet_phy_bus)
+			{
+			  phy_bus=NULL;
+			}
+		      else
+			{
+			  phy_bus=xtenet_phy_bus;
+			}
+		    }
+		}
+	      if(phy_bus==NULL)
+		{
+		  /* error, return local address and broadcast */
+		  printk(KERN_ERR
+			 "XLlTemac: no PHYs found for 0x%08x\n",
+			 lp->Emac.Config.BaseAddress);
+		  lp->Emac.Config.PhyBaseAddress=lp->Emac.Config.BaseAddress;
+		  spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+		  return 0;
+		}
+	    }
+	}
+    }
+
+  spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
+  return phy_addr;
+}
+
 static int xenet_open(struct net_device *dev)
 {
 	struct net_local *lp;
@@ -1139,6 +2009,7 @@ static int xenet_open(struct net_device *dev)
 		       dev->name);
 		return -EIO;
 	}
+	xenet_set_multicast_list(dev);
 
 	/*
 	 * If the device is not configured for polled mode, connect to the
@@ -1147,6 +2018,14 @@ static int xenet_open(struct net_device *dev)
 	 * superfluous.
 	 */
 	Options = XLlTemac_GetOptions(&lp->Emac);
+	if(dev->flags & IFF_PROMISC)
+	  {
+	    Options |= XTE_PROMISC_OPTION;
+	  }
+	else
+	  {
+	    Options &= ~XTE_PROMISC_OPTION;
+	  }
 	Options |= XTE_FLOW_CONTROL_OPTION;
 	Options |= XTE_JUMBO_OPTION;
 	Options |= XTE_TRANSMITTER_ENABLE_OPTION;
@@ -1210,7 +2089,8 @@ static int xenet_open(struct net_device *dev)
 	}
 
 	/* give the system enough time to establish a link */
-	mdelay(2000);
+	//mdelay(2000);
+	mdelay(200);
 
 	phy_setup(lp);
 	set_mac_speed(lp);
@@ -1253,15 +2133,19 @@ static int xenet_open(struct net_device *dev)
 		}
 	}
 
+	/* Initially carrier is assumed to be off */
+	netif_carrier_off(dev);
+
 	/* We're ready to go. */
 	netif_start_queue(dev);
 
 	/* Set up the PHY monitoring timer. */
-	lp->phy_timer.expires = jiffies + 2 * HZ;
+	init_timer(&lp->phy_timer);
 	lp->phy_timer.data = (unsigned long) dev;
 	lp->phy_timer.function = &poll_gmii;
-	init_timer(&lp->phy_timer);
-	add_timer(&lp->phy_timer);
+
+	/* Call the polling function for the first time -- it will start the timer */
+	poll_gmii((unsigned long) dev);
 	return 0;
 }
 
@@ -1274,12 +2158,19 @@ static int xenet_close(struct net_device *dev)
 
 	/* Shut down the PHY monitoring timer. */
 	del_timer_sync(&lp->phy_timer);
+	lp->phy_timer.function = NULL;
 
 	/* Stop Send queue */
 	netif_stop_queue(dev);
 
+	/* Turn off the LEDs */
+	initialize_leds(lp, lp->gmii_addr, LED_STATE_OFF);
+
 	/* Now we could stop the device */
 	_XLlTemac_Stop(&lp->Emac);
+
+	/* Carrier is assumed to be off */
+	netif_carrier_off(dev);
 
 	/*
 	 * Free the interrupt - not polled mode.
@@ -1301,6 +2192,16 @@ static int xenet_close(struct net_device *dev)
 	spin_unlock_irqrestore(&sentQueueSpin, flags);
 
 	return 0;
+}
+
+static u32 xenet_get_link(struct net_device *dev)
+{
+  struct net_local *lp = (struct net_local *) netdev_priv(dev);
+  /* Stop the PHY timer to prevent reentrancy. */
+  del_timer_sync(&lp->phy_timer);
+  /* timer will restart if it was enabled */
+  poll_gmii((unsigned long) dev);
+  return netif_carrier_ok(dev) != 0;
 }
 
 static struct net_device_stats *xenet_get_stats(struct net_device *dev)
@@ -1514,7 +2415,7 @@ static int xenet_DmaSend_internal(struct sk_buff *skb, struct net_device *dev)
 	len = skb_headlen(skb);
 
 	/* get the physical address of the header */
-	phy_addr = (u32) dma_map_single(NULL, skb->data, len, DMA_TO_DEVICE);
+	phy_addr = (u32) dma_map_single(dev->dev.parent, skb->data, len, DMA_TO_DEVICE);
 
 	/* get the header fragment, it's in the skb differently */
 	XLlDma_mBdSetBufAddr(bd_ptr, phy_addr);
@@ -1589,7 +2490,7 @@ static int xenet_DmaSend_internal(struct sk_buff *skb, struct net_device *dev)
 		virt_addr =
 			(void *) page_address(frag->page) + frag->page_offset;
 		phy_addr =
-			(u32) dma_map_single(NULL, virt_addr, frag->size,
+			(u32) dma_map_single(dev->dev.parent, virt_addr, frag->size,
 					     DMA_TO_DEVICE);
 
 		XLlDma_mBdSetBufAddr(bd_ptr, phy_addr);
@@ -1683,7 +2584,7 @@ static void DmaSendHandlerBH(unsigned long p)
 			do {
 				len = XLlDma_mBdGetLength(BdCurPtr);
 				skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdCurPtr);
-				dma_unmap_single(NULL, skb_dma_addr, len,
+				dma_unmap_single(dev->dev.parent, skb_dma_addr, len,
 						 DMA_TO_DEVICE);
 
 				/* get ptr to skb */
@@ -1886,7 +2787,7 @@ static void _xenet_DmaSetupRecvBuffers(struct net_device *dev)
 		}
 
 		/* Get dma handle of skb->data */
-		new_skb_baddr = (u32) dma_map_single(NULL, new_skb->data,
+		new_skb_baddr = (u32) dma_map_single(dev->dev.parent, new_skb->data,
 						     lp->max_frame_size,
 						     DMA_FROM_DEVICE);
 
@@ -1964,7 +2865,7 @@ static void DmaRecvHandlerBH(unsigned long p)
 
 				/* get and free up dma handle used by skb->data */
 				skb_baddr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdCurPtr);
-				dma_unmap_single(NULL, skb_baddr,
+				dma_unmap_single(dev->dev.parent, skb_baddr,
 						 lp->max_frame_size,
 						 DMA_FROM_DEVICE);
 
@@ -2133,11 +3034,11 @@ static int descriptor_init(struct net_device *dev)
 	 * xenv_linux.h need to be disabled.
 	 */
 
-        printk(KERN_INFO "XLlTemac: Allocating DMA descriptors with kmalloc");
+        printk(KERN_INFO "XLlTemac: Allocating DMA descriptors with kmalloc\n");
         lp->desc_space = kmalloc(dftsize, GFP_KERNEL);
 	lp->desc_space_handle = (dma_addr_t) page_to_phys(virt_to_page(lp->desc_space));
 #else
-        printk(KERN_INFO "XLlTemac: Allocating DMA descriptors in Block Ram");
+        printk(KERN_INFO "XLlTemac: Allocating DMA descriptors in Block Ram\n");
 	lp->desc_space_handle = BRAM_BASEADDR;
 	lp->desc_space = ioremap(lp->desc_space_handle, dftsize);
 #endif
@@ -2149,7 +3050,7 @@ static int descriptor_init(struct net_device *dev)
 
 	printk(KERN_INFO
 	       "XLlTemac: (buffer_descriptor_init) phy: 0x%x, virt: 0x%x, size: 0x%x\n",
-	       lp->desc_space_handle, (unsigned int) lp->desc_space,
+	       (unsigned int)lp->desc_space_handle, (unsigned int) lp->desc_space,
 	       lp->desc_space_size);
 
 	/* calc size of send and recv descriptor space */
@@ -2159,7 +3060,8 @@ static int descriptor_init(struct net_device *dev)
 	recvpoolptr = lp->desc_space;
 	sendpoolptr = (void *) ((u32) lp->desc_space + recvsize);
 
-	recvpoolphy = (void *) lp->desc_space_handle;
+	/* cast the handle to a u32 1st just to keep the compiler happy */
+	recvpoolphy = (void *) (u32)lp->desc_space_handle;
 	sendpoolphy = (void *) ((u32) lp->desc_space_handle + recvsize);
 
 	result = XLlDma_BdRingCreate(&lp->Dma.RxBdRing, (u32) recvpoolphy,
@@ -2199,8 +3101,8 @@ static void free_descriptor_skb(struct net_device *dev)
 		skb = (struct sk_buff *) XLlDma_mBdGetId(BdPtr);
 		if (skb) {
 			skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdPtr);
-			dma_unmap_single(NULL, skb_dma_addr, lp->max_frame_size,
-					 DMA_FROM_DEVICE);
+			dma_unmap_single(dev->dev.parent, skb_dma_addr, 
+					 lp->max_frame_size, DMA_FROM_DEVICE);
 			dev_kfree_skb(skb);
 		}
 		/* find the next BD in the DMA RX BD ring */
@@ -2220,7 +3122,7 @@ static void free_descriptor_skb(struct net_device *dev)
 		if (skb) {
 			skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdPtr);
 			len = XLlDma_mBdGetLength(BdPtr);
-			dma_unmap_single(NULL, skb_dma_addr, len,
+			dma_unmap_single(dev->dev.parent, skb_dma_addr, len,
 					 DMA_TO_DEVICE);
 			dev_kfree_skb(skb);
 		}
@@ -2302,6 +3204,10 @@ xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 		return -EOPNOTSUPP;
 	}
 
+	if(ecmd->autoneg)
+	  {
+	    renegotiate_speed_init(dev, 0, FULL_DUPLEX);
+	  }
 	if ((ecmd->speed != 1000) && (ecmd->speed != 100) &&
 	    (ecmd->speed != 10)) {
 		printk(KERN_ERR
@@ -2311,7 +3217,7 @@ xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	}
 
 	if (ecmd->speed != lp->cur_speed) {
-		renegotiate_speed(dev, ecmd->speed, FULL_DUPLEX);
+		renegotiate_speed_init(dev, ecmd->speed, FULL_DUPLEX);
 		_XLlTemac_SetOperatingSpeed(&lp->Emac, ecmd->speed);
 		lp->cur_speed = ecmd->speed;
 	}
@@ -2435,7 +3341,7 @@ xenet_ethtool_set_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
 	return 0;
 }
 
-static int
+static void
 xenet_ethtool_get_ringparam(struct net_device *dev,
 			    struct ethtool_ringparam *erp)
 {
@@ -2445,7 +3351,6 @@ xenet_ethtool_get_ringparam(struct net_device *dev,
 	erp->tx_max_pending = XTE_SEND_BD_CNT;
 	erp->rx_pending = XTE_RECV_BD_CNT;
 	erp->tx_pending = XTE_SEND_BD_CNT;
-	return 0;
 }
 
 #define EMAC_REGS_N 32
@@ -2473,7 +3378,7 @@ xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
 	*(int *) ret = 0;
 }
 
-static int
+static void
 xenet_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
 {
 	memset(ed, 0, sizeof(struct ethtool_drvinfo));
@@ -2481,9 +3386,9 @@ xenet_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
 	strncpy(ed->version, DRIVER_VERSION, sizeof(ed->version) - 1);
 	/* Also tell how much memory is needed for dumping register values */
 	ed->regdump_len = sizeof(u16) * EMAC_REGS_N;
-	return 0;
 }
 
+/* FIXME -- this should be converted to ethtool_ops */
 static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 {
 	struct net_local *lp = (struct net_local *) netdev_priv(dev);
@@ -2642,10 +3547,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 		break;
 	case ETHTOOL_GDRVINFO:	/* Get driver information. Use "-i" w/ ethtool */
 		edrv.cmd = edrv.cmd;
-		ret = xenet_ethtool_get_drvinfo(dev, &edrv);
-		if (ret < 0) {
-			return -EIO;
-		}
+		xenet_ethtool_get_drvinfo(dev, &edrv);
 		edrv.n_stats = XENET_STATS_LEN;
 		if (copy_to_user
 		    (rq->ifr_data, &edrv, sizeof(struct ethtool_drvinfo))) {
@@ -2667,10 +3569,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 		break;
 	case ETHTOOL_GRINGPARAM:	/* Get RX/TX ring parameters. Use "-g" w/ ethtool */
 		erp.cmd = edrv.cmd;
-		ret = xenet_ethtool_get_ringparam(dev, &(erp));
-		if (ret < 0) {
-			return ret;
-		}
+		xenet_ethtool_get_ringparam(dev, &(erp));
 		if (copy_to_user
 		    (rq->ifr_data, &erp, sizeof(struct ethtool_ringparam))) {
 			return -EFAULT;
@@ -2915,6 +3814,8 @@ static void xtenet_remove_ndev(struct net_device *ndev)
 		if (XLlTemac_IsDma(&lp->Emac) && (lp->desc_space))
 			free_descriptor_skb(ndev);
 
+		remove_phy(lp);
+
 		iounmap((void *) (lp->Emac.Config.BaseAddress));
 		free_netdev(ndev);
 	}
@@ -2930,41 +3831,17 @@ static int xtenet_remove(struct device *dev)
 	return 0;		/* success */
 }
 
-/* Detect the PHY address by scanning addresses 0 to 31 and
- * looking at the MII status register (register 1) and assuming
- * the PHY supports 10Mbps full/half duplex. Feel free to change
- * this code to match your PHY, or hardcode the address if needed.
- */
-/* Use MII register 1 (MII status register) to detect PHY */
-#define PHY_DETECT_REG  1
-
-/* Mask used to verify certain PHY features (or register contents)
- * in the register above:
- *  0x1000: 10Mbps full duplex support
- *  0x0800: 10Mbps half duplex support
- *  0x0008: Auto-negotiation support
- */
-#define PHY_DETECT_MASK 0x1808
-
-static int detect_phy(struct net_local *lp, char *dev_name)
-{
-	u16 phy_reg;
-	u32 phy_addr;
-
-	for (phy_addr = 31; phy_addr > 0; phy_addr--) {
-		_XLlTemac_PhyRead(&lp->Emac, phy_addr, PHY_DETECT_REG, &phy_reg);
-
-		if ((phy_reg != 0xFFFF) &&
-		    ((phy_reg & PHY_DETECT_MASK) == PHY_DETECT_MASK)) {
-			/* Found a valid PHY address */
-			printk(KERN_INFO "XTemac: PHY detected at address %d.\n", phy_addr);
-			return phy_addr;
-		}
-	}
-
-	printk(KERN_WARNING "XTemac: No PHY detected.  Assuming a PHY at address 0\n");
-	return 0;		/* default to zero */
-}
+static const struct ethtool_ops ethtool_ops =
+  {
+    .get_drvinfo=xenet_ethtool_get_drvinfo,
+    .get_link=xenet_get_link,
+    .get_settings=xenet_ethtool_get_settings,
+    .set_settings=xenet_ethtool_set_settings,
+    .get_coalesce=xenet_ethtool_get_coalesce,
+    .set_coalesce=xenet_ethtool_set_coalesce,
+    .get_regs=xenet_ethtool_get_regs,
+    .get_ringparam=xenet_ethtool_get_ringparam
+  };
 
 /** Shared device initialization code */
 static int xtenet_setup(
@@ -2991,12 +3868,20 @@ static int xtenet_setup(
 	}
 	dev_set_drvdata(dev, ndev);
 
+	/* the following is needed starting in 2.6.30 as the dma_ops now require
+	   the device to be used in the dma calls 
+	*/
+	SET_NETDEV_DEV(ndev, dev);
+
 	ndev->irq = r_irq->start;
 
 	/* Initialize the private data used by XEmac_LookupConfig().
 	 * The private data are zeroed out by alloc_etherdev() already.
 	 */
 	lp = netdev_priv(ndev);
+	lp->phy_timer.function = NULL;
+	lp->led_blink = 0;
+	lp->reset_flag = 0;
 	lp->ndev = ndev;
 	lp->dma_irq_r = pdata->ll_dev_dma_rx_irq;
 	lp->dma_irq_s = pdata->ll_dev_dma_tx_irq;
@@ -3012,6 +3897,7 @@ static int xtenet_setup(
 #endif
 	Temac_Config.TxCsum = pdata->tx_csum;
 	Temac_Config.RxCsum = pdata->rx_csum;
+	Temac_Config.ExtFilter = pdata->ext_filter;
 	Temac_Config.LLDevType = pdata->ll_dev_type;
 	Temac_Config.LLDevBaseAddress = pdata->ll_dev_baseaddress;
 	Temac_Config.PhyType = pdata->phy_type;
@@ -3041,9 +3927,10 @@ static int xtenet_setup(
 		rc = -EIO;
 		goto error;
 	}
+	xenet_set_multicast_list(ndev);
 
 	dev_info(dev,
-			"MAC address is now %2x:%2x:%2x:%2x:%2x:%2x\n",
+			"MAC address is now %02x:%02x:%02x:%02x:%02x:%02x\n",
 			pdata->mac_addr[0], pdata->mac_addr[1],
 			pdata->mac_addr[2], pdata->mac_addr[3],
 			pdata->mac_addr[4], pdata->mac_addr[5]);
@@ -3127,15 +4014,16 @@ static int xtenet_setup(
 	}
 
 	/** Scan to find the PHY */
-	lp->gmii_addr = detect_phy(lp, ndev->name);
+	lp->gmii_addr = add_phy(lp);
 
 
 	/* initialize the netdev structure */
 	ndev->open = xenet_open;
 	ndev->stop = xenet_close;
+	ndev->set_multicast_list = xenet_set_multicast_list;
 	ndev->change_mtu = xenet_change_mtu;
+	ndev->change_rx_flags = xenet_change_rx_flags;
 	ndev->get_stats = xenet_get_stats;
-	ndev->flags &= ~IFF_MULTICAST;
 
 	if (XLlTemac_IsDma(&lp->Emac)) {
 		ndev->features = NETIF_F_SG | NETIF_F_FRAGLIST;
@@ -3165,7 +4053,10 @@ static int xtenet_setup(
 	lp->stripping =
 		(XLlTemac_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
 #endif
+	/* Initially carrier is assumed to be off */
+	netif_carrier_off(ndev);
 
+	SET_ETHTOOL_OPS(ndev, &ethtool_ops);
 	rc = register_netdev(ndev);
 	if (rc) {
 		dev_err(dev,
@@ -3289,6 +4180,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	pdata_struct.tx_csum		= get_u32(ofdev, "xlnx,txcsum");
 	pdata_struct.rx_csum		= get_u32(ofdev, "xlnx,rxcsum");
 	pdata_struct.phy_type           = get_u32(ofdev, "xlnx,phy-type");
+	pdata_struct.ext_filter         = get_u32(ofdev, "xlnx,mcast-extend");
         llink_connected_handle =
 		of_get_property(ofdev->node, "llink-connected", NULL);
         if(!llink_connected_handle) {
@@ -3444,6 +4336,8 @@ static void __exit xtenet_cleanup(void)
 	of_unregister_platform_driver(&xtenet_of_driver);
 #endif
 }
+
+__setup("eth_leds=", eth_leds_setup);
 
 module_init(xtenet_init);
 module_exit(xtenet_cleanup);

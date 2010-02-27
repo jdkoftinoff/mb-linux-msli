@@ -11,7 +11,7 @@ FLATFSD_OBJS = flatfsd.o newfs.o reboot.o
 FLATFS_OBJS = flatfs.o flatfs1.o ops.o
 
 # force error checking on compile
-CFLAGS += -Wall -Werror -Wmissing-prototypes
+CFLAGS += -Wall -Wmissing-prototypes
 
 # CFLAGS += -DDEBUG
 

@@ -590,7 +590,7 @@ int main(int argc, char *argv[]) {
         if (daemonize) {
             daemon_retval_init();
             
-            if ((pid = daemon_fork()) < 0)
+            if ((pid = daemon_vfork(argc, argv)) < 0)
                 goto finish;
             else if (pid != 0) {
                 int ret;

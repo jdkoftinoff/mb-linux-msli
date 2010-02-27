@@ -353,10 +353,18 @@ extern "C" {
 /**< XTE_MULTICAST_OPTION specifies the TEMAC channel to receive frames
  *   sent to Ethernet addresses that are programmed into the Multicast Address
  *   Table (MAT).
- *   This driver sets this option to disabled (cleared) by default. */
+ *   This driver sets this option to enabled (set) by default. */
+
+#define XTE_EXT_FILTER_OPTION         0x00000800
+/**< XTE_EXT_FILTER_OPTION enables extended filter mode that allows more
+ *   than four multicast addresses
+ *   This driver sets this option to disabled (clear) by default
+ *   if extended multicast filtering is not available, and to enabled (set)
+ *   if it is available. */
 
 #define XTE_DEFAULT_OPTIONS                     \
     (XTE_FLOW_CONTROL_OPTION |                  \
+     XTE_MULTICAST_OPTION |                     \
      XTE_BROADCAST_OPTION |                     \
      XTE_FCS_INSERT_OPTION |                    \
      XTE_FCS_STRIP_OPTION |                     \
@@ -418,6 +426,9 @@ typedef struct {
 	u32 BaseAddress;/**< BaseAddress is the physical base address of the
                           *  channel's registers
                           */
+	u32 PhyBaseAddress;/**< PhyBaseAddress is the physical base address of the
+                          *  channel's registers responsible for this channel's PHY
+                          */
 	u8 TxCsum;	/**< TxCsum indicates that the channel has checksum
 	                  *  offload on the Tx channel or not.
 	                  */
@@ -428,6 +439,8 @@ typedef struct {
 	                  *  used (MII, GMII, RGMII, ect.
 	                  */
 	u8 TemacIntr;	/**< TEMAC interrupt ID */
+
+        u8 ExtFilter;   /**< Extended filtering mode */
 
 	int LLDevType;	/**< LLDevType is the type of device attached to the
 			 *   temac's local link interface.
