@@ -1,0 +1,13 @@
+# Makefile for uClibc
+#
+# Copyright (C) 2000-2005 Erik Andersen <andersen@uclibc.org>
+#
+# Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+#
+
+CSRC := clone.c  fixdfsi.c  mmap.c  syscall.c
+
+SSRC := \
+	__longjmp.S  setjmp.S  vfork.S
+
+include $(top_srcdir)libc/sysdeps/linux/Makefile.commonarch
