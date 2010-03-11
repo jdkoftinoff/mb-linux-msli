@@ -67,12 +67,6 @@ struct funcdesc_value
 
 extern int _dl_linux_resolve(void) __attribute__((__visibility__("hidden")));
 
-/* 4KiB page alignment.  Should perhaps be made dynamic using
-   getpagesize(), based on AT_PAGESZ from auxvt?  */
-#define PAGE_ALIGN 0xfffff000
-#define ADDR_ALIGN 0xfff
-#define OFFS_ALIGN 0x7ffff000
-
 struct funcdesc_ht;
 
 #undef SEND_EARLY_STDERR
@@ -140,10 +134,10 @@ struct funcdesc_ht;
 
 /*
  * Compute the GOT address.  On several platforms, we use assembly
- * here.  on FR-V FDPIC, there's no way to compute the GOT address,
+ * here.  on FDPIC, there's no way to compute the GOT address,
  * since the offset between text and data is not fixed, so we arrange
- * for the assembly _dl_boot to pass this value as an argument to
- * _dl_boot.  */
+ * for the ldso assembly entry point to pass this value as an argument
+ * to _dl_start.  */
 #define DL_BOOT_COMPUTE_GOT(got) ((got) = dl_boot_got_pointer)
 
 #define DL_BOOT_COMPUTE_DYN(dpnt, got, load_addr) \
@@ -213,7 +207,15 @@ while (0)
 #endif
 
 #include <elf.h>
-static __inline__ void
+
+static __always_inline Elf32_Addr
+elf_machine_load_address (void)
+{
+	/* this is never an issue on Blackfin systems, so screw it */
+	return 0;
+}
+
+static __always_inline void
 elf_machine_relative (DL_LOADADDR_TYPE load_off, const Elf32_Addr rel_addr,
 		      Elf32_Word relative_count)
 {

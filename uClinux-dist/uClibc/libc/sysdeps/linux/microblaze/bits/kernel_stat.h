@@ -21,12 +21,9 @@ struct kernel_stat
 	int		st_blksize;
 	int		__pad2;
 	long		st_blocks;
-	int		st_atime;
-	unsigned int	st_atime_nsec;
-	int		st_mtime;
-	unsigned int	st_mtime_nsec;
-	int		st_ctime;
-	unsigned int	st_ctime_nsec;
+  struct timespec	st_atim;
+  struct timespec	st_mtim;
+  struct timespec	st_ctim;
 	unsigned long	__unused4;
 	unsigned long	__unused5;
 };
@@ -45,12 +42,9 @@ struct kernel_stat64
 	int			st_blksize;	/* Optimal block size for I/O.  */
 	int			__pad2;
 	long long		st_blocks;	/* Number 512-byte blocks allocated. */
-	int			st_atime;	/* Time of last access.  */
-	unsigned int		st_atime_nsec;
-	int			st_mtime;	/* Time of last modification.  */
-	unsigned int		st_mtime_nsec;
-	int			st_ctime;	/* Time of last status change.  */
-	unsigned int		st_ctime_nsec;
+  struct timespec	st_atim;
+  struct timespec	st_mtim;
+  struct timespec	st_ctim;
 	unsigned int		__unused4;
 	unsigned int		__unused5;
 };

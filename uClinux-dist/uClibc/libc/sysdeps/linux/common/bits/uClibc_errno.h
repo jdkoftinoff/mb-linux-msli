@@ -10,7 +10,7 @@
 # undef errno
 # define errno _dl_errno
 extern int _dl_errno; /* attribute_hidden; */
-#elif defined __UCLIBC_HAS_THREADS__
+#elif defined __UCLIBC_HAS_THREADS__ && !defined __LINUXTHREADS_OLD__
 # include <tls.h>
 # if defined USE___THREAD && USE___THREAD
 #  undef errno
@@ -31,7 +31,7 @@ extern int *__errno_location (void) __THROW __attribute__ ((__const__))
 	attribute_hidden
 # endif
 ;
-# if defined __UCLIBC_HAS_THREADS__
+# if defined __UCLIBC_HAS_THREADS__ && !defined __LINUXTHREADS_OLD__
 #  include <tls.h>
 #  if defined USE___THREAD && USE___THREAD
 libc_hidden_proto(__errno_location)

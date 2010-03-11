@@ -37,10 +37,10 @@ USA.  */
    a more than adequate job of explaining everything required to get this
    working. */
 
-struct funcdesc_value volatile *__attribute__((__visibility__("hidden")))
+__attribute__((__visibility__("hidden")))
+struct funcdesc_value volatile *
 _dl_linux_resolver (struct elf_resolve *tpnt, int reloc_entry)
 {
-	int reloc_type;
 	ELF_RELOC *this_reloc;
 	char *strtab;
 	ElfW(Sym) *symtab;
@@ -55,18 +55,11 @@ _dl_linux_resolver (struct elf_resolve *tpnt, int reloc_entry)
 	rel_addr = (char *)tpnt->dynamic_info[DT_JMPREL];
 
 	this_reloc = (ELF_RELOC *)(intptr_t)(rel_addr + reloc_entry);
-	reloc_type = ELF_R_TYPE(this_reloc->r_info);
 	symtab_index = ELF_R_SYM(this_reloc->r_info);
 
 	symtab = (Elf32_Sym *) tpnt->dynamic_info[DT_SYMTAB];
 	strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
 	symname= strtab + symtab[symtab_index].st_name;
-
-	if (reloc_type != R_BFIN_FUNCDESC_VALUE) {
-		_dl_dprintf(2, "%s: Incorrect relocation type in jump relocations\n",
-			    _dl_progname);
-		_dl_exit(1);
-	}
 
 	/* Address of GOT entry fix up */
 	got_entry = (struct funcdesc_value *) DL_RELOC_ADDR(tpnt->loadaddr, this_reloc->r_offset);
@@ -213,9 +206,9 @@ _dl_do_reloc (struct elf_resolve *tpnt,struct dyn_elf *scope,
 	  old_val = 0;
 #endif
 	switch (reloc_type) {
-	case R_BFIN_unused0:
+	case R_BFIN_UNUSED0:
 		break;
-	case R_BFIN_byte4_data:
+	case R_BFIN_BYTE4_DATA:
 		if ((long)reloc_addr_packed & 3)
 			reloc_value = reloc_addr_packed->v += symbol_addr;
 		else
@@ -300,11 +293,11 @@ _dl_do_lazy_reloc (struct elf_resolve *tpnt,
 	old_val = (unsigned long)reloc_addr->entry_point;
 #endif
 		switch (reloc_type) {
-			case R_BFIN_unused0:
+			case R_BFIN_UNUSED0:
 				break;
 			case R_BFIN_FUNCDESC_VALUE:
 				funcval = *reloc_addr;
-				funcval.entry_point = DL_RELOC_ADDR(tpnt->loadaddr, funcval.entry_point);
+				funcval.entry_point = (void *) DL_RELOC_ADDR(tpnt->loadaddr, funcval.entry_point);
 				funcval.got_value = tpnt->loadaddr.got_value;
 				*reloc_addr = funcval;
 				break;
@@ -313,7 +306,7 @@ _dl_do_lazy_reloc (struct elf_resolve *tpnt,
 		}
 #if defined (__SUPPORT_LD_DEBUG__)
 	if (_dl_debug_reloc && _dl_debug_detail)
-		_dl_dprintf(_dl_debug_file, "\tpatched: %x ==> %x @ %x", old_val, reloc_addr->entry_point, reloc_addr);
+		_dl_dprintf(_dl_debug_file, "\tpatched: %x ==> %x @ %x\n", old_val, reloc_addr->entry_point, reloc_addr);
 #endif
 	return 0;
 

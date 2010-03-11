@@ -93,10 +93,11 @@ typedef struct
 
 #include <link.h>
 
-#define ARCH_NUM 3
+#define ARCH_NUM 4
 #define DT_MIPS_GOTSYM_IDX	(DT_NUM + OS_NUM)
 #define DT_MIPS_LOCAL_GOTNO_IDX	(DT_NUM + OS_NUM +1)
 #define DT_MIPS_SYMTABNO_IDX	(DT_NUM + OS_NUM +2)
+#define DT_MIPS_PLTGOT_IDX	(DT_NUM + OS_NUM +3)
 
 #define ARCH_DYNAMIC_INFO(dpnt,  dynamic, debug_addr) \
 do { \
@@ -106,6 +107,8 @@ else if (dpnt->d_tag == DT_MIPS_LOCAL_GOTNO) \
      dynamic[DT_MIPS_LOCAL_GOTNO_IDX] = dpnt->d_un.d_val; \
 else if (dpnt->d_tag == DT_MIPS_SYMTABNO) \
      dynamic[DT_MIPS_SYMTABNO_IDX] = dpnt->d_un.d_val; \
+else if (dpnt->d_tag == DT_MIPS_PLTGOT) \
+     dynamic[DT_MIPS_PLTGOT_IDX] = dpnt->d_un.d_val; \
 else if (dpnt->d_tag == DT_MIPS_RLD_MAP) \
      *(ElfW(Addr) *)(dpnt->d_un.d_ptr) =  (ElfW(Addr)) debug_addr; \
 } while (0)
@@ -114,6 +117,7 @@ else if (dpnt->d_tag == DT_MIPS_RLD_MAP) \
 #define INIT_GOT(GOT_BASE,MODULE)						\
 do {										\
 	unsigned long idx;							\
+	unsigned long *pltgot;							\
 										\
 	/* Check if this is the dynamic linker itself */			\
 	if (MODULE->libtype == program_interpreter)				\
@@ -122,6 +126,12 @@ do {										\
 	/* Fill in first two GOT entries according to the ABI */		\
 	GOT_BASE[0] = (unsigned long) _dl_runtime_resolve;			\
 	GOT_BASE[1] = (unsigned long) MODULE;					\
+										\
+	pltgot = MODULE->dynamic_info[DT_MIPS_PLTGOT_IDX];			\
+	if (pltgot) {								\
+		pltgot[0] = (unsigned long) _dl_runtime_pltresolve;		\
+		pltgot[1] = (unsigned long) MODULE;				\
+	}									\
 										\
 	/* Add load address displacement to all local GOT entries */		\
 	idx = 2;									\
@@ -148,22 +158,16 @@ void _dl_perform_mips_global_got_relocations(struct elf_resolve *tpnt, int lazy)
 
 /* 4096 bytes alignment */
 #if _MIPS_SIM == _MIPS_SIM_ABI64
-#define PAGE_ALIGN (~0xfffUL)
-#define ADDR_ALIGN 0xfffUL
 #define OFFS_ALIGN (0x10000000000UL-0x1000)
-#else	/* O32 || N32 */
-#define PAGE_ALIGN 0xfffff000
-#define ADDR_ALIGN 0xfff
-#define OFFS_ALIGN 0x7ffff000
 #endif	/* O32 || N32 */
 
-#define elf_machine_type_class(type)		ELF_RTYPE_CLASS_PLT
-/* MIPS does not have COPY relocs */
-#define DL_NO_COPY_RELOCS
+#define elf_machine_type_class(type) \
+  ((((type) == R_MIPS_JUMP_SLOT) * ELF_RTYPE_CLASS_PLT)	\
+   | (((type) == R_MIPS_COPY) * ELF_RTYPE_CLASS_COPY))
 
 #define OFFSET_GP_GOT 0x7ff0
 
-static __inline__ ElfW(Addr) *
+static __always_inline ElfW(Addr) *
 elf_mips_got_from_gpreg (ElfW(Addr) gpreg)
 {
 	/* FIXME: the offset of gp from GOT may be system-dependent. */
@@ -173,7 +177,7 @@ elf_mips_got_from_gpreg (ElfW(Addr) gpreg)
 /* Return the link-time address of _DYNAMIC.  Conveniently, this is the
    first element of the GOT.  This must be inlined in a function which
    uses global data.  We assume its $gp points to the primary GOT.  */
-static __inline__ ElfW(Addr)
+static __always_inline ElfW(Addr)
 elf_machine_dynamic (void)
 {
 	register ElfW(Addr) gp __asm__ ("$28");
@@ -192,7 +196,7 @@ elf_machine_dynamic (void)
 #endif
 
 /* Return the run-time load address of the shared object.  */
-static __inline__ ElfW(Addr)
+static __always_inline ElfW(Addr)
 elf_machine_load_address (void)
 {
 	ElfW(Addr) addr;
@@ -208,7 +212,7 @@ elf_machine_load_address (void)
 	return addr;
 }
 
-static __inline__ void
+static __always_inline void
 elf_machine_relative (ElfW(Addr) load_off, const ElfW(Addr) rel_addr,
 		      ElfW(Word) relative_count)
 {

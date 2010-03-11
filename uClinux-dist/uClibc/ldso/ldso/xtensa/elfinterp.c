@@ -35,7 +35,6 @@
 unsigned long
 _dl_linux_resolver (struct elf_resolve *tpnt, int reloc_entry)
 {
-	int reloc_type;
 	ELF_RELOC *this_reloc;
 	char *strtab;
 	Elf32_Sym *symtab;
@@ -47,18 +46,11 @@ _dl_linux_resolver (struct elf_resolve *tpnt, int reloc_entry)
 
 	rel_addr = (char *) tpnt->dynamic_info[DT_JMPREL];
 	this_reloc = (ELF_RELOC *) (rel_addr + reloc_entry);
-	reloc_type = ELF32_R_TYPE (this_reloc->r_info);
 	symtab_index = ELF32_R_SYM (this_reloc->r_info);
 
 	symtab = (Elf32_Sym *) tpnt->dynamic_info[DT_SYMTAB];
 	strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
 	symname = strtab + symtab[symtab_index].st_name;
-
-	if (unlikely (reloc_type != R_XTENSA_JMP_SLOT)) {
-		_dl_dprintf (2, "%s: Incorrect relocation type in jump relocations\n",
-					 _dl_progname);
-		_dl_exit (1);
-	}
 
 	/* Address of the literal to fix up.  */
 	got_addr = (char **) (this_reloc->r_offset + tpnt->loadaddr);
@@ -221,7 +213,7 @@ _dl_do_reloc (struct elf_resolve *tpnt, struct dyn_elf *scope,
 	}
 #if defined (__SUPPORT_LD_DEBUG__)
 	if (_dl_debug_reloc && _dl_debug_detail)
-		_dl_dprintf (_dl_debug_file, "\tpatched: %x ==> %x @ %x",
+		_dl_dprintf (_dl_debug_file, "\tpatched: %x ==> %x @ %x\n",
 					 old_val, *reloc_addr, reloc_addr);
 #endif
 
@@ -260,7 +252,7 @@ _dl_do_lazy_reloc (struct elf_resolve *tpnt, struct dyn_elf *scope,
 
 #if defined (__SUPPORT_LD_DEBUG__)
 	if (_dl_debug_reloc && _dl_debug_detail)
-		_dl_dprintf (_dl_debug_file, "\tpatched: %x ==> %x @ %x",
+		_dl_dprintf (_dl_debug_file, "\tpatched: %x ==> %x @ %x\n",
 					 old_val, *reloc_addr, reloc_addr);
 #endif
 	return 0;

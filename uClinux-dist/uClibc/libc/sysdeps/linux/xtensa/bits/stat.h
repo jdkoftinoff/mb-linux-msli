@@ -55,7 +55,7 @@ struct stat
     unsigned long __pad2;
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
 #endif
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -95,7 +95,7 @@ struct stat64
 
     unsigned long __pad2;
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -151,3 +151,8 @@ struct stat64
 #define	__S_IREAD	0400	/* Read by owner.  */
 #define	__S_IWRITE	0200	/* Write by owner.  */
 #define	__S_IEXEC	0100	/* Execute by owner.  */
+
+#ifdef __USE_ATFILE
+# define UTIME_NOW	((1l << 30) - 1l)
+# define UTIME_OMIT	((1l << 30) - 2l)
+#endif

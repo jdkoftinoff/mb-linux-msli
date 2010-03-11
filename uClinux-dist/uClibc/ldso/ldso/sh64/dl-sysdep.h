@@ -25,11 +25,6 @@
 struct elf_resolve;
 extern unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_entry);
 
-/* 4096 bytes alignment */
-#define PAGE_ALIGN 0xfffff000
-#define ADDR_ALIGN 0xfff
-#define OFFS_ALIGN 0x7ffff000
-
 /* ELF_RTYPE_CLASS_PLT iff TYPE describes relocation of a PLT entry or
    TLS variable, so undefined references should not be allowed to
    define the value.
@@ -42,7 +37,7 @@ extern unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_ent
 /* Return the link-time address of _DYNAMIC.  Conveniently, this is the
    first element of the GOT.  This must be inlined in a function which
    uses global data.  */
-static __inline__ Elf32_Addr elf_machine_dynamic(void)
+static __always_inline Elf32_Addr elf_machine_dynamic(void)
 {
 	register Elf32_Addr *got;
 
@@ -70,7 +65,7 @@ static __inline__ Elf32_Addr elf_machine_dynamic(void)
 }
 
 /* Return the run-time load address of the shared object.  */
-static __inline__ Elf32_Addr elf_machine_load_address(void)
+static __always_inline Elf32_Addr elf_machine_load_address(void)
 {
 	Elf32_Addr addr;
 
@@ -123,7 +118,7 @@ static __inline__ Elf32_Addr elf_machine_load_address(void)
 	}						\
 }
 
-static __inline__ void
+static __always_inline void
 elf_machine_relative(Elf32_Addr load_off, const Elf32_Addr rel_addr,
 		     Elf32_Word relative_count)
 {

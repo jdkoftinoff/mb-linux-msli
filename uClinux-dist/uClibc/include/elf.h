@@ -20,13 +20,15 @@
 #ifndef _ELF_H
 #define	_ELF_H 1
 
-#include <features.h>
-
-__BEGIN_DECLS
+/* Avoid features.h here for portability.  This stuff matches sys/cdefs.h.  */
+#ifdef	__cplusplus
+extern "C" {
+#endif
 
 /* Standard ELF types.  */
 
 #include <stdint.h>
+#include <endian.h>
 
 /* Type for a 16-bit quantity.  */
 typedef uint16_t Elf32_Half;
@@ -120,6 +122,11 @@ typedef struct
 /* Conglomeration of the identification bytes, for easy testing as a word.  */
 #define	ELFMAG		"\177ELF"
 #define	SELFMAG		4
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+# define ELFMAG_U32 ((uint32_t)(ELFMAG0 + 0x100 * (ELFMAG1 + (0x100 * (ELFMAG2 + 0x100 * ELFMAG3)))))
+#elif __BYTE_ORDER == __BIG_ENDIAN
+# define ELFMAG_U32 ((uint32_t)((((ELFMAG0 * 0x100) + ELFMAG1) * 0x100 + ELFMAG2) * 0x100 + ELFMAG3))
+#endif
 
 #define EI_CLASS	4		/* File class byte index */
 #define ELFCLASSNONE	0		/* Invalid class */
@@ -1259,26 +1266,26 @@ typedef struct
 #define R_386_NUM	   38
 
 /* Blackfin specific definitions.  */
-#define R_BFIN_unused0			0x00
-#define R_BFIN_pcrel5m2			0x01
-#define R_BFIN_unused1			0x02
-#define R_BFIN_pcrel10			0x03
-#define R_BFIN_pcrel12_jump		0x04
-#define R_BFIN_rimm16			0x05
-#define R_BFIN_luimm16			0x06
-#define R_BFIN_huimm16			0x07
-#define R_BFIN_pcrel12_jump_s		0x08
-#define R_BFIN_pcrel24_jump_x		0x09
-#define R_BFIN_pcrel24			0x0a
-#define R_BFIN_unusedb			0x0b
-#define R_BFIN_unusedc			0x0c
-#define R_BFIN_pcrel24_jump_l		0x0d
-#define R_BFIN_pcrel24_call_x		0x0e
+#define R_BFIN_UNUSED0			0x00
+#define R_BFIN_PCREL5M2			0x01
+#define R_BFIN_UNUSED1			0x02
+#define R_BFIN_PCREL10			0x03
+#define R_BFIN_PCREL12_JUMP		0x04
+#define R_BFIN_RIMM16			0x05
+#define R_BFIN_LUIMM16			0x06
+#define R_BFIN_HUIMM16			0x07
+#define R_BFIN_PCREL12_JUMP_S		0x08
+#define R_BFIN_PCREL24_JUMP_X		0x09
+#define R_BFIN_PCREL24			0x0a
+#define R_BFIN_UNUSEDB			0x0b
+#define R_BFIN_UNUSEDC			0x0c
+#define R_BFIN_PCREL24_JUMP_L		0x0d
+#define R_BFIN_PCREL24_CALL_X		0x0e
 #define R_BFIN_var_eq_symb		0x0f
-#define R_BFIN_byte_data		0x10
-#define R_BFIN_byte2_data		0x11
-#define R_BFIN_byte4_data		0x12
-#define R_BFIN_pcrel11			0x13
+#define R_BFIN_BYTE_DATA		0x10
+#define R_BFIN_BYTE2_DATA		0x11
+#define R_BFIN_BYTE4_DATA		0x12
+#define R_BFIN_PCREL11			0x13
 
 #define R_BFIN_GOT17M4			0x14
 #define R_BFIN_GOTHI			0x15
@@ -1544,6 +1551,7 @@ typedef struct
 #define STO_MIPS_INTERNAL		0x1
 #define STO_MIPS_HIDDEN			0x2
 #define STO_MIPS_PROTECTED		0x3
+#define STO_MIPS_PLT			0x8
 #define STO_MIPS_SC_ALIGN_UNUSED	0xff
 
 /* MIPS specific values for `st_info'.  */
@@ -1689,8 +1697,11 @@ typedef struct
 #define R_MIPS_TLS_TPREL64	48	/* TP-relative offset, 64 bit */
 #define R_MIPS_TLS_TPREL_HI16	49	/* TP-relative offset, high 16 bits */
 #define R_MIPS_TLS_TPREL_LO16	50	/* TP-relative offset, low 16 bits */
+#define R_MIPS_GLOB_DAT		51
+#define R_MIPS_COPY		126
+#define R_MIPS_JUMP_SLOT        127
 /* Keep this the last entry.  */
-#define R_MIPS_NUM		51
+#define R_MIPS_NUM		128
 
 /* Legal values for p_type field of Elf32_Phdr.  */
 
@@ -1756,7 +1767,13 @@ typedef struct
 #define DT_MIPS_COMPACT_SIZE 0x7000002f /* (O32)Size of compact rel section. */
 #define DT_MIPS_GP_VALUE     0x70000030 /* GP value for aux GOTs.  */
 #define DT_MIPS_AUX_DYNAMIC  0x70000031 /* Address of aux .dynamic.  */
-#define DT_MIPS_NUM	     0x32
+/* The address of .got.plt in an executable using the new non-PIC ABI.  */
+#define DT_MIPS_PLTGOT	     0x70000032
+/* The base of the PLT in an executable using the new non-PIC ABI if that
+   PLT is writable.  For a non-writable PLT, this is omitted or has a zero
+   value.  */
+#define DT_MIPS_RWPLT        0x70000034
+#define DT_MIPS_NUM	     0x35
 
 /* Legal values for DT_MIPS_FLAGS Elf32_Dyn entry.  */
 
@@ -2357,6 +2374,9 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_ARM_THM_SWI8		14
 #define R_ARM_XPC25		15
 #define R_ARM_THM_XPC22		16
+#define R_ARM_TLS_DTPMOD32	17
+#define R_ARM_TLS_DTPOFF32	18
+#define R_ARM_TLS_TPOFF32	19
 #define R_ARM_COPY		20	/* Copy symbol at runtime */
 #define R_ARM_GLOB_DAT		21	/* Create GOT entry */
 #define R_ARM_JUMP_SLOT		22	/* Create PLT entry */
@@ -2375,6 +2395,14 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_ARM_GNU_VTINHERIT	101
 #define R_ARM_THM_PC11		102	/* thumb unconditional branch */
 #define R_ARM_THM_PC9		103	/* thumb conditional branch */
+#define R_ARM_TLS_GD32		104
+#define R_ARM_TLS_LDM32		105
+#define R_ARM_TLS_LDO32		106
+#define R_ARM_TLS_IE32		107
+#define R_ARM_TLS_LE32		108
+#define R_ARM_TLS_LDO12		109
+#define R_ARM_TLS_LE12		110
+#define R_ARM_TLS_IE12GP	111
 #define R_ARM_RXPC25		249
 #define R_ARM_RSBREL32		250
 #define R_ARM_THM_RPC22		251
@@ -3035,6 +3063,8 @@ typedef Elf32_Addr Elf32_Conflict;
 /* Keep this the last entry.  */
 #define R_XTENSA_NUM		50
 
-__END_DECLS
+#ifdef	__cplusplus
+}
+#endif
 
 #endif	/* elf.h */

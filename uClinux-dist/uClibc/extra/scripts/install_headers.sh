@@ -41,13 +41,16 @@ IFS=''
 while read -r filename; do
 	if test -d "$1/$filename"; then
 		mkdir -p "$2/$filename" 2>/dev/null
-	else
+		continue
+	fi
 		# NB: unifdef exits with 1 if output is not
 		# exactly the same as input. That's ok.
 		# Do not abort the script if unifdef "fails"!
-		"$top_builddir/extra/scripts/unifdef" -UUCLIBC_INTERNAL "$1/$filename" \
-		    | sed -e '/^\(rtld\|lib\(c\|m\|resolv\|dl\|intl\|rt\|nsl\|util\|crypt\|pthread\)\)_hidden_proto[ 	]*([a-zA-Z0-9_]*)$/d' >"$2/$filename"
-	fi
+	# NB2: careful with sed command arguments, they contain tab character
+	"$top_builddir/extra/scripts/unifdef" -U_LIBC "$1/$filename" \
+	| sed -e '/^rtld_hidden_proto[ 	]*([a-zA-Z0-9_]*)$/d' \
+	| sed -e '/^lib\(c\|m\|resolv\|dl\|intl\|rt\|nsl\|util\|crypt\|pthread\)_hidden_proto[ 	]*([a-zA-Z0-9_]*)$/d' \
+	>"$2/$filename"
 done
 )
 

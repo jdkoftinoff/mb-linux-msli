@@ -67,6 +67,10 @@
 #else
 #define GLB_STUFF(func)
 #endif
+extern void (*__CTOR_LIST__[]) __P((void));
+extern void (*__CTOR_END__[]) __P((void));
+extern void (*__DTOR_LIST__[]) __P((void));
+extern void (*__DTOR_END__[]) __P((void));
 
 /* The initial common code ends here. */
 asm ("\n/*@HEADER_ENDS*/");
@@ -128,6 +132,14 @@ asm ("\n/*@_init_GMON_STUFF_ENDS*/");
 #endif
 
   GLB_STUFF(_init)
+
+  void (**p)(void) = __CTOR_END__ - 1;
+  while (p> __CTOR_LIST__)
+    {
+      if(*p) (**p)();
+      p--;
+    }
+
   asm ("ALIGN");
   asm("END_INIT");
   /* Now the epilog. */
@@ -148,6 +160,14 @@ void _fini (void)
 {
 
   /* End of the _fini prolog. */
+
+  void (**p)(void) = __DTOR_LIST__ + 1;
+  while (p < __DTOR_END__)
+    {
+      if(*p) (**p)();
+      p++;
+    }
+
   GLB_STUFF(_fini)
   asm ("ALIGN");
   asm ("END_FINI");

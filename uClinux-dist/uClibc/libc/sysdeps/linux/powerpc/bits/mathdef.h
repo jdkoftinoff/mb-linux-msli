@@ -33,31 +33,11 @@
 #if defined __USE_ISOC99 && defined _MATH_H && !defined _MATH_H_MATHDEF
 # define _MATH_H_MATHDEF	1
 
-# ifdef __GNUC__
-#  if __STDC__ == 1
-
-/* In GNU or ANSI mode, gcc leaves `float' expressions as-is.  */
+/* PowerPC has both `float' and `double' arithmetic.  */
 typedef float float_t;		/* `float' expressions are evaluated as
 				   `float'.  */
 typedef double double_t;	/* `double' expressions are evaluated as
 				   `double'.  */
-
-#  else
-
-/* For `gcc -traditional', `float' expressions are evaluated as `double'. */
-typedef double float_t;		/* `float' expressions are evaluated as
-				   `double'.  */
-typedef double double_t;	/* `double' expressions are evaluated as
-				   `double'.  */
-
-#  endif
-# else
-
-/* Wild guess at types for float_t and double_t. */
-typedef double float_t;
-typedef double double_t;
-
-# endif
 
 /* The values returned by `ilogb' for 0 and NaN respectively.  */
 # define FP_ILOGB0	(-2147483647)
@@ -65,11 +45,13 @@ typedef double double_t;
 
 #endif	/* ISO C99 */
 
-#ifdef __UCLIBC_HAS_LONG_DOUBLE_MATH__
+#ifndef __NO_LONG_DOUBLE_MATH
 #include <bits/wordsize.h>
 /* Signal that we do not really have a `long double'.  The disables the
    declaration of all the `long double' function variants.  */
 # if __WORDSIZE == 32
-#  undef __UCLIBC_HAS_LONG_DOUBLE_MATH__
+#  define __NO_LONG_DOUBLE_MATH	1
+# elif !defined __UCLIBC_HAS_LONG_DOUBLE_MATH__
+#  define __NO_LONG_DOUBLE_MATH	1
 # endif  /* __WORDSIZE == 32 */
-#endif  /* __UCLIBC_HAS_LONG_DOUBLE_MATH__ */
+#endif  /* __NO_LONG_DOUBLE_MATH */

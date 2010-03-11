@@ -296,7 +296,7 @@ void _dl_get_ready_to_run(struct elf_resolve *tpnt, DL_LOADADDR_TYPE load_addr,
 				for (i = 0; i < auxvt[AT_PHNUM].a_un.a_val; i++, ppnt++) {
 					if (ppnt->p_type == PT_LOAD && !(ppnt->p_flags & PF_W))
 						_dl_mprotect((void *) (DL_RELOC_ADDR(app_tpnt->loadaddr, ppnt->p_vaddr) & PAGE_ALIGN),
-							     ((ppnt->p_vaddr + app_tpnt->loadaddr) & ADDR_ALIGN) +
+							     (DL_RELOC_ADDR(app_tpnt->loadaddr, ppnt->p_vaddr) & ADDR_ALIGN) +
 							     (unsigned long) ppnt->p_filesz,
 							     PROT_READ | PROT_WRITE | PROT_EXEC);
 				}
@@ -422,7 +422,7 @@ void _dl_get_ready_to_run(struct elf_resolve *tpnt, DL_LOADADDR_TYPE load_addr,
 	 */
 	debug_addr->r_map = (struct link_map *) _dl_loaded_modules;
 	debug_addr->r_version = 1;
-	debug_addr->r_ldbase = DL_LOADADDR_BASE(load_addr);
+	debug_addr->r_ldbase = (ElfW(Addr)) DL_LOADADDR_BASE(load_addr);
 	debug_addr->r_brk = (unsigned long) &_dl_debug_state;
 	_dl_debug_addr = debug_addr;
 
@@ -912,7 +912,7 @@ void *_dl_malloc(size_t size)
 		   The actual page size doesn't really matter; as long
 		   as we're self-consistent here, we're safe.  */
 		if (size < _dl_pagesize)
-			rounded_size = (size + _dl_pagesize - 1) & _dl_pagesize;
+			rounded_size = (size + ADDR_ALIGN) & _dl_pagesize;
 		else
 			rounded_size = size;
 

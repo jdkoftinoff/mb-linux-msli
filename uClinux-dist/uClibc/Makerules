@@ -350,7 +350,7 @@ $(CRTRELOC): $(top_builddir)lib/%.o : $(top_srcdir)libc/sysdeps/linux/$(TARGET_A
 endif
 
 ifneq ($(wildcard $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/initfini.c),)
-CFLAGS-initfini.s := -S -g0 $(PICFLAG) -fno-inline-functions #-finhibit-size-directive
+CFLAGS-initfini.s := -S -g0 $(PICFLAG) -fno-inline-functions -finhibit-size-directive
 $(top_builddir)lib/initfini.s: $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/initfini.c
 	ucfront-gcc mb-gcc $(CFLAGS-initfini.s) -o $@ $<
 
