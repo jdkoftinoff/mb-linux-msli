@@ -129,13 +129,13 @@
    LLONG_MAX, and ULLONG_MAX.  Instead only the values gcc defined for
    ages are available.  */
 #if defined __USE_ISOC99 && defined __GNUC__
-#  ifndef LLONG_MIN
+# ifndef LLONG_MIN
 #  define LLONG_MIN	(-LLONG_MAX-1)
-#  endif
-#  ifndef LLONG_MAX
+# endif
+# ifndef LLONG_MAX
 #  define LLONG_MAX	__LONG_LONG_MAX__
-#  endif
-#  ifndef ULLONG_MAX
+# endif
+# ifndef ULLONG_MAX
 #  define ULLONG_MAX	(LLONG_MAX * 2ULL + 1)
 # endif
 #endif

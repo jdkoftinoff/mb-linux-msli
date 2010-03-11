@@ -60,8 +60,8 @@ elf_machine_load_address (void)
 {
 	Elf32_Addr addr;
 	__asm__ (PCREL_OP ("lea", "_dl_start", "%0", "%0", "%%pc") "\n\t"
-	     "sub.l _dl_start@GOT.w(%%a5), %0"
-	     : "=a" (addr));
+			"sub.l _dl_start@GOT.w(%%a5), %0"
+			: "=a" (addr));
 	return addr;
 }
 

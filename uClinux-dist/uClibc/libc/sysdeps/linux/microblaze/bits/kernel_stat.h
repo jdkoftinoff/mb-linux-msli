@@ -9,44 +9,44 @@
 
 struct kernel_stat
 {
-	unsigned long	st_dev;
-	unsigned long	st_ino;
-	unsigned int	st_mode;
-	unsigned int	st_nlink;
-	unsigned int	st_uid;
-	unsigned int	st_gid;
-	unsigned long	st_rdev;
-	unsigned long	__pad1;
-	long		st_size;
-	int		st_blksize;
-	int		__pad2;
-	long		st_blocks;
+  unsigned long		st_dev;
+  unsigned long		st_ino;
+  unsigned int		st_mode;
+  unsigned int		st_nlink;
+  unsigned int		st_uid;
+  unsigned int		st_gid;
+  unsigned long		st_rdev;
+  unsigned long		__pad1;
+  long			st_size;
+  int			st_blksize;
+  int			__pad2;
+  long			st_blocks;
   struct timespec	st_atim;
   struct timespec	st_mtim;
   struct timespec	st_ctim;
-	unsigned long	__unused4;
-	unsigned long	__unused5;
+  unsigned long		__unused4;
+  unsigned long		__unused5;
 };
 
 struct kernel_stat64
 {
-	unsigned long long	st_dev;		/* Device.  */
-	unsigned long long	st_ino;		/* File serial number.  */
-	unsigned int		st_mode;	/* File mode.  */
-	unsigned int		st_nlink;	/* Link count.  */
-	unsigned int		st_uid;		/* User ID of the file's owner.  */
-	unsigned int		st_gid;		/* Group ID of the file's group. */
-	unsigned long long	st_rdev;	/* Device number, if device.  */
-	unsigned long long	__pad1;
-	long long		st_size;	/* Size of file, in bytes.  */
-	int			st_blksize;	/* Optimal block size for I/O.  */
-	int			__pad2;
-	long long		st_blocks;	/* Number 512-byte blocks allocated. */
+  unsigned long long	st_dev;		/* Device.  */
+  unsigned long long	st_ino;		/* File serial number.  */
+  unsigned int		st_mode;	/* File mode.  */
+  unsigned int		st_nlink;	/* Link count.  */
+  unsigned int		st_uid;		/* User ID of the file's owner.  */
+  unsigned int		st_gid;		/* Group ID of the file's group. */
+  unsigned long long	st_rdev;	/* Device number, if device.  */
+  unsigned long long	__pad1;
+  long long		st_size;	/* Size of file, in bytes.  */
+  int			st_blksize;	/* Optimal block size for I/O.  */
+  int			__pad2;
+  long long		st_blocks;	/* Number 512-byte blocks allocated. */
   struct timespec	st_atim;
   struct timespec	st_mtim;
   struct timespec	st_ctim;
-	unsigned int		__unused4;
-	unsigned int		__unused5;
+  unsigned int		__unused4;
+  unsigned int		__unused5;
 };
 
 #endif	/*  _BITS_STAT_STRUCT_H */

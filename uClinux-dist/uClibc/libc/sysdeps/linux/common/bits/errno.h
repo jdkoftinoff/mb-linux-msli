@@ -26,7 +26,7 @@
 
 /* Linux has no ENOTSUP error code.  */
 # ifndef ENOTSUP
-# define ENOTSUP EOPNOTSUPP
+#  define ENOTSUP EOPNOTSUPP
 # endif
 
 /* Older Linux versions also had no ECANCELED error code.  */

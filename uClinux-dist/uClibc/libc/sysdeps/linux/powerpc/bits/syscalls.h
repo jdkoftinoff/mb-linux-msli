@@ -174,7 +174,7 @@
     register long int r10 __asm__ ("r10");				\
     register long int r11 __asm__ ("r11");				\
     register long int r12 __asm__ ("r12");				\
-    LOADARGS_##nr(name, args);					\
+    LOADARGS_##nr(name, args);						\
     __asm__ __volatile__						\
       ("sc   \n\t"							\
        "mfcr %0"							\
@@ -203,11 +203,11 @@ extern void __illegally_sized_syscall_arg4(void);
 extern void __illegally_sized_syscall_arg5(void);
 extern void __illegally_sized_syscall_arg6(void);
 
-# define LOADARGS_0(name, dummy)					      \
+# define LOADARGS_0(name, dummy) \
 	r0 = name
 # define LOADARGS_1(name, __arg1) \
-	long int arg1 = (long int) (__arg1);	\
-  LOADARGS_0(name, 0);					   \
+	long int arg1 = (long int) (__arg1); \
+	LOADARGS_0(name, 0); \
 	if (__builtin_classify_type (__arg1) != 5 && sizeof (__arg1) > 4) \
 	  __illegally_sized_syscall_arg1 (); \
 	r3 = arg1

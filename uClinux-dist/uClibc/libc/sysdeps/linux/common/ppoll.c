@@ -38,13 +38,13 @@ int
 ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
        const __sigset_t *sigmask)
 {
-  /* The Linux kernel can in some situations update the timeout value.
-     We do not want that so use a local variable.  */
-  struct timespec tval;
+	/* The Linux kernel can in some situations update the timeout value.
+	   We do not want that so use a local variable.  */
+	struct timespec tval;
 	if (timeout != NULL) {
-      tval = *timeout;
-      timeout = &tval;
-    }
+		tval = *timeout;
+		timeout = &tval;
+	}
 
 	return __libc_ppoll(fds, nfds, timeout, sigmask, _NSIG / 8);
 }

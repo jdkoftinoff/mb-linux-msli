@@ -815,7 +815,7 @@ exec_comm_child(char *comm, int *fildes, int showerr, int noexec)
 	unsetenv("IFS");
 
 	if (fildes[0] != 1)
-	close(fildes[0]);
+		close(fildes[0]);
 	execve(_PATH_BSHELL, (char *const *) args, __environ);
 
 	/* Bad.  What now?  */

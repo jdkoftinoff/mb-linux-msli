@@ -36,9 +36,9 @@ static char *readsonameXX(char *name, FILE *infile, int expected_type, int *type
 		goto skip;
 
 	if (UCLIBC_ENDIAN_HOST == UCLIBC_ENDIAN_LITTLE)
-	byteswap = (epnt->e_ident[5] == ELFDATA2MSB) ? 1 : 0;
+		byteswap = (epnt->e_ident[5] == ELFDATA2MSB) ? 1 : 0;
 	else if (UCLIBC_ENDIAN_HOST == UCLIBC_ENDIAN_BIG)
-	byteswap = (epnt->e_ident[5] == ELFDATA2LSB) ? 1 : 0;
+		byteswap = (epnt->e_ident[5] == ELFDATA2LSB) ? 1 : 0;
 
 	/* Be very lazy, and only byteswap the stuff we use */
 	if (byteswap == 1) {

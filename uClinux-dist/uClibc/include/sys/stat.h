@@ -358,7 +358,7 @@ extern int mkfifo (__const char *__path, __mode_t __mode)
 extern int mkfifoat (int __fd, __const char *__path, __mode_t __mode)
      __THROW __nonnull ((2));
 #endif
-
+
 #ifdef __USE_ATFILE
 /* Set file access and modification times relative to directory file
    descriptor.  */

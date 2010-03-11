@@ -236,7 +236,7 @@ static int addrconfig(sa_family_t af)
 		ret = 1; /* Assume PF_UNIX. */
 		if (s < 0) {
 			if (errno != EMFILE)
-	        		ret = 0;
+				ret = 0;
 		} else
 			close(s);
 	}

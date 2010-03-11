@@ -17,7 +17,7 @@ clone (int (*fn)(void *arg), void *child_stack, int flags, void *arg, ...)
 
 	if (fn && child_stack) {
 
-	__asm__ __volatile__ (
+		__asm__ __volatile__ (
 			"excpt 0;"	/* Call sys_clone */
 			"cc = r0 == 0;"
 			"if !cc jump 1f;"	/* if (rval != 0) skip to parent */

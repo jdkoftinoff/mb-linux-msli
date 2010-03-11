@@ -175,7 +175,7 @@ static char *xstrdup(const char *str)
 #define __ELF_NATIVE_CLASS 64
 #include "readsoname2.c"
 static char *readsoname(char *name, FILE *infile, int expected_type,
-		 int *type, int elfclass)
+			int *type, int elfclass)
 {
 	char *res;
 
@@ -208,7 +208,7 @@ static char *readsoname(char *name, FILE *infile, int expected_type,
  * and use the actual/deduced type.
  */
 static char *is_shlib(const char *dir, const char *name, int *type,
-	       int *islink, int expected_type)
+		      int *islink, int expected_type)
 {
 	char *good = NULL;
 	char *cp, *cp2;
@@ -252,9 +252,9 @@ static char *is_shlib(const char *dir, const char *name, int *type,
 				if (fread(&exec, sizeof exec, 1, file) < 1)
 					warnx("can't read header from %s, skipping", buff);
 				else if (N_MAGIC(exec) != ZMAGIC
-					 && N_MAGIC(exec) != QMAGIC
-					 && N_MAGIC_SWAP(exec) != ZMAGIC
-					 && N_MAGIC_SWAP(exec) != QMAGIC) {
+				 && N_MAGIC(exec) != QMAGIC
+				 && N_MAGIC_SWAP(exec) != ZMAGIC
+				 && N_MAGIC_SWAP(exec) != QMAGIC) {
 					elf_hdr = (ElfW(Ehdr) *) & exec;
 					if (elf_hdr->e_ident[0] != 0x7f ||
 					    strncmp((char *)elf_hdr->e_ident + 1, "ELF", 3) != 0)

@@ -71,7 +71,7 @@ extern int msgget (key_t __key, int __msgflg) __THROW;
    This function is a cancellation point and therefore not marked with
    __THROW.  */
 extern ssize_t msgrcv (int __msqid, void *__msgp, size_t __msgsz,
-		   long int __msgtyp, int __msgflg);
+		       long int __msgtyp, int __msgflg);
 
 /* Send message to message queue.
 

@@ -227,10 +227,10 @@ static int check_elf_header(ElfW(Ehdr) *const ehdr)
 	byteswap = 0;
 	if (UCLIBC_ENDIAN_HOST == UCLIBC_ENDIAN_LITTLE) {
 		if (ehdr->e_ident[5] == ELFDATA2MSB)
-		byteswap = 1;
+			byteswap = 1;
 	} else if (UCLIBC_ENDIAN_HOST == UCLIBC_ENDIAN_BIG) {
 		if (ehdr->e_ident[5] == ELFDATA2LSB)
-		byteswap = 1;
+			byteswap = 1;
 	}
 
 	/* Be very lazy, and only byteswap the stuff we use */

@@ -737,7 +737,7 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 		cp = skipcomment(cp);
 		if (parens) {
 			if (*cp != ')')
-			return (LT_IF);
+				return (LT_IF);
 			cp = skipcomment(cp+1);
 		}
 		*cpp = cp;
