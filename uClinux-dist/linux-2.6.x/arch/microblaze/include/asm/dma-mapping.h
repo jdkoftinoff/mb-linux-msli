@@ -113,21 +113,34 @@ static inline dma_addr_t
 dma_map_single(struct device *dev, void *ptr, size_t size,
 	enum dma_data_direction direction)
 {
-	BUG_ON(direction == DMA_NONE);
+	dma_addr_t dma_ptr = virt_to_bus(ptr);
 
-	return virt_to_bus(ptr);
+	switch (direction) {
+	case DMA_TO_DEVICE:
+		flush_dcache_range((unsigned)dma_ptr, (unsigned)dma_ptr + size);
+		break;
+	case DMA_FROM_DEVICE:
+		invalidate_dcache_range((unsigned)dma_ptr,
+						(unsigned)dma_ptr + size);
+		break;
+	default:
+		BUG();
+	}
+
+	return dma_ptr;
 }
 
 static inline void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
-				    size_t size,
-				    enum dma_data_direction direction)
+				size_t size, enum dma_data_direction direction)
 {
 	switch (direction) {
-	case DMA_FROM_DEVICE:
+	case DMA_TO_DEVICE:
 		flush_dcache_range((unsigned)dma_addr,
 			(unsigned)dma_addr + size);
-			/* Fall through */
-	case DMA_TO_DEVICE:
+		break;
+	case DMA_FROM_DEVICE:
+		invalidate_dcache_range((unsigned)dma_addr,
+						(unsigned)dma_addr + size);
 		break;
 	default:
 		BUG();

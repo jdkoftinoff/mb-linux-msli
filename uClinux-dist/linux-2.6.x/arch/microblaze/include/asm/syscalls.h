@@ -7,10 +7,6 @@
 #include <linux/types.h>
 #include <linux/signal.h>
 
-/* FIXME will be removed */
-asmlinkage int sys_ipc(uint call, int first, int second,
-				int third, void *ptr, long fifth);
-
 struct pt_regs;
 asmlinkage int sys_vfork(struct pt_regs *regs);
 asmlinkage int sys_clone(int flags, unsigned long stack, struct pt_regs *regs);

@@ -60,26 +60,6 @@
 /***************** Macros (Inline Functions) Definitions *********************/
 
 /******************************************************************************
- * Define methods to flush and invalidate cache for BDs should they be
- * located in cached memory. These macros may NOPs if the underlying
- * XCACHE_FLUSH_DCACHE_RANGE and XCACHE_INVALIDATE_DCACHE_RANGE macros are not
- * implemented or they do nothing.
- *****************************************************************************/
-#ifdef XCACHE_FLUSH_DCACHE_RANGE
-#  define XLLDMA_CACHE_FLUSH(BdPtr)               \
-	XCACHE_FLUSH_DCACHE_RANGE((BdPtr), XLLDMA_BD_HW_NUM_BYTES)
-#else
-#  define XLLDMA_CACHE_FLUSH(BdPtr)
-#endif
-
-#ifdef XCACHE_INVALIDATE_DCACHE_RANGE
-#  define XLLDMA_CACHE_INVALIDATE(BdPtr)          \
-	XCACHE_INVALIDATE_DCACHE_RANGE((BdPtr), XLLDMA_BD_HW_NUM_BYTES)
-#else
-#  define XLLDMA_CACHE_INVALIDATE(BdPtr)
-#endif
-
-/******************************************************************************
  * Compute the virtual address of a descriptor from its physical address
  *
  * @param BdPtr is the physical address of the BD
@@ -158,6 +138,41 @@
 									      \
 		(BdPtr) = (XLlDma_Bd*)Addr;				      \
 	}
+
+/******************************************************************************
+ * Define methods to flush and invalidate cache for BDs should they be
+ * located in cached memory. These macros may NOPs if the underlying
+ * XCACHE_FLUSH_DCACHE_RANGE and XCACHE_INVALIDATE_DCACHE_RANGE macros are not
+ * implemented or they do nothing.
+ *
+ * MicroBlaze requires a physical address while Powerpc needs a virtual address
+ * for the cache functions.
+ *****************************************************************************/
+
+#ifdef XCACHE_FLUSH_DCACHE_RANGE
+#ifdef CONFIG_MICROBLAZE
+#  define XLLDMA_CACHE_FLUSH(BdPtr)               \
+	XCACHE_FLUSH_DCACHE_RANGE(XLLDMA_VIRT_TO_PHYS(BdPtr), XLLDMA_BD_HW_NUM_BYTES)
+#else
+#  define XLLDMA_CACHE_FLUSH(BdPtr)               \
+	XCACHE_FLUSH_DCACHE_RANGE((BdPtr), XLLDMA_BD_HW_NUM_BYTES)
+#endif
+#else
+#  define XLLDMA_CACHE_FLUSH(BdPtr)
+#endif
+
+#ifdef XCACHE_INVALIDATE_DCACHE_RANGE
+#ifdef CONFIG_MICROBLAZE
+#  define XLLDMA_CACHE_INVALIDATE(BdPtr)          \
+	XCACHE_INVALIDATE_DCACHE_RANGE(XLLDMA_VIRT_TO_PHYS(BdPtr), XLLDMA_BD_HW_NUM_BYTES)
+#else
+#  define XLLDMA_CACHE_INVALIDATE(BdPtr)          		 \
+	XCACHE_INVALIDATE_DCACHE_RANGE((BdPtr), XLLDMA_BD_HW_NUM_BYTES)
+#endif
+#else
+#  define XLLDMA_CACHE_INVALIDATE(BdPtr)
+#endif
+
 
 
 /************************** Function Prototypes ******************************/
@@ -253,6 +268,13 @@ int XLlDma_BdRingCreate(XLlDma_BdRing * RingPtr, u32 PhysAddr,
 	 */
 	memset((void *) VirtAddr, 0, (RingPtr->Separation * BdCount));
 
+	/* the 1st bd addresses (virtual and physical) have to initilized
+	 * before the cache functions are called as MicroBlaze requires
+	 * physical addresses
+	 */
+	RingPtr->FirstBdAddr = VirtAddr;
+	RingPtr->FirstBdPhysAddr = PhysAddr;
+
 	BdVirtAddr = VirtAddr;
 	BdPhysAddr = PhysAddr + RingPtr->Separation;
 	for (i = 1; i < BdCount; i++) {
@@ -270,8 +292,6 @@ int XLlDma_BdRingCreate(XLlDma_BdRing * RingPtr, u32 PhysAddr,
 
 	/* Setup and initialize pointers and counters */
 	RingPtr->RunState = XST_DMA_SG_IS_STOPPED;
-	RingPtr->FirstBdAddr = VirtAddr;
-	RingPtr->FirstBdPhysAddr = PhysAddr;
 	RingPtr->LastBdAddr = BdVirtAddr;
 	RingPtr->Length = RingPtr->LastBdAddr - RingPtr->FirstBdAddr +
 		RingPtr->Separation;

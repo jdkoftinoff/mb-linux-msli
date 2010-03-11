@@ -1185,7 +1185,7 @@ ace_of_probe(struct of_device *op, const struct of_device_id *match)
 {
 	struct resource res;
 	resource_size_t physaddr;
-	const u32 *id;
+	const u32 *id, *mem_width;
 	int irq, bus_width, rc;
 
 	dev_dbg(&op->dev, "ace_of_probe(%p, %p)\n", op, match);
@@ -1208,6 +1208,20 @@ ace_of_probe(struct of_device *op, const struct of_device_id *match)
 	bus_width = ACE_BUS_WIDTH_16;
 	if (of_find_property(op->node, "8-bit", NULL))
 		bus_width = ACE_BUS_WIDTH_8;
+	else {
+		mem_width = of_get_property(op->node, "xlnx,mem-width", NULL);
+		if (mem_width) {
+			switch (*mem_width) {
+			case 8:
+				bus_width = ACE_BUS_WIDTH_8; break;
+			case 16:
+				bus_width = ACE_BUS_WIDTH_16; break;
+			default:
+				dev_err(&op->dev, "invalid width (%i)\n",
+								*mem_width);
+			}
+		}
+	}
 
 	/* Call the bus-independant setup code */
 	return ace_alloc(&op->dev, id ? *id : 0, physaddr, irq, bus_width);

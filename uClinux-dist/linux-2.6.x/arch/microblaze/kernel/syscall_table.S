@@ -121,7 +121,7 @@ ENTRY(sys_call_table)
 	.long sys_wait4
 	.long sys_swapoff		/* 115 */
 	.long sys_sysinfo
-	.long sys_ipc
+	.long sys_ni_syscall		/* old sys_ipc */
 	.long sys_fsync
 	.long sys_sigreturn_wrapper
 	.long sys_clone_wrapper		/* 120 */
@@ -303,7 +303,7 @@ ENTRY(sys_call_table)
 	.long sys_mkdirat
 	.long sys_mknodat
 	.long sys_fchownat
-	.long sys_ni_syscall
+	.long sys_futimesat
 	.long sys_fstatat64		/* 300 */
 	.long sys_unlinkat
 	.long sys_renameat

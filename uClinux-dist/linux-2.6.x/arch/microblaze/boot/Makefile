@@ -2,11 +2,13 @@
 # arch/microblaze/boot/Makefile
 #
 
+MKIMAGE := $(srctree)/scripts/mkuboot.sh
+
 obj-y += linked_dtb.o
 
 targets := linux.bin linux.bin.gz simpleImage.%
 
-OBJCOPYFLAGS_linux.bin  := -O binary
+OBJCOPYFLAGS := -O binary
 
 # Default flags to Device Tree Compiler
 DTS_FLAGS       ?= -p 1024
@@ -27,6 +29,7 @@ $(obj)/linux.bin: vmlinux FORCE
 	[ -n $(CONFIG_INITRAMFS_SOURCE) ] && [ ! -e $(CONFIG_INITRAMFS_SOURCE) ] && \
 	touch $(CONFIG_INITRAMFS_SOURCE) || echo "No CPIO image"
 	$(call if_changed,objcopy)
+	$(call if_changed,uimage)
 	@echo 'Kernel: $@ is ready' ' (#'`cat .version`')'
 
 $(obj)/linux.bin.gz: $(obj)/linux.bin FORCE
@@ -39,9 +42,17 @@ quiet_cmd_cp = CP      $@$(if $2,$2)
 quiet_cmd_strip = STRIP   $@
       cmd_strip = $(STRIP) -K _start -K _end -K __log_buf -K _fdt_start vmlinux -o $@
 
+quiet_cmd_uimage = UIMAGE  $@.ub
+      cmd_uimage = $(CONFIG_SHELL) $(MKIMAGE) -A microblaze -O linux -T kernel \
+                   -C none -n 'Linux-$(KERNELRELEASE)' \
+                   -a $(CONFIG_KERNEL_BASE_ADDR) -e $(CONFIG_KERNEL_BASE_ADDR) \
+                   -d $@ $@.ub
+
 $(obj)/simpleImage.%: vmlinux FORCE
 	$(call if_changed,cp)
 	$(call if_changed,cp,.unstrip)
+	$(call if_changed,objcopy)
+	$(call if_changed,uimage)
 	$(call if_changed,strip)
 	@echo 'Kernel: $@ is ready' ' (#'`cat .version`')'
 
@@ -76,4 +87,4 @@ endif
 
 clean-kernel += linux.bin linux.bin.gz simpleImage.*
 
-clean-files += *.dtb
+clean-files += *.dtb simpleImage.*.unstrip
