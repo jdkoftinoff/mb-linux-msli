@@ -13,7 +13,7 @@
 
 #define __NR___syscall_timer_gettime __NR_timer_gettime
 static __inline__ _syscall2(int, __syscall_timer_gettime, kernel_timer_t, ktimerid,
-			void *, value);
+			void *, value)
 
 /* Get the amount of time left on a timer */
 int timer_gettime(timer_t timerid, struct itimerspec *value)

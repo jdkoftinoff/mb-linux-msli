@@ -35,20 +35,20 @@
 
 #include <asm/syscalls.h>
 
-asmlinkage int sys_vfork(struct pt_regs *regs)
+asmlinkage int microblaze_vfork(struct pt_regs *regs)
 {
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->r1,
 						regs, 0, NULL, NULL);
 }
 
-asmlinkage int sys_clone(int flags, unsigned long stack, struct pt_regs *regs)
+asmlinkage int microblaze_clone(int flags, unsigned long stack, struct pt_regs *regs)
 {
 	if (!stack)
 		stack = regs->r1;
 	return do_fork(flags, stack, regs, 0, NULL, NULL);
 }
 
-asmlinkage int sys_execve(char __user *filenamei, char __user *__user *argv,
+asmlinkage int microblaze_execve(char __user *filenamei, char __user *__user *argv,
 			char __user *__user *envp, struct pt_regs *regs)
 {
 	int error;

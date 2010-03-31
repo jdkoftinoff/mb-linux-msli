@@ -210,8 +210,6 @@ ENTRY(_user_exception)
 	lwi	r1, r1, TS_THREAD_INFO		/* get the thread info */
 	/* calculate kernel stack pointer */
 	addik	r1, r1, THREAD_SIZE - PT_SIZE
-	swi	r11, r0, PER_CPU(R11_SAVE)	/* temporarily save r11 */
-	lwi	r11, r0, PER_CPU(KM)		/* load mode indicator */
 2:
 	swi	r11, r1, PT_MODE		/* store the mode */
 	lwi	r11, r0, PER_CPU(R11_SAVE)	/* reload r11 */
@@ -478,6 +476,8 @@ ENTRY(ret_from_fork)
 	nop
 
 work_pending:
+	enable_irq
+
 	andi	r11, r19, _TIF_NEED_RESCHED
 	beqi	r11, 1f
 	bralid	r15, schedule
@@ -554,15 +554,15 @@ no_work_pending:
 	nop
 
 sys_vfork_wrapper:
-	brid	sys_vfork
+	brid	microblaze_vfork
 	addk	r5, r1, r0
 
 sys_clone_wrapper:
-	brid	sys_clone
+	brid	microblaze_clone
 	addk	r7, r1, r0
 
 sys_execve_wrapper:
-	brid	sys_execve
+	brid	microblaze_execve
 	addk	r8, r1, r0
 
 sys_sigreturn_wrapper:

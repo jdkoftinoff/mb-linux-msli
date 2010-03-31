@@ -13,7 +13,7 @@
 librt_hidden_proto(mq_setattr)
 #define __NR___syscall_mq_getsetattr __NR_mq_getsetattr
 static __inline__ _syscall3(int, __syscall_mq_getsetattr, int, mqdes,
-			const void *, mqstat, void *, omqstat);
+			const void *, mqstat, void *, omqstat)
 
 /*
  * Set attributes associated with message queue (and possibly also get

@@ -3,6 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define index strchr
+
 int
 main(argc,argv)
 int argc;

@@ -1,6 +1,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#define rindex strrchr
+
 void
 strip_trailing_slashes (path)
 char *path;

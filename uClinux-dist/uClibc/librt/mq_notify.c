@@ -12,7 +12,7 @@
 
 #define __NR___syscall_mq_notify __NR_mq_notify
 static __inline__ _syscall2(int, __syscall_mq_notify, int, mqdes,
-			const void *, notification);
+			const void *, notification)
 
 /* Register notification upon message arrival to an empty message queue */
 int mq_notify(mqd_t mqdes, const struct sigevent *notification)
