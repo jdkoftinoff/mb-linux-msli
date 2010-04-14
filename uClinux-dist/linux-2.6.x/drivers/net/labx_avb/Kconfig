@@ -1,0 +1,52 @@
+#
+# Lab X Technologies Audio / Video Bridging (AVB) packet engine
+# device driver configuration
+#
+
+config LABX_AVB
+	bool "Lab X Audio / Video Bridging (AVB) support"
+	help
+	  Enables options for various Lab X Technologies AVB packet engines
+
+menu "Lab X AVB (IEEE1722) packet engine support"
+	depends on LABX_AVB
+
+config LABX_AUDIO_PACKETIZER
+	bool "Audio packetizer engine support"
+	help
+	  This configures support for the Lab X AVB audio packetizer engine
+
+config LABX_AUDIO_DEPACKETIZER
+	bool "Audio depacketizer engine support"
+	help
+	  This configures support for the Lab X AVB audio depacketizer engine
+
+config LABX_AUDIO_DEPACKETIZER_DMA
+	bool "Audio depacketizer DMA interface support"
+	depends on LABX_AUDIO_DEPACKETIZER
+	depends on LABX_DMA
+	help
+	  This configures support for the Lab X DMA interface to the depacketizer
+
+config XILINX_AVB_SIMPLE_IPM
+	bool "AVB Simple IPM support"
+	depends on XILINX_LLTEMAC_AVB_LABX
+	help
+	  Say Y here if you want to include access for the Simple Input Packet Manager
+	  to run as part of the TEMAC/AVB driver.
+
+config XILINX_AVB_SIMPLE_OPM
+	bool "AVB Simple OPM support"
+	depends on XILINX_LLTEMAC_AVB_LABX
+	help
+	  Say Y here if you want to include access for the Simple Output Packet Manager
+	  to run as part of the TEMAC/AVB driver.
+
+config XILINX_VXCO_SYNC
+	bool "Support for syncing a VCXO"
+	depends on XILINX_AVB_SIMPLE_OPM
+	help
+	  Say Y here if you want to sync a VCXO to the dirty recovered word clock.
+
+endmenu
+
