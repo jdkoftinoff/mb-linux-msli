@@ -6,6 +6,9 @@
  *   Modified from memcpy.S and micro-optimised for SH4
  *   Stuart Menefy (stuart.menefy@st.com)
  *
+ * Copyright (c) 2009  STMicroelectronics Ltd
+ *   Optimised using prefetching and 64bit data transfer via FPU
+ *   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
  */
 
 /*
@@ -16,6 +19,22 @@
  */
 
 #include <endian.h>
+
+#ifdef __LITTLE_ENDIAN__
+#define	MEMCPY_USES_FPU
+/* Use paired single precision load or store mode for 64-bit tranfering.
+ * FPSCR.SZ=1,FPSCR.SZ=0 is well defined on both SH4-200 and SH4-300.
+ * Currenlty it has been only implemented and tested for little endian mode. */
+.macro FPU_SET_PAIRED_PREC
+	sts	fpscr, r7
+	mov	#0x10, r6	! PR=0 SZ=1
+	shll16	r6
+	lds	r6, fpscr
+.endm
+.macro RESTORE_FPSCR
+	lds	r7, fpscr
+.endm
+#endif
 
 	!
 	!	GHIJ KLMN OPQR -->  ...G HIJK LMNO PQR.
@@ -127,10 +146,10 @@
 
 	 mov.l	r3,@-r0		!  30 LS
 #else
-3:	mov	r1,r3		! OPQR
+3:	mov	r7,r3		! OPQR
 	shlr8	r3		! xOPQ
-	mov.l	@(r0,r5),r1	! KLMN
-	mov	r1,r6
+	mov.l	@(r0,r5),r7	! KLMN
+	mov	r7,r6
 	shll16	r6
 	shll8	r6		! Nxxx
 	or	r6,r3		! NOPQ
@@ -189,9 +208,7 @@ memcpy:
 	mov	r4, r0		!   5 MT (0 cycle latency)
 	add	r6, r0		!  49 EX
 
-	mov	#16, r1		!   6 EX
 	bt/s	.Lcase00	! 111 BR		(aligned)
-
 	 sub	r4, r5		!  75 EX
 
 	! Arguments are not nicely long word aligned or zero len.
@@ -207,6 +224,7 @@ memcpy:
 	! However the penalty for getting it 'wrong' is much higher for long word
 	! aligned data (and this is more common), so use a value of 16.
 
+	mov	#16, r1		!   6 EX
 	cmp/gt	r6,r1		!  56 MT
 
 	add	#-1,r5		!  50 EX
@@ -447,6 +465,92 @@ memcpy:
 
 	 mov.l	r7, @-r0	!  30 LS
 
+#ifdef MEMCPY_USES_FPU
+	! Copy the cache line aligned blocks by using the FPU registers.
+	! If src and dst are well aligned adopt 64-bit data transfer.
+	! We also need r0 as a temporary (for movca), so 'undo' the invariant:
+	!   r5:	 src (was r0+r5)
+	!   r1:	 dest (was r0)
+1:
+	add	r0, r5
+	mov	r0, r1
+
+	add	#-0x1c, r5
+	mov	r5, r0
+
+	tst	#7, r0		! src is 8byte aligned
+	mov	r5, r3
+
+	add	#-64, r3	! To pefetch head
+	bt/s	3f
+
+	 pref	@r3
+
+2:	fmov.s	@r5+, fr0
+	mov	r1, r6
+	fmov.s	@r5+, fr1
+	add	#-32, r6
+	fmov.s	@r5+, fr2
+	fmov.s	@r5+, fr3
+	fmov.s	@r5+, fr4
+	fmov.s	@r5+, fr5
+	fmov.s	@r5+, fr6
+	fmov.s	@r5+, fr7
+	add	#-0x40, r5
+
+	movca.l	r0, @r6		! Cache allocate + store on dst-32.
+
+	fmov.s	fr7, @-r1
+	fmov.s	fr6, @-r1
+	fmov.s	fr5, @-r1
+	fmov.s	fr4, @-r1
+	fmov.s	fr3, @-r1
+	fmov.s	fr2, @-r1
+	fmov.s	fr1, @-r1
+	fmov.s	fr0, @-r1
+
+	add	#-32, r3
+	cmp/eq	r2,r1
+
+	bf/s	2b
+	 pref	@r3		! Prefetch the next cache line.
+
+	bra	5f
+
+3:	FPU_SET_PAIRED_PREC
+
+4:	fmov	@r5+, dr0
+	mov	r1, r6
+	fmov	@r5+, dr2
+	add	#-32, r6
+	fmov	@r5+, dr4
+	fmov	@r5+, dr6
+	add	#-0x40, r5
+
+	movca.l	r0, @r6
+
+	fmov	dr6, @-r1
+	fmov	dr4, @-r1
+	fmov	dr2, @-r1
+	fmov	dr0, @-r1
+	add	#-32, r3
+	cmp/eq	r2,r1
+
+	bf/s	4b
+	 pref	@r3
+
+	RESTORE_FPSCR
+
+5:	mov	r1, r0
+
+	cmp/eq	r4, r0		!  54 MT
+	bf/s	1f		! 109 BR
+	 sub	r1, r5		!  75 EX
+
+	rts
+	 nop
+1:
+#else
 	! Copy the cache line aligned blocks
 	!
 	! In use: r0, r2, r4, r5
@@ -512,6 +616,7 @@ memcpy:
 
 	rts
 1:	 mov.l	@r15+, r8	!  15 LS
+#endif
 	sub	r4, r1		!  75 EX		(len remaining)
 
 	! number of trailing bytes is non-zero
@@ -733,30 +838,30 @@ memcpy:
 	mov.l	@(0x04,r5), r11	!  18 LS (latency=2)
 	xtrct	r9, r8		!  48 EX
 
-	mov.w	@(0x02,r5), r12	!  18 LS (latency=2)
+	mov.l   @(0x00,r5), r12 !  18 LS (latency=2)
 	xtrct	r10, r9		!  48 EX
 
 	movca.l	r0,@r1		!  40 LS (latency=3-7)
 	add	#-0x1c, r1	!  50 EX
 
-	mov.l	r3, @(0x1c,r1)	!  33 LS
+	mov.l	r3, @(0x18,r1)	!  33 LS
 	xtrct	r11, r10	!  48 EX
 
-	mov.l	r6, @(0x18,r1)	!  33 LS
+	mov.l	r6, @(0x14,r1)	!  33 LS
 	xtrct	r12, r11	!  48 EX
 
-	mov.l	r7, @(0x14,r1)	!  33 LS
+	mov.l	r7, @(0x10,r1)	!  33 LS
 
-	mov.l	r8, @(0x10,r1)	!  33 LS
-	add	#-0x3e, r5	!  50 EX
+	mov.l	r8, @(0x0c,r1)	!  33 LS
+	add	#-0x1e, r5	!  50 EX
 
-	mov.l	r9, @(0x0c,r1)	!  33 LS
+	mov.l	r9, @(0x08,r1)	!  33 LS
 	cmp/eq	r2,r1		!  54 MT
 
-	mov.l	r10, @(0x08,r1)	!  33 LS
+	mov.l	r10, @(0x04,r1)	!  33 LS
 	bf/s	2b		! 109 BR
 
-	 mov.l	r11, @(0x04,r1)	!  33 LS
+	 mov.l	r11, @(0x00,r1)	!  33 LS
 #endif
 
 	mov.l	@r15+, r12

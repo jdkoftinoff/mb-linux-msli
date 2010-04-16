@@ -1,4 +1,4 @@
-/* Copyright (C) 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
+/* Copyright (C) 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2009
    Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
@@ -69,7 +69,7 @@ struct stat
 # else
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
 # endif
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -109,7 +109,7 @@ struct stat64
     __off64_t st_size;			/* Size of file, in bytes.  */
     __blksize_t st_blksize;		/* Optimal block size for I/O.  */
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -163,7 +163,7 @@ struct stat
 # else
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
 # endif
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -203,7 +203,7 @@ struct stat64
     __off64_t st_size;			/* Size of file, in bytes.  */
     __blksize_t st_blksize;		/* Optimal block size for I/O.  */
     __blkcnt64_t st_blocks;		/* Number 512-byte blocks allocated. */
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
     /* Nanosecond resolution timestamps are stored in a format
        equivalent to 'struct timespec'.  This is the type used
        whenever possible but the Unix namespace rules do not allow the
@@ -265,3 +265,8 @@ struct stat64
 #define	__S_IREAD	0400	/* Read by owner.  */
 #define	__S_IWRITE	0200	/* Write by owner.  */
 #define	__S_IEXEC	0100	/* Execute by owner.  */
+
+#ifdef __USE_ATFILE
+# define UTIME_NOW	((1l << 30) - 1l)
+# define UTIME_OMIT	((1l << 30) - 2l)
+#endif

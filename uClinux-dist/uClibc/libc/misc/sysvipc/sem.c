@@ -41,7 +41,7 @@ union semun {
 
 #ifdef __NR_semctl
 #define __NR___semctl __NR_semctl
-static __inline__ _syscall4(int, __semctl, int, semid, int, semnum, int, cmd, void *, arg);
+static __inline__ _syscall4(int, __semctl, int, semid, int, semnum, int, cmd, void *, arg)
 #endif
 
 int semctl(int semid, int semnum, int cmd, ...)
@@ -99,7 +99,7 @@ _syscall4(int, semtimedop, int, semid, struct sembuf *, sops, size_t, nsops, con
 int semtimedop(int semid, struct sembuf *sops, size_t nsops,
 	       const struct timespec *timeout)
 {
-    return __syscall_ipc(IPCOP_semtimedop, semid, nsops, 0, sops, timeout);
+    return __syscall_ipc(IPCOP_semtimedop, semid, nsops, 0, sops, (void *) timeout);
 }
 #endif
 #endif

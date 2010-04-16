@@ -15,7 +15,7 @@
   GOT_BASE[1] = (unsigned long) MODULE; \
 }
 
-static __inline__ unsigned long arm_modulus(unsigned long m, unsigned long p)
+static __always_inline unsigned long arm_modulus(unsigned long m, unsigned long p)
 {
 	unsigned long i,t,inc;
 	i=p; t=0;
@@ -55,11 +55,6 @@ static __inline__ unsigned long arm_modulus(unsigned long m, unsigned long p)
 struct elf_resolve;
 unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_entry);
 
-/* 4096 bytes alignment */
-#define PAGE_ALIGN 0xfffff000
-#define ADDR_ALIGN 0xfff
-#define OFFS_ALIGN 0x7ffff000
-
 /* ELF_RTYPE_CLASS_PLT iff TYPE describes relocation of a PLT entry, so
    PLT entries should not be allowed to define the value.
    ELF_RTYPE_CLASS_NOCOPY iff TYPE should not be allowed to resolve to one
@@ -72,7 +67,7 @@ unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_entry);
    first element of the GOT.  We used to use the PIC register to do this
    without a constant pool reference, but GCC 4.2 will use a pseudo-register
    for the PIC base, so it may not be in r10.  */
-static __inline__ Elf32_Addr __attribute__ ((unused))
+static __always_inline Elf32_Addr __attribute__ ((unused))
 elf_machine_dynamic (void)
 {
   Elf32_Addr dynamic;
@@ -104,7 +99,7 @@ elf_machine_dynamic (void)
 }
 
 /* Return the run-time load address of the shared object.  */
-static __inline__ Elf32_Addr __attribute__ ((unused))
+static __always_inline Elf32_Addr __attribute__ ((unused))
 elf_machine_load_address (void)
 {
 	extern void __dl_start __asm__ ("_dl_start");
@@ -128,7 +123,7 @@ elf_machine_load_address (void)
 	return pcrel_addr - got_addr;
 }
 
-static __inline__ void
+static __always_inline void
 elf_machine_relative (Elf32_Addr load_off, const Elf32_Addr rel_addr,
 		      Elf32_Word relative_count)
 {

@@ -29,7 +29,7 @@
 /* Here we define the magic numbers that this dynamic loader should accept
  * Note that SPARCV9 doesn't use EM_SPARCV9 since the userland is still 32-bit.
  */
-#if defined(__sparc_v9__) || defined(__sparc_v8__)
+#if defined(__sparc_v9__)
 #define MAGIC1 EM_SPARC32PLUS
 #else
 #define MAGIC1 EM_SPARC
@@ -49,7 +49,7 @@ unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_entry);
 
 #ifndef COMPILE_ASM
 /* Cheap modulo implementation, taken from arm/ld_sysdep.h. */
-static __inline__ unsigned long
+static __always_inline unsigned long
 sparc_mod(unsigned long m, unsigned long p)
 {
 	unsigned long i, t, inc;
@@ -89,18 +89,6 @@ sparc_mod(unsigned long m, unsigned long p)
 #define do_rem(result, n, base) ((result) = sparc_mod(n, base))
 #endif
 
-/* 4096 bytes alignment */
-#if defined(__sparc_v9__)
-/* ...but 8192 is required for mmap() on sparc64 kernel */
-#define PAGE_ALIGN 0xffffe000
-#define ADDR_ALIGN 0x1fff
-#define OFFS_ALIGN 0x7fffe000
-#elif defined(__sparc_v8__)
-#define PAGE_ALIGN 0xfffff000
-#define ADDR_ALIGN 0xfff
-#define OFFS_ALIGN 0x7ffff000
-#endif
-
 /* ELF_RTYPE_CLASS_PLT iff TYPE describes relocation of a PLT entry, so
    PLT entries should not be allowed to define the value.
    ELF_RTYPE_CLASS_NOCOPY iff TYPE should not be allowed to resolve to one
@@ -127,7 +115,7 @@ do {    register Elf32_Addr pc __asm__("o7"); \
 /* Return the link-time address of _DYNAMIC.  Conveniently, this is the
    first element of the GOT.  This must be inlined in a function which
    uses global data.  */
-static __inline__ Elf32_Addr
+static __always_inline Elf32_Addr
 elf_machine_dynamic (void)
 {
 	register Elf32_Addr *got __asm__ ("%l7");
@@ -138,7 +126,7 @@ elf_machine_dynamic (void)
 }
 
 /* Return the run-time load address of the shared object.  */
-static __inline__ Elf32_Addr
+static __always_inline Elf32_Addr
 elf_machine_load_address (void)
 {
 	register Elf32_Addr *pc __asm__ ("%o7"), *got __asm__ ("%l7");
@@ -157,7 +145,7 @@ elf_machine_load_address (void)
 	return (Elf32_Addr) got - *got + (pc[2] - pc[3]) * 4 - 4;
 }
 
-static __inline__ void
+static __always_inline void
 elf_machine_relative (Elf32_Addr load_off, const Elf32_Addr rel_addr,
 		      Elf32_Word relative_count)
 {

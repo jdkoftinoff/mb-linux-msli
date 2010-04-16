@@ -65,10 +65,11 @@ SECTIONS {
 	_KERNEL_SDA2_BASE_ = _ssrw + (_ssrw_size / 2);
 	}
 
+	/* FIXED in mainline version */
 	_sdata = . ;
 	/* page aligned when MMU used - origin 0x4 */
 	.data ALIGN (4096) : AT(ADDR(.data) - LOAD_OFFSET) {
-		*(.data)
+		DATA_DATA
 	}
 	. = ALIGN(32);
 	.data.cacheline_aligned : AT(ADDR(.data.cacheline_aligned) - LOAD_OFFSET) {
@@ -103,6 +104,7 @@ SECTIONS {
 		_KERNEL_SDA_BASE_ = _ssro + (_ssro_size / 2) ;
 	}
 
+	. = ALIGN(PAGE_SIZE);
 	__init_begin = .;
 
 	. = ALIGN(4096);

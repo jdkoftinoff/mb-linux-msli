@@ -1,6 +1,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#define rindex strrchr
+
 static void
 remove_suffix (name, suffix)
 	register char *name, *suffix;

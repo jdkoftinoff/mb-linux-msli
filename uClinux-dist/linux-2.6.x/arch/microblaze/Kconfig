@@ -51,6 +51,9 @@ config GENERIC_CLOCKEVENTS
 config GENERIC_HARDIRQS_NO__DO_IRQ
 	def_bool y
 
+config STACKTRACE_SUPPORT
+	def_bool y
+
 config GENERIC_GPIO
 	def_bool y
 

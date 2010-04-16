@@ -904,12 +904,10 @@ extern void endusershell (void) __THROW; /* Discard cached info.  */
 extern void setusershell (void) __THROW; /* Rewind and re-read the file.  */
 
 
-#ifdef __ARCH_USE_MMU__
 /* Put the program in the background, and dissociate from the controlling
    terminal.  If NOCHDIR is zero, do `chdir ("/")'.  If NOCLOSE is zero,
    redirects stdin, stdout, and stderr to /dev/null.  */
 extern int daemon (int __nochdir, int __noclose) __THROW __wur;
-#endif
 #endif /* Use BSD || X/Open.  */
 
 
@@ -1115,7 +1113,7 @@ extern char *ctermid (char *__s) __THROW;
 __END_DECLS
 
 
-#ifdef UCLIBC_INTERNAL
+#ifdef _LIBC
 #ifndef smallint_type /* if arch didn't override it in bits/wordsize.h */
 #define smallint_type int
 #endif

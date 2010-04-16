@@ -62,7 +62,9 @@ if test "`(cd "$KERNEL_HEADERS"; env pwd)`" != "`(cd "$2"; env pwd)`"; then
 		cp -RHL "$KERNEL_HEADERS/asm-generic"/* "$2/asm-generic" || exit 1
 	fi
 	# For paranoid reasons, we use explicit list of directories
-	# which may be here. List last updated for linux-2.6.27:
+	# which may be found in kernel's "sanitized headers" directory after
+	# "make defconfig; make headers_install" was run in kernel tree.
+	# List last updated for linux-2.6.27:
 	for dir in drm mtd rdma sound video; do
 		if test -d "$KERNEL_HEADERS/$dir"; then
 			mkdir -p "$2/$dir" 2>/dev/null

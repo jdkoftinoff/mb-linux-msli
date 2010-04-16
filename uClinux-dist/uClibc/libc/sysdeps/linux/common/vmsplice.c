@@ -10,7 +10,7 @@
 #include <sys/syscall.h>
 #include <fcntl.h>
 
-//libc_hidden_proto(vmsplice)
+libc_hidden_proto(vmsplice)
 
 #ifdef __NR_vmsplice
 _syscall4(ssize_t, vmsplice, int, __fdout, const struct iovec *, __iov,

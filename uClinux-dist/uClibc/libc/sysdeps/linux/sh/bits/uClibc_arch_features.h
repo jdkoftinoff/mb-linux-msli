@@ -6,7 +6,7 @@
 #define _BITS_UCLIBC_ARCH_FEATURES_H
 
 /* instruction used when calling abort() to kill yourself */
-#if defined(__CONFIG_SH2__)
+#ifdef __sh2__
 # define __UCLIBC_ABORT_INSTRUCTION__ "trapa #32"
 #else
 # define __UCLIBC_ABORT_INSTRUCTION__ "trapa #0xff"
@@ -39,7 +39,13 @@
 /* needed probably only for ppc64 */
 #undef __UCLIBC_HAVE_ASM_GLOBAL_DOT_NAME__
 
+/* define if target supports CFI pseudo ops */
+#define __UCLIBC_HAVE_ASM_CFI_DIRECTIVES__
+
 /* define if target supports IEEE signed zero floats */
 #define __UCLIBC_HAVE_SIGNED_ZERO__
+
+/* only weird assemblers generally need this */
+#undef __UCLIBC_ASM_LINE_SEP__
 
 #endif /* _BITS_UCLIBC_ARCH_FEATURES_H */

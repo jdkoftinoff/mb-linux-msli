@@ -33,7 +33,7 @@ __ptr_t mmap(__ptr_t addr, size_t len, int prot,
 #endif
 
 static __inline__ _syscall6 (__ptr_t, _mmap, __ptr_t, addr, size_t, len,
-                         int, prot, int, flags, int, fd, __off_t, offset);
+                         int, prot, int, flags, int, fd, __off_t, offset)
 __ptr_t mmap(__ptr_t addr, size_t len, int prot,
              int flags, int fd, __off_t offset)
 {

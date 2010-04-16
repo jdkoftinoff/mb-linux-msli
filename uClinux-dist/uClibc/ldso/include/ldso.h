@@ -33,11 +33,25 @@
 /* Pull in the arch specific page size */
 #include <bits/uClibc_page.h>
 /* Pull in the ldso syscalls and string functions */
+#ifndef __ARCH_HAS_NO_SHARED__
 #include <dl-syscall.h>
 #include <dl-string.h>
 /* Now the ldso specific headers */
 #include <dl-elf.h>
 #include <dl-hash.h>
+
+/* common align masks, if not specified by sysdep headers */
+#ifndef ADDR_ALIGN
+#define ADDR_ALIGN (_dl_pagesize - 1)
+#endif
+
+#ifndef PAGE_ALIGN
+#define PAGE_ALIGN (~ADDR_ALIGN)
+#endif
+
+#ifndef OFFS_ALIGN
+#define OFFS_ALIGN (PAGE_ALIGN & ~(1ul << (sizeof(_dl_pagesize) * 8 - 1)))
+#endif
 
 /* For INIT/FINI dependency sorting. */
 struct init_fini_list {
@@ -119,6 +133,10 @@ extern void _dl_get_ready_to_run(struct elf_resolve *tpnt, DL_LOADADDR_TYPE load
 
 #ifdef HAVE_DL_INLINES_H
 #include <dl-inlines.h>
+#endif
+
+#else /* __ARCH_HAS_NO_SHARED__ */
+#include <dl-defs.h>
 #endif
 
 #endif /* _LDSO_H_ */

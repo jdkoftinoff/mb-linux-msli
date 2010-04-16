@@ -13,7 +13,7 @@
 
 #define __NR___syscall_timer_settime __NR_timer_settime
 static __inline__ _syscall4(int, __syscall_timer_settime, kernel_timer_t, ktimerid,
-			int, flags, const void *, value, void *, ovalue);
+			int, flags, const void *, value, void *, ovalue)
 
 /* Set the expiration time for a timer */
 int timer_settime(timer_t timerid, int flags, const struct itimerspec *value,

@@ -14,7 +14,6 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <rpc/types.h>
 
 /* Experimentally off - libc_hidden_proto(memcpy) */
 libc_hidden_proto(open)

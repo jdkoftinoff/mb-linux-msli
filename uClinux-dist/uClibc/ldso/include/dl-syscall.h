@@ -137,12 +137,12 @@ static __always_inline _syscall2(int, _dl_gettimeofday, struct timeval *, tv,
 
 
 /* handle all the fun mmap intricacies */
+#define MAP_FAILED ((void *) -1)
 #if (defined(__UCLIBC_MMAP_HAS_6_ARGS__) && defined(__NR_mmap)) || !defined(__NR_mmap2)
 # define _dl_MAX_ERRNO 4096
 # define _dl_mmap_check_error(__res) \
 	(((long)__res) < 0 && ((long)__res) >= -_dl_MAX_ERRNO)
 #else
-# define MAP_FAILED ((void *) -1)
 # define _dl_mmap_check_error(X) (((void *)X) == MAP_FAILED)
 #endif
 
@@ -152,9 +152,8 @@ static __always_inline _syscall2(int, _dl_gettimeofday, struct timeval *, tv,
 # define __NR__dl_mmap __NR_mmap
 static __always_inline _syscall6(void *, _dl_mmap, void *, start, size_t, length,
                         int, prot, int, flags, int, fd, off_t, offset);
-
 /* then try mmap2() */
-#elif defined(__NR_mmap2)
+#elif defined(__NR_mmap2) && !defined (__mcoldfire__)
 
 # define __NR___syscall_mmap2       __NR_mmap2
 static __always_inline _syscall6(__ptr_t, __syscall_mmap2, __ptr_t, addr, size_t, len,
@@ -176,7 +175,6 @@ static __always_inline void * _dl_mmap(void * addr, unsigned long size, int prot
 	return __syscall_mmap2(addr, size, prot, flags,
 	                       fd, (off_t) (offset >> MMAP2_PAGE_SHIFT));
 }
-
 /* finally, fall back to mmap(), syscall1() style */
 #elif defined(__NR_mmap)
 

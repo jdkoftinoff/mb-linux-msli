@@ -11,7 +11,7 @@
 #define __NR___syscall_mq_timedsend __NR_mq_timedsend
 static _syscall5(int, __syscall_mq_timedsend, int, mqdes,
 		 const char *, msg_ptr, size_t, msg_len, unsigned int,
-		 msg_prio, const void *, abs_timeout);
+		 msg_prio, const void *, abs_timeout)
 
 # if defined __USE_XOPEN2K && defined __UCLIBC_HAS_ADVANCED_REALTIME__
 /*

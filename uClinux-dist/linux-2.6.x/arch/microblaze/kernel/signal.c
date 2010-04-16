@@ -294,6 +294,11 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	struct rt_sigframe __user *frame;
 	int err = 0;
 	int signal;
+	unsigned long address = 0;
+#ifdef CONFIG_MMU
+	pmd_t *pmdp;
+	pte_t *ptep;
+#endif
 
 	frame = get_sigframe(ka, regs, sizeof(*frame));
 
@@ -337,7 +342,29 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		 Negative 8 offset because return is rtsd r15, 8 */
 		regs->r15 = ((unsigned long)frame->tramp)-8;
 
-		__invalidate_cache_sigtramp((unsigned long)frame->tramp);
+		address = ((unsigned long)frame->tramp);
+#ifdef CONFIG_MMU
+		pmdp = pmd_offset(pud_offset(
+				pgd_offset(current->mm, address),
+						address), address);
+
+		preempt_disable();
+		ptep = pte_offset_map(pmdp, address);
+		if (pte_present(*ptep)) {
+			address = (unsigned long) page_address(pte_page(*ptep));
+			/* MS: I need add offset in page */
+			address += ((unsigned long)frame->tramp) & ~PAGE_MASK;
+			/* MS address is virtual */
+			address = virt_to_phys(address);
+			invalidate_icache_range(address, address + 8);
+			flush_dcache_range(address, address + 8);
+		}
+		pte_unmap(ptep);
+		preempt_enable();
+#else
+		invalidate_icache_range(address, address + 8);
+		flush_dcache_range(address, address + 8);
+#endif
 	}
 
 	if (err)
@@ -354,6 +381,10 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	regs->pc = (unsigned long)ka->sa.sa_handler;
 
 	set_fs(USER_DS);
+
+	/* the tracer may want to single-step inside the handler */
+	if (test_thread_flag(TIF_SINGLESTEP))
+		ptrace_notify(SIGTRAP);
 
 #ifdef DEBUG_SIG
 	printk(KERN_INFO "SIG deliver (%s:%d): sp=%p pc=%08lx\n",

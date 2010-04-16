@@ -24,9 +24,10 @@ hidden_proto(__dl_iterate_phdr)
 int
 __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void *data), void *data)
 {
+	int ret = 0;
+#ifndef __ARCH_HAS_NO_SHARED__
 	struct elf_resolve *l;
 	struct dl_phdr_info info;
-	int ret = 0;
 
 	for (l = _dl_loaded_modules; l != NULL; l = l->next) {
 		info.dlpi_addr = l->loadaddr;
@@ -37,6 +38,7 @@ __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void
 		if (ret)
 			break;
 	}
+#endif
 	return ret;
 }
 hidden_def (__dl_iterate_phdr)
@@ -60,7 +62,12 @@ dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info,
       /* This entry describes this statically-linked program itself.  */
       struct dl_phdr_info info;
       int ret;
+#ifdef __FDPIC__
+      info.dlpi_addr.map = NULL;
+      info.dlpi_addr.got_value = NULL;
+#else
       info.dlpi_addr = 0;
+#endif
       info.dlpi_name = "";
       info.dlpi_phdr = _dl_phdr;
       info.dlpi_phnum = _dl_phnum;

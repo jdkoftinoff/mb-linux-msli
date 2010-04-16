@@ -46,7 +46,7 @@ AWK        = awk
 
 STRIP_FLAGS ?= -x -R .note -R .comment
 
-UNIFDEF := $(top_builddir)extra/scripts/unifdef -UUCLIBC_INTERNAL
+UNIFDEF := $(top_builddir)extra/scripts/unifdef
 
 # Select the compiler needed to build binaries for your development system
 HOSTCC     = gcc
@@ -88,7 +88,7 @@ export RUNTIME_PREFIX DEVEL_PREFIX KERNEL_HEADERS KERNEL_ASM_HEADERS
 MAJOR_VERSION := 0
 MINOR_VERSION := 9
 SUBLEVEL      := 30
-EXTRAVERSION  :=.1
+EXTRAVERSION  :=.2
 VERSION       := $(MAJOR_VERSION).$(MINOR_VERSION).$(SUBLEVEL)
 ifneq ($(EXTRAVERSION),)
 VERSION       := $(VERSION)$(EXTRAVERSION)
@@ -172,6 +172,9 @@ endif
 
 CPU_CFLAGS-$(UCLIBC_FORMAT_SHARED_FLAT) += -mid-shared-library
 CPU_CFLAGS-$(UCLIBC_FORMAT_FLAT_SEP_DATA) += -msep-data
+
+CPU_LDFLAGS-$(ARCH_LITTLE_ENDIAN) += -Wl,-EL
+CPU_LDFLAGS-$(ARCH_BIG_ENDIAN)    += -Wl,-EB
 
 PICFLAG-y := -fPIC
 PICFLAG-$(UCLIBC_FORMAT_FDPIC_ELF) := -mfdpic
@@ -261,8 +264,6 @@ endif
 
 ifeq ($(TARGET_ARCH),arm)
 	OPTIMIZATION+=-fstrict-aliasing
-	CPU_LDFLAGS-$(ARCH_LITTLE_ENDIAN)+=-Wl,-EL
-	CPU_LDFLAGS-$(ARCH_BIG_ENDIAN)+=-Wl,-EB
 	CPU_CFLAGS-$(ARCH_LITTLE_ENDIAN)+=-mlittle-endian
 	CPU_CFLAGS-$(ARCH_BIG_ENDIAN)+=-mbig-endian
 	CPU_CFLAGS-$(CONFIG_GENERIC_ARM)+=
@@ -287,8 +288,6 @@ ifeq ($(TARGET_ARCH),arm)
 endif
 
 ifeq ($(TARGET_ARCH),mips)
-	CPU_LDFLAGS-$(ARCH_LITTLE_ENDIAN)+=-Wl,-EL
-	CPU_LDFLAGS-$(ARCH_BIG_ENDIAN)+=-Wl,-EB
 	CPU_CFLAGS-$(CONFIG_MIPS_ISA_1)+=-mips1
 	CPU_CFLAGS-$(CONFIG_MIPS_ISA_2)+=-mips2 -mtune=mips2
 	CPU_CFLAGS-$(CONFIG_MIPS_ISA_3)+=-mips3 -mtune=mips3
@@ -317,13 +316,11 @@ endif
 ifeq ($(TARGET_ARCH),sh)
 	OPTIMIZATION+=-fstrict-aliasing
 	OPTIMIZATION+= $(call check_gcc,-mprefergot,)
-	CPU_LDFLAGS-$(ARCH_LITTLE_ENDIAN)+=-Wl,-EL
-	CPU_LDFLAGS-$(ARCH_BIG_ENDIAN)+=-Wl,-EB
 	CPU_CFLAGS-$(ARCH_LITTLE_ENDIAN)+=-ml
 	CPU_CFLAGS-$(ARCH_BIG_ENDIAN)+=-mb
 	CPU_CFLAGS-$(CONFIG_SH2)+=-m2
 	CPU_CFLAGS-$(CONFIG_SH3)+=-m3
-ifeq ($(UCLIBC_HAS_FLOATS),y)
+ifeq ($(UCLIBC_HAS_FPU),y)
 	CPU_CFLAGS-$(CONFIG_SH2A)+=-m2a
 	CPU_CFLAGS-$(CONFIG_SH4)+=-m4
 else
@@ -334,8 +331,6 @@ endif
 
 ifeq ($(TARGET_ARCH),sh64)
 	OPTIMIZATION+=-fstrict-aliasing
-	CPU_LDFLAGS-$(ARCH_LITTLE_ENDIAN):=-Wl,-EL
-	CPU_LDFLAGS-$(ARCH_BIG_ENDIAN):=-Wl,-EB
 	CPU_CFLAGS-$(ARCH_LITTLE_ENDIAN):=-ml
 	CPU_CFLAGS-$(ARCH_BIG_ENDIAN):=-mb
 	CPU_CFLAGS-$(CONFIG_SH5)+=-m5-32media
@@ -396,7 +391,7 @@ ifeq ($(TARGET_ARCH),frv)
 	# -shared by itself would get us global function descriptors
 	# and calls through PLTs, dynamic resolution of symbols, etc,
 	# which would break as well, but -Bsymbolic comes to the rescue.
-	export LDPIEFLAG:=-Wl,-shared -Wl,-Bsymbolic
+	export LDPIEFLAG:=-shared -Wl,-Bsymbolic
 	UCLIBC_LDSO=ld.so.1
 endif
 
@@ -513,9 +508,6 @@ ifeq ($(TARGET_ARCH),arm)
 endif
 endif
 
-# Please let us see private headers' parts
-CFLAGS += -DUCLIBC_INTERNAL
-
 # We need this to be checked within libc-symbols.h
 ifneq ($(HAVE_SHARED),y)
 CFLAGS += -DSTATIC
@@ -523,7 +515,7 @@ endif
 
 CFLAGS += $(call check_gcc,-std=gnu99,)
 
-LDFLAGS_NOSTRIP:=$(CPU_LDFLAGS-y) -Wl,-shared \
+LDFLAGS_NOSTRIP:=$(CPU_LDFLAGS-y) -shared \
 	-Wl,--warn-common -Wl,--warn-once -Wl,-z,combreloc
 # binutils-2.16.1 warns about ignored sections, 2.16.91.0.3 and newer are ok
 #LDFLAGS_NOSTRIP+=$(call check_ld,--gc-sections)
@@ -636,7 +628,7 @@ CFLAGS += -I$(KERNEL_HEADERS) -I$(KERNEL_ASM_HEADERS)
 
 #CFLAGS += -iwithprefix include-fixed -iwithprefix include
 CC_IPREFIX:=$(shell $(CC) --print-file-name=include)
-CFLAGS += -I$(dir $(CC_IPREFIX))/include-fixed -I$(CC_IPREFIX)
+CFLAGS += -isystem $(dir $(CC_IPREFIX))include-fixed -isystem $(CC_IPREFIX)
 
 ifneq ($(DOASSERTS),y)
 CFLAGS+=-DNDEBUG

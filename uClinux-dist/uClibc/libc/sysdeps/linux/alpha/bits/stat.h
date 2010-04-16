@@ -41,7 +41,7 @@
 
    Use neat tidy anonymous unions and structures when possible.  */
 
-#if 0 /*def __USE_MISC*/
+#ifdef __USE_MISC
 # if __GNUC_PREREQ(3,3)
 #  define __ST_TIME(X)				\
 	__extension__ union {			\
@@ -149,3 +149,8 @@ struct stat64
 #define	__S_IREAD	0400	/* Read by owner.  */
 #define	__S_IWRITE	0200	/* Write by owner.  */
 #define	__S_IEXEC	0100	/* Execute by owner.  */
+
+#ifdef __USE_ATFILE
+# define UTIME_NOW	((1l << 30) - 1l)
+# define UTIME_OMIT	((1l << 30) - 2l)
+#endif

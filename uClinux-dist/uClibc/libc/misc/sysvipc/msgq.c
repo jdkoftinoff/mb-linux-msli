@@ -7,7 +7,7 @@
 
 #ifdef __NR_msgctl
 #define __NR___libc_msgctl __NR_msgctl
-static __inline__ _syscall3(int, __libc_msgctl, int, msqid, int, cmd, struct msqid_ds *, buf);
+static __inline__ _syscall3(int, __libc_msgctl, int, msqid, int, cmd, struct msqid_ds *, buf)
 #endif
 /* Message queue control operation.  */
 int msgctl(int msqid, int cmd, struct msqid_ds *buf)
@@ -43,9 +43,9 @@ struct new_msg_buf{
 
 #ifdef L_msgrcv
 #ifdef __NR_msgrcv
-_syscall5(int, msgrcv, int, msqid, void *, msgp, size_t, msgsz, long int, msgtyp, int, msgflg)
+_syscall5(ssize_t, msgrcv, int, msqid, void *, msgp, size_t, msgsz, long int, msgtyp, int, msgflg)
 #else
-int msgrcv (int msqid, void *msgp, size_t msgsz,
+ssize_t msgrcv (int msqid, void *msgp, size_t msgsz,
 	long int msgtyp, int msgflg)
 {
     struct new_msg_buf temp;

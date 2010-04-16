@@ -43,7 +43,13 @@ void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long usp);
  * both share the memory space and that is limited by the amount of
  * physical memory. thus, we set TASK_SIZE == amount of total memory.
  */
-# define TASK_SIZE	(0x81000000 - 0x80000000)
+//# define TASK_SIZE	(0x81000000 - 0x80000000)
+/*
+ * AB -- Even that won't work, as TASK_SIZE is used to validate an address,
+ * and memory usually does not start at zero.
+ */
+#define TASK_SIZE (memory_end)
+extern unsigned long memory_end;
 
 /*
  * Default implementation of macro that returns current
