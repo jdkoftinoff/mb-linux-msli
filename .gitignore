@@ -1,0 +1,17 @@
+*.d
+*.o
+tools/gcc3/
+tools/gcc4/
+*.gdb
+*.dep
+uClinux-dist/user/busybox/include/config
+uClinux-dist/uClibc/include/config
+*.gmo
+*.old
+uClinux-dist/user/busybox/Config.in
+uClinux-dist/user/busybox/*/Config.in
+uClinux-dist/user/busybox/*/*/Config.in
+*.dtb
+*.mcs
+mb_gnu
+uClinux-dist/config/
