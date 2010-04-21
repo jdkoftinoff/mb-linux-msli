@@ -335,10 +335,6 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 
   /* Obtain the resources for this instance */
-  /*
-  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, PACKET_ENGINE_ADDRESS_RANGE_RESOURCE);
-  if (!addressRange) return(-ENXIO);
-  */
   rc = of_address_to_resource(ofdev->node,0,addressRange);
   if (rc) {
 	  dev_warn(&ofdev->dev,"invalid address\n");
