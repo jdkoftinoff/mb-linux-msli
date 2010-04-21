@@ -15,12 +15,6 @@ config PLATFORM_GENERIC
 	bool "Generic"
 	help
 	  Choose this option for the Generic platform.
-
-#config PLATFORM_MEYERSOUND_DMITRI_IO_LINK
-config PLATFORM_DMITRI_IO
-	bool "Meyer Sound D'Mitri IO Link Board"
-	help
-		Choose this option for the D'Mitri IO Link Board
 endchoice
 
 config SELFMOD
@@ -67,9 +61,4 @@ config OPT_LIB_ASM
 if PLATFORM_GENERIC=y
 	source "arch/microblaze/platform/generic/Kconfig.auto"
 endif
-
-if PLATFORM_DMITRI_IO=y
-	source "arch/microblaze/platform/dmitri-io/Kconfig.auto"
-endif
-
 endmenu
