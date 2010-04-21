@@ -29,6 +29,12 @@
 #include <linux/platform_device.h>
 #include <xio.h>
 
+#ifdef CONFIG_OF
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
+#endif // CONFIG_OF
+
+
 /* Driver name and the revision of hardware expected. */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define HARDWARE_VERSION_MAJOR  1
@@ -471,6 +477,163 @@ static struct file_operations audio_depacketizer_fops = {
   .owner   = THIS_MODULE,
 };
 
+#ifdef CONFIG_OF
+static int audio_depacketizer_remove(struct platform_device *pdev);
+static struct file_operations audio_depacketizer_fops;
+
+static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+  struct resource r_mem_struct;
+  struct resource *addressRange = &r_mem_struct;
+  struct audio_depacketizer *depacketizer;
+  uint32_t capsWord;
+  uint32_t versionWord;
+  uint32_t versionMajor;
+  uint32_t versionMinor;
+  int returnValue;
+  int rc;
+
+
+  struct platform_device *pdev = to_platform_device(&ofdev->dev);
+
+  /* Obtain the resources for this instance */
+  rc = of_address_to_resource(ofdev->node,0,addressRange);
+  if (rc) {
+	  dev_warn(&ofdev->dev,"invalid address\n");
+	  return rc;
+  }
+
+  /* Create and populate a device structure */
+  depacketizer = (struct audio_depacketizer*) kmalloc(sizeof(struct audio_depacketizer), GFP_KERNEL);
+  if(!depacketizer) return(-ENOMEM);
+
+  /* Request and map the device's I/O memory region into uncacheable space */
+  depacketizer->physicalAddress = addressRange->start;
+  depacketizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  depacketizer->name[NAME_MAX_SIZE - 1] = '\0';
+  if(request_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize,
+                        depacketizer->name) == NULL) {
+    returnValue = -ENOMEM;
+    goto free;
+  }
+
+  depacketizer->virtualAddress = 
+    (void*) ioremap_nocache(depacketizer->physicalAddress, depacketizer->addressRangeSize);
+  if(!depacketizer->virtualAddress) {
+    returnValue = -ENOMEM;
+    goto release;
+  }
+
+  /* Read the capabilities word to determine how many of the lowest
+   * address bits are used to index into the microcode RAM, and therefore how
+   * many bits an address sub-range field gets shifted up.  Each instruction is
+   * 32 bits, and therefore inherently eats two lower address bits.
+   */
+  capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG));
+  depacketizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
+
+  /* Inspect and check the version */
+  versionWord = XIo_In32(REGISTER_ADDRESS(depacketizer, REVISION_REG));
+  versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
+  versionMinor = (versionWord & REVISION_FIELD_MASK);
+  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
+     (versionMinor != HARDWARE_VERSION_MINOR)) {
+    printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
+           depacketizer->name, versionMajor, versionMinor, (uint32_t)depacketizer->physicalAddress);
+    returnValue = -ENXIO;
+    goto unmap;
+  }
+  depacketizer->capabilities.versionMajor = versionMajor;
+  depacketizer->capabilities.versionMinor = versionMinor;
+
+  /* Test and sanity-check the stream-matching architecture */
+  depacketizer->matchArchitecture = ((capsWord >> MATCH_ARCH_SHIFT) & MATCH_ARCH_MASK);
+  switch(depacketizer->matchArchitecture) {
+  case STREAM_MATCH_SRLC16E:
+  case STREAM_MATCH_SRLC32E:
+    break;
+  default:
+    printk(KERN_INFO "%s: Invalid match architecture 0x%02X\n", 
+           depacketizer->name, depacketizer->matchArchitecture);
+    returnValue = -ENXIO;
+    goto unmap;
+  }
+
+  /* Capture more capabilities information */
+  depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
+  depacketizer->capabilities.maxParameters   = (0x01 << ((capsWord >> PARAM_ADDRESS_BITS_SHIFT) & 
+                                                         PARAM_ADDRESS_BITS_MASK));
+  depacketizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
+  depacketizer->capabilities.maxStreams      = ((capsWord >> MAX_STREAMS_SHIFT) & MAX_STREAMS_MASK);
+
+  /* Announce the device */
+  printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X\n", 
+         depacketizer->name,
+         HARDWARE_VERSION_MAJOR,
+         HARDWARE_VERSION_MINOR,
+         (uint32_t)depacketizer->physicalAddress);
+
+  /* Initialize other resources */
+  spin_lock_init(&depacketizer->mutex);
+  depacketizer->opened = false;
+
+#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
+  depacketizer->dma.virtualAddress = depacketizer->virtualAddress + LABX_DMA_MEMORY_OFFSET;
+ 
+  labx_dma_probe(&depacketizer->dma); 
+#endif
+
+  /* Provide navigation from the platform device structure */
+  platform_set_drvdata(pdev, depacketizer);
+
+  /* Reset the state of the depacketizer */
+  reset_depacketizer(depacketizer);
+
+  /* Add as a character device to make the instance available for use */
+  cdev_init(&depacketizer->cdev, &audio_depacketizer_fops);
+  depacketizer->cdev.owner = THIS_MODULE;
+  kobject_set_name(&depacketizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
+  depacketizer->instanceNumber = instanceCount++;
+  cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
+
+  platform_set_drvdata(pdev, depacketizer);
+  depacketizer->pdev = pdev;
+
+  /* Return success */
+  return(0);
+
+ unmap:
+  iounmap(depacketizer->virtualAddress);
+ release:
+  release_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize);
+ free:
+  kfree(depacketizer);
+  return(returnValue);
+}
+
+static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
+{
+	struct platform_device *pdev = to_platform_device(&dev->dev);
+	audio_depacketizer_remove(pdev);
+	return(0);
+}
+
+static struct of_device_id audio_depacketizer_of_match[] = {
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.00.a", },
+	{ /* end of list */ },
+};
+
+MODULE_DEVICE_TABLE(of, audio_depacketizer_of_match);
+
+static struct of_platform_driver of_audio_depacketizer_driver = {
+	.name		= DRIVER_NAME,
+	.match_table	= audio_depacketizer_of_match,
+	.probe		= audio_depacketizer_of_probe,
+	.remove		= __devexit_p(audio_depacketizer_of_remove),
+};
+#endif
+
 /*
  * Platform device hook functions
  */
@@ -631,6 +794,10 @@ static int __init audio_depacketizer_driver_init(void)
   printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer %d.%d driver\n",
          HARDWARE_VERSION_MAJOR, HARDWARE_VERSION_MINOR);
   printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
+
+#ifdef CONFIG_OF
+  returnValue = of_register_platform_driver(&of_audio_depacketizer_driver);
+#endif
 
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&audio_depacketizer_driver)) < 0) {

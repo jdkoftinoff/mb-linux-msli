@@ -37,6 +37,12 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 
+#ifdef CONFIG_OF
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
+#endif // CONFIG_OF
+
+
 #define DRIVER_NAME "labx_dma"
 
 #define MAX_DMA_DEVICES 16
@@ -66,6 +72,103 @@ static int labx_dma_ioctl_cdev(struct inode *inode, struct file *filp,
 
 	return labx_dma_ioctl(&dma_pdev->dma, command, arg);
 }
+#ifdef CONFIG_OF
+
+static int __exit labx_dma_pdev_remove(struct platform_device *pdev);
+
+static int labx_dma_pdev_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+    struct resource r_mem_struct;
+    struct resource *addressRange = &r_mem_struct;
+	struct labx_dma_pdev *dma_pdev;
+	int ret;
+	int i;
+  	struct platform_device *pdev = to_platform_device(&ofdev->dev);
+
+	/* Obtain the resources for this instance */
+	rc = of_address_to_resource(ofdev->node,0,addressRange);
+	if (rc) {
+		dev_warn(&ofdev->dev,"invalid address\n");
+		return rc;
+	}
+
+	/* Create and populate a device structure */
+	dma_pdev = (struct labx_dma_pdev*) kzalloc(sizeof(struct labx_dma_pdev), GFP_KERNEL);
+	if(!dma_pdev) return(-ENOMEM);
+
+	/* Request and map the device's I/O memory region into uncacheable space */
+	dma_pdev->physicalAddress = addressRange->start;
+	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
+	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
+			dma_pdev->name) == NULL) {
+		ret = -ENOMEM;
+		goto free;
+	}
+	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
+
+	dma_pdev->dma.virtualAddress = 
+		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
+	if(!dma_pdev->dma.virtualAddress) {
+		ret = -ENOMEM;
+		goto release;
+	}
+	//printk("DMA Virtual %p\n", dma_pdev->dma.virtualAddress);
+
+	dma_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
+	dma_pdev->miscdev.name = dma_pdev->name;
+	dma_pdev->miscdev.fops = &labx_dma_fops;
+	ret = misc_register(&dma_pdev->miscdev);
+	if (ret) {
+		printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
+		goto unmap;
+	}
+	platform_set_drvdata(pdev, dma_pdev);
+	dma_pdev->pdev = pdev;
+	dev_set_drvdata(dma_pdev->miscdev.this_device, dma_pdev);
+
+	labx_dma_probe(&dma_pdev->dma);
+
+	for (i=0; i<MAX_DMA_DEVICES; i++)
+	{
+		if (NULL == devices[i])
+		{
+			//printk(DRIVER_NAME ": Device %d = %p\n", i, dma_pdev);
+			devices[i] = dma_pdev;
+			break;
+		}
+	}
+	return 0;
+
+unmap:
+	iounmap(dma_pdev->dma.virtualAddress);
+release:
+	release_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
+free:
+	kfree(dma_pdev);
+	return ret;
+}
+static int __devexit labx_dma_pdev_of_remove(struct of_device *dev)
+{
+	struct platform_device *pdev = to_platform_device(&dev->dev);
+	labx_dma_pdev_remove(pdev);
+	return(0);
+}
+
+static struct of_device_id labx_dma_pdev_of_match[] = {
+	{ .compatible = "xlnx,labx-local-audio-1.00.a", },
+	{ .compatible = "xlnx,labx-dma-1.00.a", },
+	{ /* end of list */ },
+};
+
+static struct of_platform_driver of_labx_dma_pdev_driver = {
+	.name		= DRIVER_NAME,
+	.match_table	= packetizer_of_match,
+	.probe		= audio_packetizer_of_probe,
+	.remove		= __devexit_p(labx_dma_pdev_of_remove),
+};
+#endif
 
 static const struct file_operations labx_dma_fops = {
 	.open = labx_dma_open,
@@ -172,6 +275,10 @@ static int __init labx_dma_driver_init(void)
 {
   int returnValue;
 
+#ifdef CONFIG_OF
+  returnValue = of_register_platform_driver(&of_labx_dma_pdev_driver);
+#endif
+ 
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&labx_dma_platform_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");

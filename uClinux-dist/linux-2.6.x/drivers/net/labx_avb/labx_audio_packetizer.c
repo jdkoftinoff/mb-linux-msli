@@ -28,6 +28,12 @@
 #include <linux/platform_device.h>
 #include <xio.h>
 
+#ifdef CONFIG_OF
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
+#endif // CONFIG_OF
+
+
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
  */
@@ -308,6 +314,148 @@ static struct file_operations audio_packetizer_fops = {
   .owner   = THIS_MODULE,
 };
 
+
+#ifdef CONFIG_OF
+static int audio_packetizer_remove(struct platform_device *pdev);
+
+/* Probe for registered devices */
+static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+  struct resource r_mem_struct;
+  struct resource *addressRange = &r_mem_struct;
+  struct audio_packetizer *packetizer;
+  uint32_t capsWord;
+  uint32_t versionWord;
+  uint32_t versionMajor;
+  uint32_t versionMinor;
+  int returnValue;
+  int rc = 0;
+  struct platform_device *pdev = to_platform_device(&ofdev->dev);
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
+
+  /* Obtain the resources for this instance */
+  /*
+  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, PACKET_ENGINE_ADDRESS_RANGE_RESOURCE);
+  if (!addressRange) return(-ENXIO);
+  */
+  rc = of_address_to_resource(ofdev->node,0,addressRange);
+  if (rc) {
+	  dev_warn(&ofdev->dev,"invalid address\n");
+	  return rc;
+  }
+
+  /* Create and populate a device structure */
+  packetizer = (struct audio_packetizer*) kmalloc(sizeof(struct audio_packetizer), GFP_KERNEL);
+  if(!packetizer) return(-ENOMEM);
+
+  /* Request and map the device's I/O memory region into uncacheable space */
+  packetizer->physicalAddress = addressRange->start;
+  packetizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  packetizer->name[NAME_MAX_SIZE - 1] = '\0';
+  if(request_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize,
+                        packetizer->name) == NULL) {
+    returnValue = -ENOMEM;
+    goto free;
+  }
+
+  packetizer->virtualAddress = 
+    (void*) ioremap_nocache(packetizer->physicalAddress, packetizer->addressRangeSize);
+  if(!packetizer->virtualAddress) {
+    returnValue = -ENOMEM;
+    goto release;
+  }
+
+  /* Read the capabilities word to determine how many of the lowest
+   * address bits are used to index into the microcode RAM, and therefore how
+   * many bits an address sub-range field gets shifted up.  Each instruction is
+   * 32 bits, and therefore inherently eats two lower address bits.
+   */
+  capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG));
+  packetizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
+
+  /* Inspect and check the version to ensure it lies within the range of hardware
+   * we support.
+   */
+  versionWord = XIo_In32(REGISTER_ADDRESS(packetizer, REVISION_REG));
+  versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
+  versionMinor = (versionWord & REVISION_FIELD_MASK);
+  if(((versionMajor < HARDWARE_MIN_VERSION_MAJOR) & 
+      (versionMinor < HARDWARE_MIN_VERSION_MINOR)) |
+     ((versionMajor > HARDWARE_MAX_VERSION_MAJOR) & 
+      (versionMinor > HARDWARE_MAX_VERSION_MINOR))) {
+    printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
+           packetizer->name, versionMajor, versionMinor, (uint32_t)packetizer->physicalAddress);
+    returnValue = -ENXIO;
+    goto unmap;
+  }
+  packetizer->capabilities.versionMajor = versionMajor;
+  packetizer->capabilities.versionMinor = versionMinor;
+
+  /* Capture more capabilities information */
+  packetizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
+  packetizer->capabilities.maxTemplateBytes = 
+    (0x04 << ((capsWord >> TEMPLATE_ADDRESS_SHIFT) & TEMPLATE_ADDRESS_BITS_MASK));
+  packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
+
+  /* Announce the device */
+  printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X\n", 
+         packetizer->name, versionMajor, versionMinor, 
+         (uint32_t)packetizer->physicalAddress);
+
+  /* Initialize other resources */
+  spin_lock_init(&packetizer->mutex);
+  packetizer->opened = false;
+
+  /* Provide navigation between the device structures */
+  platform_set_drvdata(pdev, packetizer);
+  packetizer->pdev = pdev;
+
+  /* Reset the state of the packetizer */
+  reset_packetizer(packetizer);
+
+  /* Add as a character device to make the instance available for use */
+  cdev_init(&packetizer->cdev, &audio_packetizer_fops);
+  packetizer->cdev.owner = THIS_MODULE;
+  kobject_set_name(&packetizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
+  packetizer->instanceNumber = instanceCount++;
+  cdev_add(&packetizer->cdev, MKDEV(DRIVER_MAJOR, packetizer->instanceNumber), 1);
+
+  /* Return success */
+  return(0);
+
+ unmap:
+  iounmap(packetizer->virtualAddress);
+ release:
+  release_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize);
+ free:
+  kfree(packetizer);
+  return(returnValue);
+}
+
+static int __devexit audio_packetizer_of_remove(struct of_device *dev)
+{
+	struct platform_device *pdev = to_platform_device(&dev->dev);
+	audio_packetizer_remove(pdev);
+	return(0);
+}
+
+
+static struct of_device_id packetizer_of_match[] = {
+	{ .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
+	{ /* end of list */ },
+};
+
+
+static struct of_platform_driver of_audio_packetizer_driver = {
+	.name		= DRIVER_NAME,
+	.match_table	= packetizer_of_match,
+	.probe		= audio_packetizer_of_probe,
+	.remove		= __devexit_p(audio_packetizer_of_remove),
+};
+#endif
+
 /*
  * Platform device hook functions
  */
@@ -448,6 +596,10 @@ static int __init audio_packetizer_driver_init(void)
   printk(KERN_INFO DRIVER_NAME ": AVB Audio Packetizer driver\n");
   printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
+#ifdef CONFIG_OF
+  returnValue = of_register_platform_driver(&of_audio_packetizer_driver);
+#endif
+ 
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&audio_packetizer_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
