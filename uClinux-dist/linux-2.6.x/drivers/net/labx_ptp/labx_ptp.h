@@ -41,31 +41,34 @@
 #define ADDRESS_RANGE_SHIFT (11)
 
 /* Bytes per packet buffer */
-#define PTP_MAX_PACKET_BYTES     (128)
-#define PTP_PACKET_BUFFER_SHIFT  (7)
+#define PTP_MAX_PACKET_BYTES     (256)
+#define PTP_PACKET_BUFFER_SHIFT  (8)
+
+/* Packets per ring (these must be a power of 2) */
+#define PTP_TX_BUFFER_COUNT      (8)
+#define PTP_RX_BUFFER_COUNT      (8)
 
 /* Register file */
 #define PTP_RX_REG            (0x000)
 #  define PTP_RX_DISABLE      (0x00000000)
 #  define PTP_RX_ENABLE       (0x80000000)
-#  define PTP_RX_BUFFER_MASK  (0x0000000F)
+#  define PTP_RX_BUFFER_MASK  (PTP_RX_BUFFER_COUNT-1)
 
 #define PTP_TX_REG            (0x001)
 #  define PTP_TX_DISABLE          (0x00000000)
 #  define PTP_TX_ENABLE           (0x80000000)
 #  define PTP_TX_BUSY             (0x40000000)
-#  define PTP_TX_BUFFER_COUNT     (16)
-#  define PTP_TX_BUFFER_MASK      (0x0000FFFF)
+#  define PTP_TX_BUFFER_MASK      ((1 << PTP_TX_BUFFER_COUNT) - 1)
 #  define PTP_TX_BUFFER_NONE      (0x00000000)
 #  define PTP_TX_BUFFER(txBuffer) ((0x01 << txBuffer) & PTP_TX_BUFFER_MASK)
 
 #define PTP_IRQ_MASK_REG      (0x002)
 #define PTP_IRQ_FLAGS_REG     (0x003)
 #  define PTP_NO_IRQS          (0x00000)
-#  define PTP_TX_IRQ_MASK      (0x0FFFF)
+#  define PTP_TX_IRQ_MASK      ((1 << PTP_TX_BUFFER_COUNT) - 1)
 #  define PTP_TX_IRQ(txBuffer) ((0x01 << txBuffer) & PTP_TX_IRQ_MASK)
-#  define PTP_RX_IRQ           (0x10000)
-#  define PTP_TIMER_IRQ        (0x20000)
+#  define PTP_RX_IRQ           (0x1 << PTP_TX_BUFFER_COUNT)
+#  define PTP_TIMER_IRQ        (0x2 << PTP_TX_BUFFER_COUNT)
 
 #define PTP_RTC_INC_REG       (0x004)
 #  define PTP_RTC_DISABLE      (0x00000000)
@@ -95,7 +98,7 @@
 #define PTP_TX_PACKET_BUFFER(device, whichBuffer)                       \
   ((uint32_t)device->virtualAddress |                                   \
    (TX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
-   ((whichBuffer & PTP_TX_BUFFER_MASK) << PTP_PACKET_BUFFER_SHIFT))
+   ((whichBuffer & (PTP_TX_BUFFER_COUNT-1)) << PTP_PACKET_BUFFER_SHIFT))
 
 #define PTP_RX_PACKET_BUFFER(device, whichBuffer)                       \
   ((uint32_t)device->virtualAddress |                                   \
@@ -138,6 +141,12 @@ typedef enum {
 
 /* Number of fractional nanosecond bits for correction field */
 #define CORRECTION_FRACTION_BITS  (16)
+
+/* 802.1AS MDPdelayReq state machine states */
+typedef enum { MDPdelayReq_NOT_ENABLED, MDPdelayReq_INITIAL_SEND_PDELAY_REQ,
+  MDPdelayReq_RESET, MDPdelayReq_SEND_PDELAY_REQ, MDPdelayReq_WAITING_FOR_PDELAY_RESP,
+  MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP, MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER
+} MDPdelayReq_State_t;
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
@@ -216,20 +225,54 @@ struct ptp_device {
   PtpTime delayReqRxTimestamp;
   uint32_t delayReqTimestampsValid;
 
-  /* Peer-to-peer delay mechanism timing parameters */
-  PtpTime pdelayReqTxTimestamp;
-  PtpTime pdelayRespTxTimestamp;
-  PtpTime pdelayRespRxTimestamp;
-  PtpTime pdelayReqRxTimestamp;
-  uint32_t pdelayRespTimestampsValid;
-  uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
-  int32_t peerMeanPathDelay;
-  uint32_t pdelayReqCounter;
+  /* 802.1AS per-port variables (10.2.4) */
+  uint32_t asCapable;
+  uint32_t neighborRateRatio;
+  uint32_t neighborPropDelay;
+  uint32_t computeNeighborRateRatio;
+  uint32_t computeNeighborPropDelay;
+  uint32_t portEnabled;
+  uint32_t pttPortEnabled;
+
+  /* 802.1AS MD entity variables (11.2.12) */
+  uint32_t pdelayReqInterval;
+  uint32_t allowedLostResponses;
+  uint32_t isMeasuringDelay;
+  uint32_t neighborPropDelayThresh;
+
+  /* 802.1AS Peer-to-peer delay mechanism variables (11.2.15.1) */
+  MDPdelayReq_State_t mdPdelayReq_State;
+
+  uint32_t pdelayIntervalTimer;
+  uint32_t rcvdPdelayResp;
+  uint32_t rcvdPdelayRespPtr;
+  uint32_t rcvdPdelayRespFollowUp;
+  uint32_t rcvdPdelayRespFollowUpPtr;
+  uint32_t rcvdMDTimestampReceive;
   uint32_t pdelayReqSequenceId;
+  uint32_t initPdelayRespReceived;
+  uint32_t lostResponses;
+  uint32_t neighborRateRatioValid;
+
+  /* Current PDelay Request/Response timestamps */
+  PtpTime pdelayReqTxTimestamp;  // pdelayReqEventEgressTimestamp (Treq1)
+  PtpTime pdelayReqRxTimestamp;  // pdelayReqEventIngressTimestamp (Trsp2)
+  PtpTime pdelayRespTxTimestamp; // pdelayRespEventEgressTimestamp (Trsp3)
+  PtpTime pdelayRespRxTimestamp; // pdelayRespEventIngressTimestamp (Treq4)
+
+  /* First PDelay Response timestamps (after the last enable/reset) */
+  PtpTime pdelayRespTxTimestampI; // pdelayRespEventEgressTimestamp (Trsp3)
+  PtpTime pdelayRespRxTimestampI; // pdelayRespEventIngressTimestamp (Treq4)
+
+  /* pdelay response variables */
+  uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
 
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
+
+  /* Network device event notifier */
+  struct notifier_block notifier;
 };
 
 /* Enumerated type identifying a packet buffer direction; outgoing or incoming, 
@@ -251,6 +294,7 @@ void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t rxBuffer, uint8_
 void extract_announce(struct ptp_device *ptp, uint32_t rxBuffer, PtpProperties *properties);
 void copy_ptp_properties(PtpProperties *to, PtpProperties *from);
 int32_t compare_mac_addresses(const uint8_t *macAddressA, const uint8_t *macAddressB);
+int32_t compare_clock_identity(const uint8_t *clockIdentityA, const uint8_t *clockIdentityB);
 int32_t compare_port_ids(const uint8_t *portIdA, const uint8_t *portIdB);
 void transmit_announce(struct ptp_device *ptp);
 void transmit_sync(struct ptp_device *ptp);
@@ -266,12 +310,17 @@ uint16_t get_sequence_id(struct ptp_device *ptp, PacketDirection bufferDirection
                          uint32_t packetBuffer);
 void get_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
                             uint32_t packetBuffer, PtpTime *timestamp);
+void get_local_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
+                                  uint32_t packetBuffer, PtpTime *timestamp);
 void get_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
                    uint32_t packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t txBuffer, PtpTime *correctionField);
 
 /* From labx_ptp_state.c */
 void init_state_machines(struct ptp_device *ptp);
+
+/* From labx_ptp_pdelay_state.c */
+void MDPdelayReq_StateMachine(struct ptp_device *ptp);
 
 /* From labx_ptp_rtc.c */
 void disable_rtc(struct ptp_device *ptp);

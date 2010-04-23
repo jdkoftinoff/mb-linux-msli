@@ -28,7 +28,7 @@
 #include <xio.h>
 
 /* Uncomment to print debug messages for the slave offset */
-// #define SLAVE_OFFSET_DEBUG
+/* #define SLAVE_OFFSET_DEBUG */
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
@@ -150,7 +150,7 @@ void rtc_update_servo(struct ptp_device *ptp) {
     /* The fact that this is called at all implies there's a < 1 sec slaveOffset; deal
      * strictly with nanoseconds now that the seconds have been normalized.
      */
-    slaveOffset = (((int32_t) difference.nanoseconds) - ptp->peerMeanPathDelay);
+    slaveOffset = (((int32_t) difference.nanoseconds) - ptp->neighborPropDelay);
     slaveOffsetValid = 1;
   }
 
@@ -198,10 +198,10 @@ void rtc_update_servo(struct ptp_device *ptp) {
     XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RTC_INC_REG), newRtcIncrement);
 
 #ifdef SLAVE_OFFSET_DEBUG
-    if(++servoCount >= 100) {
+    if(++servoCount >= 10) {
       printk("Slave offset %d, Increment 0x%08X\n", slaveOffset, newRtcIncrement);
       printk("  syncRxNS %d, syncTxNS %d (%d), MeanPathNS %d\n", (int)ptp->syncRxTimestamp.nanoseconds,
-        (int)ptp->syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->peerMeanPathDelay);
+        (int)ptp->syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->neighborPropDelay);
       servoCount = 0;
     }
 #endif

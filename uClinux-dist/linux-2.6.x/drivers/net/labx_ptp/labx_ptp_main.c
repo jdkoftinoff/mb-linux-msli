@@ -28,8 +28,11 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/netdevice.h>
 #include <xio.h>
 
+/* Enable this to get some extra link debug messages */
+// #define DEBUG_LINK
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
@@ -41,7 +44,7 @@
 #define HARDWARE_VERSION_MINOR  1
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 254
+#define DRIVER_MAJOR 253
 
 /* Maximum number of packetizers and instance count */
 #define MAX_INSTANCES 64
@@ -63,7 +66,6 @@ static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
 #define DEFAULT_CLOCK_CLASS            (248)
 #define DEFAULT_CLOCK_ACCURACY         (0xFE)
 #define DEFAULT_SCALED_LOG_VARIANCE    (0x4100)
-#define DEFAULT_GRANDMASTER_IDENTITY   ("labxPtp0")
 #define DEFAULT_TIME_SOURCE            (PTP_SOURCE_OTHER)
 #define DEFAULT_DELAY_MECHANISM        (PTP_DELAY_MECHANISM_E2E)
 
@@ -157,6 +159,43 @@ static int ptp_device_release(struct inode *inode, struct file *filp)
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
   return(0);
+}
+
+static int ptp_device_event(struct notifier_block *nb, unsigned long event, void *ptr)
+{
+  struct net_device *dev = ptr;
+  struct ptp_device *ptp = container_of(nb, struct ptp_device, notifier);
+  int on;
+ 
+  if (event != NETDEV_CHANGE) return NOTIFY_DONE; /* Only interrested in carrier changes */
+
+  on = netif_carrier_ok(dev);
+
+#ifdef DEBUG_LINK
+  printk(KERN_DEBUG "%s: ptp_device_event NETDEV_CHANGE, carrier %i\n",
+    dev->name, on);
+#endif
+
+  /* TODO: If there are multiple interfaces we should discriminate based on which interface changed state */
+
+  if (on)
+  {
+    /* Enable Rx/Tx when the link comes up */
+    XIo_Out32(REGISTER_ADDRESS(ptp, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, PTP_TX_REG)) | PTP_TX_ENABLE);
+    XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, PTP_RX_REG)) | PTP_RX_ENABLE);
+
+    ptp->portEnabled = TRUE;
+  }
+  else
+  {
+    /* Disable Rx/Tx when the link goes down */
+    XIo_Out32(REGISTER_ADDRESS(ptp, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, PTP_TX_REG)) & ~PTP_TX_ENABLE);
+    XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, PTP_RX_REG)) & ~PTP_RX_ENABLE);
+
+    ptp->portEnabled = FALSE;
+  }
+
+  return NOTIFY_DONE;
 }
 
 /* Stops the PTP service */
@@ -357,7 +396,7 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   /* Request and map the device's I/O memory region into uncacheable space */
   ptp->physicalAddress = addressRange->start;
   ptp->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
   ptp->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(ptp->physicalAddress, ptp->addressRangeSize,
                         ptp->name) == NULL) {
@@ -443,20 +482,36 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   quality->offsetScaledLogVariance     = DEFAULT_SCALED_LOG_VARIANCE;
   ptp->properties.grandmasterPriority2 = DEFAULT_GRANDMASTER_PRIORITY2;
   ptp->properties.timeSource           = DEFAULT_TIME_SOURCE;
-  memset(ptp->properties.grandmasterIdentity, 0, PTP_CLOCK_IDENTITY_CHARS);
-  strncpy(ptp->properties.grandmasterIdentity, 
-          DEFAULT_GRANDMASTER_IDENTITY, PTP_CLOCK_IDENTITY_CHARS);
+
+  ptp->properties.grandmasterIdentity[0] = DEFAULT_SOURCE_MAC[0];
+  ptp->properties.grandmasterIdentity[1] = DEFAULT_SOURCE_MAC[1];
+  ptp->properties.grandmasterIdentity[2] = DEFAULT_SOURCE_MAC[2];
+  ptp->properties.grandmasterIdentity[3] = 0xFF;
+  ptp->properties.grandmasterIdentity[4] = 0xFE;
+  ptp->properties.grandmasterIdentity[5] = DEFAULT_SOURCE_MAC[3];
+  ptp->properties.grandmasterIdentity[6] = DEFAULT_SOURCE_MAC[4];
+  ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
+
+
   ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
   init_tx_templates(ptp);
 
   /* Configure the instance's RTC control loop based on data provided by
    * the platform when it defines the device.
    */
-  ptp->nominalIncrement.mantissa = get_u32(ofdev,"nominal-increment-mantissa");
-  ptp->nominalIncrement.fraction = get_u32(ofdev,"nominal-increment-fraction");
-  ptp->rtcPCoefficient = get_u32(ofdev,"rtc-p-coefficient");
-  ptp->rtcICoefficient = get_u32(ofdev,"rtc-i-coefficient");
-  ptp->rtcDCoefficient = get_u32(ofdev,"rtc-d-coefficient");
+  ptp->nominalIncrement.mantissa = get_u32(ofdev,"xlnx,nominal-increment-mantissa");
+  ptp->nominalIncrement.fraction = get_u32(ofdev,"xlnx,nominal-increment-fraction");
+  ptp->rtcPCoefficient = get_u32(ofdev,"xlnx,rtc-p-coefficient");
+  ptp->rtcICoefficient = get_u32(ofdev,"xlnx,rtc-i-coefficient");
+  ptp->rtcDCoefficient = get_u32(ofdev,"xlnx,rtc-d-coefficient");
+
+  /* Register for network device events */
+  ptp->notifier.notifier_call = ptp_device_event;
+
+  if (register_netdevice_notifier(&ptp->notifier) != 0)
+  {
+    /* TODO: anything to do if we can't register for events? */
+  }
 
   /* Return success */
   return(0);
@@ -614,9 +669,17 @@ static int ptp_probe(struct platform_device *pdev)
   quality->offsetScaledLogVariance     = DEFAULT_SCALED_LOG_VARIANCE;
   ptp->properties.grandmasterPriority2 = DEFAULT_GRANDMASTER_PRIORITY2;
   ptp->properties.timeSource           = DEFAULT_TIME_SOURCE;
-  memset(ptp->properties.grandmasterIdentity, 0, PTP_CLOCK_IDENTITY_CHARS);
-  strncpy(ptp->properties.grandmasterIdentity, 
-          DEFAULT_GRANDMASTER_IDENTITY, PTP_CLOCK_IDENTITY_CHARS);
+
+  ptp->properties.grandmasterIdentity[0] = DEFAULT_SOURCE_MAC[0];
+  ptp->properties.grandmasterIdentity[1] = DEFAULT_SOURCE_MAC[1];
+  ptp->properties.grandmasterIdentity[2] = DEFAULT_SOURCE_MAC[2];
+  ptp->properties.grandmasterIdentity[3] = 0xFF;
+  ptp->properties.grandmasterIdentity[4] = 0xFE;
+  ptp->properties.grandmasterIdentity[5] = DEFAULT_SOURCE_MAC[3];
+  ptp->properties.grandmasterIdentity[6] = DEFAULT_SOURCE_MAC[4];
+  ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
+
+
   ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
   init_tx_templates(ptp);
 
@@ -628,6 +691,14 @@ static int ptp_probe(struct platform_device *pdev)
   ptp->rtcPCoefficient = platformData->rtcPCoefficient;
   ptp->rtcICoefficient = platformData->rtcICoefficient;
   ptp->rtcDCoefficient = platformData->rtcDCoefficient;
+
+  /* Register for network device events */
+  ptp->notifier.notifier_call = ptp_device_event;
+
+  if (register_netdevice_notifier(&ptp->notifier) != 0)
+  {
+    /* TODO: anything to do if we can't register for events? */
+  }
 
   /* Return success */
   return(0);
@@ -650,6 +721,9 @@ static int ptp_remove(struct platform_device *pdev)
   /* TODO: release IRQ and disable interrupts (in reverse order...)! */
   ptp = platform_get_drvdata(pdev);
   if(!ptp) return(-1);
+
+  unregister_netdevice_notifier(&ptp->notifier);
+
   iounmap(ptp->virtualAddress);
   release_mem_region(ptp->physicalAddress, ptp->addressRangeSize);
   kfree(ptp);

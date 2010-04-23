@@ -53,6 +53,8 @@
 #include "xlldma.h"
 #include "xlldma_bdring.h"
 
+#include "net/labx_ethernet/labx_ethernet_defs.h"
+
 #define LOCAL_FEATURE_RX_CSUM   0x01
 
 /*
@@ -166,11 +168,14 @@ struct net_local {
 	struct net_device *ndev;	/* this device */
 	struct net_device *next_dev;	/* The next device in dev_list */
 	struct net_device_stats stats;	/* Statistics for this device */
-	struct timer_list phy_timer;	/* PHY monitoring timer */
   struct task_struct *phy_thread;   /* Thread to respond to PHY */
   wait_queue_head_t phy_irq_event;  /* Event triggered upon a PHY interrupt */
   u32 phy_irq_count;
   u32 phy_irq_handled;
+
+  /* Hook methods for the PHY */
+  PhyInitMethod phy_init;
+  PhyIsrMethod phy_isr;
 
 	u32 index;		/* Which interface is this */
 	u8 gmii_addr;		/* The GMII address of the PHY */
@@ -468,232 +473,7 @@ static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
 #define DEBUG_ERROR KERN_ERR
 #define DEBUG_LOG(level, ...) printk(level __VA_ARGS__)
 
-/* DP83865-specific PHY registers - see note in phy_setup() about how this
- * all needs to move out of this driver somehow!  Tasklet-invoked hook functions,
- * perhaps...
- */
-#define BP83865_AN_STATUS   (0x11)
-#  define AN_SPEED_MASK  (0x0018)
-#  define AN_SPEED_1000  (0x0010)
-#  define AN_SPEED_100   (0x0008)
-#  define AN_SPEED_10    (0x0000)
-#  define AN_LINK_GOOD   (0x0004)
-#define DP83865_INT_STATUS  (0x14)
-#define DP83865_INT_MASK    (0x15)
-#define DP83865_INT_CLEAR   (0x17)
-#  define DP83865_IRQ_SPEED      (0x08000)
-#  define DP83865_IRQ_LINK       (0x04000)
-#  define DP83865_IRQ_DUPLEX     (0x02000)
-#  define DP83865_IRQ_MDIX       (0x01000)
-#  define DP83865_IRQ_POL        (0x00800)
-#  define DP83865_IRQ_PAR        (0x00400)
-#  define DP83865_IRQ_MS_ERROR   (0x00200)
-#  define DP83865_IRQ_NO_HCD     (0x00100)
-#  define DP83865_IRQ_NO_LINK    (0x00080)
-#  define DP83865_IRQ_JABBER     (0x00040)
-#  define DP83865_IRQ_NEXT_PAGE  (0x00020)
-#  define DP83865_IRQ_AN_CMPLT   (0x00010)
-#  define DP83865_IRQ_REM_FAULT  (0x00008)
-#  define DP83865_IRQ_ALL        (0x0FFF8)
-
-/*
- * Perform any necessary special phy setup.
- */
-static void phy_setup(struct net_local *lp)
-{
-  u16 phyReg;
-
-  /* NOTE - As of the time of this implementation, the only platform using this
-   * driver is the AUD8822-3ADSP AVB demo board.  This setup is specific to the
-   * DP83865 PHY on the board, however!  As such, it should really be brought into
-   * the platform-specific code somehow.  Problem is, the ISR code also needs to
-   * be split off as well...
-   */
-  phyReg = DP83865_IRQ_ALL;
-  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, DP83865_INT_CLEAR, phyReg);
-  phyReg = (DP83865_IRQ_SPEED | DP83865_IRQ_LINK | DP83865_IRQ_NO_LINK);
-  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, DP83865_INT_MASK, phyReg);
-  XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, DP83865_INT_MASK, &phyReg);
-
-  /* Force an auto-negotiation */
-  phyReg = (BMCR_ANENABLE | BMCR_ANRESTART);
-  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, phyReg);
-}
-
-#define NEGOTIATE_POLL_MS       (100)
-#define NEGOTIATE_POLLS_PER_SEC (1000 / NEGOTIATE_POLL_MS)
-#define MAX_NEGOTIATE_DELAY_SEC (10)
-
 typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
-
-int renegotiate_speed(struct net_device *dev, int speed, DUPLEX duplex)
-{
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
-	int retries = 2;
-	int wait_count;
-	u16 phy_reg0 = BMCR_ANENABLE | BMCR_ANRESTART;
-	u16 phy_reg1;
-	u16 phy_reg4;
-	u16 phy_reg9 = 0;
-
-
-	/*
-	 * It appears that the 10baset full and half duplex settings
-	 * are overloaded for gigabit ethernet
-	 */
-	if ((duplex == FULL_DUPLEX) && (speed == 10)) {
-		phy_reg4 = ADVERTISE_10FULL | ADVERTISE_CSMA;
-	}
-	else if ((duplex == FULL_DUPLEX) && (speed == 100)) {
-		phy_reg4 = ADVERTISE_100FULL | ADVERTISE_CSMA;
-	}
-	else if ((duplex == FULL_DUPLEX) && (speed == 1000)) {
-		phy_reg4 = ADVERTISE_CSMA;
-		phy_reg9 = EX_ADVERTISE_1000FULL;
-	}
-	else if (speed == 10) {
-		phy_reg4 = ADVERTISE_10HALF | ADVERTISE_CSMA;
-	}
-	else if (speed == 100) {
-		phy_reg4 = ADVERTISE_100HALF | ADVERTISE_CSMA;
-	}
-	else if (speed == 1000) {
-		phy_reg4 = ADVERTISE_CSMA;
-		phy_reg9 = EX_ADVERTISE_1000HALF;
-	}
-	else {
-		printk(KERN_ERR
-		       "%s: labx_eth_llink: unsupported speed requested: %d\n",
-		       dev->name, speed);
-		return -1;
-	}
-
-    /* TEMPORARY */
-    printk("PHY negotiate regs: [4] = 0x%04X, [9] = 0x%04X\n",
-           phy_reg4, phy_reg9);
-
-	/*
-	 * link status in register 1:
-	 * first read / second read:
-	 * 0               0           link is down
-	 * 0               1           link is up (but it was down earlier)
-	 * 1               0           link is down (but it was just up)
-	 * 1               1           link is up
-	 *
-	 */
-	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &phy_reg1);
-	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &phy_reg1);
-	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_ADVERTISE, phy_reg4);
-	_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_EXADVERTISE, phy_reg9);
-
-	printk("xenet: renegotiate_speed BMSR=%04X ADVERTISE=%04X EXADVERTISE=%04X\n", phy_reg1, phy_reg4, phy_reg9);
-
-	while (retries--) {
-      int negotiate_complete;
-		/* initiate an autonegotiation of the speed */
-		_XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, phy_reg0);
-
-        /* Wait up to a a maximum of three seconds for autonegotiation */
-        negotiate_complete = 0;
-		wait_count = MAX_NEGOTIATE_DELAY_SEC;
-		while((negotiate_complete == 0) && (wait_count--)) {
-          int poll_index;
-
-          /* Give a visual feedback each second we wait for success */
-          printk(".");
-          for(poll_index = 0; poll_index < NEGOTIATE_POLLS_PER_SEC; poll_index++) {
-			mdelay(NEGOTIATE_POLL_MS);
-			_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR,
-                              &phy_reg1);
-			_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR,
-                              &phy_reg1);
-            
-			if ((phy_reg1 & BMSR_LSTATUS) && (phy_reg1 & BMSR_ANEGCOMPLETE)) {
-              negotiate_complete = 1;
-              break;
-            }
-          }
-		} /* while(wait count) */
-        printk("\n");
-
-		if (phy_reg1 & BMSR_LSTATUS) {
-			printk(KERN_INFO
-			       "%s: labx_eth_llink: We renegotiated the speed to: %d\n",
-			       dev->name, speed);
-			return 0;
-		}
-		else {
-			printk(KERN_ERR
-			       "%s: labx_eth_llink: Not able to set the speed to %d (status: 0x%0x)\n",
-			       dev->name, speed, phy_reg1);
-			return -1;
-		}
-	}
-
-	printk(KERN_ERR
-	       "%s: labx_eth_llink: Not able to set the speed to %d\n", dev->name,
-	       speed);
-	return -1;
-}
-
-// #define XILINX_PLB_TEMAC_3_00A_ML403_PHY_SUPPORT
-/*
- * This function sets up MAC's speed according to link speed of PHY
- * This function is specific to MARVELL 88E1111 PHY chip on Xilinx ML403
- * board and assumes GMII interface is being used by the TEMAC
- */
-void set_mac_speed(struct net_local *lp)
-{
-	u16 phylinkspeed;
-	struct net_device *dev = lp->ndev;
-	int ret;
-	int retry_count = 1;
-
-	if (XLlTemac_GetPhysicalInterface(&lp->Emac) == XTE_PHY_TYPE_MII) {
-		phylinkspeed = 100;
-	}
-	else {
-		phylinkspeed = 1000;
-	}
-
-	/*
-	 * Try to renegotiate the speed until something sticks
-	 */
-	while (phylinkspeed > 1) {
-		ret = renegotiate_speed(dev, phylinkspeed, FULL_DUPLEX);
-		/*
-		 * ret == 1 - try it again
-		 * ret == 0 - it worked
-		 * ret <  0 - there was some failure negotiating the speed
-		 */
-		if (ret == 0) {
-			/* it worked, get out of the loop */
-			break;
-		}
-
-		/* it didn't work this time, but it may work if we try again */
-		if ((ret == 1) && (retry_count)) {
-			retry_count--;
-			printk("trying again...\n");
-			continue;
-		}
-		/* reset the retry_count, becuase we're about to try a lower speed */
-		retry_count = 1;
-		phylinkspeed /= 10;
-	}
-	if (phylinkspeed == 1) {
-		printk(KERN_INFO "%s: labx_eth_llink: could not negotiate speed\n",
-		       dev->name);
-		lp->cur_speed = 0;
-
-		return;
-	}
-
-	_XLlTemac_SetOperatingSpeed(&lp->Emac, phylinkspeed);
-	printk(KERN_INFO "%s: labx_eth_llink: speed set to %dMb/s\n", dev->name,
-	       phylinkspeed);
-	lp->cur_speed = phylinkspeed;
-}
 
 /*
  * Helper function to reset the underlying hardware.  This is called
@@ -702,7 +482,7 @@ void set_mac_speed(struct net_local *lp)
  */
 static void reset(struct net_device *dev, u32 line_num)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	u32 TxThreshold, TxWaitBound, RxThreshold, RxWaitBound;
 	u32 Options;
 	static u32 reset_cnt = 0;
@@ -748,11 +528,8 @@ static void reset(struct net_device *dev, u32 line_num)
 	 * before we move on */
 #endif
 
-    /* Perform PHY setup */
-	phy_setup(lp);
-
-    /* TODO: Do we need this delay? */
-	mdelay(2000);
+    /* Perform PHY setup using the platform-supplied hook method */
+    if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
 
 	/*
 	 * The following four functions will return an error if the
@@ -764,8 +541,6 @@ static void reset(struct net_device *dev, u32 line_num)
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
 	Options = XLlTemac_GetOptions(&lp->Emac);
 	printk(KERN_INFO "%s: labx_eth_llink: Options: 0x%x\n", dev->name, Options);
-
-	set_mac_speed(lp);
 
 	if (XLlTemac_IsDma(&lp->Emac)) {	/* SG DMA mode */
 		status = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing,
@@ -805,82 +580,6 @@ static void reset(struct net_device *dev, u32 line_num)
 	netif_wake_queue(dev);
 }
 
-/*
- * The PHY registers read here should be standard registers in all PHY chips
- */
-static int get_phy_status(struct net_device *dev, DUPLEX * duplex, int *linkup)
-{
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
-	u16 reg;
-	u16 reg2;
-
-	do
-	{
-		_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &reg);
-		_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &reg2);
-
-	} while (reg != reg2);
-
-	*duplex = FULL_DUPLEX;
-
-	do
-	{
-		_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &reg);
-		_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &reg2);
-
-	} while (reg != reg2);
-
-	*linkup = (reg & BMSR_LSTATUS) != 0;
-
-	return 0;
-}
-
-/*
- * This routine is used for two purposes.  The first is to keep the
- * EMAC's duplex setting in sync with the PHY's.  The second is to keep
- * the system apprised of the state of the link.  Note that this driver
- * does not configure the PHY.  Either the PHY should be configured for
- * auto-negotiation or it should be handled by something like mii-tool. */
-static void poll_gmii(unsigned long data)
-{
-	struct net_device *dev;
-	struct net_local *lp;
-	DUPLEX phy_duplex;
-	int phy_carrier;
-	int netif_carrier;
-
-	dev = (struct net_device *) data;
-	lp = (struct net_local *) dev->ml_priv;
-
-	/* First, find out what's going on with the PHY. */
-	if (get_phy_status(dev, &phy_duplex, &phy_carrier)) {
-		printk(KERN_ERR "%s: labx_eth_llink: terminating link monitoring.\n",
-		       dev->name);
-		return;
-	}
-	netif_carrier = netif_carrier_ok(dev) != 0;
-	if (phy_carrier != netif_carrier) {
-		if (phy_carrier) {
-			printk(KERN_INFO
-			       "%s: labx_eth_llink: PHY Link carrier restored.\n",
-			       dev->name);
-			netif_carrier_on(dev);
-		}
-		else {
-			printk(KERN_INFO "%s: labx_eth_llink: PHY Link carrier lost.\n",
-			       dev->name);
-			netif_carrier_off(dev);
-		}
-	
-		/* Update the MAC speed to match the phy if it has changed */
-		set_mac_speed(lp);
-	}
-
-	/* Set up the timer so we'll get called again in 2 seconds. */
-	lp->phy_timer.expires = jiffies + 2 * HZ;
-	add_timer(&lp->phy_timer);
-}
-
 static void FifoSendHandler(struct net_device *dev);
 static void FifoRecvHandler(unsigned long p /*struct net_device *dev*/);
 
@@ -889,7 +588,7 @@ DECLARE_TASKLET(FifoRecvBH, FifoRecvHandler, 0);
 static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 {
 	struct net_device *dev = dev_id;
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	u32 irq_status;
 
 	unsigned long flags;
@@ -954,7 +653,7 @@ static irqreturn_t xenet_dma_rx_interrupt(int irq, void *dev_id)
 {
 	u32 irq_status;
 	struct net_device *dev = dev_id;
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	struct list_head *cur_lp;
 
         unsigned int flags;
@@ -991,7 +690,7 @@ static irqreturn_t xenet_dma_tx_interrupt(int irq, void *dev_id)
 {
 	u32 irq_status;
 	struct net_device *dev = dev_id;
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	struct list_head *cur_lp;
 
 	unsigned int flags;
@@ -1084,7 +783,7 @@ static int xenet_open(struct net_device *dev)
 	 * really care.
 	 */
 	netif_stop_queue(dev);
-	lp = (struct net_local *) dev->ml_priv;
+	lp = netdev_priv(dev);
 	_XLlTemac_Stop(&lp->Emac);
 
 	INIT_LIST_HEAD(&(lp->rcv));
@@ -1157,13 +856,10 @@ static int xenet_open(struct net_device *dev)
 		}
 	}
 
-	/* Perform PHY setup */
-	phy_setup(lp);
 
-    /* TODO: Do we need this delay? */
-	mdelay(2000);
+    /* Perform PHY setup using the platform-supplied hook method */
 
-    //	set_mac_speed(lp);
+    if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
 
 	/* Enable interrupts  - no polled mode */
 	if (XLlTemac_IsFifo(&lp->Emac)) { /* fifo direct interrupt driver mode */
@@ -1206,13 +902,9 @@ static int xenet_open(struct net_device *dev)
 
 static int xenet_close(struct net_device *dev)
 {
-	struct net_local *lp;
 	unsigned long flags;
 
-	lp = (struct net_local *) dev->ml_priv;
-
-	/* Shut down the PHY monitoring timer. */
-	del_timer_sync(&lp->phy_timer);
+	struct net_local *lp = netdev_priv(dev);
 
 	/* Stop Send queue */
 	netif_stop_queue(dev);
@@ -1243,14 +935,14 @@ static int xenet_close(struct net_device *dev)
 
 static struct net_device_stats *xenet_get_stats(struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	return &lp->stats;
 }
 
 static void xenet_set_multicast_list(struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	u32 Options = XLlTemac_GetOptions(&lp->Emac);
 
@@ -1282,7 +974,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 
 static int xenet_set_mac_address(struct net_device *dev, void *p)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	struct sockaddr * addr = p;
 	int err = 0;
 
@@ -1313,7 +1005,7 @@ static int xenet_change_mtu(struct net_device *dev, int new_mtu)
 #else
 	int head_size = XTE_HDR_SIZE;
 #endif
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	int max_frame = new_mtu + head_size + XTE_TRL_SIZE;
 	int min_frame = 1 + head_size + XTE_TRL_SIZE;
 
@@ -1346,7 +1038,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 	 * or other processor in SMP case.
 	 */
 	spin_lock_irqsave(&XTE_tx_spinlock, flags);
-	lp = (struct net_local *) dev->ml_priv;
+	lp = netdev_priv(dev);
 
 	fifo_free_bytes = XLlFifo_TxVacancy(&lp->Fifo) * 4;
 	if (fifo_free_bytes < total_len) {
@@ -1385,7 +1077,7 @@ static void FifoSendHandler(struct net_device *dev)
 	unsigned int flags;
 
 	spin_lock_irqsave(&XTE_tx_spinlock, flags);
-	lp = (struct net_local *) dev->ml_priv;
+	lp = netdev_priv(dev);
 	lp->stats.tx_packets++;
 
 	/*Send out the deferred skb and wake up send queue if a deferred skb exists */
@@ -1466,7 +1158,7 @@ static inline unsigned int _xenet_rx_csum(struct sk_buff *skb)
  */
 static int xenet_DmaSend_internal(struct sk_buff *skb, struct net_device *dev)
 {
-	struct net_local *lp;
+	struct net_local *lp = netdev_priv(dev);
 	XLlDma_Bd *bd_ptr;
 	int result;
 	int total_frags;
@@ -1478,7 +1170,6 @@ static int xenet_DmaSend_internal(struct sk_buff *skb, struct net_device *dev)
 	XLlDma_Bd *last_bd_ptr;
 	skb_frag_t *frag;
 
-	lp = (struct net_local *) dev->ml_priv;
 	/* get skb_shinfo(skb)->nr_frags + 1 buffer descriptors */
 	total_frags = skb_shinfo(skb)->nr_frags + 1;
 
@@ -1677,7 +1368,8 @@ static void DmaSendHandlerBH(unsigned long p)
 			do {
 				len = XLlDma_mBdGetLength(BdCurPtr);
 				skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdCurPtr);
-				dma_unmap_single(NULL, (void *)skb_dma_addr, len, DMA_TO_DEVICE);
+				dma_unmap_single(NULL, (void *)skb_dma_addr, len,
+						 DMA_TO_DEVICE);
 
 				/* get ptr to skb */
 				skb = (struct sk_buff *)
@@ -1736,7 +1428,7 @@ static void xenet_tx_timeout(struct net_device *dev)
 	 */
 	spin_lock_irqsave(&XTE_tx_spinlock, flags);
 
-	lp = (struct net_local *) dev->ml_priv;
+	lp = netdev_priv(dev);
 	printk(KERN_ERR
 	       "%s: labx_eth_llink: exceeded transmit timeout of %lu ms.  Resetting emac.\n",
 	       dev->name, TX_TIMEOUT * 1000UL / HZ);
@@ -1821,7 +1513,7 @@ static void FifoRecvHandler(unsigned long p)
  */
 static void _xenet_DmaSetupRecvBuffers(struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	int free_bd_count = XLlDma_mBdRingGetFreeCnt(&lp->Dma.RxBdRing);
 	int num_sk_buffs;
@@ -2099,7 +1791,7 @@ static void DmaRecvHandlerBH(unsigned long p)
 
 static int descriptor_init(struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	int recvsize, sendsize;
 	int dftsize;
 	u32 *recvpoolptr, *sendpoolptr;
@@ -2190,7 +1882,7 @@ static int descriptor_init(struct net_device *dev)
 
 static void free_descriptor_skb(struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	XLlDma_Bd *BdPtr;
 	struct sk_buff *skb;
 	dma_addr_t skb_dma_addr;
@@ -2246,7 +1938,7 @@ static void free_descriptor_skb(struct net_device *dev)
 static int
 xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	u32 mac_options;
 	u32 threshold, timer;
 	u16 gmii_cmd, gmii_status, gmii_advControl;
@@ -2299,7 +1991,7 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 static int
 xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	if ((ecmd->duplex != DUPLEX_FULL) ||
 	    (ecmd->transceiver != XCVR_INTERNAL) ||
@@ -2316,18 +2008,13 @@ xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 		return -EOPNOTSUPP;
 	}
 
-	if (ecmd->speed != lp->cur_speed) {
-		renegotiate_speed(dev, ecmd->speed, FULL_DUPLEX);
-		_XLlTemac_SetOperatingSpeed(&lp->Emac, ecmd->speed);
-		lp->cur_speed = ecmd->speed;
-	}
 	return 0;
 }
 
 static int
 xenet_ethtool_get_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	u32 threshold, waitbound;
 
 	memset(ec, 0, sizeof(struct ethtool_coalesce));
@@ -2408,9 +2095,7 @@ static int
 xenet_ethtool_set_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
 {
 	int ret;
-	struct net_local *lp;
-
-	lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	if (ec->rx_coalesce_usecs == 0) {
 		ec->rx_coalesce_usecs = 1;
@@ -2464,7 +2149,7 @@ static void
 xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
 		       void *ret)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	struct mac_regsDump *dump = (struct mac_regsDump *) regs;
 	int i;
 
@@ -2492,7 +2177,7 @@ xenet_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
 
 static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 	struct ethtool_cmd ecmd;
 	struct ethtool_coalesce eco;
 	struct ethtool_drvinfo edrv;
@@ -2758,7 +2443,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 
 static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
-	struct net_local *lp = (struct net_local *) dev->ml_priv;
+	struct net_local *lp = netdev_priv(dev);
 
 	/* gmii_ioctl_data has 4 u16 fields: phy_id, reg_num, val_in & val_out */
 	struct mii_ioctl_data *data = (struct mii_ioctl_data *) &rq->ifr_data;
@@ -2789,15 +2474,8 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		if (data->phy_id > 31 || data->reg_num > 31)
 			return -ENXIO;
 
-		/* Stop the PHY timer to prevent reentrancy. */
-		del_timer_sync(&lp->phy_timer);
-
 		_XLlTemac_PhyRead(&lp->Emac, data->phy_id, data->reg_num,
 				  &data->val_out);
-
-		/* Start the PHY timer up again. */
-		lp->phy_timer.expires = jiffies + 2 * HZ;
-		add_timer(&lp->phy_timer);
 		return 0;
 
 	case SIOCSMIIREG:	/* Write GMII PHY register. */
@@ -2808,15 +2486,8 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		if (data->phy_id > 31 || data->reg_num > 31)
 			return -ENXIO;
 
-		/* Stop the PHY timer to prevent reentrancy. */
-		del_timer_sync(&lp->phy_timer);
-
 		_XLlTemac_PhyWrite(&lp->Emac, data->phy_id, data->reg_num,
 				   data->val_in);
-
-		/* Start the PHY timer up again. */
-		lp->phy_timer.expires = jiffies + 2 * HZ;
-		add_timer(&lp->phy_timer);
 		return 0;
 
 	case SIOCDEVPRIVATE + 3:	/* set THRESHOLD */
@@ -3026,7 +2697,6 @@ static int detect_phy(struct net_local *lp, char *dev_name)
 /* Thread function for PHY / MAC management */
 static int phy_thread_task(void *data) {
   struct net_local *lp = (struct net_local *) data;
-  u16 phyReg;
 
   /* Endlessly loop, waiting on the PHY interrupt to occur */
   while(1) {
@@ -3034,33 +2704,53 @@ static int phy_thread_task(void *data) {
                              (lp->phy_irq_count != lp->phy_irq_handled));
     lp->phy_irq_handled = lp->phy_irq_count;
 
-    /* Determine the cause of the interrupt and clear the status bits */
-    XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, DP83865_INT_MASK, &phyReg);
-    XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, DP83865_INT_CLEAR, phyReg);
-
-    /* Read the auto-negotiation status register to test for a valid link */
-    XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, BP83865_AN_STATUS, &phyReg);
-    if((phyReg & AN_LINK_GOOD) != 0) {
-      u16 linkSpeed;
-
-      phyReg &= AN_SPEED_MASK;
-      switch(phyReg) {
-      case AN_SPEED_1000:
-        linkSpeed = 1000;
+    /* Invoke the platform-supplied ISR method for the specific PHY, if one
+     * was specified.
+     */
+    if(lp->phy_isr != NULL) {
+      u32 isr_code;
+      u16 link_speed;
+      isr_code = lp->phy_isr(lp->ndev->name, (void*) lp);
+      switch(isr_code) {
+      case LINK_UP_10_MBIT:
+        link_speed = 10;
         break;
-      case AN_SPEED_100:
-        linkSpeed = 100;
+      case LINK_UP_100_MBIT:
+        link_speed = 100;
+        break;
+      case LINK_UP_1_GBIT:
+        link_speed = 1000;
         break;
       default:
-        linkSpeed = 10;
+        /* Assume LINK_DOWN */
+        link_speed = 0;
+        netif_carrier_off(lp->ndev);
+        printk("%s: Link down\n", lp->ndev->name);
       }
-      XLlTemac_SetOperatingSpeed(&lp->Emac, linkSpeed);
-      lp->cur_speed = linkSpeed;
-      printk("%s: Link up, %d Mb/s\n", lp->ndev->name, linkSpeed);
-    } else {
-      printk("%s: Link down\n", lp->ndev->name);
-    }
+
+      /* Set the link speed and the MACs compatible operating mode */
+      if(link_speed > 0) {
+        XLlTemac_SetOperatingSpeed(&lp->Emac, link_speed);
+        lp->cur_speed = link_speed;
+        netif_carrier_on(lp->ndev);
+        printk("%s: Link up, %d Mb/s\n", lp->ndev->name, link_speed);
+      }
+    } /* if(PHY ISR available) */
   }
+}
+
+void write_phy_register(void *portHandle, uint32_t regAddress, uint16_t writeData) {
+  struct net_local *lp = (struct net_local *) portHandle;
+
+  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, regAddress, writeData);
+}
+
+uint16_t read_phy_register(void *portHandle, uint32_t regAddress) {
+  struct net_local *lp = (struct net_local *) portHandle;
+  u16 phyReg;
+
+  XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, regAddress, &phyReg);
+  return(phyReg);
 }
 
 /* PHY / MDIO interrupt service routine */
@@ -3095,7 +2785,7 @@ static int xtenet_setup(
 		struct device *dev,
 		struct resource *r_mem,
 		struct resource *r_irq,
-		struct xlltemac_platform_data *pdata) {
+		struct labx_eth_platform_data *pdata) {
 	int xs;
 	u32 virt_baddr;		/* virtual base address of TEMAC */
 	int i;
@@ -3106,6 +2796,7 @@ static int xtenet_setup(
 	struct net_local *lp = NULL;
 
 	int rc = 0;
+
 
 	/* Create an ethernet device instance */
 	ndev = alloc_etherdev(sizeof(struct net_local));
@@ -3143,6 +2834,10 @@ static int xtenet_setup(
 	Temac_Config.PhyType = pdata->phy_type;
 	Temac_Config.PhyAddr = pdata->phy_addr;
 
+    /* Hang on to hook functions defined for the PHY */
+    lp->phy_init = pdata->phy_init;
+    lp->phy_isr = pdata->phy_isr;
+
 	/* Get the virtual base address for the device */
 	virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
 	if (0 == virt_baddr) {
@@ -3158,7 +2853,6 @@ static int xtenet_setup(
 		rc = -ENODEV;
 		goto error;
 	}
-
 	/* Set the MAC address */
 	for (i = 0; i < 6; i++) {
 		if (macaddr[i] != 0)
@@ -3195,7 +2889,6 @@ static int xtenet_setup(
 	if (XLlTemac_IsDma(&lp->Emac)) {
 		int result;
 
-		printk("%s: labx_eth_llink: using DMA mode.\n", ndev->name);
 
 #ifndef XDCRIO_H
 		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
@@ -3206,7 +2899,7 @@ static int xtenet_setup(
 			goto error;
 		}
 #endif
-//		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
+		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
 		XLlDma_Initialize(&lp->Dma, virt_baddr);
 
 		ndev->hard_start_xmit = xenet_DmaSend;
@@ -3348,7 +3041,7 @@ static int xtenet_probe_thread(void *data)
 
 	struct resource *r_irq = NULL;	/* Interrupt resources */
 	struct resource *r_mem = NULL;	/* IO mem resources */
-	struct xlltemac_platform_data *pdata;
+	struct labx_eth_platform_data *pdata;
 	struct platform_device *pdev = to_platform_device(dev);
 
 	/* param check */
@@ -3357,7 +3050,7 @@ static int xtenet_probe_thread(void *data)
 		return -ENODEV;
 	}
 
-	pdata = (struct xlltemac_platform_data *) pdev->dev.platform_data;
+	pdata = (struct labx_eth_platform_data *) pdev->dev.platform_data;
 	if (!pdata) {
 		dev_err(dev, "labx_eth_llink: Couldn't find platform data.\n");
 
@@ -3423,19 +3116,18 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct resource r_mem_struct;
 	struct resource r_connected_mem_struct;
 	struct resource r_connected_irq_struct;
-	struct xlltemac_platform_data pdata_struct;
+	struct labx_eth_platform_data pdata_struct = {};
 
 	struct resource *r_irq = &r_irq_struct;	/* Interrupt resources */
 	struct resource *r_mem = &r_mem_struct;	/* IO mem resources */
-	struct xlltemac_platform_data *pdata = &pdata_struct;
-        const void *mac_address;
+	struct labx_eth_platform_data *pdata = &pdata_struct;
+    const void *mac_address;
 	int rc = 0;
 	const phandle *llink_connected_handle;
 	struct device_node *llink_connected_node;
 	u32 *dcrreg_property;
 
-	printk(KERN_INFO "Device Tree Probing \'%s\'\n",
-                        ofdev->node->name);
+	printk(KERN_INFO "Device Tree Probing \'%s\'\n",ofdev->node->name);
 
 	/* Get iospace for the device */
 	rc = of_address_to_resource(ofdev->node, 0, r_mem);
@@ -3453,55 +3145,51 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 
 	pdata_struct.tx_csum		= get_u32(ofdev, "xlnx,txcsum");
 	pdata_struct.rx_csum		= get_u32(ofdev, "xlnx,rxcsum");
-	pdata_struct.phy_type           = get_u32(ofdev, "xlnx,phy-type");
-//	pdata_struct.ext_filter         = get_u32(ofdev, "xlnx,mcast-extend");
-        llink_connected_handle =
-		of_get_property(ofdev->node, "llink-connected", NULL);
-        if(!llink_connected_handle) {
-            dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-            return rc;
-        }
+	pdata_struct.phy_type       = get_u32(ofdev, "xlnx,phy-type");
 
-	llink_connected_node =
-		of_find_node_by_phandle(*llink_connected_handle);
-	rc = of_address_to_resource(
-			llink_connected_node,
-			0,
-			&r_connected_mem_struct);
+    llink_connected_handle = of_get_property(ofdev->node, "llink-connected", NULL);
+    if(!llink_connected_handle) {
+        dev_warn(&ofdev->dev, "no Locallink connection found.\n");
+        return rc;
+    }
 
-        /** Get the right information from whatever the locallink is
-	    connected to. */
+	llink_connected_node = of_find_node_by_phandle(*llink_connected_handle);
+	if (!llink_connected_node) {
+        dev_warn(&ofdev->dev, "no Locallink connection found.\n");
+        return rc;
+    }
+
+	rc = of_address_to_resource( llink_connected_node, 0, &r_connected_mem_struct);
+
+    /** Get the right information from whatever the locallink is connected to. */
 	if(of_match_node(xtenet_fifo_of_match, llink_connected_node)) {
 		/** Connected to a fifo. */
-
 		if(rc) {
 			dev_warn(&ofdev->dev, "invalid address\n");
 			return rc;
 		}
 
-	        pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
+	    pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
 		pdata_struct.ll_dev_type = XPAR_LL_FIFO;
 		pdata_struct.ll_dev_dma_rx_irq	= NO_IRQ;
 		pdata_struct.ll_dev_dma_tx_irq	= NO_IRQ;
 
-		rc = of_irq_to_resource(
-				llink_connected_node,
-				0,
-				&r_connected_irq_struct);
+		rc = of_irq_to_resource( llink_connected_node, 0, &r_connected_irq_struct);
 		if(rc == NO_IRQ) {
 			dev_warn(&ofdev->dev, "no IRQ found.\n");
 			return rc;
 		}
 		pdata_struct.ll_dev_fifo_irq	= r_connected_irq_struct.start;
 		pdata_struct.dcr_host = 0x0;
-        } else if(of_match_node(xtenet_sdma_of_match, llink_connected_node)) {
+        } 
+		else if(of_match_node(xtenet_sdma_of_match, llink_connected_node)) {
 		/** Connected to a dma port, default to 405 type dma */
-
 		pdata->dcr_host = 0;
 		if(rc) {
+			printk("No Address was found, might be 440, check for dcr reg\n");
 			/* no address was found, might be 440, check for dcr reg */
 
-			dcrreg_property = (u32 *)of_get_property(llink_connected_node, "dcr-reg", 									NULL);
+			dcrreg_property = (u32 *)of_get_property(llink_connected_node, "dcr-reg",NULL);
 			if(dcrreg_property) {
 			        r_connected_mem_struct.start = *dcrreg_property;
 				pdata->dcr_host = 0xFF;
@@ -3511,23 +3199,17 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 			}			
 		}
 
-        	pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
+       	pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
 		pdata_struct.ll_dev_type = XPAR_LL_DMA;
 
-		rc = of_irq_to_resource(
-				llink_connected_node,
-				0,
-				&r_connected_irq_struct);
+		rc = of_irq_to_resource( llink_connected_node, 0, &r_connected_irq_struct);
 		if(rc == NO_IRQ) {
 			dev_warn(&ofdev->dev, "First IRQ not found.\n");
 			return rc;
 		}
 		pdata_struct.ll_dev_dma_rx_irq	= r_connected_irq_struct.start;
 
-		rc = of_irq_to_resource(
-				llink_connected_node,
-				1,
-				&r_connected_irq_struct);
+		rc = of_irq_to_resource( llink_connected_node, 1, &r_connected_irq_struct);
 		if(rc == NO_IRQ) {
 			dev_warn(&ofdev->dev, "Second IRQ not found.\n");
 			return rc;
@@ -3537,10 +3219,11 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 		pdata_struct.ll_dev_fifo_irq	= NO_IRQ;
         } else {
 		dev_warn(&ofdev->dev, "Locallink connection not matched.\n");
+		printk("Locallink connection no matched\n");
 		return rc;
         }
 
-	of_node_put(llink_connected_node);
+		of_node_put(llink_connected_node);
         mac_address = of_get_mac_address(ofdev->node);
         if(mac_address) {
             memcpy(pdata_struct.mac_addr, mac_address, 6);
@@ -3551,14 +3234,13 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
         return xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);
 }
 
-
 static int __devexit xtenet_of_remove(struct of_device *dev)
 {
 	return xtenet_remove(&dev->dev);
 }
 
 static struct of_device_id xtenet_of_match[] = {
-	{ .compatible = "xlnx,xps-ll-temac-avb-labx", },
+	{ .compatible = "xlnx,labx-eth-locallink-1.00.a", },
 	{ /* end of list */ },
 };
 

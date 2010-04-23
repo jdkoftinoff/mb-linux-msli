@@ -51,18 +51,20 @@
 static uint32_t instanceCount;
 
 #if 0
-#define DBG(f, x...) pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
+#define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DBG(f, x...)
 #endif
 
 /* Disables the passed instance */
 static void disable_packetizer(struct audio_packetizer *packetizer) {
+  DBG("Disbling the packetizer\n");
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), PACKETIZER_DISABLE);
 }
 
 /* Enables the passed instance */
 static void enable_packetizer(struct audio_packetizer *packetizer) {
+  DBG("Enabling the packetizer\n");
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), PACKETIZER_ENABLE);
 }
 
@@ -79,6 +81,7 @@ static void load_descriptor(struct audio_packetizer *packetizer,
   uint32_t wordAddress;
 
   wordAddress = (MICROCODE_RAM_BASE(packetizer) + (descriptor->offset * sizeof(uint32_t)));
+  DBG("Loading descriptor @ %08X (%d), numWords %d\n", wordAddress, descriptor->offset, descriptor->numWords);
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
@@ -348,7 +351,7 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   /* Request and map the device's I/O memory region into uncacheable space */
   packetizer->physicalAddress = addressRange->start;
   packetizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
   packetizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize,
                         packetizer->name) == NULL) {

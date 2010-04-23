@@ -73,6 +73,7 @@
 #define GM_PRIORITY1_OFFSET     (15 * BYTES_PER_WORD)
 #define HW_TIMESTAMP_OFFSET     ((PACKET_BUFFER_WORDS - HW_TIMESTAMP_WORDS) * \
                                   BYTES_PER_WORD)
+#define HW_LOCAL_TIMESTAMP_OFFSET (HW_TIMESTAMP_OFFSET - (HW_TIMESTAMP_WORDS * BYTES_PER_WORD))
 
 /* Additional offset applied for the transmit buffers, since the first
  * word holds the packet length (minus one.)
@@ -140,19 +141,20 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t txBuffer,
   case MSG_PDELAY_REQ:
   case MSG_PDELAY_RESP:
   case MSG_PDELAY_RESP_FUP:
+  default:
     write_packet(bufferBase, wordOffset, 0x0180C200);
     packetWord = 0x000E0000;
     packetWord |= (ptp->properties.sourceMacAddress[0] << 8);
     packetWord |= ptp->properties.sourceMacAddress[1];
     write_packet(bufferBase, wordOffset, packetWord);
     break;
-
-  default:
+#if 0
     write_packet(bufferBase, wordOffset, 0x011B1900);
     packetWord = 0x00000000;
     packetWord |= (ptp->properties.sourceMacAddress[0] << 8);
     packetWord |= ptp->properties.sourceMacAddress[1];
     write_packet(bufferBase, wordOffset, packetWord);
+#endif
   }
   packetWord = (ptp->properties.sourceMacAddress[2] << 24);
   packetWord |= (ptp->properties.sourceMacAddress[3] << 16);
@@ -236,7 +238,7 @@ static void init_announce_template(struct ptp_device *ptp) {
    */
   wordOffset = 0;
   init_ptp_header(ptp, PTP_TX_ANNOUNCE_BUFFER, &wordOffset, MSG_ANNOUNCE, 
-                  PTP_ANNOUNCE_LENGTH, (uint16_t) FLAG_TWO_STEP);
+                  PTP_ANNOUNCE_LENGTH, (uint16_t) (FLAG_TWO_STEP|FLAG_PTP_TIMESCALE));
   bufferBase = PTP_TX_PACKET_BUFFER(ptp, PTP_TX_ANNOUNCE_BUFFER);
 
   /* Clear originTimestamp and set currentUtcOffset */
@@ -577,6 +579,29 @@ void get_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirect
   timestamp->nanoseconds  = read_packet(bufferBase, &wordOffset);
 }
 
+/* Gets the local hardware timestamp located within the passed packet buffer.
+ * This is the same as get_hardware_timestamp except it is from a local clock
+ * that is running at a fixed rate unmodified by PTP.
+ */
+void get_local_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
+                            uint32_t packetBuffer, PtpTime *timestamp) {
+  uint32_t bufferBase;
+  uint32_t wordOffset;
+
+  /* Fetch the hardware timestamp from the end of the specified packet buffer and pack
+   * it into the passed timestamp structure.  Don't offset the Tx packet buffer by
+   * its data offset in this case, since we're not going to be reading relative to
+   * the start of data, but relative to the end of the buffer instead!
+   */
+  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
+                PTP_TX_PACKET_BUFFER(ptp, packetBuffer) :
+                PTP_RX_PACKET_BUFFER(ptp, packetBuffer));
+  wordOffset = HW_LOCAL_TIMESTAMP_OFFSET;
+  timestamp->secondsUpper = (int32_t)(read_packet(bufferBase, &wordOffset) & 0x0FFFF);
+  timestamp->secondsLower = read_packet(bufferBase, &wordOffset);
+  timestamp->nanoseconds  = read_packet(bufferBase, &wordOffset);
+}
+
 void print_packet_buffer(struct ptp_device *ptp, PacketDirection bufferDirection,
                          uint32_t packetBuffer) {
   uint32_t bufferBase;
@@ -663,10 +688,10 @@ void transmit_fup(struct ptp_device *ptp) {
   /* TODO: Need to add in the MAC latency and the PHY latency! */
   set_timestamp(ptp, PTP_TX_FUP_BUFFER, &syncTxTimestamp);
 
-  /* Update the correction field with our mean path delay 
-   * TODO: Should also account for asymmetry!
+  /* Update the correction field.
+   * TODO: This should always be zero except if we are acting as a transparent clock 
    */
-  correctionField = (int64_t) ptp->peerMeanPathDelay;
+  correctionField = (int64_t) 0;
   correctionField <<= CORRECTION_FRACTION_BITS;
   update_correction_field(ptp, PTP_TX_SYNC_BUFFER, correctionField);
 
@@ -957,6 +982,23 @@ void copy_ptp_properties(PtpProperties *to, PtpProperties *from) {
     to->grandmasterIdentity[byteIndex] = from->grandmasterIdentity[byteIndex];
   }
   to->timeSource = from->timeSource;
+}
+
+int32_t compare_clock_identity(const uint8_t *clockIdentityA, const uint8_t *clockIdentityB)
+{
+  uint32_t byteIndex;
+  int32_t comparisonResult = 0;
+
+  for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_CHARS; byteIndex++) {
+    if(clockIdentityA[byteIndex] < clockIdentityB[byteIndex]) {
+      comparisonResult = -1;
+      break;
+    } else if(clockIdentityA[byteIndex] > clockIdentityB[byteIndex]) {
+      comparisonResult = 1;
+      break;
+    }
+  }
+  return(comparisonResult);
 }
 
 /* Compares the two passed MAC addresses; returns less than zero if the first MAC 

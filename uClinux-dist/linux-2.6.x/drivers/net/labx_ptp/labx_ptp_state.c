@@ -28,7 +28,10 @@
 #include <xio.h>
 
 /* Define this to get some extra debug on path delay messages */
-// #define PATH_DELAY_DEBUG
+/* #define PATH_DELAY_DEBUG */
+
+/* Define this to get some extra debug on sync/follow-up messages */
+/* #define SYNC_DEBUG */
 
 /* Timer tick period */
 #define TIMER_TICK_MS         (10)
@@ -128,12 +131,8 @@ static void timer_state_task(unsigned long data) {
   /* Regardless of whether we are a master or slave, increment the peer delay request
    * counter and see if it's time to send one to our link peer.
    */
-  if(++ptp->pdelayReqCounter >= (PDELAY_REQ_INTERVAL / TIMER_TICK_MS)) {
-    /* Time to transmit, clear the timestamps' validity */
-    ptp->pdelayReqCounter = 0;
-    transmit_pdelay_request(ptp);
-    ptp->pdelayRespTimestampsValid = 0;
-  }
+  ptp->pdelayIntervalTimer++;
+  MDPdelayReq_StateMachine(ptp);
 }
 
 /* Runs the Best Master Clock Algorithm (BMCA) between the passed master and challenger.
@@ -180,7 +179,7 @@ static BmcaResult bmca_comparison(PtpProperties *presentMaster, PtpProperties *c
             returnValue = REPLACE_PRESENT_MASTER;
           } else if(challengerQuality->offsetScaledLogVariance == presentQuality->offsetScaledLogVariance) {
             /* Clock settings completely identical, compare MAC addresses as a tie-breaker */
-            if(macComparison < 0) {
+            if(compare_clock_identity(challenger->grandmasterIdentity,presentMaster->grandmasterIdentity) < 0) {
               /* The new announce message has a lower MAC address, it becomes the master */
               returnValue = REPLACE_PRESENT_MASTER;
             } /* macAddress (clockIdentity) */
@@ -224,8 +223,6 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t rxBuffer) {
     ptp->syncSequenceIdValid       = 0;
     ptp->delayReqCounter           = 0;
     ptp->delayReqSequenceId        = 0x0000;
-    ptp->pdelayRespTimestampsValid = 0;
-    ptp->peerMeanPathDelay         = 0;
     ptp->integral                  = 0;
     ptp->derivative                = 0;
     ptp->previousOffset            = 0;
@@ -273,7 +270,6 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t rxBuffer) {
 
     preempt_disable();
     spin_lock_irqsave(&ptp->mutex, flags);
-    get_hardware_timestamp(ptp, RECEIVED_PACKET, rxBuffer, &ptp->syncRxTimestampTemp);
     timestamp_copy(&ptp->syncRxTimestampTemp, &correctedTimestamp);
     ptp->syncSequenceId = get_sequence_id(ptp, RECEIVED_PACKET, rxBuffer);
     ptp->syncSequenceIdValid = 1;
@@ -311,7 +307,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t rxBuffer) {
 
     /* Correct the Tx timestamp with the received correction field */
     get_correction_field(ptp, rxBuffer, &correctionField);
-    timestamp_difference(&syncTxTimestamp, &correctionField, &correctedTimestamp);
+    timestamp_sum(&syncTxTimestamp, &correctionField, &correctedTimestamp);
 
     /* Compare the timestamps; if the one-way offset plus delay is greater than
      * one second, we need to reset our RTC before beginning to servo.  Regardless
@@ -326,6 +322,15 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t rxBuffer) {
       set_rtc_time(ptp, &syncTxTimestamp);
     } else {
       /* Less than a second, leave these timestamps and update the servo */
+#ifdef SYNC_DEBUG
+      printk("Sync Rx: %08X%08X.%08X\n", ptp->syncRxTimestampTemp.secondsUpper,
+        ptp->syncRxTimestampTemp.secondsLower, ptp->syncRxTimestampTemp.nanoseconds);
+      printk("Sync Tx: %08X%08X.%08X (corrected: %08X%08X.%08X\n", syncTxTimestamp.secondsUpper,
+        syncTxTimestamp.secondsLower, syncTxTimestamp.nanoseconds, correctedTimestamp.secondsUpper,
+        correctedTimestamp.secondsLower, correctedTimestamp.nanoseconds);
+      printk("Correction: %08X%08X.%08X\n", correctionField.secondsUpper,
+        correctionField.secondsLower, correctionField.nanoseconds);
+#endif
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       timestamp_copy(&ptp->syncRxTimestamp, &ptp->syncRxTimestampTemp);
@@ -412,115 +417,20 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t rxBuffer) {
 
 /* Processes a newly-received PDELAY_RESP packet for the passed instance */
 static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t rxBuffer) {
-  uint32_t flags;
-  uint8_t rxRequestingPortId[PORT_ID_BYTES];
-  uint8_t txRequestingPortId[PORT_ID_BYTES];
 
-  /* Obtain the requesting source port ID from the peer delay response and
-   * compare it to the source port ID we used in our last peer delay request
-   */
-  get_rx_requesting_port_id(ptp, rxBuffer, rxRequestingPortId);
-  get_source_port_id(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
-                     txRequestingPortId);
-  if((compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0) &&
-     (get_sequence_id(ptp, RECEIVED_PACKET, rxBuffer) == 
-      get_sequence_id(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER))) {
+  ptp->rcvdPdelayResp = TRUE;
+  ptp->rcvdPdelayRespPtr = rxBuffer;
 
-    /* Obtain the peer delay request receive timestamp that our peer has just sent */
-    get_timestamp(ptp, RECEIVED_PACKET, rxBuffer, &ptp->pdelayReqRxTimestamp);
-
-    /* Capture the hardware timestamp at which we received this packet, and hang on to 
-     * it for delay calculation.
-     */
-    preempt_disable();
-    spin_lock_irqsave(&ptp->mutex, flags);
-    get_hardware_timestamp(ptp, RECEIVED_PACKET, rxBuffer, &ptp->pdelayRespRxTimestamp);
-    
-    /* Flag the peer delay timestamps as valid */
-    ptp->pdelayRespTimestampsValid = 1;
-    spin_unlock_irqrestore(&ptp->mutex, flags);
-    preempt_enable();
-  }
+  MDPdelayReq_StateMachine(ptp);
 }
 
 /* Processes a newly-received PDELAY_RESP_FUP packet for the passed instance */
 static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t rxBuffer) {
-  uint8_t rxRequestingPortId[PORT_ID_BYTES];
-  uint8_t txRequestingPortId[PORT_ID_BYTES];
-  uint32_t flags;
 
-  /* Obtain the requesting source port ID from the peer delay response and
-   * compare it to the source port ID we used in our last peer delay request
-   */
-  get_rx_requesting_port_id(ptp, rxBuffer, rxRequestingPortId);
-  get_source_port_id(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
-                     txRequestingPortId);
-  if((compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0) &&
-     (get_sequence_id(ptp, RECEIVED_PACKET, rxBuffer) == 
-      get_sequence_id(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER))) {
-    /* Only continue processing if the PDELAY_RESP message was received */
-    if(ptp->pdelayRespTimestampsValid) {
-      PtpTime difference;
-      PtpTime absDifference;
+  ptp->rcvdPdelayRespFollowUp = TRUE;
+  ptp->rcvdPdelayRespFollowUpPtr = rxBuffer;
 
-      /* Everything matches; obtain the preciseOriginTimestamp from the packet.
-       * This is the time at which the master captured its transmit of the preceding
-       * PDELAY_RESP, which we also timestamped reception for.
-       */
-      ptp->pdelayRespTimestampsValid = 0;
-      get_timestamp(ptp, RECEIVED_PACKET, rxBuffer, &ptp->pdelayRespTxTimestamp);
-      
-      /* Compare the timestamps; if the one-way offset plus delay is greater than
-       * one second, we need to wait until the SYNC-FUP mechanism causes the slave
-       * to reset its RTC.
-       */
-      timestamp_difference(&ptp->pdelayRespRxTimestamp, &ptp->pdelayRespTxTimestamp, 
-                           &difference);
-      timestamp_abs(&difference, &absDifference);
-      if((absDifference.secondsUpper == 0) & (absDifference.secondsLower == 0)) {
-        PtpTime difference;
-        PtpTime difference2;
-        uint32_t meanPathDelay;
-
-        /* Less than a second, solve for our mean path delay from our peer.
-         * This will be used when we receive SYNC->FUP combinations from the master.
-         */
-        timestamp_difference(&ptp->pdelayRespRxTimestamp, &ptp->pdelayRespTxTimestamp, 
-                             &difference);
-        timestamp_difference(&ptp->pdelayReqRxTimestamp, &ptp->pdelayReqTxTimestamp, 
-                             &difference2);
-        
-        /* By virtue of having reset the time, we know the path delay is less than one
-         * second, so we work strictly with the nanoseconds now.
-         */
-        meanPathDelay = ((((int32_t) difference.nanoseconds) + 
-                          ((int32_t) difference2.nanoseconds)) >> 1);
-
-#ifdef PATH_DELAY_DEBUG
-	if (meanPathDelay > 750)
-	{
-        	get_hardware_timestamp(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
-                	               &ptp->pdelayReqTxTimestamp);
-		printk("Mean Path %d, ReqTx %08X%08X.%08X, ReqRx %08X%08X.%08X (%08X%08X.%08X), RespTx %08X%08X.%08X, RespRx %08X%08X.%08X (%08X%08X.%08X)\n",
-			meanPathDelay,
-			ptp->pdelayReqTxTimestamp.secondsUpper, ptp->pdelayReqTxTimestamp.secondsLower, ptp->pdelayReqTxTimestamp.nanoseconds,
-			ptp->pdelayReqRxTimestamp.secondsUpper, ptp->pdelayReqRxTimestamp.secondsLower, ptp->pdelayReqRxTimestamp.nanoseconds,
-			difference2.secondsUpper, difference2.secondsLower, difference2.nanoseconds, 
-			ptp->pdelayRespTxTimestamp.secondsUpper, ptp->pdelayRespTxTimestamp.secondsLower, ptp->pdelayRespTxTimestamp.nanoseconds,
-			ptp->pdelayRespRxTimestamp.secondsUpper, ptp->pdelayRespRxTimestamp.secondsLower, ptp->pdelayRespRxTimestamp.nanoseconds,
-			difference.secondsUpper, difference.secondsLower, difference.nanoseconds); 
-	}
-#endif
-
-        /* Store the new mean path delay to the device structure */
-        preempt_disable();
-        spin_lock_irqsave(&ptp->mutex, flags);
-        ptp->peerMeanPathDelay = meanPathDelay;
-        spin_unlock_irqrestore(&ptp->mutex, flags);
-        preempt_enable();
-      }
-    } /* if(peer delay timestamps valid) */
-  } /* if(port ID & sequence match */
+  MDPdelayReq_StateMachine(ptp);
 }
 
 static void tx_state_task(unsigned long data);
@@ -629,10 +539,13 @@ static void tx_state_task(unsigned long data) {
         
       case PTP_TX_PDELAY_REQ_BUFFER: {
         /* A peer delay request message has just been sent; capture and store the
-         * transmission timestamp for later use.
+         * transmission timestamp for later use. (Treq1 - our local clock)
          */
-        get_hardware_timestamp(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
-                               &ptp->pdelayReqTxTimestamp);
+        get_local_hardware_timestamp(ptp, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
+                                     &ptp->pdelayReqTxTimestamp);
+
+        ptp->rcvdMDTimestampReceive = TRUE;
+        MDPdelayReq_StateMachine(ptp);
       } break;
         
       case PTP_TX_PDELAY_RESP_BUFFER: {
@@ -655,6 +568,7 @@ static void tx_state_task(unsigned long data) {
 void init_state_machines(struct ptp_device *ptp) {
   /* Initialize the timer state machine */
   tasklet_init(&ptp->timerTasklet, &timer_state_task, (unsigned long) ptp);
+
   ptp->announceCounter     = 0;
   ptp->announceSequenceId  = 0x0000;
   ptp->syncCounter         = 0;
@@ -662,8 +576,16 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->syncSequenceIdValid = 0;
   ptp->delayReqCounter     = 0;
   ptp->delayReqSequenceId  = 0x0000;
-  ptp->pdelayReqCounter    = 0;
-  ptp->pdelayReqSequenceId = 0x0000;
+
+  /* TODO: check the ethernet port for link-up here to determine if it should be enabled */
+  ptp->portEnabled = TRUE;
+  ptp->pttPortEnabled = TRUE;
+
+  /* peer delay request state machine initialization */
+  ptp->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
+  ptp->pdelayReqInterval    = (PDELAY_REQ_INTERVAL / TIMER_TICK_MS);
+  ptp->allowedLostResponses = 3;
+  ptp->neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
 
   /* Initialize the Rx state machine, presuming we are a master; set the nominal
    * RTC increment, enabling the counter.
@@ -675,8 +597,7 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->lastRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
   ptp->syncTimestampsValid       = 0;
   ptp->delayReqTimestampsValid   = 0;
-  ptp->pdelayRespTimestampsValid = 0;
-  ptp->peerMeanPathDelay         = 0;
+  ptp->neighborPropDelay         = 0;
   ptp->integral                  = 0;
   ptp->derivative                = 0;
   ptp->previousOffset            = 0;
