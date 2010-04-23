@@ -48,7 +48,7 @@
 static uint32_t instanceCount;
 
 #if 0
-#define DBG(f, x...) pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
+#define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DBG(f, x...)
 #endif
@@ -65,6 +65,8 @@ static void depacketizer_syntonize(uint32_t rtcIncrement, void *callbackParam) {
 
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
+  DBG("Disbling the depacketizer\n");
+
   /* Disable the micro-engine, and unregister its syntonization callback */
   XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_DISABLE);
   remove_syntonize_callback(&depacketizer_syntonize, (void*)depacketizer);
@@ -72,6 +74,8 @@ static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
 
 /* Enables the passed instance */
 static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
+  DBG("Enabling the depacketizer\n");
+
   /* Initialize the local syntonized counter to start at a nominal rate, and
    * then register the instance with a callback for syntonization updates 
    */
@@ -85,10 +89,13 @@ static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
 /* Loads the passed microcode descriptor into the instance */
 static void load_descriptor(struct audio_depacketizer *depacketizer,
                             ConfigWords *descriptor) {
+  
   uint32_t wordIndex;
   uint32_t wordAddress;
 
+
   wordAddress = (MICROCODE_RAM_BASE(depacketizer) + (descriptor->offset * sizeof(uint32_t)));
+  DBG("Loading descriptor @ %08X (%d), numWords %d\n", wordAddress, descriptor->offset, descriptor->numWords);
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
@@ -510,7 +517,7 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   /* Request and map the device's I/O memory region into uncacheable space */
   depacketizer->physicalAddress = addressRange->start;
   depacketizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
   depacketizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize,
                         depacketizer->name) == NULL) {
