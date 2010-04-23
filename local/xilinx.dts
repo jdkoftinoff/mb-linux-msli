@@ -38,11 +38,12 @@
 		reg = < 0x90000000 0x8000000 >;
 	} ;
 	aliases {
+		ethernet0 = &labx_eth_locallink_0;
 		serial0 = &xps_uartlite_0;
 		serial1 = &RS232_Atmel;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00";
+		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4755 prompt_ramdisk=0 BUTTONS=0x01";
 		linux,stdout-path = "/plb@0/serial@83e00000";
 	} ;
 	cpus {
@@ -67,8 +68,12 @@
 			xlnx,addr-tag-bits = <0xd>;
 			xlnx,allow-dcache-wr = <0x1>;
 			xlnx,allow-icache-wr = <0x1>;
+			xlnx,archiver = "1";
 			xlnx,area-optimized = <0x0>;
 			xlnx,cache-byte-size = <0x4000>;
+			xlnx,compiler = "1";
+			xlnx,compiler-flags = "1";
+			xlnx,core-clock-freq-hz = <0x7735940>;
 			xlnx,d-lmb = <0x1>;
 			xlnx,d-opb = <0x0>;
 			xlnx,d-plb = <0x1>;
@@ -85,6 +90,7 @@
 			xlnx,dopb-bus-exception = <0x0>;
 			xlnx,dynamic-bus-sizing = <0x1>;
 			xlnx,edge-is-positive = <0x1>;
+			xlnx,extra-compiler-flags = "1";
 			xlnx,family = "virtex5";
 			xlnx,fpu-exception = <0x1>;
 			xlnx,fsl-data-size = <0x20>;
@@ -106,6 +112,7 @@
 			xlnx,mmu-itlb-size = <0x2>;
 			xlnx,mmu-tlb-access = <0x3>;
 			xlnx,mmu-zones = <0x10>;
+			xlnx,multiplier = "false";
 			xlnx,number-of-pc-brk = <0x1>;
 			xlnx,number-of-rd-addr-brk = <0x0>;
 			xlnx,number-of-wr-addr-brk = <0x0>;
@@ -129,6 +136,7 @@
 			xlnx,use-mmu = <0x3>;
 			xlnx,use-msr-instr = <0x1>;
 			xlnx,use-pcmp-instr = <0x1>;
+			xlnx,xmdstub-peripheral = "false";
 		} ;
 	} ;
 	mb_plb: plb@0 {
@@ -272,13 +280,22 @@
 			xlnx,num-clock-domains = <0x2>;
 		} ;
 		labx_eth_locallink_0: labx-eth-locallink@80050000 {
-			compatible = "xlnx,labx-eth-locallink-1.00.a";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 10 2 >;
-			reg = < 0x80050000 0x10000 >;
-			xlnx,client-llink-rem-width = <0x4>;
-			xlnx,client-llink-width = <0x20>;
-			xlnx,family = "virtex5";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "xlnx,compound";
+			ethernet@80050000 {
+				compatible = "xlnx,labx-eth-locallink-1.00.a";
+				device_type = "network";
+				interrupt-parent = <&xps_intc_0>;
+				interrupts = < 10 2 >;
+				llink-connected = <&PIM4>;
+				local-mac-address = [ 00 0a 35 ca 7e 00 ];
+				reg = < 0x80050000 0x40 >;
+				xlnx,phy-addr = <0x1>;
+				xlnx,phy-type = <0x63>;
+				xlnx,rxcsum = <0x0>;
+				xlnx,txcsum = <0x0>;
+			} ;
 		} ;
 		labx_ptp_0: labx-ptp@80040000 {
 			compatible = "xlnx,labx-ptp-1.00.a";
@@ -287,6 +304,13 @@
 			reg = < 0x80040000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x0>;
+			xlnx,nominal-increment-fraction = <0x0>;
+			xlnx,nominal-increment-mantissa = <0x8>;
+			xlnx,rtc-d-coefficient = <0x80000000>;
+			xlnx,rtc-i-coefficient = <0x80000000>;
+			xlnx,rtc-p-coefficient = <0xfff00000>;
+			xlnx,timer-divider = <0x271>;
+			xlnx,timer-prescaler = <0x7d0>;
 		} ;
 		mdm_0: debug@84400000 {
 			compatible = "xlnx,mdm-1.00.g";
