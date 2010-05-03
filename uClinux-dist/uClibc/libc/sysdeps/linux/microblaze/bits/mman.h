@@ -61,6 +61,9 @@
 # define MAP_EXECUTABLE	0x1000		/* Mark it as an executable.  */
 # define MAP_LOCKED	0x2000		/* Lock the mapping.  */
 # define MAP_NORESERVE	0x4000		/* Don't check for reservations.  */
+# define MAP_POPULATE   0x8000		/* populate (prefault) pagetables */
+# define MAP_NONBLOCK   0x10000		/* do not block on IO */
+# define MAP_STACK      0x20000		/* give out an address that is best suited for process/threadstacks */
 #endif
 
 /* Flags to `msync'.  */

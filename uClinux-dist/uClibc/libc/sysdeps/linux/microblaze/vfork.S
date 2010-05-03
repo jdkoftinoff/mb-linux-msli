@@ -20,10 +20,6 @@
 
 #include <asm/clinkage.h>
 
-#ifndef __NR_vfork
-#define __NR_vfork		190
-#endif
-
 /* Clone the calling process, but without copying the whole address space.
    The calling process is suspended until the new process exits or is
    replaced by a call to `execve'.  Return -1 for errors, 0 to the new process,

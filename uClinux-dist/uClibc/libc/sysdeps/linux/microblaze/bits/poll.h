@@ -31,8 +31,15 @@
 /* These values are defined in XPG4.2.  */
 # define POLLRDNORM	0x040		/* Normal data may be read.  */
 # define POLLRDBAND	0x080		/* Priority data may be read.  */
-# define POLLWRNORM	POLLOUT		/* Writing now will not block.  */
-# define POLLWRBAND	0x100		/* Priority data may be written.  */
+# define POLLWRNORM	0x100		/* Writing now will not block.  */
+# define POLLWRBAND	0x200		/* Priority data may be written.  */
+#endif
+
+#ifdef __USE_GNU
+/* These are extensions for Linux.  */
+# define POLLMSG        0x400
+# define POLLREMOVE     0x1000
+# define POLLRDHUP      0x2000
 #endif
 
 /* Event types always implicitly polled for.  These bits need not be set in

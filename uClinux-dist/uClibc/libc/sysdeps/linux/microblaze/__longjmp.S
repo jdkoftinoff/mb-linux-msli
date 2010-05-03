@@ -38,7 +38,8 @@ C_ENTRY(__longjmp):
 	lwi	r28, r5, 56
 	lwi	r29, r5, 60
 	lwi	r30, r5, 64
-
+	lwi	r31, r5, 68
+	
 	addi	r3, r0, 1		// return val
 	rtsd	r15, 8			// normal return
 	nop

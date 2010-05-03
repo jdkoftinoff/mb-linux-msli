@@ -37,7 +37,7 @@ clone (int (*fn)(void *arg), void *child_stack, int flags, void *arg)
 		    : "=r" (rval)
 		    : "i" (__NR_clone), "r" (arg0), "r" (arg1)
 			: "r3", "r4", "r5", "r6", "r7", "r8",
-			  "r9","r10", "r11", "r12", "r14", "cc");
+			  "r9","r10", "r11", "r12", "r14", "cc", "memory");
 
       if (rval == 0)
 	/* In child thread, call FN and exit.  */
@@ -50,7 +50,7 @@ clone (int (*fn)(void *arg), void *child_stack, int flags, void *arg)
 			: "=r" (rval)
 			: "i" (__NR_exit), "r" (arg0)
 			: "r3", "r4", "r5", "r6", "r7", "r8",
-			  "r9", "r10", "r11", "r12", "r14", "cc");
+			  "r9", "r10", "r11", "r12", "r14", "cc", "memory");
 	}
     }
 

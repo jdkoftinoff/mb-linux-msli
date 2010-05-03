@@ -38,10 +38,10 @@ syscall (long num, arg_t a1, arg_t a2, arg_t a3, arg_t a4, arg_t a5, arg_t a6)
 	"brki	r14, 0x08	\n\t"
 	"addk	%0, r0, r3	\n\t"
        : "=r" (ret)
-	: "r" (syscall), "r" (a1), "r" (a2), "r" (a3),
+	: "r" (num), "r" (a1), "r" (a2), "r" (a3),
 	  "r" (a4), "r" (a5), "r" (a6)
 	: "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
-	  "r11", "r12", "r14", "cc");
+	  "r11", "r12", "r14", "cc", "memory");
 
   __syscall_return (long, ret);
 }
