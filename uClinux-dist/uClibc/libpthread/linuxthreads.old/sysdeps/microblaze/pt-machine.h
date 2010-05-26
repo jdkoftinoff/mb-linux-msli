@@ -11,6 +11,8 @@
  *
  * Written by Miles Bader <miles@gnu.org>
  */
+#ifndef _PT_MACHINE_H
+#define _PT_MACHINE_H 1
 
 #ifndef PT_EI
 # define PT_EI extern inline
@@ -102,4 +104,5 @@ PT_EI long int testandset (int *spinlock)
   return ret;
 }
 
+#endif
 #endif

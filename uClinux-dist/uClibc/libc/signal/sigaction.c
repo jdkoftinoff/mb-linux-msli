@@ -21,6 +21,7 @@
 #include <signal.h>
 #include <string.h>
 
+#include <sys/param.h>
 #include <sys/syscall.h>
 
 /* Experimentally off - libc_hidden_proto(memcpy) */
@@ -45,8 +46,10 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 	struct kernel_sigaction kact, koact;
 
 	if (act) {
+		memset(&kact, 0, sizeof(kact));
 		kact.k_sa_handler = act->sa_handler;
-		memcpy (&kact.sa_mask, &act->sa_mask, sizeof (sigset_t));
+		memcpy (&kact.sa_mask, &act->sa_mask, 
+		        MIN(sizeof(kact.sa_mask), sizeof(act->sa_mask)));
 		kact.sa_flags = act->sa_flags;
 # ifdef HAVE_SA_RESTORER
 		kact.sa_restorer = act->sa_restorer;
@@ -57,11 +60,13 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 	   real size of the user-level sigset_t.  */
 	result = __syscall_rt_sigaction(sig,
 			       act ? __ptrvalue (&kact) : NULL,
-			       oact ? __ptrvalue (&koact) : NULL, _NSIG / 8);
+			       oact ? __ptrvalue (&koact) : NULL, sizeof(kact.sa_mask));
 
 	if (oact && result >= 0) {
 		oact->sa_handler = koact.k_sa_handler;
-		memcpy (&oact->sa_mask, &koact.sa_mask, sizeof (sigset_t));
+		memset(&oact->sa_mask, 0, sizeof(oact->sa_mask));
+		memcpy (&oact->sa_mask, &koact.sa_mask, 
+		        MIN(sizeof(koact.sa_mask), sizeof(oact->sa_mask)));
 		oact->sa_flags = koact.sa_flags;
 # ifdef HAVE_SA_RESTORER
 		oact->sa_restorer = koact.sa_restorer;

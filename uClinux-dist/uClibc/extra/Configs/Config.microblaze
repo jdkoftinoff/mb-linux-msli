@@ -23,6 +23,6 @@ config ARCH_SUPPORTS_BIG_ENDIAN
 #config ARCH_CFLAGS
 #	string
 
-config CROSS
+config CROSS_COMPILER_PREFIX
 	string
 	default "mb-"

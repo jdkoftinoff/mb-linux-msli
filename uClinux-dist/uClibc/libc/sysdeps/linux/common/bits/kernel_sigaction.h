@@ -39,6 +39,30 @@ struct kernel_sigaction {
 	unsigned long sa_flags;
 	sigset_t sa_mask;
 };
+#elif defined(__MICROBLAZE__)
+#define HAVE_SA_RESTORER
+#define _KERNEL_NSIG         64
+#define _KERNEL_NSIG_BPW     32
+#define _KERNEL_NSIG_WORDS   (_KERNEL_NSIG / _KERNEL_NSIG_BPW)
+typedef unsigned long old_sigset_t; /* at least 32 bits */
+
+typedef struct {
+  unsigned long sig[_KERNEL_NSIG_WORDS];
+} kernel_sigset_t;
+
+struct old_kernel_sigaction {
+  __sighandler_t k_sa_handler;
+  old_sigset_t sa_mask;
+  unsigned long sa_flags;
+  void (*sa_restorer)(void);
+};
+
+struct kernel_sigaction {
+  __sighandler_t k_sa_handler;
+  unsigned long sa_flags;
+  void (*sa_restorer)(void);
+  kernel_sigset_t sa_mask; /* mask last for extensibility */
+};
 #else
 #define HAVE_SA_RESTORER
 /* This is the sigaction structure from the Linux 2.1.20 kernel.  */
