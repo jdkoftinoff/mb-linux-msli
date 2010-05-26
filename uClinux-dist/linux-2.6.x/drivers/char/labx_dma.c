@@ -57,6 +57,8 @@ void labx_dma_probe(struct labx_dma *dma)
   versionMinor = (versionWord & DMA_REVISION_FIELD_MASK);
   if((versionMajor != DMA_HARDWARE_VERSION_MAJOR) | 
      (versionMinor != DMA_HARDWARE_VERSION_MINOR)) {
+    dma->regionShift = 0;
+
     printk(KERN_INFO "Found incompatible hardware version %d.%d at %p\n",
            versionMajor, versionMinor, dma->virtualAddress);
     return;
@@ -71,10 +73,16 @@ void labx_dma_probe(struct labx_dma *dma)
 static void load_descriptor(struct labx_dma *dma,
                             DMAConfigWords *descriptor) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
+
+  if (dma->regionShift == 0)
+  {
+    printk(KERN_ERR "Trying to load a descriptor on invalid DMA hardware (vaddr = %p)\n", dma->virtualAddress);
+    return;
+  }
 
   wordAddress = (DMA_MICROCODE_BASE(dma) + (descriptor->offset * sizeof(uint32_t)));
-  printk(KERN_INFO "DMA (%p) Descriptor load at %08X (%p + %08X)\n", dma, wordAddress, dma->virtualAddress, descriptor->offset);
+  printk(KERN_INFO "DMA (%p) Descriptor load at %p (%p + %08X)\n", dma, (void*)wordAddress, dma->virtualAddress, descriptor->offset);
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
@@ -96,7 +104,7 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
     if (alloc->size < 4096)
     {
       // Force alignment
-      pointers[i] = (void*)(((uint32_t)(kmalloc(alloc->size*2, GFP_DMA) + alloc->size-1)) & ~(alloc->size-1));
+      pointers[i] = (void*)(((uintptr_t)(kmalloc(alloc->size*2, GFP_DMA) + alloc->size-1)) & ~(alloc->size-1));
     }
     else
     {
@@ -187,13 +195,13 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     break;
 
   case DMA_IOC_START_CHANNEL:
-    printk(KERN_INFO "DMA (%p) Start Channel %08X (%p)\n", dma, arg, DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
+    printk(KERN_INFO "DMA (%p) Start Channel %08X (%p)\n", dma, (int)arg, (void*)DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
     XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), 
       XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) | (1<<arg));
     break;
 
   case DMA_IOC_STOP_CHANNEL:
-    printk(KERN_INFO "DMA (%p) Stop Channel %08X (%p)\n", dma, arg, DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
+    printk(KERN_INFO "DMA (%p) Stop Channel %08X (%p)\n", dma, (int)arg, (void*)DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
     XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), 
       XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) & ~(1<<arg));
     break;

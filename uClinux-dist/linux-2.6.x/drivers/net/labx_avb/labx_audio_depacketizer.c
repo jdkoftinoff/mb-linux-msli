@@ -91,7 +91,7 @@ static void load_descriptor(struct audio_depacketizer *depacketizer,
                             ConfigWords *descriptor) {
   
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
 
 
   wordAddress = (MICROCODE_RAM_BASE(depacketizer) + (descriptor->offset * sizeof(uint32_t)));
@@ -108,7 +108,7 @@ static void load_descriptor(struct audio_depacketizer *depacketizer,
 static void copy_descriptor(struct audio_depacketizer *depacketizer,
                             ConfigWords *descriptor) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
 
   wordAddress = (MICROCODE_RAM_BASE(depacketizer) + (descriptor->offset * sizeof(uint32_t)));
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
@@ -168,7 +168,7 @@ static void clear_matchers(struct audio_depacketizer *depacketizer) {
 static int configure_matcher(struct audio_depacketizer *depacketizer,
                              MatcherConfig *matcherConfig) {
   uint32_t selectionWord;
-  uint32_t vectorAddress;
+  uintptr_t vectorAddress;
   uint32_t vectorWord;
   uint32_t matchUnit;
 
@@ -486,7 +486,6 @@ static struct file_operations audio_depacketizer_fops = {
 
 #ifdef CONFIG_OF
 static int audio_depacketizer_remove(struct platform_device *pdev);
-static struct file_operations audio_depacketizer_fops;
 
 static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
@@ -502,6 +501,8 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
 
 
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node,0,addressRange);
@@ -602,7 +603,12 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   depacketizer->cdev.owner = THIS_MODULE;
   kobject_set_name(&depacketizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
   depacketizer->instanceNumber = instanceCount++;
-  cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
+  returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
+  if (returnValue < 0)
+  {
+    printk("%s: Unable to add character device %d.%d (%d)\n", pdev->name, DRIVER_MAJOR, depacketizer->instanceNumber, returnValue);
+    goto unmap;
+  }
 
   platform_set_drvdata(pdev, depacketizer);
   depacketizer->pdev = pdev;
@@ -753,7 +759,12 @@ static int audio_depacketizer_probe(struct platform_device *pdev)
   depacketizer->cdev.owner = THIS_MODULE;
   kobject_set_name(&depacketizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
   depacketizer->instanceNumber = instanceCount++;
-  cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
+  returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
+  if (returnValue < 0)
+  {
+    printk("%s: Unable to add character device %d.%d (%d)\n", pdev->name, DRIVER_MAJOR, depacketizer->instanceNumber, returnValue);
+    goto unmap;
+  }
 
   platform_set_drvdata(pdev, depacketizer);
   depacketizer->pdev = pdev;
@@ -777,6 +788,7 @@ static int audio_depacketizer_remove(struct platform_device *pdev)
   /* Get a handle to the packetizer and begin shutting it down */
   depacketizer = platform_get_drvdata(pdev);
   if(!depacketizer) return(-1);
+
   cdev_del(&depacketizer->cdev);
   reset_depacketizer(depacketizer);
   iounmap(depacketizer->virtualAddress);
@@ -809,19 +821,27 @@ static int __init audio_depacketizer_driver_init(void)
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&audio_depacketizer_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
-    return(returnValue);
+    goto error;
   }
 
   /* Allocate a range of major / minor device numbers for use */
   instanceCount = 0;
   if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
     printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
+    goto device_unregister;
   }
   return(0);
+
+device_unregister:
+  platform_driver_unregister(&audio_depacketizer_driver);
+error:
+  return returnValue;
 }
 
 static void __exit audio_depacketizer_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
   /* Unregister as a platform device driver */
   platform_driver_unregister(&audio_depacketizer_driver);
 }

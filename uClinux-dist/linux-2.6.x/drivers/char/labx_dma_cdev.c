@@ -85,6 +85,7 @@ static int labx_dma_pdev_of_probe(struct of_device *ofdev, const struct of_devic
 	int i;
   	struct platform_device *pdev = to_platform_device(&ofdev->dev);
 
+  	printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 	/* Obtain the resources for this instance */
 	rc = of_address_to_resource(ofdev->node,0,addressRange);
 	if (rc) {

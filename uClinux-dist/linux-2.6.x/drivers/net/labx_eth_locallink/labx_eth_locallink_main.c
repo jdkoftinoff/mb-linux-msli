@@ -2889,6 +2889,7 @@ static int xtenet_setup(
 	if (XLlTemac_IsDma(&lp->Emac)) {
 		int result;
 
+		printk("%s: labx_eth_llink: using DMA mode.\n", ndev->name);
 
 #ifndef XDCRIO_H
 		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
@@ -2899,7 +2900,7 @@ static int xtenet_setup(
 			goto error;
 		}
 #endif
-		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
+//		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
 		XLlDma_Initialize(&lp->Dma, virt_baddr);
 
 		ndev->hard_start_xmit = xenet_DmaSend;

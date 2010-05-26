@@ -67,20 +67,20 @@
 #define DOMAIN_ENABLE_REG  (0x001)
 
 #define REGISTER_ADDRESS(device, offset) \
-  ((uint32_t)device->virtualAddress |                       \
+  ((uintptr_t)device->virtualAddress |                       \
    (REGISTER_RANGE << device->regionShift) | (offset << 2))
 
 #define CLOCK_DOMAIN_REGISTER_ADDRESS(device, clockDomain, offset) \
-  ((uint32_t)device->virtualAddress |                              \
+  ((uintptr_t)device->virtualAddress |                              \
    (CLOCK_DOMAIN_RANGE << device->regionShift) |                    \
    (((clockDomain * REGS_PER_CLOCK_DOMAIN) + offset) << 2))
 
 #define MICROCODE_RAM_BASE(device)              \
-  ((uint32_t)device->virtualAddress |           \
+  ((uintptr_t)device->virtualAddress |           \
    (MICROCODE_RANGE << device->regionShift))
 
 #define TEMPLATE_RAM_BASE(device)               \
-  ((uint32_t)device->virtualAddress |           \
+  ((uintptr_t)device->virtualAddress |           \
    (TEMPLATE_RANGE << device->regionShift))
 
 /* Driver structure to maintain state for each device instance */
@@ -98,8 +98,8 @@ struct audio_packetizer {
   char name[NAME_MAX_SIZE];
 
   /* Physical and virtual base address */
-  uint32_t      physicalAddress;
-  uint32_t      addressRangeSize;
+  uintptr_t      physicalAddress;
+  uintptr_t      addressRangeSize;
   void __iomem  *virtualAddress;
 
   /* Bit shift for the address sub-range */

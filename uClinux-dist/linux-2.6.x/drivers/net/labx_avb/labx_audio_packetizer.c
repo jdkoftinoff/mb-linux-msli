@@ -615,6 +615,8 @@ static int __init audio_packetizer_driver_init(void)
 
 static void __exit audio_packetizer_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
   /* Unregister as a platform device driver */
   platform_driver_unregister(&audio_packetizer_driver);
 }

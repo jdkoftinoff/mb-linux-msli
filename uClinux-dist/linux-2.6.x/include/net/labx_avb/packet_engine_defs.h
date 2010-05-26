@@ -27,6 +27,7 @@
 #define _PACKET_ENGINE_DEFS_H_
 
 #include <linux/types.h>
+#include <linux/ioctl.h>
 
 /*
  * Common definitions
@@ -62,10 +63,9 @@
 #define AVBTP_SEQUENCE_NUMBER_BITS  (8)
 
 /* I/O control commands and structures common to all packet engines */
-#define IOC_START_ENGINE           (0x01)
-#define IOC_STOP_ENGINE            (0x02)
-#define IOC_LOAD_DESCRIPTOR        (0x03)
-#define IOC_COPY_DESCRIPTOR        (0x04)
+#define IOC_START_ENGINE           _IO('d', 0x01)
+#define IOC_STOP_ENGINE            _IO('d', 0x02)
+
 #define MAX_CONFIG_WORDS 1024
 typedef struct {
   uint32_t  offset;
@@ -73,14 +73,17 @@ typedef struct {
   uint32_t *configWords;
 } ConfigWords;
 
+#define IOC_LOAD_DESCRIPTOR        _IOW('d', 0x03, ConfigWords)
+#define IOC_COPY_DESCRIPTOR        _IOWR('d', 0x04, ConfigWords)
+
 /*
  * Packetizer definitions
  */
 
 /* I/O control commands and structures specific to the packetizer */
-#define IOC_LOAD_PACKET_TEMPLATE     (0x10)
-#define IOC_SET_START_VECTOR         (0x11)
-#define IOC_CONFIG_CLOCK_DOMAIN      (0x12)
+#define IOC_LOAD_PACKET_TEMPLATE     _IOW('d', 0x10, ConfigWords)
+#define IOC_SET_START_VECTOR         _IOW('d', 0x11, uint32_t)
+
 typedef struct {
   uint32_t clockDomain;
   uint32_t sytInterval;
@@ -89,7 +92,8 @@ typedef struct {
 #  define DOMAIN_DISABLED  (0x00)
 #  define DOMAIN_ENABLED   (0x01)
 
-#define IOC_GET_PACKETIZER_CAPS      (0x13)
+#define IOC_CONFIG_CLOCK_DOMAIN      _IOW('d', 0x12, ClockDomainSettings)
+
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
@@ -98,7 +102,9 @@ typedef struct {
   uint32_t maxClockDomains;
 } PacketizerCaps;
 
-#define IOC_SET_PRESENTATION_OFFSET  (0x14)
+#define IOC_GET_PACKETIZER_CAPS      _IOR('d', 0x13, PacketizerCaps)
+
+#define IOC_SET_PRESENTATION_OFFSET  _IOW('d', 0x14, uint32_t)
 #  define PRESENTATION_OFFSET_MASK  (0x001FFFFF)
 
 /* Type definitions and macros for packetizer microcode */
@@ -318,8 +324,8 @@ typedef struct {
  */
 
 /* I/O control commands specific to the depacketizer */
-#define IOC_CLEAR_MATCHERS         (0x20)
-#define IOC_CONFIG_MATCHER         (0x21)
+#define IOC_CLEAR_MATCHERS         _IO('d', 0x20)
+
 typedef struct {
   uint32_t matchUnit;
   uint32_t enable;
@@ -329,14 +335,17 @@ typedef struct {
 #  define MATCHER_DISABLE  0x00000000
 #  define MATCHER_ENABLE   0x00000001
 
-#define IOC_LOCATE_VECTOR_TABLE    (0x22)
-#define IOC_CONFIG_CLOCK_RECOVERY  (0x23)
+#define IOC_CONFIG_MATCHER         _IOW('d', 0x21, MatcherConfig)
+
+#define IOC_LOCATE_VECTOR_TABLE    _IOW('d', 0x22, uint32_t)
+
 typedef struct {
   uint32_t            matchUnit;
   ClockDomainSettings clockDomainSettings;
 } ClockRecoverySettings;
 
-#define IOC_GET_DEPACKETIZER_CAPS  (0x24)
+#define IOC_CONFIG_CLOCK_RECOVERY  _IOW('d', 0x23, ClockRecoverySettings)
+
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
@@ -345,6 +354,8 @@ typedef struct {
   uint32_t maxClockDomains;
   uint32_t maxStreams;
 } DepacketizerCaps;
+
+#define IOC_GET_DEPACKETIZER_CAPS  _IOR('d', 0x24, DepacketizerCaps)
 
 /* Type definitions and macros for depacketizer microcode */
 

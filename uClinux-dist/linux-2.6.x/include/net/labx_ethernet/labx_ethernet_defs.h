@@ -27,6 +27,7 @@
 #define _LABX_ETHERNET_DEFS_H_
 
 #include <linux/types.h>
+#include <linux/phy.h>
 
 /* PHY types supported by XEMAC; Note that these values match XPS design 
  * parameters from the PLB_TEMAC specification.
@@ -87,6 +88,9 @@ struct labx_eth_platform_data {
   uint8_t phy_addr;
   PhyInitMethod phy_init;
   PhyIsrMethod phy_isr;
+  uint32_t phy_mask;
+  char phy_name[64];
+  void *rx_ring_ptr;		/* Pointer to RxRing buffer */
 };
 
 /* LocalLink TYPE Enumerations */
