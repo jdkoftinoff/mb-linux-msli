@@ -28,6 +28,18 @@ if ! which makeinfo > /dev/null 2>&1
  exit 1
 fi
 
+if ! which flex > /dev/null 2>&1
+ then
+ echo "This script requires flex to be present"
+ exit 1
+fi
+
+if ! which bison > /dev/null 2>&1
+ then
+ echo "This script requires bison to be present"
+ exit 1
+fi
+
 # Build xilinx toolchain
 
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
