@@ -1,5 +1,6 @@
 *.d
 *.o
+*.os
 tools/gcc3/
 tools/gcc4/
 *.gdb
@@ -15,3 +16,22 @@ uClinux-dist/user/busybox/*/*/Config.in
 *.mcs
 mb_gnu
 uClinux-dist/config/
+
+# Ignore symlinks in these include dirs except for things actually under revision control...
+uClinux-dist/include/
+!uClinux-dist/include/Makefile
+
+uClinux-dist/uClibc/include/bits/
+!uClinux-dist/uClibc/include/bits/sysnum.h
+!uClinux-dist/uClibc/include/bits/uClibc_config.h
+
+uClinux-dist/uClibc/include/sys/acct.h
+uClinux-dist/uClibc/include/sys/epoll.h
+uClinux-dist/uClibc/include/sys/inotify.h
+uClinux-dist/uClibc/include/sys/prctl.h
+uClinux-dist/uClibc/include/sys/procfs.h
+uClinux-dist/uClibc/include/sys/ptrace.h
+uClinux-dist/uClibc/include/sys/ucontext.h
+uClinux-dist/uClibc/include/sys/user.h
+
+uClinux-dist/uClibc/lib/
