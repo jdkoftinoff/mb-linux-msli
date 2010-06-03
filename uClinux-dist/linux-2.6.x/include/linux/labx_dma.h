@@ -68,12 +68,12 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 #define DMA_MICROCODE_RANGE 1
 
 #define DMA_REGISTER_ADDRESS(dma, offset)                    \
-  ((uint32_t)dma->virtualAddress |                          \
-   (DMA_REGISTER_RANGE << dma->regionShift) | (offset << 2))
+  ((uintptr_t)(dma)->virtualAddress |                          \
+   (DMA_REGISTER_RANGE << (dma)->regionShift) | (offset << 2))
 
 #define DMA_MICROCODE_BASE(dma)                 \
-  ((uint32_t)dma->virtualAddress |           \
-   (DMA_MICROCODE_RANGE << dma->regionShift))
+  ((uintptr_t)(dma)->virtualAddress |           \
+   (DMA_MICROCODE_RANGE << (dma)->regionShift))
 
 /* Register address and control field #defines */
 #define DMA_CONTROL_REG                 0x00

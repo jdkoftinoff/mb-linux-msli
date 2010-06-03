@@ -69,6 +69,27 @@ typedef enum
 	eDMASourceParam = 1,
 
 } EDMASource;
+
+typedef enum
+{
+	eDMANoIncB = 0,
+	eDMAIncB   = 1,
+
+} EDMAIncB;
+
+typedef enum
+{
+	eDMABlockCountNone = 0,
+	eDMABlockCountAlu  = 1
+
+} EDMABlockCount;
+
+typedef enum
+{
+	eDMAStoreFull = 0,
+	eDMAStoreMasked = 1
+
+} EDMAStoreMask;
   
 /* Definitions for instruction opcodes */
 #define DMA_OPCODE_NOP                    0x00
@@ -80,21 +101,20 @@ typedef enum
 #define DMA_OPCODE_LOAD_CACHE_ADDRESS     0x06
 #define DMA_OPCODE_STORE_CACHE_ADDRESS    0x07
 #define DMA_OPCODE_INC_CACHE_ADDRESS      0x08
-#define DMA_OPCODE_LOAD_CACHE_MASK        0x09
-#define DMA_OPCODE_LOAD_CACHE_INCREMENT   0x0A
-#define DMA_OPCODE_LOAD_BUFFER_ADDRESS    0x0B
-#define DMA_OPCODE_STORE_BUFFER_ADDRESS   0x0C
-#define DMA_OPCODE_INC_BUFFER_ADDRESS     0x0D
-#define DMA_OPCODE_LOAD_BUFFER_MASK       0x0E
-#define DMA_OPCODE_LOAD_BUFFER_INCREMENT  0x0F
-#define DMA_OPCODE_BUFFER_READ            0x10
-#define DMA_OPCODE_BUFFER_WRITE           0x11
-#define DMA_OPCODE_JOIN_TRANSFER          0x12
-#define DMA_OPCODE_STORE_ALU              0x13
-#define DMA_OPCODE_LOAD_INDEX_INDIRECT    0x14
-#define DMA_OPCODE_STORE_INDEX_INDIRECT   0x15
-#define DMA_OPCODE_ADDRESS_ALIGN          0x16
-#define DMA_OPCODE_INDEX_LOGICAL          0x17
+#define DMA_OPCODE_LOAD_CACHE_INCREMENT   0x09
+#define DMA_OPCODE_LOAD_BUFFER_ADDRESS    0x0A
+#define DMA_OPCODE_STORE_BUFFER_ADDRESS   0x0B
+#define DMA_OPCODE_INC_BUFFER_ADDRESS     0x0C
+#define DMA_OPCODE_LOAD_BUFFER_INCREMENT  0x0D
+#define DMA_OPCODE_BUFFER_READ            0x0E
+#define DMA_OPCODE_BUFFER_WRITE           0x0F
+#define DMA_OPCODE_JOIN_TRANSFER          0x10
+#define DMA_OPCODE_STORE_ALU              0x11
+#define DMA_OPCODE_LOAD_INDEX_INDIRECT    0x12
+#define DMA_OPCODE_STORE_INDEX_INDIRECT   0x13
+#define DMA_OPCODE_ADDRESS_ALIGN          0x14
+#define DMA_OPCODE_INDEX_LOGICAL          0x15
+#define DMA_OPCODE_SET_BYTE_ORDER         0x16
 #define DMA_OPCODE_STOP                   0xFF
 
 /* Constants identifying different branch conditions */
@@ -139,23 +159,43 @@ typedef enum
 
 } EDMAALUOpcode;
 
+/* Constants for the bit flags that can be passed into the address generator opcodes */
+typedef enum
+{
+	DMA_ADDRESS_LOAD_BASE        = 0x10, /* Load the base address */
+	DMA_ADDRESS_LOAD_OFFSET      = 0x08, /* Load the offset (no base address) */
+	DMA_ADDRESS_LOAD_INDEX       = 0x04, /* Load the index */
+	DMA_ADDRESS_LOAD_SIZE        = 0x02, /* Load the block size */
+	DMA_ADDRESS_ADD_BASE         = 0x01, /* Add the existing base/index */
+	DMA_ADDRESS_LOAD_OFFSET_BASE = 0x09, /* Load the offset and add the existing base/index */
+
+} EDMAAddressFlags;
+
 /* Field ranges for opcode bits */
-#define DMA_OPCODE_SHIFT(config)           (DMA_INSTRUCTION_WIDTH - DMA_OPCODE_BITS)
-#define DMA_INDEX_SELECT_SHIFT(config)     (DMA_OPCODE_SHIFT(config) - config.indexSelectBits)
-#define DMA_BRANCH_CONDITION_SHIFT(config) (DMA_INDEX_SELECT_SHIFT(config) - DMA_BRANCH_CONDITION_BITS)
-#define DMA_LOGICAL_OP_SHIFT(config)       (DMA_INDEX_SELECT_SHIFT(config) - DMA_LOGICAL_OP_BITS)
-#define DMA_INDEX_VALUE_SHIFT(config)      (0)
-#define DMA_INDEX_VALUE_MASK(config)       (((1<<DMA_INDEX_VALUE_BITS)-1)<<DMA_INDEX_VALUE_SHIFT(config))
-#define DMA_SOURCE_SELECT_SHIFT(config)    (DMA_INDEX_SELECT_SHIFT(config) - config.sourceSelectBits)
-#define DMA_INDEX_SELECT_2_SHIFT(config)   (DMA_SOURCE_SELECT_SHIFT(config) - config.indexSelectBits)
-#define DMA_ALU_OPCODE_SHIFT(config)       (DMA_SOURCE_SELECT_SHIFT(config) - DMA_ALU_OPCODE_BITS)
-#define DMA_ALU_SELECT_SHIFT(config)       (DMA_ALU_OPCODE_SHIFT(config) - config.aluSelectBits)
-#define DMA_CODE_ADDRESS_SHIFT(config)     (0)
-#define DMA_CACHE_ADDRESS_SHIFT(config)    (0)
-#define DMA_CACHE_ADDRESS_MASK(config)     (((1<<DMA_CACHE_ADDRESS_BITS)-1)<<DMA_CACHE_ADDRESS_SHIFT(config))
-#define DMA_BUFFER_ADDRESS_SHIFT(config)   (0)
-#define DMA_TRANSFER_LENGTH_SHIFT(config)  (0)
-#define DMA_WHICH_INCREMENT_SHIFT(config)  (DMA_OPCODE_SHIFT(config) - 1)
+#define DMA_OPCODE_SHIFT(config)             (DMA_INSTRUCTION_WIDTH - DMA_OPCODE_BITS)
+#define  DMA_INCREMENT_B_SHIFT(config)       (DMA_OPCODE_SHIFT(config) - 1)
+#define   DMA_TRANSFER_ALU_BC_SHIFT(config)  (DMA_INCREMENT_B_SHIFT(config) - 1)
+#define  DMA_WHICH_INCREMENT_SHIFT(config)   (DMA_OPCODE_SHIFT(config) - 1)
+#define  DMA_INDEX_SELECT_SHIFT(config)      (DMA_OPCODE_SHIFT(config) - config.indexSelectBits)
+#define   DMA_BRANCH_CONDITION_SHIFT(config) (DMA_INDEX_SELECT_SHIFT(config) - DMA_BRANCH_CONDITION_BITS)
+#define   DMA_LOGICAL_OP_SHIFT(config)       (DMA_INDEX_SELECT_SHIFT(config) - DMA_LOGICAL_OP_BITS)
+#define   DMA_INDEX_VALUE_SHIFT(config)      (0)
+#define   DMA_INDEX_VALUE_MASK(config)       (((1<<DMA_INDEX_VALUE_BITS)-1)<<DMA_INDEX_VALUE_SHIFT(config))
+#define   DMA_SOURCE_SELECT_SHIFT(config)    (DMA_INDEX_SELECT_SHIFT(config) - config.sourceSelectBits)
+#define    DMA_STORE_MASKED_SHIFT(config)    (DMA_SOURCE_SELECT_SHIFT(config)-1)
+#define    DMA_LOAD_BASE_SHIFT(config)       (DMA_SOURCE_SELECT_SHIFT(config)-1)
+#define     DMA_LOAD_OFFSET_SHIFT(config)    (DMA_LOAD_BASE_SHIFT(config)-1)
+#define      DMA_LOAD_INDEX_SHIFT(config)    (DMA_LOAD_OFFSET_SHIFT(config)-1)
+#define       DMA_LOAD_SIZE_SHIFT(config)    (DMA_LOAD_INDEX_SHIFT(config)-1)
+#define        DMA_ADD_BASE_SHIFT(config)    (DMA_LOAD_SIZE_SHIFT(config)-1)
+#define    DMA_INDEX_SELECT_2_SHIFT(config)  (DMA_SOURCE_SELECT_SHIFT(config) - config.indexSelectBits)
+#define    DMA_ALU_OPCODE_SHIFT(config)      (DMA_SOURCE_SELECT_SHIFT(config) - DMA_ALU_OPCODE_BITS)
+#define     DMA_ALU_SELECT_SHIFT(config)     (DMA_ALU_OPCODE_SHIFT(config) - config.aluSelectBits)
+#define DMA_CODE_ADDRESS_SHIFT(config)       (0)
+#define DMA_CACHE_ADDRESS_SHIFT(config)      (0)
+#define DMA_CACHE_ADDRESS_MASK(config)       (((1<<DMA_CACHE_ADDRESS_BITS)-1)<<DMA_CACHE_ADDRESS_SHIFT(config))
+#define DMA_BUFFER_ADDRESS_SHIFT(config)     (0)
+#define DMA_TRANSFER_LENGTH_SHIFT(config)    (0)
 
 /* Returns a NOP instruction */
 static inline DMAInstruction DMA_NOP(DMAConfiguration config)
@@ -278,22 +318,75 @@ static inline DMAInstruction DMA_STORE_ALU(DMAConfiguration config, EDMAALU alu_
 /* Returns a LOAD_CACHE_ADDRESS instruction, used for configuring cache addressing */
 /* for subsequent data transfers. */
 /* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param address_Flags - Which address part is being loaded */
 /* @param index_Select - Index counter to use as an offset to the base address */
-static inline DMAInstruction DMA_LOAD_CACHE_ADDRESS(DMAConfiguration config, uint32_t load_Address, EDMAIndex index_Select)
+static inline DMAInstruction DMA_LOAD_CACHE_ADDRESS(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAAddressFlags address_Flags, EDMAIndex index_Select)
 {
 	return ((DMA_OPCODE_LOAD_CACHE_ADDRESS << DMA_OPCODE_SHIFT(config)) |
 		(load_Address << DMA_CODE_ADDRESS_SHIFT(config))            |
+		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))          |
+		( ((uint32_t)address_Flags) << DMA_ADD_BASE_SHIFT(config))  |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config)));
 }
   
+/* Returns a LOAD_CACHE_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_CACHE_BASE(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_CACHE_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_BASE, index_Select);
+}
+
+/* Returns a LOAD_CACHE_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_CACHE_OFFSET(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, int add_Base, EDMAIndex index_Select)
+{
+	return DMA_LOAD_CACHE_ADDRESS(config, load_Address, source_Select,
+		(add_Base) ? DMA_ADDRESS_LOAD_OFFSET_BASE : DMA_ADDRESS_LOAD_OFFSET, index_Select);
+}
+
+/* Returns a LOAD_CACHE_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_CACHE_INDEX(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_CACHE_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_INDEX, index_Select);
+}
+
+/* Returns a LOAD_CACHE_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_CACHE_SIZE(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_CACHE_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_SIZE, index_Select);
+}
+
 /* Returns a STORE_CACHE_ADDRESS instruction, used for committing the present cache address */
 /* to a location in microcode RAM. */
 /* @param store_Address - Base location at which to store the address into microcode RAM */
 /* @param index_Select  - Index counter to use as an offset to the base address */
-static inline DMAInstruction DMA_STORE_CACHE_ADDRESS(DMAConfiguration config, uint32_t store_Address, EDMAIndex index_Select)
+static inline DMAInstruction DMA_STORE_CACHE_ADDRESS(DMAConfiguration config, uint32_t store_Address,
+	EDMASource source_Select, EDMAStoreMask mask, EDMAIndex index_Select)
 {
 	return ((DMA_OPCODE_STORE_CACHE_ADDRESS << DMA_OPCODE_SHIFT(config)) |
 		(store_Address << DMA_CODE_ADDRESS_SHIFT(config))            |
+		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))           |
+		(mask          << DMA_STORE_MASKED_SHIFT(config))            |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config)));
 }
                                    
@@ -304,16 +397,6 @@ static inline DMAInstruction DMA_INC_CACHE_ADDRESS(DMAConfiguration config, EDMA
 {
 	return ((DMA_OPCODE_INC_CACHE_ADDRESS << DMA_OPCODE_SHIFT(config)) |
 		(which_Increment << DMA_WHICH_INCREMENT_SHIFT(config)));
-}
-  
-/* Returns a LOAD_CACHE_MASK instruction, used for configuring cache addressing */
-/* for subsequent data transfers.  The cache addresses are small enough to encode */
-/* the mask directly into the instruction word. */
-/* @param address_Modulus - Modulus which will be applied to subsequent increment operations */
-static inline DMAInstruction DMA_LOAD_CACHE_MASK(DMAConfiguration config, uint32_t address_Modulus)
-{
-	return ((DMA_OPCODE_LOAD_CACHE_MASK << DMA_OPCODE_SHIFT(config)) |
-		((address_Modulus-1) << DMA_CODE_ADDRESS_SHIFT(config)));
 }
   
 /* Returns a LOAD_CACHE_INCREMENT instruction, with an increment selection and value encoded */
@@ -327,25 +410,78 @@ static inline DMAInstruction DMA_LOAD_CACHE_INCREMENT(DMAConfiguration config, E
 		((increment_Value << DMA_CACHE_ADDRESS_SHIFT(config))&DMA_CACHE_ADDRESS_MASK(config)));
 }
   
-/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring buffer addressing */
+/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring cache addressing */
 /* for subsequent data transfers. */
-/* @param load_Address - Base location of the address to be loaded from microcode RAM */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param address_Flags - Which address part is being loaded */
 /* @param index_Select - Index counter to use as an offset to the base address */
-static inline DMAInstruction DMA_LOAD_BUFFER_ADDRESS(DMAConfiguration config, uint32_t load_Address, EDMAIndex index_Select)
+static inline DMAInstruction DMA_LOAD_BUFFER_ADDRESS(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAAddressFlags address_Flags, EDMAIndex index_Select)
 {
 	return ((DMA_OPCODE_LOAD_BUFFER_ADDRESS << DMA_OPCODE_SHIFT(config)) |
-		(load_Address << DMA_CODE_ADDRESS_SHIFT(config))             |
+		(load_Address << DMA_CODE_ADDRESS_SHIFT(config))            |
+		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))          |
+		( ((uint32_t)address_Flags) << DMA_ADD_BASE_SHIFT(config))  |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config)));
 }
   
+/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_BUFFER_BASE(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_BUFFER_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_BASE, index_Select);
+}
+
+/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_BUFFER_OFFSET(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, int add_Base, EDMAIndex index_Select)
+{
+	return DMA_LOAD_BUFFER_ADDRESS(config, load_Address, source_Select,
+		(add_Base) ? DMA_ADDRESS_LOAD_OFFSET_BASE : DMA_ADDRESS_LOAD_OFFSET, index_Select);
+}
+
+/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_BUFFER_INDEX(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_BUFFER_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_INDEX, index_Select);
+}
+
+/* Returns a LOAD_BUFFER_ADDRESS instruction, used for configuring cache addressing */
+/* for subsequent data transfers. */
+/* @param load_Address - Base location of the address and modulus mask to be loaded from microcode RAM */
+/* @param source_Select - Which RAM block to load from */
+/* @param index_Select - Index counter to use as an offset to the base address */
+static inline DMAInstruction DMA_LOAD_BUFFER_SIZE(DMAConfiguration config, uint32_t load_Address,
+	EDMASource source_Select, EDMAIndex index_Select)
+{
+	return DMA_LOAD_BUFFER_ADDRESS(config, load_Address, source_Select, DMA_ADDRESS_LOAD_SIZE, index_Select);
+}
+
 /* Returns a STORE_BUFFER_ADDRESS instruction, used for committing the present buffer address */
 /* to a location in microcode RAM. */
 /* @param store_Address - Base location at which to store the address into microcode RAM */
 /* @param index_Select  - Index counter to use as an offset to the base address */
-static inline DMAInstruction DMA_STORE_BUFFER_ADDRESS(DMAConfiguration config, uint32_t store_Address, EDMAIndex index_Select)
+static inline DMAInstruction DMA_STORE_BUFFER_ADDRESS(DMAConfiguration config, uint32_t store_Address,
+	EDMASource source_Select, EDMAStoreMask mask, EDMAIndex index_Select)
 {
 	return ((DMA_OPCODE_STORE_BUFFER_ADDRESS << DMA_OPCODE_SHIFT(config)) |
 		(store_Address << DMA_CODE_ADDRESS_SHIFT(config))             |
+		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))            |
+		(mask          << DMA_STORE_MASKED_SHIFT(config))             |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config)));
 }
   
@@ -358,14 +494,6 @@ static inline DMAInstruction DMA_INC_BUFFER_ADDRESS(DMAConfiguration config, EDM
 		(which_Increment << DMA_WHICH_INCREMENT_SHIFT(config)));
 }
   
-/* Returns a LOAD_BUFFER_MASK instruction, used for configuring buffer addressing */
-/* for subsequent data transfers.  This must be followed by an instruction word containing */
-/* an immediate value for the mask. */
-static inline DMAInstruction DMA_LOAD_BUFFER_MASK(DMAConfiguration config)
-{
-	return (DMA_OPCODE_LOAD_BUFFER_MASK << DMA_OPCODE_SHIFT(config));
-}
-  
 /* Returns a BUFFER_READ instruction configured for the passed transfer length. */
 /* This instruction will not issue a request while another one is active, and will return  */
 /* as soon as the request has been acknowledged; at that point, the transfer is in progress.   */
@@ -375,9 +503,10 @@ static inline DMAInstruction DMA_LOAD_BUFFER_MASK(DMAConfiguration config)
 /* address, however, is incremented by its 'A' increment as soon as the transfer has been acknowledged, */
 /* and does not undergo any additional auto-increments.  As such, it may be manipulated, stored, etc. */
 /* while the transfer is in progress. */
-static inline DMAInstruction DMA_BUFFER_READ(DMAConfiguration config, uint32_t transfer_Length)
+static inline DMAInstruction DMA_BUFFER_READ(DMAConfiguration config, EDMAIncB incB, uint32_t transfer_Length)
 {
 	return ((DMA_OPCODE_BUFFER_READ << DMA_OPCODE_SHIFT(config)) |
+		(incB << DMA_INCREMENT_B_SHIFT(config)) |
 		(transfer_Length << DMA_CODE_ADDRESS_SHIFT(config)));
 }
   
@@ -390,19 +519,15 @@ static inline DMAInstruction DMA_BUFFER_READ(DMAConfiguration config, uint32_t t
 /* address, however, is incremented by its 'A' increment as soon as the transfer has been acknowledged, */
 /* and does not undergo any additional auto-increments.  As such, it may be manipulated, stored, etc. */
 /* while the transfer is in progress. */
-static inline DMAInstruction DMA_BUFFER_WRITE(DMAConfiguration config, uint32_t transfer_Length)
+static inline DMAInstruction DMA_BUFFER_WRITE(DMAConfiguration config, EDMAIncB incB,
+                                              EDMABlockCount bc, uint32_t transfer_Length)
 {
 	return ((DMA_OPCODE_BUFFER_WRITE << DMA_OPCODE_SHIFT(config)) |
+		(incB << DMA_INCREMENT_B_SHIFT(config)) |
+                (bc << DMA_TRANSFER_ALU_BC_SHIFT(config)) |
 		(transfer_Length << DMA_CODE_ADDRESS_SHIFT(config)));
 }
 
-/* Returns an instruction word containing a buffer mask appropriate for circular addressing through */
-/* buffers of a given size, in words. */
-static inline DMAInstruction DMA_BUFFER_MASK(DMAConfiguration config, uint32_t address_Modulus)
-{
-	return (address_Modulus-1);
-}
-  
 /* Returns a LOAD_BUFFER_INCREMENT instruction, with an increment selection encoded */
 /* within the instruction word.  This instruction must be followed by a word containing */
 /* the increment to be used. */
@@ -451,6 +576,13 @@ static inline DMAInstruction DMA_INDEX_LOGICAL(DMAConfiguration config, EDMAInde
                 (index_Select << DMA_INDEX_SELECT_SHIFT(config))       |
 		(index_Op     << DMA_LOGICAL_OP_SHIFT(config))         |
                 ((logic_Value << DMA_INDEX_VALUE_SHIFT(config))&DMA_INDEX_VALUE_MASK(config)));
+}
+
+/* Returns an SET_BYTE_ORDER instruction used to set byte ordering from the cache */
+/* @param byte_Order - Byte order (each nybble defines a byte; ex. 0x0123 for standard order) */
+static inline DMAInstruction DMA_SET_BYTE_ORDER(DMAConfiguration config, uint32_t byte_Order)
+{
+        return ((DMA_OPCODE_SET_BYTE_ORDER << DMA_OPCODE_SHIFT(config)) | byte_Order);
 }
 
 /* DMA ioctls */
