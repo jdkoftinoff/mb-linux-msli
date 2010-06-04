@@ -30,6 +30,7 @@
 #include <linux/highmem.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
+#include <linux/wait.h>
 #include <net/labx_avb/packet_engine_defs.h>
 
 /* Macros for determining sub-addresses for address ranges and individual registers.
@@ -50,14 +51,24 @@
 
 #define TS_OFFSET_REG     (0x002)
 
-#define CAPABILITIES_REG (0x0FE)
+#define IRQ_MASK_REG      (0x003)
+#define IRQ_FLAGS_REG     (0x004)
+#  define NO_IRQS   (0x00000000)
+#  define SYNC_IRQ  (0x00000001)
+
+#define SYNC_REG          (0x005)
+#  define CANCEL_SYNC      (0x00000000)
+#  define SYNC_NEXT_WRITE  (0x00000001)
+#  define SYNC_PENDING     (0x80000000)
+
+#define CAPABILITIES_REG  (0x0FE)
 #  define CLOCK_DOMAINS_SHIFT         (16)
 #  define CLOCK_DOMAINS_MASK          (0x0FF)
 #  define TEMPLATE_ADDRESS_SHIFT      (8)
 #  define TEMPLATE_ADDRESS_BITS_MASK  (0x0FF)
 #  define CODE_ADDRESS_BITS_MASK      (0x0FF)
 
-#define REVISION_REG     (0x0FF)
+#define REVISION_REG      (0x0FF)
 #  define REVISION_FIELD_BITS  4
 #  define REVISION_FIELD_MASK  (0x0F)
 
@@ -84,7 +95,8 @@
    (TEMPLATE_RANGE << device->regionShift))
 
 /* Driver structure to maintain state for each device instance */
-#define NAME_MAX_SIZE  256
+#define NAME_MAX_SIZE    (256)
+#define NO_IRQ_SUPPLIED   (-1)
 struct audio_packetizer {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -102,11 +114,17 @@ struct audio_packetizer {
   uintptr_t      addressRangeSize;
   void __iomem  *virtualAddress;
 
+  /* Interrupt request number */
+  int32_t irq;
+
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
 
   /* Capabilities of the packetizer hardware */
   PacketizerCaps capabilities;
+
+  /* Wait queue for putting threads to sleep */
+  wait_queue_head_t syncedWriteQueue;
 
   /* Mutex for the device instance */
   spinlock_t mutex;

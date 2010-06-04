@@ -25,6 +25,7 @@
 
 #include "labx_audio_packetizer.h"
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -50,6 +51,9 @@
 #define MAX_INSTANCES 64
 static uint32_t instanceCount;
 
+/* Number of milliseconds we will wait before bailing out of a synced write */
+#define SYNCED_WRITE_TIMEOUT_MSECS  (2000)
+
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
@@ -74,18 +78,74 @@ static void reset_packetizer(struct audio_packetizer *packetizer) {
   disable_packetizer(packetizer);
 }
 
+
+
+/* Waits for a synchronized write to commit, using either polling or
+ * an interrupt-driven waitqueue.
+ */
+static int32_t await_synced_write(struct audio_packetizer *packetizer) {
+  int32_t returnValue = 0;
+
+  /* Determine whether to use an interrupt or polling */
+  if(packetizer->irq != NO_IRQ_SUPPLIED) {
+    int32_t waitResult;
+
+    /* Place ourselves onto a wait queue if the synced write is flagged as
+     * pending by the hardware, as this indicates that the microengine is active,
+     * and we need to wait for it to finish a pass through all the microcode 
+     * before the hardware will commit the write to its destination (a register
+     * or microcode RAM.)  If the engine is inactive or the write already 
+     * committed, we will not actually enter the wait queue.
+     */
+    waitResult =
+      wait_event_interruptible_timeout(packetizer->syncedWriteQueue,
+				       ((XIo_In32(REGISTER_ADDRESS(packetizer, SYNC_REG)) & 
+					 SYNC_PENDING) == 0),
+				       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
+
+    /* If the wait returns zero, then the timeout elapsed; if negative, a signal
+     * interrupted the wait.
+     */
+    if(waitResult == 0) returnValue = -ETIMEDOUT;
+    else if(waitResult < 0) returnValue = -EAGAIN;
+  } else {
+    /* No interrupt was supplied during the device probe, simply poll for the bit. */
+    /* TODO: Need to introduce timeout semantics to this mode as well! */
+    while(XIo_In32(REGISTER_ADDRESS(packetizer, SYNC_REG)) & SYNC_PENDING);
+  }
+
+  /* Return success or "timed out" */
+  return(returnValue);
+}
+
 /* Loads the passed microcode descriptor into the instance */
-static void load_descriptor(struct audio_packetizer *packetizer,
-                            ConfigWords *descriptor) {
+static int32_t load_descriptor(struct audio_packetizer *packetizer,
+			       ConfigWords *descriptor) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
+  uint32_t lastIndex;
+  int32_t returnValue = 0;
+
+  /* Handle the last write specially for interlocks */
+  lastIndex = descriptor->numWords;
+  if(descriptor->interlockedLoad) lastIndex--;
 
   wordAddress = (MICROCODE_RAM_BASE(packetizer) + (descriptor->offset * sizeof(uint32_t)));
-  DBG("Loading descriptor @ %08X (%d), numWords %d\n", wordAddress, descriptor->offset, descriptor->numWords);
-  for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
+  DBG("Loading descriptor @ %p (%d), numWords %d\n", (void*)wordAddress, descriptor->offset, descriptor->numWords);
+  for(wordIndex = 0; wordIndex < lastIndex; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
   }
+
+  /* If an interlocked load is requested, issue a sync command on the last write */
+  if(descriptor->interlockedLoad) {
+    /* Request a synchronized write for the last word and wait for it */
+    XIo_Out32(REGISTER_ADDRESS(packetizer, SYNC_REG), SYNC_NEXT_WRITE);
+    XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
+    returnValue = await_synced_write(packetizer);
+  }
+
+  return(returnValue);
 }
 
 /* Reads back and copies a descriptor from the packetizer into the passed 
@@ -94,9 +154,10 @@ static void load_descriptor(struct audio_packetizer *packetizer,
 static void copy_descriptor(struct audio_packetizer *packetizer,
                             ConfigWords *descriptor) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
 
   wordAddress = (MICROCODE_RAM_BASE(packetizer) + (descriptor->offset * sizeof(uint32_t)));
+  DBG("Copying descriptor @ %p (%d), numWords %d\n", (void*)wordAddress, descriptor->offset, descriptor->numWords);
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
     descriptor->configWords[wordIndex] = XIo_In32(wordAddress);
     wordAddress += sizeof(uint32_t);
@@ -106,9 +167,10 @@ static void copy_descriptor(struct audio_packetizer *packetizer,
 /* Loads the passed packet template into the instance */
 static void load_packet_template(struct audio_packetizer *packetizer, ConfigWords *template) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
 
   wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
+  DBG("Loading template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
   for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
     XIo_Out32(wordAddress, template->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
@@ -118,13 +180,19 @@ static void load_packet_template(struct audio_packetizer *packetizer, ConfigWord
 /* Sets the start vector the packetizer jumps to at the beginning of each 
  * isochronous interval 
  */
-static void set_start_vector(struct audio_packetizer *packetizer, uint32_t startVector) {
+static int32_t set_start_vector(struct audio_packetizer *packetizer, uint32_t startVector) {
+  /* Always perform this operation as a synchronized write */
+  DBG("Set start vector %d\n", startVector);
+  XIo_Out32(REGISTER_ADDRESS(packetizer, SYNC_REG), SYNC_NEXT_WRITE);
   XIo_Out32(REGISTER_ADDRESS(packetizer, START_VECTOR_REG), startVector);
+  return(await_synced_write(packetizer));
 }
 
 /* Configures a clock domain, including whether it is enabled */
 static void configure_clock_domain(struct audio_packetizer *packetizer, 
                                    ClockDomainSettings *clockDomainSettings) {
+
+  DBG("Configure clock domain: sytInterval %d, enabled %d\n", clockDomainSettings->sytInterval, (int)clockDomainSettings->enabled);
   /* Set the timestamp interval, then enable or disable since we need to enable
    * last (it doesn't really matter if we disable last or not.)
    *
@@ -148,7 +216,27 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
  */
 static void set_presentation_offset(struct audio_packetizer *packetizer,
                                     uint32_t presentationOffset) {
+  DBG("Set presentation offset to %d\n", presentationOffset);
   XIo_Out32(REGISTER_ADDRESS(packetizer, TS_OFFSET_REG), presentationOffset);
+}
+
+/* Interrupt service routine for the instance */
+static irqreturn_t labx_audio_packetizer_interrupt(int irq, void *dev_id) {
+  struct audio_packetizer *packetizer = (struct audio_packetizer*) dev_id;
+  uint32_t maskedFlags;
+
+  /* Read the interrupt flags and immediately clear them */
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG));
+  maskedFlags &= XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG));
+  XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), maskedFlags);
+
+  /* Detect the timer IRQ */
+  if((maskedFlags & SYNC_IRQ) != 0) {
+    /* Wake up all threads waiting for a synchronization event */
+    wake_up_interruptible(&(packetizer->syncedWriteQueue));
+  }
+  
+  return(IRQ_HANDLED);
 }
 
 /*
@@ -200,6 +288,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
                                   unsigned int command, unsigned long arg)
 {
   // Switch on the request
+  int returnValue = 0;
   struct audio_packetizer *packetizer = (struct audio_packetizer*)filp->private_data;
 
   switch(command) {
@@ -223,7 +312,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
       descriptor.configWords = configWords;
-      load_descriptor(packetizer, &descriptor);
+      returnValue = load_descriptor(packetizer, &descriptor);
     }
     break;
 
@@ -269,7 +358,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&startVector, (void __user*)arg, sizeof(startVector)) != 0) {
         return(-EFAULT);
       }
-      set_start_vector(packetizer, startVector);
+      returnValue = set_start_vector(packetizer, startVector);
     }
     break;
 
@@ -306,7 +395,8 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     return(-EINVAL);
   }
 
-  return(0);
+  /* Return an error code appropriate to the command */
+  return(returnValue);
 }
 
 /* Character device file operations structure */
@@ -317,32 +407,19 @@ static struct file_operations audio_packetizer_fops = {
   .owner   = THIS_MODULE,
 };
 
-
-#ifdef CONFIG_OF
-static int audio_packetizer_remove(struct platform_device *pdev);
-
-/* Probe for registered devices */
-static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
-{
-  struct resource r_mem_struct;
-  struct resource *addressRange = &r_mem_struct;
+/* Function containing the "meat" of the probe mechanism - this is used by
+ * the OpenFirmware probe as well as the standard platform device mechanism.
+ */
+static int audio_packetizer_probe(const char *name, 
+				  struct platform_device *pdev,
+				  struct resource *addressRange,
+				  struct resource *irq) {
   struct audio_packetizer *packetizer;
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
   int returnValue;
-  int rc = 0;
-  struct platform_device *pdev = to_platform_device(&ofdev->dev);
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
-
-  /* Obtain the resources for this instance */
-  rc = of_address_to_resource(ofdev->node,0,addressRange);
-  if (rc) {
-	  dev_warn(&ofdev->dev,"invalid address\n");
-	  return rc;
-  }
 
   /* Create and populate a device structure */
   packetizer = (struct audio_packetizer*) kmalloc(sizeof(struct audio_packetizer), GFP_KERNEL);
@@ -351,7 +428,7 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   /* Request and map the device's I/O memory region into uncacheable space */
   packetizer->physicalAddress = addressRange->start;
   packetizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
+  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
   packetizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize,
                         packetizer->name) == NULL) {
@@ -365,6 +442,21 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
     returnValue = -ENOMEM;
     goto release;
   }
+
+  /* Ensure that the interrupts are disabled */
+  XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), NO_IRQS);
+
+  /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
+  if(irq != NULL) {
+    packetizer->irq = irq->start;
+    returnValue = request_irq(packetizer->irq, &labx_audio_packetizer_interrupt, IRQF_DISABLED, 
+                              packetizer->name, packetizer);
+    if (returnValue) {
+      printk(KERN_ERR "%s : Could not allocate Lab X Audio Packetizer interrupt (%d).\n",
+             packetizer->name, packetizer->irq);
+      goto unmap;
+    }
+  } else packetizer->irq = NO_IRQ_SUPPLIED;
 
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -399,9 +491,14 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X\n", 
+  printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X, ",
          packetizer->name, versionMajor, versionMinor, 
          (uint32_t)packetizer->physicalAddress);
+  if(packetizer->irq == NO_IRQ_SUPPLIED) {
+    printk("polled interlocks\n");
+  } else {
+    printk("IRQ %d\n", packetizer->irq);
+  }
 
   /* Initialize other resources */
   spin_lock_init(&packetizer->mutex);
@@ -421,6 +518,14 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   packetizer->instanceNumber = instanceCount++;
   cdev_add(&packetizer->cdev, MKDEV(DRIVER_MAJOR, packetizer->instanceNumber), 1);
 
+  /* Initialize the waitqueue used for synchronized writes */
+  init_waitqueue_head(&(packetizer->syncedWriteQueue));
+
+  /* Now that the device is configured, enable interrupts if they are to be used */
+  if(packetizer->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), SYNC_IRQ);
+  }
+
   /* Return success */
   return(0);
 
@@ -433,25 +538,58 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   return(returnValue);
 }
 
+#ifdef CONFIG_OF
+static int audio_packetizer_remove(struct platform_device *pdev);
+
+/* Probe for registered devices */
+static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+  struct resource r_mem_struct = {};
+  struct resource r_irq_struct = {};
+  struct resource *addressRange = &r_mem_struct;
+  struct resource *irq          = &r_irq_struct;
+  struct platform_device *pdev  = to_platform_device(&ofdev->dev);
+  int rc = 0;
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
+
+  /* Obtain the resources for this instance */
+  rc = of_address_to_resource(ofdev->node, 0, addressRange);
+  if(rc) {
+    dev_warn(&ofdev->dev, "Invalid address\n");
+    return(rc);
+  }
+
+  rc = of_irq_to_resource(ofdev->node, 0, irq);
+  if(rc == NO_IRQ) {
+    /* No IRQ was defined; null the resource pointer to indicate polled mode */
+    irq = NULL;
+    return(rc);
+  }
+
+  /* Dispatch to the generic function */
+  return(audio_packetizer_probe(ofdev->node->name, pdev, addressRange, irq));
+}
+
 static int __devexit audio_packetizer_of_remove(struct of_device *dev)
 {
-	struct platform_device *pdev = to_platform_device(&dev->dev);
-	audio_packetizer_remove(pdev);
-	return(0);
+  struct platform_device *pdev = to_platform_device(&dev->dev);
+  audio_packetizer_remove(pdev);
+  return(0);
 }
 
 
 static struct of_device_id packetizer_of_match[] = {
-	{ .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
-	{ /* end of list */ },
+  { .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
+  { /* end of list */ },
 };
 
 
 static struct of_platform_driver of_audio_packetizer_driver = {
-	.name		= DRIVER_NAME,
-	.match_table	= packetizer_of_match,
-	.probe		= audio_packetizer_of_probe,
-	.remove		= __devexit_p(audio_packetizer_of_remove),
+  .name		= DRIVER_NAME,
+  .match_table	= packetizer_of_match,
+  .probe   	= audio_packetizer_of_probe,
+  .remove       = __devexit_p(audio_packetizer_of_remove),
 };
 #endif
 
@@ -460,112 +598,27 @@ static struct of_platform_driver of_audio_packetizer_driver = {
  */
 
 /* Probe for registered devices */
-static int audio_packetizer_probe(struct platform_device *pdev)
-{
+static int audio_packetizer_platform_probe(struct platform_device *pdev) {
   struct resource *addressRange;
-  struct audio_packetizer *packetizer;
-  uint32_t capsWord;
-  uint32_t versionWord;
-  uint32_t versionMajor;
-  uint32_t versionMinor;
-  int returnValue;
-
+  struct resource *irq;
 
   /* Obtain the resources for this instance */
-  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, PACKET_ENGINE_ADDRESS_RANGE_RESOURCE);
-  if (!addressRange) return(-ENXIO);
-
-  /* Create and populate a device structure */
-  packetizer = (struct audio_packetizer*) kmalloc(sizeof(struct audio_packetizer), GFP_KERNEL);
-  if(!packetizer) return(-ENOMEM);
-
-  /* Request and map the device's I/O memory region into uncacheable space */
-  packetizer->physicalAddress = addressRange->start;
-  packetizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
-  packetizer->name[NAME_MAX_SIZE - 1] = '\0';
-  if(request_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize,
-                        packetizer->name) == NULL) {
-    returnValue = -ENOMEM;
-    goto free;
+  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+  if (!addressRange) {
+    printk(KERN_ERR "%s: IO resource address not found.\n", pdev->name);
+    return(-ENXIO);
   }
 
-  packetizer->virtualAddress = 
-    (void*) ioremap_nocache(packetizer->physicalAddress, packetizer->addressRangeSize);
-  if(!packetizer->virtualAddress) {
-    returnValue = -ENOMEM;
-    goto release;
-  }
-
-  /* Read the capabilities word to determine how many of the lowest
-   * address bits are used to index into the microcode RAM, and therefore how
-   * many bits an address sub-range field gets shifted up.  Each instruction is
-   * 32 bits, and therefore inherently eats two lower address bits.
+  /* Attempt to obtain the IRQ; if none is specified, the resource pointer is
+   * NULL, and polling will be used.
    */
-  capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG));
-  packetizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
+  irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
-  /* Inspect and check the version to ensure it lies within the range of hardware
-   * we support.
-   */
-  versionWord = XIo_In32(REGISTER_ADDRESS(packetizer, REVISION_REG));
-  versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
-  versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if(((versionMajor < HARDWARE_MIN_VERSION_MAJOR) & 
-      (versionMinor < HARDWARE_MIN_VERSION_MINOR)) |
-     ((versionMajor > HARDWARE_MAX_VERSION_MAJOR) & 
-      (versionMinor > HARDWARE_MAX_VERSION_MINOR))) {
-    printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
-           packetizer->name, versionMajor, versionMinor, (uint32_t)packetizer->physicalAddress);
-    returnValue = -ENXIO;
-    goto unmap;
-  }
-  packetizer->capabilities.versionMajor = versionMajor;
-  packetizer->capabilities.versionMinor = versionMinor;
-
-  /* Capture more capabilities information */
-  packetizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
-  packetizer->capabilities.maxTemplateBytes = 
-    (0x04 << ((capsWord >> TEMPLATE_ADDRESS_SHIFT) & TEMPLATE_ADDRESS_BITS_MASK));
-  packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
-
-  /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X\n", 
-         packetizer->name, versionMajor, versionMinor, 
-         (uint32_t)packetizer->physicalAddress);
-
-  /* Initialize other resources */
-  spin_lock_init(&packetizer->mutex);
-  packetizer->opened = false;
-
-  /* Provide navigation between the device structures */
-  platform_set_drvdata(pdev, packetizer);
-  packetizer->pdev = pdev;
-
-  /* Reset the state of the packetizer */
-  reset_packetizer(packetizer);
-
-  /* Add as a character device to make the instance available for use */
-  cdev_init(&packetizer->cdev, &audio_packetizer_fops);
-  packetizer->cdev.owner = THIS_MODULE;
-  kobject_set_name(&packetizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
-  packetizer->instanceNumber = instanceCount++;
-  cdev_add(&packetizer->cdev, MKDEV(DRIVER_MAJOR, packetizer->instanceNumber), 1);
-
-  /* Return success */
-  return(0);
-
- unmap:
-  iounmap(packetizer->virtualAddress);
- release:
-  release_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize);
- free:
-  kfree(packetizer);
-  return(returnValue);
+  /* Dispatch to the generic function */
+  return(audio_packetizer_probe(pdev->name, pdev, addressRange, irq));
 }
 
-static int audio_packetizer_remove(struct platform_device *pdev)
-{
+static int audio_packetizer_remove(struct platform_device *pdev) {
   struct audio_packetizer *packetizer;
 
   /* Get a handle to the packetizer and begin shutting it down */
@@ -581,7 +634,7 @@ static int audio_packetizer_remove(struct platform_device *pdev)
 
 /* Platform device driver structure */
 static struct platform_driver audio_packetizer_driver = {
-  .probe  = audio_packetizer_probe,
+  .probe  = audio_packetizer_platform_probe,
   .remove = audio_packetizer_remove,
   .driver = {
     .name = DRIVER_NAME,

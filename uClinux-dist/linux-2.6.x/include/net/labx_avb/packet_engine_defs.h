@@ -44,8 +44,9 @@
 #define AUDIO_CHANNEL_MAP_POINTER(descriptorBase, mapOffset) ((uint32_t) (descriptorBase + mapOffset))
 
 /* Indices for identifying memory resources */
-#define PACKET_ENGINE_ADDRESS_RANGE_RESOURCE    (0)
-#define PACKET_ENGINE_NUM_RESOURCES             (1)
+#define PACKET_ENGINE_ADDRESS_RANGE_RESOURCE  (0)
+#define PACKET_ENGINE_IRQ_RESOURCE            (1)
+#define PACKET_ENGINE_NUM_RESOURCES           (2)
 
 /* Size of AVBTP stream IDs */
 #define AVBTP_STREAM_ID_BYTES  (8)
@@ -71,10 +72,18 @@ typedef struct {
   uint32_t  offset;
   uint32_t  numWords;
   uint32_t *configWords;
+  uint32_t  interlockedLoad;
 } ConfigWords;
 
 #define IOC_LOAD_DESCRIPTOR        _IOW('d', 0x03, ConfigWords)
 #define IOC_COPY_DESCRIPTOR        _IOWR('d', 0x04, ConfigWords)
+
+/* Definitions for the interlockedLoad member.  An "interlocked" load makes
+ * use of hardware interlocks to ensure the final word of a descriptor load
+ * is written in a manner guaranteed not to disrupt the running microengine.
+ */
+#define LOAD_NORMAL       (0)
+#define LOAD_INTERLOCKED  (1)
 
 /*
  * Packetizer definitions
