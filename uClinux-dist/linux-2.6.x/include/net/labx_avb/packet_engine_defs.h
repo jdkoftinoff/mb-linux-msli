@@ -91,7 +91,8 @@ typedef struct {
 
 /* I/O control commands and structures specific to the packetizer */
 #define IOC_LOAD_PACKET_TEMPLATE     _IOW('d', 0x10, ConfigWords)
-#define IOC_SET_START_VECTOR         _IOW('d', 0x11, uint32_t)
+#define IOC_COPY_PACKET_TEMPLATE     _IOW('d', 0x11, ConfigWords)
+#define IOC_SET_START_VECTOR         _IOW('d', 0x12, uint32_t)
 
 typedef struct {
   uint32_t clockDomain;
@@ -159,6 +160,7 @@ typedef struct {
  *        PACKETIZER_MAX_STREAM_SLOTS constants within Audio_Packetizer_Params.vhd.  
  *        Should the VHDL constants ever be changed, these must be revisited.
  */
+#define PACKETIZER_MAX_STREAM_SLOTS      (32)
 #define PACKETIZER_SAMPLE_SIZE_BITS      (3)
 #define PACKETIZER_SAMPLE_SIZE_MASK      (0x07)
 #define PACKETIZER_PACKET_SLOT_BITS      (5)
@@ -337,12 +339,19 @@ typedef struct {
 
 typedef struct {
   uint32_t matchUnit;
-  uint32_t enable;
+  uint32_t configAction;
   uint32_t matchVector;
   uint64_t matchStreamId;
 } MatcherConfig;
-#  define MATCHER_DISABLE  0x00000000
-#  define MATCHER_ENABLE   0x00000001
+
+/* Valid actions to be performed on a match unit:
+ * MATCHER_DISABLE  - Disables the match unit
+ * MATCHER_ENABLE   - Enables the match unit with a new ID
+ * MATCHER_RELOCATE - Dynamically relocates the vector for the match unit
+ */
+#  define MATCHER_DISABLE   0x00000000
+#  define MATCHER_ENABLE    0x00000001
+#  define MATCHER_RELOCATE  0x00000002
 
 #define IOC_CONFIG_MATCHER         _IOW('d', 0x21, MatcherConfig)
 
@@ -368,8 +377,14 @@ typedef struct {
 
 /* Type definitions and macros for depacketizer microcode */
 
-/* Parameter maxima */
-#define DEPACKETIZER_MAX_STREAMS  (128)
+
+/* Parameter maxima
+ * NOTE - The first constant is related to the DEPACKETIZER_MAX_STREAM_SLOTS
+ *        constant within Audio_Depacketizer_Params.vhd.  
+ *        Should the VHDL constant ever be changed, these must be revisited.
+ */
+#define DEPACKETIZER_MAX_STREAM_SLOTS   (32)
+#define DEPACKETIZER_MAX_STREAMS       (128)
 
 /* Opcode definitions */
 #define DEPACKETIZER_OPCODE_NOP                (0x00)

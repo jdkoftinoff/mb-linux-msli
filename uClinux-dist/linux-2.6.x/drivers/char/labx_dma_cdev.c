@@ -36,6 +36,7 @@
 #include <linux/labx_dma.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <xio.h>
 
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
@@ -249,6 +250,10 @@ static int __exit labx_dma_pdev_remove(struct platform_device *pdev)
 {
 	int i;
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)platform_get_drvdata(pdev);
+
+	/* Make sure the DMA unit is no longer running */
+	XIo_Out32(DMA_REGISTER_ADDRESS(&dma_pdev->dma, DMA_CONTROL_REG), DMA_DISABLE);
+
 	misc_deregister(&dma_pdev->miscdev);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)

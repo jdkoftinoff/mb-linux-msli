@@ -609,6 +609,12 @@ typedef struct {
 #define DMA_IOC_START_DMA              (0x87)
 #define DMA_IOC_STOP_DMA               (0x88)
 
+typedef struct {
+  uint32_t channel;
+  uint32_t address;
+} DMAVector;
+#define DMA_IOC_SET_VECTOR             (0x89)
+
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)
 #define LABX_DMA_NUM_RESOURCES             (1)
