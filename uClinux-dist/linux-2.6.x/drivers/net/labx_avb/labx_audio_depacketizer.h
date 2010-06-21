@@ -48,6 +48,7 @@
 #  define DEPACKETIZER_DISABLE  0x000
 #  define DEPACKETIZER_ENABLE   0x001
 #  define ID_LOAD_ACTIVE        0x100
+#  define ID_LOAD_LAST_WORD     0x200
 
 #define VECTOR_BAR_REG       0x001
 
@@ -62,6 +63,16 @@
 
 #define RTC_INCREMENT_REG    0x007
 #  define NOMINAL_RTC_INCREMENT  0x00800000
+
+#define IRQ_MASK_REG      (0x008)
+#define IRQ_FLAGS_REG     (0x009)
+#  define NO_IRQS   (0x00000000)
+#  define SYNC_IRQ  (0x00000001)
+
+#define SYNC_REG          (0x00A)
+#  define CANCEL_SYNC      (0x00000000)
+#  define SYNC_NEXT_WRITE  (0x00000001)
+#  define SYNC_PENDING     (0x80000000)
 
 #define CAPABILITIES_REG     0x0FE
 #  define MATCH_ARCH_SHIFT          24
@@ -151,6 +162,7 @@ typedef enum {
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  256
+#define NO_IRQ_SUPPLIED   (-1)
 struct audio_depacketizer {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -168,6 +180,9 @@ struct audio_depacketizer {
   uintptr_t      addressRangeSize;
   void __iomem  *virtualAddress;
 
+  /* Interrupt request number */
+  int32_t irq;
+
   /* Bit shift for the address sub-range, related to max instructions */
   uint32_t regionShift;
 
@@ -181,6 +196,9 @@ struct audio_depacketizer {
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   struct labx_dma dma;
 #endif
+
+  /* Wait queue for putting threads to sleep */
+  wait_queue_head_t syncedWriteQueue;
 
   /* Mutex for the device instance */
   spinlock_t mutex;

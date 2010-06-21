@@ -247,6 +247,17 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_DISABLE);
     break;
 
+  case DMA_IOC_SET_VECTOR:
+    {
+      DMAVector vector;
+      if(copy_from_user(&vector, (void __user*)arg, sizeof(vector)) != 0) {
+        return(-EFAULT);
+      }
+
+      XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_VECTORS_BASE_ADDRESS + vector.channel), vector.address);
+    }
+    break;
+
   default:
     return(-EINVAL);
   }

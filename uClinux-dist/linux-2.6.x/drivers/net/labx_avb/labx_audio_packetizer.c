@@ -52,7 +52,7 @@
 static uint32_t instanceCount;
 
 /* Number of milliseconds we will wait before bailing out of a synced write */
-#define SYNCED_WRITE_TIMEOUT_MSECS  (2000)
+#define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
@@ -120,7 +120,7 @@ static int32_t await_synced_write(struct audio_packetizer *packetizer) {
 
 /* Loads the passed microcode descriptor into the instance */
 static int32_t load_descriptor(struct audio_packetizer *packetizer,
-			       ConfigWords *descriptor) {
+                               ConfigWords *descriptor) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
   uint32_t lastIndex;
@@ -173,6 +173,22 @@ static void load_packet_template(struct audio_packetizer *packetizer, ConfigWord
   DBG("Loading template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
   for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
     XIo_Out32(wordAddress, template->configWords[wordIndex]);
+    wordAddress += sizeof(uint32_t);
+  }
+}
+
+/* Reads back and copies a packet template from the packetizer into the passed 
+ * structure, using the address and size it specifies.
+ */
+static void copy_packet_template(struct audio_packetizer *packetizer, 
+                                 ConfigWords *template) {
+  uint32_t wordIndex;
+  uintptr_t wordAddress;
+
+  wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
+  DBG("Copying template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
+  for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
+    template->configWords[wordIndex] = XIo_In32(wordAddress);
     wordAddress += sizeof(uint32_t);
   }
 }
@@ -352,6 +368,26 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_COPY_PACKET_TEMPLATE:
+    {
+      ConfigWords userTemplate;
+      ConfigWords localTemplate;
+
+      /* Copy into our local template, then obtain buffer pointer from userland */
+      if(copy_from_user(&userTemplate, (void __user*)arg, sizeof(userTemplate)) != 0) {
+        return(-EFAULT);
+      }
+      localTemplate.offset = userTemplate.offset;
+      localTemplate.numWords = userTemplate.numWords;
+      localTemplate.configWords = configWords;
+      copy_packet_template(packetizer, &localTemplate);
+      if(copy_to_user((void __user*)userTemplate.configWords, configWords, 
+                      (userTemplate.numWords * sizeof(uint32_t))) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+
   case IOC_SET_START_VECTOR:
     {
       uint32_t startVector;
@@ -411,9 +447,9 @@ static struct file_operations audio_packetizer_fops = {
  * the OpenFirmware probe as well as the standard platform device mechanism.
  */
 static int audio_packetizer_probe(const char *name, 
-				  struct platform_device *pdev,
-				  struct resource *addressRange,
-				  struct resource *irq) {
+                                  struct platform_device *pdev,
+                                  struct resource *addressRange,
+                                  struct resource *irq) {
   struct audio_packetizer *packetizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -539,7 +575,7 @@ static int audio_packetizer_probe(const char *name,
 }
 
 #ifdef CONFIG_OF
-static int audio_packetizer_remove(struct platform_device *pdev);
+static int audio_packetizer_platform_remove(struct platform_device *pdev);
 
 /* Probe for registered devices */
 static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
@@ -574,7 +610,7 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
 static int __devexit audio_packetizer_of_remove(struct of_device *dev)
 {
   struct platform_device *pdev = to_platform_device(&dev->dev);
-  audio_packetizer_remove(pdev);
+  audio_packetizer_platform_remove(pdev);
   return(0);
 }
 
@@ -618,7 +654,7 @@ static int audio_packetizer_platform_probe(struct platform_device *pdev) {
   return(audio_packetizer_probe(pdev->name, pdev, addressRange, irq));
 }
 
-static int audio_packetizer_remove(struct platform_device *pdev) {
+static int audio_packetizer_platform_remove(struct platform_device *pdev) {
   struct audio_packetizer *packetizer;
 
   /* Get a handle to the packetizer and begin shutting it down */
@@ -635,7 +671,7 @@ static int audio_packetizer_remove(struct platform_device *pdev) {
 /* Platform device driver structure */
 static struct platform_driver audio_packetizer_driver = {
   .probe  = audio_packetizer_platform_probe,
-  .remove = audio_packetizer_remove,
+  .remove = audio_packetizer_platform_remove,
   .driver = {
     .name = DRIVER_NAME,
   }

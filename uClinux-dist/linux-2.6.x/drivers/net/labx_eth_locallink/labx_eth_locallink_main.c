@@ -3101,6 +3101,7 @@ static struct of_device_id xtenet_fifo_of_match[] = {
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.a", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.b", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.01.a", },
+	{ .compatible = "xlnx,xps-ll-fifo-1.02.a", },
 	{ /* end of list */ },
 };
 

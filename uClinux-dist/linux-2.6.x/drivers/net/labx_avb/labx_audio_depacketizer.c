@@ -26,6 +26,7 @@
 #include <linux/autoconf.h>
 #include "labx_audio_depacketizer.h"
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -35,10 +36,10 @@
 #endif // CONFIG_OF
 
 
-/* Driver name and the revision of hardware expected. */
+/* Driver name and the revision of hardware expected (1.1) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define HARDWARE_VERSION_MAJOR  1
-#define HARDWARE_VERSION_MINOR  0
+#define HARDWARE_VERSION_MINOR  1
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 252
@@ -46,6 +47,9 @@
 /* Maximum number of depacketizers and instance count */
 #define MAX_INSTANCES 64
 static uint32_t instanceCount;
+
+/* Number of milliseconds we will wait before bailing out of a synced write */
+#define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
@@ -68,7 +72,9 @@ static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   DBG("Disbling the depacketizer\n");
 
   /* Disable the micro-engine, and unregister its syntonization callback */
+  // TEMPORARY
   XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_DISABLE);
+  //  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), (ID_LOAD_LAST_WORD | DEPACKETIZER_DISABLE));
   remove_syntonize_callback(&depacketizer_syntonize, (void*)depacketizer);
 }
 
@@ -82,24 +88,79 @@ static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
   XIo_Out32(REGISTER_ADDRESS(depacketizer, RTC_INCREMENT_REG), NOMINAL_RTC_INCREMENT);
   add_syntonize_callback(&depacketizer_syntonize, (void*) depacketizer);
 
-  /* Enable the micro-engine */
+  /* Enable the micro-engine, with the "last load" flag for match unit configuration
+   * disabled (the loading methods should assert this as needed.)
+   */
   XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_ENABLE);
 }
 
+/* Waits for a synchronized write to commit, using either polling or
+ * an interrupt-driven waitqueue.
+ */
+static int32_t await_synced_write(struct audio_depacketizer *depacketizer) {
+  int32_t returnValue = 0;
+
+  /* Determine whether to use an interrupt or polling */
+  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
+    int32_t waitResult;
+
+    /* Place ourselves onto a wait queue if the synced write is flagged as
+     * pending by the hardware, as this indicates that the microengine is active,
+     * and we need to wait for it to finish a pass through all the microcode 
+     * before the hardware will commit the write to its destination (a register
+     * or microcode RAM.)  If the engine is inactive or the write already 
+     * committed, we will not actually enter the wait queue.
+     */
+    waitResult =
+      wait_event_interruptible_timeout(depacketizer->syncedWriteQueue,
+                                       ((XIo_In32(REGISTER_ADDRESS(depacketizer, SYNC_REG)) & 
+					 SYNC_PENDING) == 0),
+				       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
+
+    /* If the wait returns zero, then the timeout elapsed; if negative, a signal
+     * interrupted the wait.
+     */
+    if(waitResult == 0) returnValue = -ETIMEDOUT;
+    else if(waitResult < 0) returnValue = -EAGAIN;
+  } else {
+    /* No interrupt was supplied during the device probe, simply poll for the bit. */
+    /* TODO: Need to introduce timeout semantics to this mode as well! */
+    while(XIo_In32(REGISTER_ADDRESS(depacketizer, SYNC_REG)) & SYNC_PENDING);
+  }
+
+  /* Return success or "timed out" */
+  return(returnValue);
+}
+
 /* Loads the passed microcode descriptor into the instance */
-static void load_descriptor(struct audio_depacketizer *depacketizer,
-                            ConfigWords *descriptor) {
+static int32_t load_descriptor(struct audio_depacketizer *depacketizer,
+                               ConfigWords *descriptor) {
   
   uint32_t wordIndex;
   uintptr_t wordAddress;
+  uint32_t lastIndex;
+  int32_t returnValue = 0;
 
+  /* Handle the last write specially for interlocks */
+  lastIndex = descriptor->numWords;
+  if(descriptor->interlockedLoad) lastIndex--;
 
   wordAddress = (MICROCODE_RAM_BASE(depacketizer) + (descriptor->offset * sizeof(uint32_t)));
   DBG("Loading descriptor @ %08X (%d), numWords %d\n", wordAddress, descriptor->offset, descriptor->numWords);
-  for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
+  for(wordIndex = 0; wordIndex < lastIndex; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
   }
+
+  /* If an interlocked load is requested, issue a sync command on the last write */
+  if(descriptor->interlockedLoad) {
+    /* Request a synchronized write for the last word and wait for it */
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
+    XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
+    returnValue = await_synced_write(depacketizer);
+  }
+
+  return(returnValue);
 }
 
 /* Reads back and copies a descriptor from the packetizer into the passed 
@@ -132,6 +193,14 @@ static void wait_match_config(struct audio_depacketizer *depacketizer) {
 static void clear_matchers(struct audio_depacketizer *depacketizer) {
   uint32_t numClearWords;
   uint32_t wordIndex;
+  uint32_t controlWord;
+
+  /* Clear the "last word" bit to suppress false matches while the units are
+   * only partially cleared out
+   */
+  controlWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  controlWord &= ~ID_LOAD_LAST_WORD;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
 
   /* Ascertain that the configuration logic is ready, then clear all in one shot */
   wait_match_config(depacketizer);
@@ -154,6 +223,13 @@ static void clear_matchers(struct audio_depacketizer *depacketizer) {
     numClearWords = 0;
   }
   for(wordIndex = 0; wordIndex < numClearWords; wordIndex++) {
+    /* Assert the "last word" flag on the last word required to complete the clearing
+     * of all the units.
+     */
+    if(wordIndex == (numClearWords - 1)) {
+      controlWord |= ID_LOAD_LAST_WORD;
+      XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+    }
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), SRLCXXE_CLEARING_WORD);
   }
 
@@ -165,16 +241,25 @@ static void clear_matchers(struct audio_depacketizer *depacketizer) {
 }
 
 /* Configures one of the passed instance's match units */
-static int configure_matcher(struct audio_depacketizer *depacketizer,
-                             MatcherConfig *matcherConfig) {
+static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
+                                 MatcherConfig *matcherConfig) {
   uint32_t selectionWord;
   uintptr_t vectorAddress;
   uint32_t vectorWord;
   uint32_t matchUnit;
+  uint32_t controlWord;
+  int32_t returnValue = 0;
 
   /* Sanity-check the input structure */
   matchUnit = matcherConfig->matchUnit;
   if(matchUnit >= MAX_CONCURRENT_STREAMS) return(-EINVAL);
+
+  /* Initially clear the "last word" flag to suppress false matches which might
+   * otherwise occur while the unit is only partially configured.
+   */
+  controlWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  controlWord &= ~ID_LOAD_LAST_WORD;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
 
   /* Ascertain that the configuration logic is ready, then select the matcher */
   wait_match_config(depacketizer);
@@ -187,48 +272,115 @@ static int configure_matcher(struct audio_depacketizer *depacketizer,
   selectionWord = ((matchUnit > 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
   XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), selectionWord);
 
-  /* Calculate matching truth tables for the LUTs and load them */
-  switch(depacketizer->matchArchitecture) {
-  case STREAM_MATCH_SRLC16E:
-    {
-      int32_t lutIndex;
-      uint32_t configWord = 0x00000000;
-      uint32_t matchChunk;
-      bool loadLutPair = false;
-      
-      for(lutIndex = (NUM_SRLC16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
-        configWord <<= 16;
-        matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 4)) & 0x0F);
-        if(matcherConfig->enable == MATCHER_ENABLE) {
-          configWord |= (0x01 << matchChunk);
-        }
-        if(loadLutPair) {
-          XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
-          wait_match_config(depacketizer);
-        }
-        loadLutPair = !loadLutPair;
-      }
-    }
-    break;
+  /* If we are activating the match unit, we must first ensure that the match unit
+   * is disabled, then update the matcher's entry in the vector table
+   */
+  switch(matcherConfig->configAction) {
+  case MATCHER_ENABLE:
+    /* Since the match unit is selected in the map and the "last word" flag is clear,
+     * writing a word of nonsense will deactivate it.  Even though an interlock will
+     * be used to actually modify the vector table, we don't want to vector off to the
+     * new location if a subsequent match occurs at an old configured stream ID.
+     */
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), 0x00000000);
+    wait_match_config(depacketizer);
 
-  case STREAM_MATCH_SRLC32E:
-    {
-      int32_t lutIndex;
-      uint32_t configWord;
-      uint32_t matchChunk;
-      
-      for(lutIndex = (NUM_SRLC32E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
-        matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 5)) & 0x01F);
-        configWord = ((matcherConfig->enable == MATCHER_ENABLE) ? 
-                      (0x01 << matchChunk) : SRLCXXE_CLEARING_WORD);
-        XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
-        wait_match_config(depacketizer);
-      }
+    /* Fall through to the vector relocation case */
+
+  case MATCHER_RELOCATE:
+    /* 
+     * Locate the unit's vector in the relocatable table and write it.  Match vectors
+     * are packed in sixteen-bit pairs, in little-endian order, so we must maintain the
+     * "neighbor" value.
+     */
+    vectorAddress = XIo_In32(REGISTER_ADDRESS(depacketizer, VECTOR_BAR_REG));
+    vectorAddress += (matchUnit / MATCH_VECTORS_PER_WORD);
+    vectorAddress = (MICROCODE_RAM_BASE(depacketizer) + (vectorAddress * sizeof(uint32_t)));
+    vectorWord = XIo_In32(vectorAddress);
+    if(matchUnit % MATCH_VECTORS_PER_WORD) {
+      vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_EVEN_SHIFT);
+      vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_ODD_SHIFT);
+    } else {
+      vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_ODD_SHIFT);
+      vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_EVEN_SHIFT);
     }
+
+    /* Now modify the vector table itself.  An interlock is used here even though it
+     * isn't possible for the match unit we're working on to have matched and still
+     * be accessing the vector table - but A) its "neighbor" vector may be, and B)
+     * some architectures have constraints on write-while-read across clock domains
+     * for a *range* of block RAM addresses, not just a single location!
+     */
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
+    XIo_Out32(vectorAddress, vectorWord);
+    returnValue = await_synced_write(depacketizer);
     break;
 
   default:
+    // Do nothing for deactivation at this stage
     ;
+  }
+
+  /* Don't activate the match unit if there was a problem with the vector load,
+   * or if we're only being asked to relocate its vector
+   */
+  if((returnValue == 0) & (matcherConfig->configAction != MATCHER_RELOCATE)) {
+    /* Calculate matching truth tables for the LUTs and load them */
+    switch(depacketizer->matchArchitecture) {
+    case STREAM_MATCH_SRLC16E:
+      {
+        int32_t lutIndex;
+        uint32_t configWord = 0x00000000;
+        uint32_t matchChunk;
+        bool loadLutPair = false;
+        
+        for(lutIndex = (NUM_SRLC16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+          configWord <<= 16;
+          matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 4)) & 0x0F);
+          if(matcherConfig->configAction == MATCHER_ENABLE) {
+            configWord |= (0x01 << matchChunk);
+          }
+          if(loadLutPair) {
+            /* Assert the "load last word" flag on the last word we're going to load
+             * for the configuration; this will re-enable the match unit as soon as
+             * the last bit of the word has been shifted into it.
+             */
+            if(lutIndex == 0) {
+              controlWord |= ID_LOAD_LAST_WORD;
+              XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+            }
+            XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
+            wait_match_config(depacketizer);
+          }
+          loadLutPair = !loadLutPair;
+        }
+      }
+      break;
+      
+    case STREAM_MATCH_SRLC32E:
+      {
+        int32_t lutIndex;
+        uint32_t configWord;
+        uint32_t matchChunk;
+        
+        for(lutIndex = (NUM_SRLC32E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+          matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 5)) & 0x01F);
+          configWord = ((matcherConfig->configAction == MATCHER_ENABLE) ? 
+                        (0x01 << matchChunk) : SRLCXXE_CLEARING_WORD);
+          /* Assert the "load last word" flag as per the comment in SRLC16E above */
+          if(lutIndex == 0) {
+            controlWord |= ID_LOAD_LAST_WORD;
+            XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+          }
+          XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
+          wait_match_config(depacketizer);
+        }
+      }
+      break;
+      
+    default:
+      ;
+    }
   }
 
   /* De-select all of the match units */
@@ -237,23 +389,7 @@ static int configure_matcher(struct audio_depacketizer *depacketizer,
   XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_NONE);
   XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_NONE);
 
-  /* 
-   * Locate the unit's vector in the relocatable table and write it.  Match vectors
-   * are packed in sixteen-bit pairs, in little-endian order.
-   */
-  vectorAddress = XIo_In32(REGISTER_ADDRESS(depacketizer, VECTOR_BAR_REG));
-  vectorAddress += (matchUnit / MATCH_VECTORS_PER_WORD);
-  vectorAddress = (MICROCODE_RAM_BASE(depacketizer) + (vectorAddress * sizeof(uint32_t)));
-  vectorWord = XIo_In32(vectorAddress);
-  if(matchUnit % MATCH_VECTORS_PER_WORD) {
-    vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_EVEN_SHIFT);
-    vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_ODD_SHIFT);
-  } else {
-    vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_ODD_SHIFT);
-    vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_EVEN_SHIFT);
-  }
-  XIo_Out32(vectorAddress, vectorWord);
-  return(0);
+  return(returnValue);
 }
 
 /* Sets the base address of the match vector table; all subsequent calls to configure
@@ -328,6 +464,25 @@ static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
   set_vector_base_address(depacketizer, 0x00000000);
 }
 
+/* Interrupt service routine for the instance */
+static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
+  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
+  uint32_t maskedFlags;
+
+  /* Read the interrupt flags and immediately clear them */
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
+  maskedFlags &= XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG), maskedFlags);
+
+  /* Detect the timer IRQ */
+  if((maskedFlags & SYNC_IRQ) != 0) {
+    /* Wake up all threads waiting for a synchronization event */
+    wake_up_interruptible(&(depacketizer->syncedWriteQueue));
+  }
+  
+  return(IRQ_HANDLED);
+}
+
 /*
  * Character device hook functions
  */
@@ -400,7 +555,7 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
       descriptor.configWords = configWords;
-      load_descriptor(depacketizer, &descriptor);
+      returnValue = load_descriptor(depacketizer, &descriptor);
     }
     break;
 
@@ -484,41 +639,29 @@ static struct file_operations audio_depacketizer_fops = {
   .owner   = THIS_MODULE,
 };
 
-#ifdef CONFIG_OF
-static int audio_depacketizer_remove(struct platform_device *pdev);
-
-static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
-{
-  struct resource r_mem_struct;
-  struct resource *addressRange = &r_mem_struct;
+/* Function containing the "meat" of the probe mechanism - this is used by
+ * the OpenFirmware probe as well as the standard platform device mechanism.
+ */
+static int audio_depacketizer_probe(const char *name, 
+                                    struct platform_device *pdev,
+                                    struct resource *addressRange,
+                                    struct resource *irq) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
   int returnValue;
-  int rc;
-
-
-  struct platform_device *pdev = to_platform_device(&ofdev->dev);
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
-
-  /* Obtain the resources for this instance */
-  rc = of_address_to_resource(ofdev->node,0,addressRange);
-  if (rc) {
-	  dev_warn(&ofdev->dev,"invalid address\n");
-	  return rc;
-  }
-
+  
   /* Create and populate a device structure */
-  depacketizer = (struct audio_depacketizer*) kmalloc(sizeof(struct audio_depacketizer), GFP_KERNEL);
+  depacketizer = (struct audio_depacketizer*) kmalloc(sizeof(struct audio_depacketizer), 
+                                                      GFP_KERNEL);
   if(!depacketizer) return(-ENOMEM);
 
   /* Request and map the device's I/O memory region into uncacheable space */
   depacketizer->physicalAddress = addressRange->start;
   depacketizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
+  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
   depacketizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize,
                         depacketizer->name) == NULL) {
@@ -532,6 +675,21 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
     returnValue = -ENOMEM;
     goto release;
   }
+
+  /* Ensure that the interrupts are disabled */
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), NO_IRQS);
+
+  /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
+  if(irq != NULL) {
+    depacketizer->irq = irq->start;
+    returnValue = request_irq(depacketizer->irq, &labx_audio_depacketizer_interrupt, 
+                              IRQF_DISABLED, depacketizer->name, depacketizer);
+    if (returnValue) {
+      printk(KERN_ERR "%s : Could not allocate Lab X Audio Depacketizer interrupt (%d).\n",
+             depacketizer->name, depacketizer->irq);
+      goto unmap;
+    }
+  } else depacketizer->irq = NO_IRQ_SUPPLIED;
 
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -576,11 +734,14 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   depacketizer->capabilities.maxStreams      = ((capsWord >> MAX_STREAMS_SHIFT) & MAX_STREAMS_MASK);
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X\n", 
-         depacketizer->name,
-         HARDWARE_VERSION_MAJOR,
-         HARDWARE_VERSION_MINOR,
+  printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X, ",
+         depacketizer->name, versionMajor, versionMinor, 
          (uint32_t)depacketizer->physicalAddress);
+  if(depacketizer->irq == NO_IRQ_SUPPLIED) {
+    printk("polled interlocks\n");
+  } else {
+    printk("IRQ %d\n", depacketizer->irq);
+  }
 
   /* Initialize other resources */
   spin_lock_init(&depacketizer->mutex);
@@ -592,8 +753,9 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   labx_dma_probe(&depacketizer->dma); 
 #endif
 
-  /* Provide navigation from the platform device structure */
+  /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, depacketizer);
+  depacketizer->pdev = pdev;
 
   /* Reset the state of the depacketizer */
   reset_depacketizer(depacketizer);
@@ -610,8 +772,13 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
     goto unmap;
   }
 
-  platform_set_drvdata(pdev, depacketizer);
-  depacketizer->pdev = pdev;
+  /* Initialize the waitqueue used for synchronized writes */
+  init_waitqueue_head(&(depacketizer->syncedWriteQueue));
+
+  /* Now that the device is configured, enable interrupts if they are to be used */
+  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ);
+  }
 
   /* Return success */
   return(0);
@@ -625,10 +792,42 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   return(returnValue);
 }
 
+#ifdef CONFIG_OF
+static int audio_depacketizer_platform_remove(struct platform_device *pdev);
+
+static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+  struct resource r_mem_struct;
+  struct resource r_irq_struct;
+  struct resource *addressRange = &r_mem_struct;
+  struct resource *irq          = &r_irq_struct;
+  struct platform_device *pdev = to_platform_device(&ofdev->dev);
+  int rc;
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
+
+  /* Obtain the resources for this instance */
+  rc = of_address_to_resource(ofdev->node,0,addressRange);
+  if (rc) {
+	  dev_warn(&ofdev->dev,"invalid address\n");
+	  return rc;
+  }
+
+  rc = of_irq_to_resource(ofdev->node, 0, irq);
+  if(rc == NO_IRQ) {
+    /* No IRQ was defined; null the resource pointer to indicate polled mode */
+    irq = NULL;
+    return(rc);
+  }
+
+  /* Dispatch to the generic function */
+  return(audio_depacketizer_probe(ofdev->node->name, pdev, addressRange, irq));
+}
+
 static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
 {
 	struct platform_device *pdev = to_platform_device(&dev->dev);
-	audio_depacketizer_remove(pdev);
+	audio_depacketizer_platform_remove(pdev);
 	return(0);
 }
 
@@ -652,136 +851,28 @@ static struct of_platform_driver of_audio_depacketizer_driver = {
  */
 
 /* Probe for registered devices */
-static int audio_depacketizer_probe(struct platform_device *pdev)
+static int audio_depacketizer_platform_probe(struct platform_device *pdev)
 {
   struct resource *addressRange;
-  struct audio_depacketizer *depacketizer;
-  uint32_t capsWord;
-  uint32_t versionWord;
-  uint32_t versionMajor;
-  uint32_t versionMinor;
-  int returnValue;
-
+  struct resource *irq;
 
   /* Obtain the resources for this instance */
-  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, PACKET_ENGINE_ADDRESS_RANGE_RESOURCE);
-  if (!addressRange) return(-ENXIO);
-
-  /* Create and populate a device structure */
-  depacketizer = (struct audio_depacketizer*) kmalloc(sizeof(struct audio_depacketizer), GFP_KERNEL);
-  if(!depacketizer) return(-ENOMEM);
-
-  /* Request and map the device's I/O memory region into uncacheable space */
-  depacketizer->physicalAddress = addressRange->start;
-  depacketizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
-  depacketizer->name[NAME_MAX_SIZE - 1] = '\0';
-  if(request_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize,
-                        depacketizer->name) == NULL) {
-    returnValue = -ENOMEM;
-    goto free;
+  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+  if (!addressRange) {
+    printk(KERN_ERR "%s: IO resource address not found.\n", pdev->name);
+    return(-ENXIO);
   }
 
-  depacketizer->virtualAddress = 
-    (void*) ioremap_nocache(depacketizer->physicalAddress, depacketizer->addressRangeSize);
-  if(!depacketizer->virtualAddress) {
-    returnValue = -ENOMEM;
-    goto release;
-  }
-
-  /* Read the capabilities word to determine how many of the lowest
-   * address bits are used to index into the microcode RAM, and therefore how
-   * many bits an address sub-range field gets shifted up.  Each instruction is
-   * 32 bits, and therefore inherently eats two lower address bits.
+  /* Attempt to obtain the IRQ; if none is specified, the resource pointer is
+   * NULL, and polling will be used.
    */
-  capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG));
-  depacketizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
+  irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
-  /* Inspect and check the version */
-  versionWord = XIo_In32(REGISTER_ADDRESS(depacketizer, REVISION_REG));
-  versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
-  versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != HARDWARE_VERSION_MINOR)) {
-    printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
-           depacketizer->name, versionMajor, versionMinor, (uint32_t)depacketizer->physicalAddress);
-    returnValue = -ENXIO;
-    goto unmap;
-  }
-  depacketizer->capabilities.versionMajor = versionMajor;
-  depacketizer->capabilities.versionMinor = versionMinor;
-
-  /* Test and sanity-check the stream-matching architecture */
-  depacketizer->matchArchitecture = ((capsWord >> MATCH_ARCH_SHIFT) & MATCH_ARCH_MASK);
-  switch(depacketizer->matchArchitecture) {
-  case STREAM_MATCH_SRLC16E:
-  case STREAM_MATCH_SRLC32E:
-    break;
-  default:
-    printk(KERN_INFO "%s: Invalid match architecture 0x%02X\n", 
-           depacketizer->name, depacketizer->matchArchitecture);
-    returnValue = -ENXIO;
-    goto unmap;
-  }
-
-  /* Capture more capabilities information */
-  depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
-  depacketizer->capabilities.maxParameters   = (0x01 << ((capsWord >> PARAM_ADDRESS_BITS_SHIFT) & 
-                                                         PARAM_ADDRESS_BITS_MASK));
-  depacketizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
-  depacketizer->capabilities.maxStreams      = ((capsWord >> MAX_STREAMS_SHIFT) & MAX_STREAMS_MASK);
-
-  /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X\n", 
-         depacketizer->name,
-         HARDWARE_VERSION_MAJOR,
-         HARDWARE_VERSION_MINOR,
-         (uint32_t)depacketizer->physicalAddress);
-
-  /* Initialize other resources */
-  spin_lock_init(&depacketizer->mutex);
-  depacketizer->opened = false;
-
-#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
-  depacketizer->dma.virtualAddress = depacketizer->virtualAddress + LABX_DMA_MEMORY_OFFSET;
- 
-  labx_dma_probe(&depacketizer->dma); 
-#endif
-
-  /* Provide navigation from the platform device structure */
-  platform_set_drvdata(pdev, depacketizer);
-
-  /* Reset the state of the depacketizer */
-  reset_depacketizer(depacketizer);
-
-  /* Add as a character device to make the instance available for use */
-  cdev_init(&depacketizer->cdev, &audio_depacketizer_fops);
-  depacketizer->cdev.owner = THIS_MODULE;
-  kobject_set_name(&depacketizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
-  depacketizer->instanceNumber = instanceCount++;
-  returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
-  if (returnValue < 0)
-  {
-    printk("%s: Unable to add character device %d.%d (%d)\n", pdev->name, DRIVER_MAJOR, depacketizer->instanceNumber, returnValue);
-    goto unmap;
-  }
-
-  platform_set_drvdata(pdev, depacketizer);
-  depacketizer->pdev = pdev;
-
-  /* Return success */
-  return(0);
-
- unmap:
-  iounmap(depacketizer->virtualAddress);
- release:
-  release_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize);
- free:
-  kfree(depacketizer);
-  return(returnValue);
+  /* Dispatch to the generic function */
+  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq));
 }
 
-static int audio_depacketizer_remove(struct platform_device *pdev)
+static int audio_depacketizer_platform_remove(struct platform_device *pdev)
 {
   struct audio_depacketizer *depacketizer;
 
@@ -799,8 +890,8 @@ static int audio_depacketizer_remove(struct platform_device *pdev)
 
 /* Platform device driver structure */
 static struct platform_driver audio_depacketizer_driver = {
-  .probe  = audio_depacketizer_probe,
-  .remove = audio_depacketizer_remove,
+  .probe  = audio_depacketizer_platform_probe,
+  .remove = audio_depacketizer_platform_remove,
   .driver = {
     .name = DRIVER_NAME,
   }
