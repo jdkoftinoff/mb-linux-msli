@@ -40,11 +40,30 @@ if ! which bison > /dev/null 2>&1
  exit 1
 fi
 
+if ! which gmake > /dev/null 2>&1
+ then
+ echo "This script requires gmake to be present (if make is gnu make make a symlink for gmake)"
+ exit 1
+fi
+
+GCC3_DIR="microblaze-toolchain-sources"
+GCC4_DIR="mb_gnu"
+
+if [ ! -d "$GCC3_DIR" ]; then
+ echo "$GCC3_DIR should link to the gcc 3 toolchain source"
+ exit 1;
+fi
+
+if [ ! -d "$GCC4_DIR" ]; then
+ echo "$GCC4_DIR should link to the gcc 4 toolchain source"
+ exit 1;
+fi
+
 # Build xilinx toolchain
 
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
 (
-cd mb_gnu \
+cd "$GCC4_DIR" \
 && bash build_binutils.sh && bash build_gcc.sh && bash build_gdb.sh
 )||(
 echo "Build failed, see mb_gnu/build directory for logs"
@@ -55,7 +74,7 @@ exit 1
 
 echo "Building Binutils / GCC3 / GDB / uCLinux toolchain (Petalogix tree)"
 (
-cd microblaze-toolchain-sources \
+cd "$GCC3_DIR" \
 && csh do_everything.csh
 ) || (
 echo "Build failed"
