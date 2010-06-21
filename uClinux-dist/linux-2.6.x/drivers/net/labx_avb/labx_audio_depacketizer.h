@@ -74,6 +74,12 @@
 #  define SYNC_NEXT_WRITE  (0x00000001)
 #  define SYNC_PENDING     (0x80000000)
 
+#define RELOCATE_REG      (0x00B)
+#  define RELOCATION_INACTIVE       (0x00000000)
+#  define RELOCATION_ACTIVE         (0x80000000)
+#  define RELOCATION_MATCH_MASK     (0x0000007F)
+#  define RELOCATION_ADDRESS_SHIFT  (7)
+
 #define CAPABILITIES_REG     0x0FE
 #  define MATCH_ARCH_SHIFT          24
 #  define MATCH_ARCH_MASK           0x0FF

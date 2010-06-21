@@ -344,18 +344,25 @@ typedef struct {
   uint64_t matchStreamId;
 } MatcherConfig;
 
-/* Valid actions to be performed on a match unit:
- * MATCHER_DISABLE  - Disables the match unit
- * MATCHER_ENABLE   - Enables the match unit with a new ID
- * MATCHER_RELOCATE - Dynamically relocates the vector for the match unit
+/* Valid configuration actions to be performed on a match unit:
+ * MATCHER_DISABLE - Disables the match unit
+ * MATCHER_ENABLE  - Enables the match unit with a new ID
  */
-#  define MATCHER_DISABLE   0x00000000
-#  define MATCHER_ENABLE    0x00000001
-#  define MATCHER_RELOCATE  0x00000002
+#  define MATCHER_DISABLE  0x00000000
+#  define MATCHER_ENABLE   0x00000001
 
 #define IOC_CONFIG_MATCHER         _IOW('d', 0x21, MatcherConfig)
 
-#define IOC_LOCATE_VECTOR_TABLE    _IOW('d', 0x22, uint32_t)
+typedef struct {
+  uint32_t matchUnit;
+  uint32_t oldVector;
+  uint32_t newVector;
+  uint32_t ringStateOffset;
+} MatcherRelocation;
+
+#define IOC_RELOCATE_MATCHER       _IOW('d', 0x22, MatcherRelocation)
+
+#define IOC_LOCATE_VECTOR_TABLE    _IOW('d', 0x23, uint32_t)
 
 typedef struct {
   uint32_t            matchUnit;

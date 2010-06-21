@@ -189,26 +189,77 @@ static void wait_match_config(struct audio_depacketizer *depacketizer) {
   } while(statusWord & ID_LOAD_ACTIVE);
 }
 
-/* Clears all of the match units within the passed instance */
-static void clear_matchers(struct audio_depacketizer *depacketizer) {
+/* Selects a set of match units for subsequent configuration loads */
+typedef enum { SELECT_NONE, SELECT_SINGLE, SELECT_ALL } SelectionMode;
+static void select_matchers(struct audio_depacketizer *depacketizer,
+                            SelectionMode selectionMode,
+                            uint32_t matchUnit) {
+  uint32_t selectionWord;
+
+  switch(selectionMode) {
+  case SELECT_NONE:
+    /* De-select all the match units */
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_NONE);
+    break;
+
+  case SELECT_SINGLE:
+    /* Select a single unit */
+    selectionWord = ((matchUnit < 32) ? (0x01 << matchUnit) : ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), selectionWord);
+    selectionWord = (((matchUnit < 64) & (matchUnit > 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), selectionWord);
+    selectionWord = (((matchUnit < 96) & (matchUnit > 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), selectionWord);
+    selectionWord = ((matchUnit > 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), selectionWord);
+    break;
+
+  default:
+    /* Select all match units at once */
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), ID_SELECT_ALL);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), ID_SELECT_ALL);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_ALL);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_ALL);
+  }
+}
+
+/* Sets the loading mode for any selected match units.  This revolves around
+ * automatically disabling the match units' outputs while they're being
+ * configured so they don't fire false matches, and re-enabling them as their
+ * last configuration word is loaded.
+ */
+typedef enum { LOADING_MORE_WORDS, LOADING_LAST_WORD } LoadingMode;
+static void set_matcher_loading_mode(struct audio_depacketizer *depacketizer,
+                                     LoadingMode loadingMode) {
+  uint32_t controlWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+
+  if(loadingMode == LOADING_MORE_WORDS) {
+    /* Clear the "last word" bit to suppress false matches while the units are
+     * only partially cleared out
+     */
+    controlWord &= ~ID_LOAD_LAST_WORD;
+  } else {
+    /* Loading the final word, flag the match unit(s) to enable after the
+     * next configuration word is loaded.
+     */
+    controlWord |= ID_LOAD_LAST_WORD;
+  }
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+}
+
+/* Clears any selected match units, preventing them from matching any packets */
+static void clear_selected_matchers(struct audio_depacketizer *depacketizer) {
   uint32_t numClearWords;
   uint32_t wordIndex;
-  uint32_t controlWord;
 
-  /* Clear the "last word" bit to suppress false matches while the units are
-   * only partially cleared out
+  /* Ensure the unit(s) disable as the first word is load to prevent erronous
+   * matches as the units become partially-cleared
    */
-  controlWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
-  controlWord &= ~ID_LOAD_LAST_WORD;
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+  set_matcher_loading_mode(depacketizer, LOADING_MORE_WORDS);
 
-  /* Ascertain that the configuration logic is ready, then clear all in one shot */
-  wait_match_config(depacketizer);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), ID_SELECT_ALL);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), ID_SELECT_ALL);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_ALL);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_ALL);
-  
   /* Load the appropriate number of clearing words to the LUTs */
   switch(depacketizer->matchArchitecture) {
   case STREAM_MATCH_SRLC16E:
@@ -224,172 +275,231 @@ static void clear_matchers(struct audio_depacketizer *depacketizer) {
   }
   for(wordIndex = 0; wordIndex < numClearWords; wordIndex++) {
     /* Assert the "last word" flag on the last word required to complete the clearing
-     * of all the units.
+     * of the selected unit(s).
      */
     if(wordIndex == (numClearWords - 1)) {
-      controlWord |= ID_LOAD_LAST_WORD;
-      XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
+      set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
     }
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), SRLCXXE_CLEARING_WORD);
   }
+}
 
-  /* De-select all of the match units */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_NONE);
+/* Clears all of the match units within the passed instance */
+static void clear_all_matchers(struct audio_depacketizer *depacketizer) {
+  /* Ascertain that the configuration logic is ready, then clear all in one shot */
+  wait_match_config(depacketizer);
+  select_matchers(depacketizer, SELECT_ALL, 0);
+  clear_selected_matchers(depacketizer);
+  select_matchers(depacketizer, SELECT_NONE, 0);
+}
+
+/* Updates an entry in the match vector table, using the synchronized write
+ * mechanism to make sure the operation is safe even if the engine is running
+ * and the match unit is in use.
+ */
+static int32_t update_match_vector(struct audio_depacketizer *depacketizer,
+                                   uint32_t matchUnit,
+                                   uint32_t matchVector) {
+  uintptr_t vectorAddress;
+  uint32_t vectorWord;
+
+  /* 
+   * Locate the unit's vector in the relocatable table and write it.  Match vectors
+   * are packed in sixteen-bit pairs, in little-endian order, so we must maintain the
+   * "neighbor" value.
+   */
+  vectorAddress = XIo_In32(REGISTER_ADDRESS(depacketizer, VECTOR_BAR_REG));
+  vectorAddress += (matchUnit / MATCH_VECTORS_PER_WORD);
+  vectorAddress = (MICROCODE_RAM_BASE(depacketizer) + (vectorAddress * sizeof(uint32_t)));
+  vectorWord = XIo_In32(vectorAddress);
+  if(matchUnit % MATCH_VECTORS_PER_WORD) {
+    vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_EVEN_SHIFT);
+    vectorWord |= (matchVector << MATCH_VECTOR_ODD_SHIFT);
+  } else {
+    vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_ODD_SHIFT);
+    vectorWord |= (matchVector << MATCH_VECTOR_EVEN_SHIFT);
+  }
+  
+  /* Now modify the vector table itself.  An interlock is used here to ensure that
+   * the engine isn't just about to access the vector table as we're modifying it
+   * in what is potentially a different clock domain.
+   */
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
+  XIo_Out32(vectorAddress, vectorWord);
+  return(await_synced_write(depacketizer));
+}
+
+/* Loads truth tables into a selected SRLC16E-based match unit */
+static void load_srlc16e_matcher(struct audio_depacketizer *depacketizer,
+                                 uint64_t matchStreamId) {
+  int32_t lutIndex;
+  uint32_t configWord = 0x00000000;
+  uint32_t matchChunk;
+  bool loadLutPair = false;
+        
+  for(lutIndex = (NUM_SRLC16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+    configWord <<= 16;
+    matchChunk = ((matchStreamId >> (lutIndex * 4)) & 0x0F);
+    configWord |= (0x01 << matchChunk);
+    if(loadLutPair) {
+      /* Assert the "load last word" flag on the last word we're going to load
+       * for the configuration; this will re-enable the match unit as soon as
+       * the last bit of the word has been shifted into it.
+       */
+      if(lutIndex == 0) {
+        set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
+      }
+      XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
+      wait_match_config(depacketizer);
+    }
+    loadLutPair = !loadLutPair;
+  }
+}
+
+/* Loads truth tables into a selected SRLC32E-based match unit */
+static void load_srlc32e_matcher(struct audio_depacketizer *depacketizer,
+                                 uint64_t matchStreamId) {
+  int32_t lutIndex;
+  uint32_t configWord;
+  uint32_t matchChunk;
+  
+  for(lutIndex = (NUM_SRLC32E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+    matchChunk = ((matchStreamId >> (lutIndex * 5)) & 0x01F);
+    configWord = (0x01 << matchChunk);
+
+    /* Assert the "load last word" flag as per the comment in SRLC16E above */
+    if(lutIndex == 0) set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
+    wait_match_config(depacketizer);
+  }
 }
 
 /* Configures one of the passed instance's match units */
 static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
                                  MatcherConfig *matcherConfig) {
-  uint32_t selectionWord;
-  uintptr_t vectorAddress;
-  uint32_t vectorWord;
-  uint32_t matchUnit;
-  uint32_t controlWord;
   int32_t returnValue = 0;
 
   /* Sanity-check the input structure */
-  matchUnit = matcherConfig->matchUnit;
-  if(matchUnit >= MAX_CONCURRENT_STREAMS) return(-EINVAL);
-
-  /* Initially clear the "last word" flag to suppress false matches which might
-   * otherwise occur while the unit is only partially configured.
-   */
-  controlWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
-  controlWord &= ~ID_LOAD_LAST_WORD;
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
-
-  /* Ascertain that the configuration logic is ready, then select the matcher */
-  wait_match_config(depacketizer);
-  selectionWord = ((matchUnit < 32) ? (0x01 << matchUnit) : ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), selectionWord);
-  selectionWord = (((matchUnit < 64) & (matchUnit > 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), selectionWord);
-  selectionWord = (((matchUnit < 96) & (matchUnit > 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), selectionWord);
-  selectionWord = ((matchUnit > 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), selectionWord);
+  if(matcherConfig->matchUnit >= MAX_CONCURRENT_STREAMS) return(-EINVAL);
 
   /* If we are activating the match unit, we must first ensure that the match unit
    * is disabled, then update the matcher's entry in the vector table
    */
   switch(matcherConfig->configAction) {
   case MATCHER_ENABLE:
-    /* Since the match unit is selected in the map and the "last word" flag is clear,
-     * writing a word of nonsense will deactivate it.  Even though an interlock will
-     * be used to actually modify the vector table, we don't want to vector off to the
-     * new location if a subsequent match occurs at an old configured stream ID.
-     */
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), 0x00000000);
+    /* Ascertain that the configuration logic is ready, then select the matcher */
     wait_match_config(depacketizer);
+    select_matchers(depacketizer, SELECT_SINGLE, matcherConfig->matchUnit);
 
-    /* Fall through to the vector relocation case */
-
-  case MATCHER_RELOCATE:
-    /* 
-     * Locate the unit's vector in the relocatable table and write it.  Match vectors
-     * are packed in sixteen-bit pairs, in little-endian order, so we must maintain the
-     * "neighbor" value.
+    /* First clear the match unit to disable any old configuration, then update the vector
+     * table to point to the descriptor for the stream and configure the new match ID
      */
-    vectorAddress = XIo_In32(REGISTER_ADDRESS(depacketizer, VECTOR_BAR_REG));
-    vectorAddress += (matchUnit / MATCH_VECTORS_PER_WORD);
-    vectorAddress = (MICROCODE_RAM_BASE(depacketizer) + (vectorAddress * sizeof(uint32_t)));
-    vectorWord = XIo_In32(vectorAddress);
-    if(matchUnit % MATCH_VECTORS_PER_WORD) {
-      vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_EVEN_SHIFT);
-      vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_ODD_SHIFT);
-    } else {
-      vectorWord &= (MATCH_VECTOR_MASK << MATCH_VECTOR_ODD_SHIFT);
-      vectorWord |= (matcherConfig->matchVector << MATCH_VECTOR_EVEN_SHIFT);
-    }
+    clear_selected_matchers(depacketizer);
+    returnValue = update_match_vector(depacketizer, matcherConfig->matchUnit, 
+                                      matcherConfig->matchVector);
 
-    /* Now modify the vector table itself.  An interlock is used here even though it
-     * isn't possible for the match unit we're working on to have matched and still
-     * be accessing the vector table - but A) its "neighbor" vector may be, and B)
-     * some architectures have constraints on write-while-read across clock domains
-     * for a *range* of block RAM addresses, not just a single location!
+    /* Don't activate the match unit if there was a problem with the vector load */
+    if(returnValue == 0) {
+      /* Set the loading mode to disable as we load the first word */
+      set_matcher_loading_mode(depacketizer, LOADING_MORE_WORDS);
+      
+      /* Calculate matching truth tables for the LUTs and load them */
+      switch(depacketizer->matchArchitecture) {
+      case STREAM_MATCH_SRLC16E:
+        load_srlc16e_matcher(depacketizer, matcherConfig->matchStreamId);
+        break;
+      
+      case STREAM_MATCH_SRLC32E:
+        load_srlc32e_matcher(depacketizer, matcherConfig->matchStreamId);
+        break;
+      
+      default:
+        /* Unrecognized architecture, do nothing */
+        ;
+      } /* switch(match architecture) */
+    } /* if(vector relocation okay) */
+
+    /* De-select the match unit */
+    select_matchers(depacketizer, SELECT_NONE, 0);
+    break;
+
+  case MATCHER_DISABLE:
+    /* Deactivate the match unit.  Ascertain that the configuration logic is ready, 
+     * then select the matcher and clear it
      */
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
-    XIo_Out32(vectorAddress, vectorWord);
-    returnValue = await_synced_write(depacketizer);
+    wait_match_config(depacketizer);
+    select_matchers(depacketizer, SELECT_SINGLE, matcherConfig->matchUnit);
+    clear_selected_matchers(depacketizer);
+    select_matchers(depacketizer, SELECT_NONE, 0);
     break;
 
   default:
-    // Do nothing for deactivation at this stage
-    ;
+    /* Bad parameter */
+    returnValue = -EINVAL;
   }
-
-  /* Don't activate the match unit if there was a problem with the vector load,
-   * or if we're only being asked to relocate its vector
-   */
-  if((returnValue == 0) & (matcherConfig->configAction != MATCHER_RELOCATE)) {
-    /* Calculate matching truth tables for the LUTs and load them */
-    switch(depacketizer->matchArchitecture) {
-    case STREAM_MATCH_SRLC16E:
-      {
-        int32_t lutIndex;
-        uint32_t configWord = 0x00000000;
-        uint32_t matchChunk;
-        bool loadLutPair = false;
-        
-        for(lutIndex = (NUM_SRLC16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
-          configWord <<= 16;
-          matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 4)) & 0x0F);
-          if(matcherConfig->configAction == MATCHER_ENABLE) {
-            configWord |= (0x01 << matchChunk);
-          }
-          if(loadLutPair) {
-            /* Assert the "load last word" flag on the last word we're going to load
-             * for the configuration; this will re-enable the match unit as soon as
-             * the last bit of the word has been shifted into it.
-             */
-            if(lutIndex == 0) {
-              controlWord |= ID_LOAD_LAST_WORD;
-              XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
-            }
-            XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
-            wait_match_config(depacketizer);
-          }
-          loadLutPair = !loadLutPair;
-        }
-      }
-      break;
-      
-    case STREAM_MATCH_SRLC32E:
-      {
-        int32_t lutIndex;
-        uint32_t configWord;
-        uint32_t matchChunk;
-        
-        for(lutIndex = (NUM_SRLC32E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
-          matchChunk = ((matcherConfig->matchStreamId >> (lutIndex * 5)) & 0x01F);
-          configWord = ((matcherConfig->configAction == MATCHER_ENABLE) ? 
-                        (0x01 << matchChunk) : SRLCXXE_CLEARING_WORD);
-          /* Assert the "load last word" flag as per the comment in SRLC16E above */
-          if(lutIndex == 0) {
-            controlWord |= ID_LOAD_LAST_WORD;
-            XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), controlWord);
-          }
-          XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
-          wait_match_config(depacketizer);
-        }
-      }
-      break;
-      
-    default:
-      ;
-    }
-  }
-
-  /* De-select all of the match units */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), ID_SELECT_NONE);
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), ID_SELECT_NONE);
 
   return(returnValue);
+}
+
+/* Relocates a match unit to point to a new descriptor.  This is done safely
+ * and dynamically to permit shuffling of microcode around while the engine
+ * is active and receiving AVBTP packets.
+ */
+static int32_t relocate_matcher(struct audio_depacketizer *depacketizer,
+                                MatcherRelocation *matcherRelocation) {
+  uint32_t relocationWord;
+  int32_t returnValue = 0;
+
+  /* Sanity-check the input structure */
+  if(matcherRelocation->matchUnit >= MAX_CONCURRENT_STREAMS) return(-EINVAL);
+
+  /* The match unit is being dynamically relocated to point to a new descriptor.
+   * Some state information such as the audio cache ring offset cannot be captured,
+   * copied to a new location in microcode RAM, and pointed to atomically.  The
+   * engine may receive a packet on the stream while the host processor is copying
+   * the descriptor, and when pointed to the new location, the stale state information
+   * would be used again, dropping samples.
+   *
+   * To avoid this, we use the gateware's "relocation mode" facility; the hardware
+   * is requested to host the state for the single stream into dedicated registers.
+   */
+
+  /* Place the match unit into relocation mode, having the engine grab the ring
+   * buffer offset at the location where it presently exists.  This is performed
+   * with a synchronized write to the relocation register to ensure the state
+   * capture occurs when the engine is idle.
+   */
+  relocationWord = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK);
+  relocationWord |= ((matcherRelocation->oldVector + matcherRelocation->ringStateOffset) << 
+                     RELOCATION_ADDRESS_SHIFT);
+  relocationWord |= RELOCATION_ACTIVE;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, RELOCATE_REG), relocationWord);
+  returnValue = await_synced_write(depacketizer);
+  if(returnValue) goto relocate_fail;
+
+  /* Now that the stream is in relocation mode, we can safely reconfigure the vector
+   * table to jump to the new location, even if the code the application copied there
+   * has a now-stale ring buffer offset stored in it - the engine won't use it.
+   */
+  returnValue = update_match_vector(depacketizer, matcherRelocation->matchUnit, 
+                                    matcherRelocation->newVector);
+  if(returnValue) goto relocate_fail;
+
+  /* The match unit is now vectoring to the new location, but the stream is still
+   * in relocation mode using a dedicated register.  Take it out of relocation mode,
+   * causing the engine to commit the present value of the ring offset counter into
+   * its new home, where it will be used from now on.
+   */
+  relocationWord = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK);
+  relocationWord |= ((matcherRelocation->newVector + matcherRelocation->ringStateOffset) << 
+                     RELOCATION_ADDRESS_SHIFT);
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, RELOCATE_REG), relocationWord);
+  returnValue = await_synced_write(depacketizer);
+
+ relocate_fail:
+    return(returnValue);
 }
 
 /* Sets the base address of the match vector table; all subsequent calls to configure
@@ -399,7 +509,8 @@ static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
  */
 static void set_vector_base_address(struct audio_depacketizer *depacketizer,
                                     uint32_t vectorBaseAddress) {
-  clear_matchers(depacketizer);
+  /* Clear the matchers, the set the BAR */
+  clear_all_matchers(depacketizer);
   XIo_Out32(REGISTER_ADDRESS(depacketizer, VECTOR_BAR_REG), vectorBaseAddress);
 }
 
@@ -460,7 +571,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
 static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
   /* Disable the instance and all of its match units */
   disable_depacketizer(depacketizer);
-  clear_matchers(depacketizer);
+  clear_all_matchers(depacketizer);
   set_vector_base_address(depacketizer, 0x00000000);
 }
 
@@ -580,7 +691,7 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
     break;
 
   case IOC_CLEAR_MATCHERS:
-    clear_matchers(depacketizer);
+    clear_all_matchers(depacketizer);
     break;
 
   case IOC_CONFIG_MATCHER:
@@ -588,6 +699,14 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
       MatcherConfig matcherConfig;
       if(copy_from_user(&matcherConfig, (void __user*)arg, sizeof(matcherConfig)) != 0) return(-EFAULT);
       returnValue = configure_matcher(depacketizer, &matcherConfig);
+    }
+    break;
+
+  case IOC_RELOCATE_MATCHER:
+    {
+      MatcherRelocation matcherRelocation;
+      if(copy_from_user(&matcherRelocation, (void __user*)arg, sizeof(matcherRelocation)) != 0) return(-EFAULT);
+      returnValue = relocate_matcher(depacketizer, &matcherRelocation);
     }
     break;
 
