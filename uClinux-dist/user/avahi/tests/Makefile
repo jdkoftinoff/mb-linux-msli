@@ -401,7 +401,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/c_plus_plus_test-c-plus-plus-test.Po
+-include ./$(DEPDIR)/c_plus_plus_test-c-plus-plus-test.Po
 
 .cc.o:
 	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

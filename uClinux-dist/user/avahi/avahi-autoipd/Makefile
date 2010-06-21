@@ -373,12 +373,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/avahi_autoipd-iface-bsd.Po
-include ./$(DEPDIR)/avahi_autoipd-iface-linux.Po
-include ./$(DEPDIR)/avahi_autoipd-main.Po
-include ./$(DEPDIR)/avahi_autoipd-malloc.Po
-include ./$(DEPDIR)/avahi_autoipd-setproctitle.Po
-include ./$(DEPDIR)/avahi_autoipd-timeval.Po
+-include ./$(DEPDIR)/avahi_autoipd-iface-bsd.Po
+-include ./$(DEPDIR)/avahi_autoipd-iface-linux.Po
+-include ./$(DEPDIR)/avahi_autoipd-main.Po
+-include ./$(DEPDIR)/avahi_autoipd-malloc.Po
+-include ./$(DEPDIR)/avahi_autoipd-setproctitle.Po
+-include ./$(DEPDIR)/avahi_autoipd-timeval.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
