@@ -73,14 +73,17 @@ static int labx_dma_ioctl_cdev(struct inode *inode, struct file *filp,
 
 	return labx_dma_ioctl(&dma_pdev->dma, command, arg);
 }
+
+static const struct file_operations labx_dma_fops = {
+	.open = labx_dma_open,
+	.ioctl = labx_dma_ioctl_cdev,
+};
+
 #ifdef CONFIG_OF
-
-static int __exit labx_dma_pdev_remove(struct platform_device *pdev);
-
-static int labx_dma_pdev_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
-    struct resource r_mem_struct;
-    struct resource *addressRange = &r_mem_struct;
+	struct resource r_mem_struct;
+	struct resource *addressRange = &r_mem_struct;
 	struct labx_dma_pdev *dma_pdev;
 	int ret;
 	int i;
@@ -88,10 +91,10 @@ static int labx_dma_pdev_of_probe(struct of_device *ofdev, const struct of_devic
 
   	printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 	/* Obtain the resources for this instance */
-	rc = of_address_to_resource(ofdev->node,0,addressRange);
-	if (rc) {
-		dev_warn(&ofdev->dev,"invalid address\n");
-		return rc;
+	ret = of_address_to_resource(ofdev->node, 0, addressRange);
+	if (ret) {
+		dev_warn(&ofdev->dev, "invalid address\n");
+		return ret;
 	}
 
 	/* Create and populate a device structure */
@@ -151,31 +154,29 @@ free:
 	kfree(dma_pdev);
 	return ret;
 }
-static int __devexit labx_dma_pdev_of_remove(struct of_device *dev)
+
+static int __exit labx_dma_pdev_remove(struct platform_device *pdev);
+
+static int __devexit labx_dma_of_remove(struct of_device *dev)
 {
 	struct platform_device *pdev = to_platform_device(&dev->dev);
 	labx_dma_pdev_remove(pdev);
 	return(0);
 }
 
-static struct of_device_id labx_dma_pdev_of_match[] = {
+static struct of_device_id labx_dma_of_match[] = {
 	{ .compatible = "xlnx,labx-local-audio-1.00.a", },
 	{ .compatible = "xlnx,labx-dma-1.00.a", },
 	{ /* end of list */ },
 };
 
-static struct of_platform_driver of_labx_dma_pdev_driver = {
+static struct of_platform_driver labx_dma_of_driver = {
 	.name		= DRIVER_NAME,
-	.match_table	= packetizer_of_match,
-	.probe		= audio_packetizer_of_probe,
-	.remove		= __devexit_p(labx_dma_pdev_of_remove),
+	.match_table	= labx_dma_of_match,
+	.probe		= labx_dma_of_probe,
+	.remove		= __devexit_p(labx_dma_of_remove),
 };
-#endif
-
-static const struct file_operations labx_dma_fops = {
-	.open = labx_dma_open,
-	.ioctl = labx_dma_ioctl_cdev,
-};
+#endif /* CONFIG_OF */
 
 static int labx_dma_pdev_probe(struct platform_device *pdev)
 {
@@ -282,7 +283,7 @@ static int __init labx_dma_driver_init(void)
   int returnValue;
 
 #ifdef CONFIG_OF
-  returnValue = of_register_platform_driver(&of_labx_dma_pdev_driver);
+  returnValue = of_register_platform_driver(&labx_dma_of_driver);
 #endif
  
   /* Register as a platform device driver */

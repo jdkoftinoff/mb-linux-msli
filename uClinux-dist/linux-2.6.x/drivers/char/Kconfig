@@ -1093,6 +1093,17 @@ config TELCLOCK
 	  /sys/devices/platform/telco_clock, with a number of files for
 	  controlling the behavior of this hardware.
 
+config LABX_DMA
+	bool "Lab X DMA Coprocessor support"
+	help
+	  Select this to enable support for DMA Coprocessor hardware.
+
+config LABX_DMA_CDEV
+	bool "Lab X DMA Coprocessor character device"
+	depends on LABX_DMA
+	help
+	  Select this to enable a misc device node to use for talking to DMA Coprocessor hardware.
+
 config DEVPORT
 	bool
 	depends on !M68K

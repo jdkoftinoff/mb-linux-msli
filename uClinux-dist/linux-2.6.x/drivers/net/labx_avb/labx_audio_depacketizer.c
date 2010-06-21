@@ -748,7 +748,9 @@ static int audio_depacketizer_probe(const char *name,
   depacketizer->opened = false;
 
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
-  depacketizer->dma.virtualAddress = depacketizer->virtualAddress + LABX_DMA_MEMORY_OFFSET;
+  /* There are 4 address blocks in the depacketizer, each sized the same as the instruction RAM (which is 4 bytes wide).
+   * DMA is selected with the next bit up in the address */
+  depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
  
   labx_dma_probe(&depacketizer->dma); 
 #endif

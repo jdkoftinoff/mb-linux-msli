@@ -106,6 +106,10 @@ obj-$(CONFIG_IPMI_HANDLER)	+= ipmi/
 obj-$(CONFIG_HANGCHECK_TIMER)	+= hangcheck-timer.o
 obj-$(CONFIG_TCG_TPM)		+= tpm/
 
+obj-$(CONFIG_LABX_DMA)          += labx_dma.o
+obj-$(CONFIG_LABX_DMA_CDEV)     += labx_dma_cdev.o
+EXTRA_CFLAGS	+= -I$(TOPDIR)/drivers/xilinx_common
+
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
 obj-$(CONFIG_JS_RTC)		+= js-rtc.o

@@ -130,11 +130,6 @@
   ((uintptr_t)device->virtualAddress |           \
    (MICROCODE_RANGE << device->regionShift))
 
-#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
-/* DMA registers start 8K bytes into the depacketizer address space */
-#  define LABX_DMA_MEMORY_OFFSET 16384
-#endif
-
 /* Maximum number of streams the depacketizer can architecturally handle */
 #define MAX_CONCURRENT_STREAMS  128
 
