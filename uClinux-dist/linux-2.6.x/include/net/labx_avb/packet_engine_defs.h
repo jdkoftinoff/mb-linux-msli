@@ -102,7 +102,7 @@ typedef struct {
 #  define DOMAIN_DISABLED  (0x00)
 #  define DOMAIN_ENABLED   (0x01)
 
-#define IOC_CONFIG_CLOCK_DOMAIN      _IOW('d', 0x12, ClockDomainSettings)
+#define IOC_CONFIG_CLOCK_DOMAIN      _IOW('d', 0x13, ClockDomainSettings)
 
 typedef struct {
   uint32_t versionMajor;
@@ -110,12 +110,23 @@ typedef struct {
   uint32_t maxInstructions;
   uint32_t maxTemplateBytes;
   uint32_t maxClockDomains;
+  uint32_t shaperFractionBits;
 } PacketizerCaps;
 
-#define IOC_GET_PACKETIZER_CAPS      _IOR('d', 0x13, PacketizerCaps)
+#define IOC_GET_PACKETIZER_CAPS      _IOR('d', 0x14, PacketizerCaps)
 
-#define IOC_SET_PRESENTATION_OFFSET  _IOW('d', 0x14, uint32_t)
+#define IOC_SET_PRESENTATION_OFFSET  _IOW('d', 0x15, uint32_t)
 #  define PRESENTATION_OFFSET_MASK  (0x001FFFFF)
+
+typedef struct {
+  int32_t  idleSlope;
+  int32_t  sendSlope;
+  uint32_t enabled;
+} CreditShaperSettings;
+#  define CREDIT_SHAPER_DISABLED (0x00)
+#  define CREDIT_SHAPER_ENABLED  (0x01)
+
+#define IOC_CONFIG_CREDIT_SHAPER     _IOW('d', 0x16, CreditShaperSettings)
 
 /* Type definitions and macros for packetizer microcode */
 
@@ -416,6 +427,10 @@ typedef struct {
 #define DEPACKETIZER_PARAM_SOURCE_TS_MODULUS   (0x04)
 #define DEPACKETIZER_PARAM_SOURCE_RING_OFFSET  (0x05)
 
+/* Number of bits in a timestamp interval mask */
+#define DEPACKETIZER_SYT_MASK_BITS   (5)
+#define DEPACKETIZER_SYT_MASK_SHIFT  (32 - DEPACKETIZER_SYT_MASK_BITS)
+
 /* Returns a NOP instruction
  * This instruction, not surprisingly, simply consumes a cycle with no side-effects.
  */
@@ -512,10 +527,14 @@ typedef struct {
 #define DEPACKETIZER_INITIALIZE_SEQUENCE  ((uint32_t) (0x01 << AVBTP_SEQUENCE_NUMBER_BITS))
 
 /* Returns an instruction word containing a ring buffer offset, useful for allocating a location
- * for storing the present offset into a clock domain's ring buffers.
+ * for storing the present offset into a clock domain's ring buffers.  This also encodes
+ * the SYT interval mask used for calculating the sample modulus for packets with a valid
+ * timestamp.
  *
- * @param ringOffset - Starting offset for the stream
+ * @param ringOffset  - Starting offset for the stream
+ * @param sytInterval - Timestamp interval used for the clock domain
  */
-#define DEPACKETIZER_RING_OFFSET_WORD(ringOffset)  ((uint32_t) ringOffset)
+#define DEPACKETIZER_RING_OFFSET_WORD(ringOffset, sytInterval) \
+  (((sytInterval - 1) << DEPACKETIZER_SYT_MASK_SHIFT) | ((uint32_t) ringOffset))
 
 #endif

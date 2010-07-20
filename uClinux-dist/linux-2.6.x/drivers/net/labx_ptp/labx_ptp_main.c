@@ -304,9 +304,9 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     {
       PtpCoefficients c;
 
-      c.P = ptp->rtcPCoefficient;
-      c.I = ptp->rtcICoefficient;
-      c.D = ptp->rtcDCoefficient;
+      c.P = ptp->coefficients.P;
+      c.I = ptp->coefficients.I;
+      c.D = ptp->coefficients.D;
 
       if(copy_to_user((void __user*)arg, &c, sizeof(c)) != 0) {
         return(-EFAULT);
@@ -322,9 +322,9 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
 
-      ptp->rtcPCoefficient = c.P;
-      ptp->rtcICoefficient = c.I;
-      ptp->rtcDCoefficient = c.D;
+      ptp->coefficients.P = c.P;
+      ptp->coefficients.I = c.I;
+      ptp->coefficients.D = c.D;
     }
     break;
 
@@ -343,235 +343,22 @@ static struct file_operations ptp_device_fops = {
   .owner   = THIS_MODULE,
 };
 
-
-#ifdef CONFIG_OF
-static int ptp_remove(struct platform_device *pdev);
-
-static u32 get_u32(struct of_device *ofdev, const char *s) {
-	u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
-	if(p) {
-		return *p;
-	} else {
-		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to 0.\n", s);
-		return 0;
-	}
-}
-static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
-{
-  struct ptp_device *ptp;
-  uint32_t versionWord;
-  uint32_t versionMajor;
-  uint32_t versionMinor;
-  int returnValue;
-  int byteIndex;
-  PtpClockQuality *quality;
-  int rc=0;
-
-  struct resource r_mem_struct;
-  struct resource *addressRange = &r_mem_struct;
-  struct resource r_irq_struct;
-  struct resource *r_irq = &r_irq_struct;	/* Interrupt resources */
-  struct platform_device *pdev = to_platform_device(&ofdev->dev);
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
-
-  /* Obtain the resources for this instance */
-  rc = of_address_to_resource(ofdev->node,0,addressRange);
-  if (rc) {
-	  dev_warn(&ofdev->dev,"invalid address\n");
-	  return rc;
-  }
-
-  /* Get IRQ for the device */
-  rc = of_irq_to_resource(ofdev->node, 0, r_irq);
-  if(rc == NO_IRQ) {
-    dev_warn(&ofdev->dev, "no IRQ found.\n");
-    return rc;
-  }
-
-  /* Create and populate a device structure */
-  ptp = (struct ptp_device*) kmalloc(sizeof(struct ptp_device), GFP_KERNEL);
-  if(!ptp) return(-ENOMEM);
-
-  /* Request and map the device's I/O memory region into uncacheable space */
-  ptp->physicalAddress = addressRange->start;
-  ptp->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
-  ptp->name[NAME_MAX_SIZE - 1] = '\0';
-  if(request_mem_region(ptp->physicalAddress, ptp->addressRangeSize,
-                        ptp->name) == NULL) {
-    returnValue = -ENOMEM;
-    goto free;
-  }
-
-  ptp->virtualAddress = 
-    (void*) ioremap_nocache(ptp->physicalAddress, ptp->addressRangeSize);
-  if(!ptp->virtualAddress) {
-    returnValue = -ENOMEM;
-    goto release;
-  }
-
-  /* Inspect and check the version */
-  versionWord = XIo_In32(REGISTER_ADDRESS(ptp, PTP_REVISION_REG));
-  versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
-  versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != HARDWARE_VERSION_MINOR)) {
-    printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
-           ptp->name, versionMajor, versionMinor, (uint32_t)ptp->physicalAddress);
-    returnValue = -ENXIO;
-    goto unmap;
-  }
-
-  /* Ensure that the interrupts are disabled */
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_IRQ_MASK_REG), PTP_NO_IRQS);
-
-  /* Retain the IRQ and register our handler */
-  ptp->irq = r_irq->start;
-  returnValue = request_irq(ptp->irq, &labx_ptp_interrupt, IRQF_DISABLED, "Lab X PTP", ptp);
-  if (returnValue) {
-    printk(KERN_ERR "%s: : Could not allocate Lab X PTP interrupt (%d).\n",
-           ptp->name, ptp->irq);
-    goto unmap;
-  }
-  ptp->pendingTxFlags = PTP_TX_BUFFER_NONE;
-
-  /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d\n", 
-         ptp->name,
-         HARDWARE_VERSION_MAJOR,
-         HARDWARE_VERSION_MINOR,
-         (uint32_t)ptp->physicalAddress,
-         ptp->irq);
-
-  /* Initialize other resources */
-  spin_lock_init(&ptp->mutex);
-  ptp->opened = false;
-
-  /* Provide navigation from the platform device structure */
-  platform_set_drvdata(pdev, ptp);
-
-  /* Add as a character device to make the instance available for use */
-  cdev_init(&ptp->cdev, &ptp_device_fops);
-  ptp->cdev.owner = THIS_MODULE;
-  kobject_set_name(&ptp->cdev.kobj, "%s%d", pdev->name, pdev->id);
-  ptp->instanceNumber = instanceCount++;
-  cdev_add(&ptp->cdev, MKDEV(DRIVER_MAJOR, ptp->instanceNumber), 1);
-
-  /* Configure the prescaler and divider used to generate a 10 msec event timer.
-   * The register values are terminal counts, so are one less than the count value.
-   */
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_TIMER_REG), 
-            (((get_u32(ofdev,"xlnx,timer-prescaler") - 1) & PTP_PRESCALER_MASK) |
-             (((get_u32(ofdev,"xlnx,timer-divider") - 1) & PTP_DIVIDER_MASK) << PTP_DIVIDER_SHIFT)));
-
-  /* Assign the MAC transmit and receive latency
-   * TODO: The MAC latency should be specified as a platform resource!
-   */
-
-  /* Configure defaults and initialize the transmit templates */
-  quality = &ptp->properties.grandmasterClockQuality;
-  for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
-    ptp->properties.sourceMacAddress[byteIndex] = DEFAULT_SOURCE_MAC[byteIndex];
-  }
-  ptp->properties.domainNumber         = DEFAULT_DOMAIN_NUM;
-  ptp->properties.currentUtcOffset     = DEFAULT_UTC_OFFSET;
-  ptp->properties.grandmasterPriority1 = DEFAULT_GRANDMASTER_PRIORITY1;
-  quality->clockClass                  = DEFAULT_CLOCK_CLASS;
-  quality->clockAccuracy               = DEFAULT_CLOCK_ACCURACY;
-  quality->offsetScaledLogVariance     = DEFAULT_SCALED_LOG_VARIANCE;
-  ptp->properties.grandmasterPriority2 = DEFAULT_GRANDMASTER_PRIORITY2;
-  ptp->properties.timeSource           = DEFAULT_TIME_SOURCE;
-
-  ptp->properties.grandmasterIdentity[0] = DEFAULT_SOURCE_MAC[0];
-  ptp->properties.grandmasterIdentity[1] = DEFAULT_SOURCE_MAC[1];
-  ptp->properties.grandmasterIdentity[2] = DEFAULT_SOURCE_MAC[2];
-  ptp->properties.grandmasterIdentity[3] = 0xFF;
-  ptp->properties.grandmasterIdentity[4] = 0xFE;
-  ptp->properties.grandmasterIdentity[5] = DEFAULT_SOURCE_MAC[3];
-  ptp->properties.grandmasterIdentity[6] = DEFAULT_SOURCE_MAC[4];
-  ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
-
-
-  ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
-  init_tx_templates(ptp);
-
-  /* Configure the instance's RTC control loop based on data provided by
-   * the platform when it defines the device.
-   */
-  ptp->nominalIncrement.mantissa = get_u32(ofdev,"xlnx,nominal-increment-mantissa");
-  ptp->nominalIncrement.fraction = get_u32(ofdev,"xlnx,nominal-increment-fraction");
-  ptp->rtcPCoefficient = get_u32(ofdev,"xlnx,rtc-p-coefficient");
-  ptp->rtcICoefficient = get_u32(ofdev,"xlnx,rtc-i-coefficient");
-  ptp->rtcDCoefficient = get_u32(ofdev,"xlnx,rtc-d-coefficient");
-
-  /* Register for network device events */
-  ptp->notifier.notifier_call = ptp_device_event;
-
-  if (register_netdevice_notifier(&ptp->notifier) != 0)
-  {
-    /* TODO: anything to do if we can't register for events? */
-  }
-
-  /* Return success */
-  return(0);
-
- unmap:
-  iounmap(ptp->virtualAddress);
- release:
-  release_mem_region(ptp->physicalAddress, ptp->addressRangeSize);
- free:
-  kfree(ptp);
-  return(returnValue);
-
-}
-
-static int __devexit ptp_of_remove(struct of_device *dev)
-{
-	struct platform_device *pdev = to_platform_device(&dev->dev);
-	ptp_remove(pdev);
-	return(0);
-}
-
-static struct of_device_id ptp_of_match[] = {
-	{ .compatible = "xlnx,labx-ptp-1.00.a", },
-	{ /* end of list */ },
-};
-
-MODULE_DEVICE_TABLE(of, ptp_of_match);
-
-static struct of_platform_driver of_ptp_driver = {
-	.name		= DRIVER_NAME,
-	.match_table	= ptp_of_match,
-	.probe		= ptp_of_probe,
-	.remove		= __devexit_p(ptp_of_remove),
-};
-#endif // CONFIG_OF
-
-
-/*
- * Platform device hook functions
+/* Common, factored-out function which provides the "meat" of the probe
+ * functionality regardless of how it is invoked.
  */
-
-/* Probe for registered devices */
-static int ptp_probe(struct platform_device *pdev)
+static int ptp_probe(const char *name,
+                     struct platform_device *pdev,
+                     struct resource *addressRange,
+                     struct resource *irq,
+                     PtpPlatformData *platformData)
 {
-  struct resource *addressRange;
   struct ptp_device *ptp;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
   int returnValue;
-  int irq;
   int byteIndex;
   PtpClockQuality *quality;
-  PtpPlatformData *platformData;
-
-  /* Obtain the resources for this instance */
-  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-  irq = platform_get_irq(pdev, 0);
-  if (!addressRange || (irq < 0))
-    return -ENXIO;
 
   /* Create and populate a device structure */
   ptp = (struct ptp_device*) kmalloc(sizeof(struct ptp_device), GFP_KERNEL);
@@ -580,7 +367,7 @@ static int ptp_probe(struct platform_device *pdev)
   /* Request and map the device's I/O memory region into uncacheable space */
   ptp->physicalAddress = addressRange->start;
   ptp->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
   ptp->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(ptp->physicalAddress, ptp->addressRangeSize,
                         ptp->name) == NULL) {
@@ -611,7 +398,7 @@ static int ptp_probe(struct platform_device *pdev)
   XIo_Out32(REGISTER_ADDRESS(ptp, PTP_IRQ_MASK_REG), PTP_NO_IRQS);
 
   /* Retain the IRQ and register our handler */
-  ptp->irq = irq;
+  ptp->irq = irq->start;
   returnValue = request_irq(ptp->irq, &labx_ptp_interrupt, IRQF_DISABLED, "Lab X PTP", ptp);
   if (returnValue) {
     printk(KERN_ERR "%s: : Could not allocate Lab X PTP interrupt (%d).\n",
@@ -641,9 +428,6 @@ static int ptp_probe(struct platform_device *pdev)
   kobject_set_name(&ptp->cdev.kobj, "%s%d", pdev->name, pdev->id);
   ptp->instanceNumber = instanceCount++;
   cdev_add(&ptp->cdev, MKDEV(DRIVER_MAJOR, ptp->instanceNumber), 1);
-
-  /* Get a pointer to platform data provided specific to the board */
-  platformData = (PtpPlatformData*) pdev->dev.platform_data;
 
   /* Configure the prescaler and divider used to generate a 10 msec event timer.
    * The register values are terminal counts, so are one less than the count value.
@@ -688,9 +472,9 @@ static int ptp_probe(struct platform_device *pdev)
    */
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
-  ptp->rtcPCoefficient = platformData->rtcPCoefficient;
-  ptp->rtcICoefficient = platformData->rtcICoefficient;
-  ptp->rtcDCoefficient = platformData->rtcDCoefficient;
+  ptp->coefficients.P = platformData->coefficients.P;
+  ptp->coefficients.I = platformData->coefficients.I;
+  ptp->coefficients.D = platformData->coefficients.D;
 
   /* Register for network device events */
   ptp->notifier.notifier_call = ptp_device_event;
@@ -710,6 +494,102 @@ static int ptp_probe(struct platform_device *pdev)
  free:
   kfree(ptp);
   return(returnValue);
+}
+
+#ifdef CONFIG_OF
+static int ptp_remove(struct platform_device *pdev);
+
+static u32 get_u32(struct of_device *ofdev, const char *s) {
+	u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+	if(p) {
+		return *p;
+	} else {
+		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to 0.\n", s);
+		return 0;
+	}
+}
+static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+{
+  struct resource r_mem_struct;
+  struct resource *addressRange = &r_mem_struct;
+  struct resource r_irq_struct;
+  struct resource *irq = &r_irq_struct;
+  struct platform_device *pdev = to_platform_device(&ofdev->dev);
+  PtpPlatformData platformData;
+  int rc = 0;
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
+
+  /* Obtain the resources for this instance */
+  rc = of_address_to_resource(ofdev->node,0,addressRange);
+  if (rc) {
+	  dev_warn(&ofdev->dev,"invalid address\n");
+	  return rc;
+  }
+
+  /* Get IRQ for the device */
+  rc = of_irq_to_resource(ofdev->node, 0, irq);
+  if(rc == NO_IRQ) {
+    dev_warn(&ofdev->dev, "no IRQ found.\n");
+    return rc;
+  }
+
+  /* Consult the device tree for other required parameters */
+  platformData.timerPrescaler            = get_u32(ofdev,"xlnx,timer-prescaler");
+  platformData.timerDivider              = get_u32(ofdev,"xlnx,timer-divider");
+  platformData.nominalIncrement.mantissa = get_u32(ofdev,"xlnx,nominal-increment-mantissa");
+  platformData.nominalIncrement.fraction = get_u32(ofdev,"xlnx,nominal-increment-fraction");
+  platformData.coefficients.P            = get_u32(ofdev,"xlnx,rtc-p-coefficient");
+  platformData.coefficients.I            = get_u32(ofdev,"xlnx,rtc-i-coefficient");
+  platformData.coefficients.D            = get_u32(ofdev,"xlnx,rtc-d-coefficient");
+
+  /* Dispatch to the common probe function */
+  return(ptp_probe(ofdev->node->name, pdev, addressRange, irq, &platformData));
+}
+
+static int __devexit ptp_of_remove(struct of_device *dev)
+{
+	struct platform_device *pdev = to_platform_device(&dev->dev);
+	ptp_remove(pdev);
+	return(0);
+}
+
+static struct of_device_id ptp_of_match[] = {
+	{ .compatible = "xlnx,labx-ptp-1.00.a", },
+	{ /* end of list */ },
+};
+
+MODULE_DEVICE_TABLE(of, ptp_of_match);
+
+static struct of_platform_driver of_ptp_driver = {
+	.name		= DRIVER_NAME,
+	.match_table	= ptp_of_match,
+	.probe		= ptp_of_probe,
+	.remove		= __devexit_p(ptp_of_remove),
+};
+#endif // CONFIG_OF
+
+
+/*
+ * Platform device hook functions
+ */
+
+static int ptp_probe_platform(struct platform_device *pdev)
+{
+  struct resource *addressRange;
+  struct resource *irq;
+  PtpPlatformData *platformData;
+
+  /* Obtain the resources for this instance */
+  addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+  irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+  if (!addressRange | !irq) return -ENXIO;
+
+  /* Get a pointer to platform data provided specific to the board */
+  platformData = (PtpPlatformData*) pdev->dev.platform_data;
+
+  /* Dispatch to the common probe function */
+  return(ptp_probe(pdev->name, pdev, addressRange, irq, platformData));
 }
 
 static int ptp_remove(struct platform_device *pdev)
@@ -732,7 +612,7 @@ static int ptp_remove(struct platform_device *pdev)
 
 /* Platform device driver structure */
 static struct platform_driver ptp_driver = {
-  .probe  = ptp_probe,
+  .probe  = ptp_probe_platform,
   .remove = ptp_remove,
   .driver = {
     .name = DRIVER_NAME,
