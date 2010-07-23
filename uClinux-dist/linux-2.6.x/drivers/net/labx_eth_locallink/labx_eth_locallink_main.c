@@ -162,6 +162,9 @@ MODULE_PARM_DESC(macaddr, "MAC address to set");
  * ask for enough extra space for this.
  */
 struct net_local {
+	struct phy_device *phy_dev;
+	char phy_name[64];
+
 	struct list_head rcv;
 	struct list_head xmit;
 
@@ -389,7 +392,7 @@ static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 				     u32 RegisterNum, u16 *PhyDataPtr)
 {
 	unsigned long flags;
@@ -399,7 +402,7 @@ static inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 				      u32 RegisterNum, u16 PhyData)
 {
 	unsigned long flags;
@@ -480,7 +483,7 @@ typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
  * when we get into such deep trouble that we don't know how to handle
  * otherwise.
  */
-static void reset(struct net_device *dev, u32 line_num)
+void reset(struct net_device *dev, u32 line_num)
 {
 	struct net_local *lp = netdev_priv(dev);
 	u32 TxThreshold, TxWaitBound, RxThreshold, RxWaitBound;
@@ -722,6 +725,11 @@ static irqreturn_t xenet_dma_tx_interrupt(int irq, void *dev_id)
 	}
 	return IRQ_HANDLED;
 }
+static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
+{
+	printk("%s: I DO NOTHING, Should I ?\n",__func__);
+}
+
 
 /*
  * Q:
@@ -859,7 +867,28 @@ static int xenet_open(struct net_device *dev)
 
     /* Perform PHY setup using the platform-supplied hook method */
 
-    if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
+    // if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
+	printk("%s: About to connect (if needed) to phy device\n",__func__);
+	if (lp->phy_dev == NULL) {
+	   /* Lookup phy device */
+	   lp->phy_dev = phy_connect(lp->ndev,lp->phy_name,labx_eth_ll_mac_adjust_link,
+			   					 0,PHY_INTERFACE_MODE_MII);
+		if(!IS_ERR(lp->phy_dev)) {
+			int ret;
+			printk("%s: About to call phy_start_aneg()\n",__func__);
+			ret = phy_start_aneg(lp->phy_dev);
+			if (0 != ret) {
+				printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
+			}
+			else {
+				printk("%s: phy_start_aneg() Passed\n",__func__);
+			}
+
+		} else {
+			printk("Not able to find Phy");
+		}
+   }
+
 
 	/* Enable interrupts  - no polled mode */
 	if (XLlTemac_IsFifo(&lp->Emac)) { /* fifo direct interrupt driver mode */
@@ -2818,6 +2847,7 @@ static int xtenet_setup(
 	lp->dma_irq_r = pdata->ll_dev_dma_rx_irq;
 	lp->dma_irq_s = pdata->ll_dev_dma_tx_irq;
 	lp->fifo_irq = pdata->ll_dev_fifo_irq;
+	strncpy(lp->phy_name,pdata->phy_name,64);
 
 	/* Setup the Config structure for the XLlTemac_CfgInitialize() call. */
 	Temac_Config.BaseAddress = r_mem->start;
@@ -3097,6 +3127,15 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 		return FALSE;
 	}
 }
+static char * get_str(struct of_device *ofdev, const char *s) {
+	char *p = (char *)of_get_property(ofdev->node, s, NULL);
+	if(p) {
+		return p;
+	} else {
+		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
+		return NULL;
+	}
+}
 static struct of_device_id xtenet_fifo_of_match[] = {
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.a", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.b", },
@@ -3123,11 +3162,17 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct resource *r_irq = &r_irq_struct;	/* Interrupt resources */
 	struct resource *r_mem = &r_mem_struct;	/* IO mem resources */
 	struct labx_eth_platform_data *pdata = &pdata_struct;
+	struct device_node *parent = of_get_parent(ofdev->node);
     const void *mac_address;
 	int rc = 0;
 	const phandle *llink_connected_handle;
 	struct device_node *llink_connected_node;
 	u32 *dcrreg_property;
+	char *mdio_ctrl_str=NULL;
+	u32 phy_addr;
+
+	struct net_device *ndev = NULL;
+	struct net_local *lp = NULL;
 
 	printk(KERN_INFO "Device Tree Probing \'%s\'\n",ofdev->node->name);
 
@@ -3148,6 +3193,12 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	pdata_struct.tx_csum		= get_u32(ofdev, "xlnx,txcsum");
 	pdata_struct.rx_csum		= get_u32(ofdev, "xlnx,rxcsum");
 	pdata_struct.phy_type       = get_u32(ofdev, "xlnx,phy-type");
+	mdio_ctrl_str				= get_str(ofdev,"phy-mdio-controller");
+	phy_addr					= get_u32(ofdev,"xlnx,phy-addr");
+
+	// snprintf(pdata->phy_name,64,"%s:%d",mdio_ctrl_str,phy_addr);
+	snprintf(pdata->phy_name,64,"%s:%d",parent->name,phy_addr);
+	printk("%s:phy_name: %s\n",__func__,pdata->phy_name); 
 
     llink_connected_handle = of_get_property(ofdev->node, "llink-connected", NULL);
     if(!llink_connected_handle) {
@@ -3232,9 +3283,24 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
         } else {
             dev_warn(&ofdev->dev, "No MAC address found.\n");
         }
+		
+        rc = xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);
+		if (rc) {
+			printk("Error calling xtenet_setup, code: %d\n",rc);
+		}
 
-        return xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);
+#if 1
+		ndev = dev_get_drvdata(&ofdev->dev);
+		lp = netdev_priv(ndev);
+		rc = labx_eth_ll_mdio_probe(ofdev,&lp->Emac,pdata);
+		if (rc) {
+			printk("Error calling mdio_probe, code: %d\n",rc);
+		}
+#endif
+		return rc;
 }
+
+
 
 static int __devexit xtenet_of_remove(struct of_device *dev)
 {

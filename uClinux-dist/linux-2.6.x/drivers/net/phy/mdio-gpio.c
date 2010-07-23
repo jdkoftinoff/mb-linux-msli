@@ -218,6 +218,8 @@ static int __devinit mdio_ofgpio_probe(struct of_device *ofdev,
                 goto out_free;
 	pdata->mdio = ret;
 
+	pdata->phy_mask = (1<<PHY_MAX_ADDR)-1;
+
 	while ((np = of_get_next_child(ofdev->node, np)))
 		if (!strcmp(np->type, "ethernet-phy"))
 			add_phy(pdata, np);
