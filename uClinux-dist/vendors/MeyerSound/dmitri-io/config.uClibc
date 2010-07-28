@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Version: 0.9.30.2
+# Thu Jun  3 22:40:37 2010
 #
 # TARGET_alpha is not set
 # TARGET_arm is not set
@@ -34,6 +35,7 @@ TARGET_microblaze=y
 TARGET_ARCH="microblaze"
 FORCE_OPTIONS_FOR_ARCH=y
 ARCH_SUPPORTS_BIG_ENDIAN=y
+CROSS_COMPILER_PREFIX="mb-"
 TARGET_SUBARCH=""
 # UCLIBC_FORMAT_ELF is not set
 # UCLIBC_FORMAT_FDPIC_ELF is not set
@@ -134,11 +136,10 @@ UCLIBC_HAS_CTYPE_SIGNED=y
 UCLIBC_HAS_CTYPE_UNSAFE=y
 # UCLIBC_HAS_CTYPE_CHECKED is not set
 # UCLIBC_HAS_CTYPE_ENFORCED is not set
-# UCLIBC_HAS_WCHAR is not set
+UCLIBC_HAS_WCHAR=y
 # UCLIBC_HAS_LOCALE is not set
 # UCLIBC_HAS_HEXADECIMAL_FLOATS is not set
 # UCLIBC_HAS_GLIBC_CUSTOM_PRINTF is not set
-# USE_OLD_VFPRINTF is not set
 UCLIBC_PRINTF_SCANF_POSITIONAL_ARGS=9
 # UCLIBC_HAS_SCANF_GLIBC_A_FLAG is not set
 # UCLIBC_HAS_STDIO_BUFSIZ_NONE is not set
@@ -200,7 +201,6 @@ UCLIBC_BUILD_NOEXECSTACK=y
 #
 # uClibc development/debugging options
 #
-CROSS_COMPILER_PREFIX="mb-"
 UCLIBC_EXTRA_CFLAGS=""
 # DODEBUG is not set
 # DODEBUG_PT is not set
