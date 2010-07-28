@@ -171,14 +171,6 @@ struct net_local {
 	struct net_device *ndev;	/* this device */
 	struct net_device *next_dev;	/* The next device in dev_list */
 	struct net_device_stats stats;	/* Statistics for this device */
-  struct task_struct *phy_thread;   /* Thread to respond to PHY */
-  wait_queue_head_t phy_irq_event;  /* Event triggered upon a PHY interrupt */
-  u32 phy_irq_count;
-  u32 phy_irq_handled;
-
-  /* Hook methods for the PHY */
-  PhyInitMethod phy_init;
-  PhyIsrMethod phy_isr;
 
 	u32 index;		/* Which interface is this */
 	u8 gmii_addr;		/* The GMII address of the PHY */
@@ -224,6 +216,8 @@ struct net_local {
 	unsigned long stripping;
 #endif
 };
+
+static void labx_eth_ll_mac_adjust_link(struct net_device *dev);
 
 u32 dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
 u32 dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
@@ -531,8 +525,18 @@ void reset(struct net_device *dev, u32 line_num)
 	 * before we move on */
 #endif
 
-    /* Perform PHY setup using the platform-supplied hook method */
-    if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
+	/* Perform PHY setup */
+	if (NULL != lp->phy_dev)
+	{
+		int ret;
+		printk("%s: About to call phy_start_aneg()\n",__func__);
+		ret = phy_start_aneg(lp->phy_dev);
+		if (0 != ret) {
+			printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
+		} else {
+			printk("%s: phy_start_aneg() Passed\n",__func__);
+		}
+	}
 
 	/*
 	 * The following four functions will return an error if the
@@ -725,11 +729,6 @@ static irqreturn_t xenet_dma_tx_interrupt(int irq, void *dev_id)
 	}
 	return IRQ_HANDLED;
 }
-static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
-{
-	printk("%s: I DO NOTHING, Should I ?\n",__func__);
-}
-
 
 /*
  * Q:
@@ -864,31 +863,25 @@ static int xenet_open(struct net_device *dev)
 		}
 	}
 
-
-    /* Perform PHY setup using the platform-supplied hook method */
-
-    // if(lp->phy_init != NULL) lp->phy_init(dev->name, (void*) lp);
+	/* Perform PHY setup using the platform-supplied hook method */
 	printk("%s: About to connect (if needed) to phy device\n",__func__);
 	if (lp->phy_dev == NULL) {
-	   /* Lookup phy device */
-	   lp->phy_dev = phy_connect(lp->ndev,lp->phy_name,labx_eth_ll_mac_adjust_link,
-			   					 0,PHY_INTERFACE_MODE_MII);
+		/* Lookup phy device */
+	     	lp->phy_dev = phy_connect(lp->ndev, lp->phy_name, &labx_eth_ll_mac_adjust_link,
+			0, PHY_INTERFACE_MODE_MII);
 		if(!IS_ERR(lp->phy_dev)) {
 			int ret;
 			printk("%s: About to call phy_start_aneg()\n",__func__);
 			ret = phy_start_aneg(lp->phy_dev);
 			if (0 != ret) {
 				printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
-			}
-			else {
+			} else {
 				printk("%s: phy_start_aneg() Passed\n",__func__);
 			}
-
 		} else {
 			printk("Not able to find Phy");
 		}
-   }
-
+	}
 
 	/* Enable interrupts  - no polled mode */
 	if (XLlTemac_IsFifo(&lp->Emac)) { /* fifo direct interrupt driver mode */
@@ -1974,11 +1967,15 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 
 	memset(ecmd, 0, sizeof(struct ethtool_cmd));
 
-	mac_options = XLlTemac_GetOptions(&(lp->Emac));
-	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &gmii_cmd);
-	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &gmii_status);
+	/* Check to be sure we found a PHY */
+	if (NULL == lp->phy_dev) {
+		return -ENODEV;
+	}
 
-	_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_ADVERTISE, &gmii_advControl);
+	mac_options = XLlTemac_GetOptions(&(lp->Emac));
+	gmii_cmd = phy_read(lp->phy_dev, MII_BMCR);
+	gmii_status = phy_read(lp->phy_dev, MII_BMSR);
+	gmii_advControl = phy_read(lp->phy_dev, MII_ADVERTISE);
 
 	ecmd->duplex = DUPLEX_FULL;
 
@@ -2182,12 +2179,17 @@ xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
 	struct mac_regsDump *dump = (struct mac_regsDump *) regs;
 	int i;
 
+	if (NULL == lp->phy_dev) {
+		*(int*)ret = -ENODEV;
+		return;
+	}
+
 	dump->hd.version = 0;
 	dump->hd.len = sizeof(dump->data);
 	memset(dump->data, 0, sizeof(dump->data));
 
 	for (i = 0; i < EMAC_REGS_N; i++) {
-		_XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, i, &(dump->data[i]));
+		dump->data[i] = phy_read(lp->phy_dev, i);
 	}
 
 	*(int *) ret = 0;
@@ -2493,31 +2495,15 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	switch (cmd) {
 	case SIOCETHTOOL:
 		return xenet_do_ethtool_ioctl(dev, rq);
+
 	case SIOCGMIIPHY:	/* Get address of GMII PHY in use. */
-	case SIOCDEVPRIVATE:	/* for binary compat, remove in 2.5 */
-		data->phy_id = lp->gmii_addr;
-		/* Fall Through */
-
 	case SIOCGMIIREG:	/* Read GMII PHY register. */
-	case SIOCDEVPRIVATE + 1:	/* for binary compat, remove in 2.5 */
-		if (data->phy_id > 31 || data->reg_num > 31)
-			return -ENXIO;
-
-		_XLlTemac_PhyRead(&lp->Emac, data->phy_id, data->reg_num,
-				  &data->val_out);
-		return 0;
-
 	case SIOCSMIIREG:	/* Write GMII PHY register. */
-	case SIOCDEVPRIVATE + 2:	/* for binary compat, remove in 2.5 */
-		if (!capable(CAP_NET_ADMIN))
-			return -EPERM;
+		if (NULL == lp->phy_dev) {
+			return -ENODEV;
+		}
 
-		if (data->phy_id > 31 || data->reg_num > 31)
-			return -ENXIO;
-
-		_XLlTemac_PhyWrite(&lp->Emac, data->phy_id, data->reg_num,
-				   data->val_in);
-		return 0;
+		return phy_mii_ioctl(lp->phy_dev, data, cmd);
 
 	case SIOCDEVPRIVATE + 3:	/* set THRESHOLD */
 		if (XLlTemac_IsFifo(&lp->Emac))
@@ -2648,124 +2634,26 @@ static int xtenet_remove(struct device *dev)
 	return 0;		/* success */
 }
 
-/* Detect the PHY address by scanning addresses 0 to 31 and
- * looking at the MII status register (register 1) and assuming
- * the PHY supports 10Mbps full/half duplex. Feel free to change
- * this code to match your PHY, or hardcode the address if needed.
- */
-/* Use MII register 1 (MII status register) to detect PHY */
-#define PHY_DETECT_REG  1
-
-/* Mask used to verify certain PHY features (or register contents)
- * in the register above:
- *  0x1000: 10Mbps full duplex support
- *  0x0800: 10Mbps half duplex support
- *  0x0008: Auto-negotiation support
- */
-//#define PHY_DETECT_MASK 0x1808
-
-/* FIXME JW The Vitesse PHY with our ebc701 CMODE register values doesn't
-  report it's 10/100/1000 capabiltiies until it gets an SGMII link with the
-  MGT.  But, we need the PHY address to do this setup.
-
-  So, hack the detect mask down to what is reported by the PHY even when in
-  "cold boot" mode, so we at least find it.
-
-  A better long term solution is required here
-*/
-#define PHY_DETECT_MASK 0x0149
-
-void phy_reg_scan(struct net_local *lp, u32 phy_addr)
+static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
 {
-	u16 phy_reg;
-	int i;
-
-	printk("Scanning phy address %i",phy_addr);
-	for(i=0;i<32; i++) {
-		_XLlTemac_PhyRead(&lp->Emac, phy_addr, i,&phy_reg);
-		if(!(i%4))
-			printk("\n");
-		printk("%d:  0x%08x   ",i,phy_reg);
-	}
-	printk("\n------------------\n");
-
-}
-
-static int detect_phy(struct net_local *lp, char *dev_name)
-{
-	u16 phy_reg;
-	u32 phy_addr;
-
-	/* Try the assigned PHY first */
-	if (lp->Emac.Config.PhyAddr != 0) {
-		phy_addr = lp->Emac.Config.PhyAddr;
-		_XLlTemac_PhyRead(&lp->Emac, phy_addr, PHY_DETECT_REG, &phy_reg);
-		if ((phy_reg != 0xFFFF) &&
-		    ((phy_reg & PHY_DETECT_MASK) == PHY_DETECT_MASK)) {
-			/* Found a valid PHY address */
-          printk(KERN_INFO "labx_eth_llink: Assigned PHY detected at address %d.\n", phy_addr);
-			return phy_addr;
+	struct net_local *lp = netdev_priv(dev);
+	if (lp->phy_dev->link != PHY_DOWN)
+	{
+		if (lp->cur_speed != lp->phy_dev->speed)
+		{
+			XLlTemac_SetOperatingSpeed(&lp->Emac, lp->phy_dev->speed);
+			lp->cur_speed = lp->phy_dev->speed;
+			printk("%s: Link up, %d Mb/s\n", lp->ndev->name, lp->cur_speed);
 		}
 	}
-
-	for (phy_addr = 31; phy_addr > 0; phy_addr--) {
-
-		_XLlTemac_PhyRead(&lp->Emac, phy_addr, PHY_DETECT_REG, &phy_reg);
-		if ((phy_reg != 0xFFFF) &&
-		    ((phy_reg & PHY_DETECT_MASK) == PHY_DETECT_MASK)) {
-			/* Found a valid PHY address */
-          printk(KERN_INFO "labx_eth_llink: WARNING - Unassigned PHY detected at address %d.\n", phy_addr);
-			return phy_addr;
+	else
+	{
+		if (lp->cur_speed != 0)
+		{
+			lp->cur_speed = 0;
+			printk("%s: Link down\n", lp->ndev->name);
 		}
 	}
-
-	printk(KERN_WARNING "labx_eth_llink: No PHY detected.  Assuming a PHY at address 0x00\n");
-	return 0;		/* default to zero */
-}
-
-/* Thread function for PHY / MAC management */
-static int phy_thread_task(void *data) {
-  struct net_local *lp = (struct net_local *) data;
-
-  /* Endlessly loop, waiting on the PHY interrupt to occur */
-  while(1) {
-    wait_event_interruptible(lp->phy_irq_event, 
-                             (lp->phy_irq_count != lp->phy_irq_handled));
-    lp->phy_irq_handled = lp->phy_irq_count;
-
-    /* Invoke the platform-supplied ISR method for the specific PHY, if one
-     * was specified.
-     */
-    if(lp->phy_isr != NULL) {
-      u32 isr_code;
-      u16 link_speed;
-      isr_code = lp->phy_isr(lp->ndev->name, (void*) lp);
-      switch(isr_code) {
-      case LINK_UP_10_MBIT:
-        link_speed = 10;
-        break;
-      case LINK_UP_100_MBIT:
-        link_speed = 100;
-        break;
-      case LINK_UP_1_GBIT:
-        link_speed = 1000;
-        break;
-      default:
-        /* Assume LINK_DOWN */
-        link_speed = 0;
-        netif_carrier_off(lp->ndev);
-        printk("%s: Link down\n", lp->ndev->name);
-      }
-
-      /* Set the link speed and the MACs compatible operating mode */
-      if(link_speed > 0) {
-        XLlTemac_SetOperatingSpeed(&lp->Emac, link_speed);
-        lp->cur_speed = link_speed;
-        netif_carrier_on(lp->ndev);
-        printk("%s: Link up, %d Mb/s\n", lp->ndev->name, link_speed);
-      }
-    } /* if(PHY ISR available) */
-  }
 }
 
 void write_phy_register(void *portHandle, uint32_t regAddress, uint16_t writeData) {
@@ -2782,8 +2670,8 @@ uint16_t read_phy_register(void *portHandle, uint32_t regAddress) {
   return(phyReg);
 }
 
-/* PHY / MDIO interrupt service routine */
-static irqreturn_t phy_interrupt(int irq, void *dev_id)
+/* MDIO interrupt service routine */
+static irqreturn_t mdio_interrupt(int irq, void *dev_id)
 {
   struct net_local *lp = (struct net_local *) dev_id;
   XLlTemac *InstancePtr = (XLlTemac *) &lp->Emac;
@@ -2794,18 +2682,13 @@ static irqreturn_t phy_interrupt(int irq, void *dev_id)
   maskedFlags &= XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, INT_MASK_REG);
   XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, INT_FLAGS_REG, maskedFlags);
 
-  /* Service the MDIO and / or the PHY interrupt */
+  /* Service the MDIO interrupt */
   if((maskedFlags & MDIO_IRQ_MASK) != 0) {
     /* Indicate the MDIO is ready again */
     InstancePtr->MdioState = MDIO_STATE_READY;
     wake_up_interruptible(&InstancePtr->PhyWait);
   }
 
-  if((maskedFlags & PHY_IRQ_MASK) != 0) {
-    /* Awaken the PHY kernel thread to handle the interrupt with MDIO queries */
-    lp->phy_irq_count++;
-    wake_up_interruptible(&lp->phy_irq_event);
-  }
   return(IRQ_HANDLED);
 }
 
@@ -2826,7 +2709,6 @@ static int xtenet_setup(
 
 	int rc = 0;
 
-
 	/* Create an ethernet device instance */
 	ndev = alloc_etherdev(sizeof(struct net_local));
 	if (!ndev) {
@@ -2835,9 +2717,6 @@ static int xtenet_setup(
 		goto error;
 	}
 	dev_set_drvdata(dev, ndev);
-
-    /* Obtain the IRQ, which is used solely for PHY management */
-	ndev->irq = r_irq->start;
 
 	/* Initialize the private data used by XEmac_LookupConfig().
 	 * The private data are zeroed out by alloc_etherdev() already.
@@ -2863,10 +2742,6 @@ static int xtenet_setup(
 	Temac_Config.LLDevBaseAddress = pdata->ll_dev_baseaddress;
 	Temac_Config.PhyType = pdata->phy_type;
 	Temac_Config.PhyAddr = pdata->phy_addr;
-
-    /* Hang on to hook functions defined for the PHY */
-    lp->phy_init = pdata->phy_init;
-    lp->phy_isr = pdata->phy_isr;
 
 	/* Get the virtual base address for the device */
 	virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
@@ -3031,33 +2906,37 @@ static int xtenet_setup(
 		goto error;	/* rc is already set here... */
 	}
 
-    /* Register the ISR and enable interrupts */
-    init_waitqueue_head(&lp->Emac.PhyWait);
-    init_waitqueue_head(&lp->phy_irq_event);
-    lp->phy_irq_count = lp->phy_irq_handled = 0;
-    lp->phy_thread = kthread_run(&phy_thread_task, (void *)lp, "PhyThread");
-    lp->Emac.MdioState = MDIO_STATE_READY;
-    XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
-    rc = request_irq(ndev->irq, &phy_interrupt, IRQF_DISABLED, "Lab X Ethernet", lp);
-    if(rc) {
-      printk(KERN_ERR "%s: Could not allocate Lab X Ethernet MAC interrupt (%d).\n",
-             ndev->name, ndev->irq);
-      goto error;
-    }
-    XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-    XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, 
-                      (PHY_IRQ_FALLING | PHY_IRQ_MASK | MDIO_IRQ_MASK));
+	/* Setup MDIO IRQ handling */
+	if (NULL != r_irq) {
+		ndev->irq = r_irq->start;
+		rc = request_irq(ndev->irq, &mdio_interrupt, IRQF_DISABLED, "Lab X MDIO", lp);
+		if(rc) {
+			printk(KERN_ERR "%s: Could not allocate Lab X Ethernet MDIO interrupt (%d).\n",
+				ndev->name, ndev->irq);
+			goto error;
+		}
+	} else {
+		ndev->irq = NO_IRQ;
+	}
+	init_waitqueue_head(&lp->Emac.PhyWait);
+	lp->Emac.MdioState = MDIO_STATE_READY;
+	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
+	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
+	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
-	/** Scan to find the PHY */
-	lp->gmii_addr = detect_phy(lp, ndev->name);
+	lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
 	printk("%s: Lab X Tri-mode MAC at 0x%08X, IRQ %d using PHY at MDIO 0x%02X\n",
            ndev->name,
            r_mem->start,
-           r_irq->start,
+           ndev->irq,
            lp->gmii_addr);
 
-	return 0;
+	if (pdata->phy_mask != 0) {
+		return labx_eth_ll_mdio_bus_init(dev, pdata, &lp->Emac);
+	} else {
+		return 0;
+	}
 
 error:
 	if (ndev) {
@@ -3070,8 +2949,8 @@ static int xtenet_probe_thread(void *data)
 {
 	struct device *dev = (struct device *)data;
 
-	struct resource *r_irq = NULL;	/* Interrupt resources */
-	struct resource *r_mem = NULL;	/* IO mem resources */
+	struct resource *r_irq     = NULL; /* Interrupt resources */
+	struct resource *r_mem     = NULL; /* IO mem resources */
 	struct labx_eth_platform_data *pdata;
 	struct platform_device *pdev = to_platform_device(dev);
 
@@ -3091,21 +2970,18 @@ static int xtenet_probe_thread(void *data)
 	/* Get iospace and an irq for the device */
 	r_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if(!r_mem) {
-      dev_err(dev, "labx_eth_llink: IO resource MEM not found.\n");
-      return -ENODEV;
+		dev_err(dev, "labx_eth_llink: IO resource MEM not found.\n");
+		return -ENODEV;
 	}
-    r_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-    if(!r_irq) {
-      dev_err(dev, "labx_eth_llink: IO resource IRQ not found.\n");
-      return -ENODEV;
-	}
-    return(xtenet_setup(dev, r_mem, r_irq, pdata));
+	r_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+
+	return(xtenet_setup(dev, r_mem, r_irq, pdata));
 }
 
 
 static int xtenet_probe(struct device *dev)
 {
-	kthread_run(xtenet_probe_thread,dev,"xtenet_probe_thread");
+	kthread_run(xtenet_probe_thread, dev, "xtenet_probe_thread");
 	return 0;
 }
 
@@ -3127,15 +3003,7 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 		return FALSE;
 	}
 }
-static char * get_str(struct of_device *ofdev, const char *s) {
-	char *p = (char *)of_get_property(ofdev->node, s, NULL);
-	if(p) {
-		return p;
-	} else {
-		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
-		return NULL;
-	}
-}
+
 static struct of_device_id xtenet_fifo_of_match[] = {
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.a", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.b", },
@@ -3149,30 +3017,34 @@ static struct of_device_id xtenet_sdma_of_match[] = {
 	{ /* end of list */ },
 };
 
-
+/* Note: This must be <= MII_BUS_ID_SIZE which is currently 17 (including trailing '\0') */
+#define MDIO_OF_BUSNAME_FMT "labxeth%08x"
 
 static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
 	struct resource r_irq_struct;
+	struct resource r_irq_phy_struct;
 	struct resource r_mem_struct;
+	struct resource r_connected_mdio_mem_struct;
 	struct resource r_connected_mem_struct;
 	struct resource r_connected_irq_struct;
+	struct resource *r_irq     = &r_irq_struct;     /* Interrupt resources */
+	struct resource *r_irq_phy = &r_irq_phy_struct; /* Interrupt resources */
+	struct resource *r_mem     = &r_mem_struct;     /* IO mem resources */
+
 	struct labx_eth_platform_data pdata_struct = {};
 
-	struct resource *r_irq = &r_irq_struct;	/* Interrupt resources */
-	struct resource *r_mem = &r_mem_struct;	/* IO mem resources */
 	struct labx_eth_platform_data *pdata = &pdata_struct;
-	struct device_node *parent = of_get_parent(ofdev->node);
-    const void *mac_address;
+	const void *mac_address;
 	int rc = 0;
 	const phandle *llink_connected_handle;
 	struct device_node *llink_connected_node;
+	const phandle *mdio_controller_handle;
+	struct device_node *mdio_controller_node;
+	struct device_node *mdio_controller_node_eth;
 	u32 *dcrreg_property;
-	char *mdio_ctrl_str=NULL;
 	u32 phy_addr;
-
-	struct net_device *ndev = NULL;
-	struct net_local *lp = NULL;
+	int i;
 
 	printk(KERN_INFO "Device Tree Probing \'%s\'\n",ofdev->node->name);
 
@@ -3186,35 +3058,74 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	/* Get IRQ for the device */
 	rc = of_irq_to_resource(ofdev->node, 0, r_irq);
 	if(rc == NO_IRQ) {
-		dev_warn(&ofdev->dev, "no IRQ found.\n");
+		r_irq = NULL;
+	}
+
+	/* Get IRQ of the attached phy (if any) */
+	rc = of_irq_to_resource(ofdev->node, 1, r_irq_phy);
+	if(rc == NO_IRQ) {
+		r_irq_phy = NULL;
+	}
+
+	pdata_struct.tx_csum  = get_u32(ofdev, "xlnx,txcsum");
+	pdata_struct.rx_csum  = get_u32(ofdev, "xlnx,rxcsum");
+
+	/* Connected PHY information */
+	pdata_struct.phy_type = get_u32(ofdev, "xlnx,phy-type");
+	phy_addr              = get_u32(ofdev, "xlnx,phy-addr");
+
+	pdata->phy_name[0] = '\0';
+	mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-controller", NULL);
+	if(!mdio_controller_handle) {
+		dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+	} else {
+		mdio_controller_node = of_find_node_by_phandle(*mdio_controller_handle);
+		if (!mdio_controller_node) {
+			dev_warn(&ofdev->dev, "no MDIO connection found.\n");
+		} else {
+			/* The ethernet@xxxxxxxx should be the first child... */
+			mdio_controller_node_eth = of_get_next_child(mdio_controller_node, NULL);
+
+			if (!mdio_controller_node_eth) {
+				dev_warn(&ofdev->dev, "MDIO connection node has no ethernet child.\n");
+			} else {
+				rc = of_address_to_resource(mdio_controller_node_eth, 0, &r_connected_mdio_mem_struct);
+				snprintf(pdata->phy_name, BUS_ID_SIZE, MDIO_OF_BUSNAME_FMT ":%02x", (u32)r_connected_mdio_mem_struct.start, phy_addr);
+				printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
+			}
+		}
+	}
+
+	/* Connected MDIO bus information */
+	if (0 == get_u32(ofdev, "xlnx,has-mdio")) {
+		pdata_struct.phy_mask = 0;
+		pdata_struct.mdio_bus_name[0] = '\0';
+	} else {
+		pdata_struct.phy_mask = get_u32(ofdev, "xlnx,phy-mask");
+		snprintf(pdata_struct.mdio_bus_name, MII_BUS_ID_SIZE, MDIO_OF_BUSNAME_FMT, (u32)r_mem->start);
+	}
+
+	if (NULL != r_irq_phy) {
+		for (i=0; i<PHY_MAX_ADDR; i++) {
+			pdata_struct.mdio_phy_irqs[i] = r_irq_phy->start;
+		}
+	}
+
+	llink_connected_handle = of_get_property(ofdev->node, "llink-connected", NULL);
+	if(!llink_connected_handle) {
+		dev_warn(&ofdev->dev, "no Locallink connection found.\n");
 		return rc;
 	}
 
-	pdata_struct.tx_csum		= get_u32(ofdev, "xlnx,txcsum");
-	pdata_struct.rx_csum		= get_u32(ofdev, "xlnx,rxcsum");
-	pdata_struct.phy_type       = get_u32(ofdev, "xlnx,phy-type");
-	mdio_ctrl_str				= get_str(ofdev,"phy-mdio-controller");
-	phy_addr					= get_u32(ofdev,"xlnx,phy-addr");
-
-	// snprintf(pdata->phy_name,64,"%s:%d",mdio_ctrl_str,phy_addr);
-	snprintf(pdata->phy_name,64,"%s:%d",parent->name,phy_addr);
-	printk("%s:phy_name: %s\n",__func__,pdata->phy_name); 
-
-    llink_connected_handle = of_get_property(ofdev->node, "llink-connected", NULL);
-    if(!llink_connected_handle) {
-        dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-        return rc;
-    }
-
 	llink_connected_node = of_find_node_by_phandle(*llink_connected_handle);
 	if (!llink_connected_node) {
-        dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-        return rc;
-    }
+		dev_warn(&ofdev->dev, "no Locallink connection found.\n");
+		return rc;
+	}
 
 	rc = of_address_to_resource( llink_connected_node, 0, &r_connected_mem_struct);
 
-    /** Get the right information from whatever the locallink is connected to. */
+	/** Get the right information from whatever the locallink is connected to. */
 	if(of_match_node(xtenet_fifo_of_match, llink_connected_node)) {
 		/** Connected to a fifo. */
 		if(rc) {
@@ -3222,7 +3133,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 			return rc;
 		}
 
-	    pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
+		pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
 		pdata_struct.ll_dev_type = XPAR_LL_FIFO;
 		pdata_struct.ll_dev_dma_rx_irq	= NO_IRQ;
 		pdata_struct.ll_dev_dma_tx_irq	= NO_IRQ;
@@ -3235,7 +3146,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 		pdata_struct.ll_dev_fifo_irq	= r_connected_irq_struct.start;
 		pdata_struct.dcr_host = 0x0;
         } 
-		else if(of_match_node(xtenet_sdma_of_match, llink_connected_node)) {
+	else if(of_match_node(xtenet_sdma_of_match, llink_connected_node)) {
 		/** Connected to a dma port, default to 405 type dma */
 		pdata->dcr_host = 0;
 		if(rc) {
@@ -3252,17 +3163,17 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 			}			
 		}
 
-       	pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
+		pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
 		pdata_struct.ll_dev_type = XPAR_LL_DMA;
 
-		rc = of_irq_to_resource( llink_connected_node, 0, &r_connected_irq_struct);
+		rc = of_irq_to_resource(llink_connected_node, 0, &r_connected_irq_struct);
 		if(rc == NO_IRQ) {
 			dev_warn(&ofdev->dev, "First IRQ not found.\n");
 			return rc;
 		}
 		pdata_struct.ll_dev_dma_rx_irq	= r_connected_irq_struct.start;
 
-		rc = of_irq_to_resource( llink_connected_node, 1, &r_connected_irq_struct);
+		rc = of_irq_to_resource(llink_connected_node, 1, &r_connected_irq_struct);
 		if(rc == NO_IRQ) {
 			dev_warn(&ofdev->dev, "Second IRQ not found.\n");
 			return rc;
@@ -3276,7 +3187,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 		return rc;
         }
 
-		of_node_put(llink_connected_node);
+	of_node_put(llink_connected_node);
         mac_address = of_get_mac_address(ofdev->node);
         if(mac_address) {
             memcpy(pdata_struct.mac_addr, mac_address, 6);
@@ -3285,22 +3196,12 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
         }
 		
         rc = xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);
-		if (rc) {
-			printk("Error calling xtenet_setup, code: %d\n",rc);
-		}
+	if (rc) {
+		printk("Error calling xtenet_setup, code: %d\n", rc);
+	}
 
-#if 1
-		ndev = dev_get_drvdata(&ofdev->dev);
-		lp = netdev_priv(ndev);
-		rc = labx_eth_ll_mdio_probe(ofdev,&lp->Emac,pdata);
-		if (rc) {
-			printk("Error calling mdio_probe, code: %d\n",rc);
-		}
-#endif
-		return rc;
+	return rc;
 }
-
-
 
 static int __devexit xtenet_of_remove(struct of_device *dev)
 {

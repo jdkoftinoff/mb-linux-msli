@@ -459,6 +459,7 @@ typedef struct XLlTemac {
   u32 Flags;                 /* Internal driver flags */
   wait_queue_head_t PhyWait; /* Wait queue for PHY operations */
   u32 MdioState;             /* MDIO state */
+  struct mii_bus *mdio_bus;  /* MDIO bus driver instance */
 } XLlTemac;
 
 
@@ -780,7 +781,8 @@ void XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
-int labx_eth_ll_mdio_probe(struct of_device *ofdev, XLlTemac *Emac,struct labx_eth_platform_data *pdata);
+
+extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus
 }
 #endif
