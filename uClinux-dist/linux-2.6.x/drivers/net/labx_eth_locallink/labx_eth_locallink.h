@@ -266,6 +266,7 @@ extern "C" {
 #include "xbasic_types.h"
 #include "xstatus.h"
 #include "labx_eth_locallink_hw.h"
+#include "net/labx_ethernet/labx_ethernet_defs.h"
 #include <linux/interrupt.h>
 
 /************************** Constant Definitions *****************************/
@@ -458,6 +459,7 @@ typedef struct XLlTemac {
   u32 Flags;                 /* Internal driver flags */
   wait_queue_head_t PhyWait; /* Wait queue for PHY operations */
   u32 MdioState;             /* MDIO state */
+  struct mii_bus *mdio_bus;  /* MDIO bus driver instance */
 } XLlTemac;
 
 
@@ -780,6 +782,7 @@ int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
 
+extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus
 }
 #endif

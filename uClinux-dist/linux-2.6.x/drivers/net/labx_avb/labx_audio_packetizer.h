@@ -44,6 +44,8 @@
 
 /* Global control registers */
 #define CONTROL_REG       (0x000)
+#  define SHAPER_DISABLE      (0x00)
+#  define SHAPER_ENABLE       (0x02)
 #  define PACKETIZER_DISABLE  (0x00)
 #  define PACKETIZER_ENABLE   (0x01)
 
@@ -53,15 +55,22 @@
 
 #define IRQ_MASK_REG      (0x003)
 #define IRQ_FLAGS_REG     (0x004)
-#  define NO_IRQS   (0x00000000)
-#  define SYNC_IRQ  (0x00000001)
+#  define NO_IRQS      (0x00000000)
+#  define SYNC_IRQ     (0x00000001)
+#  define OVERRUN_IRQ  (0x00000002)
+#  define ALL_IRQS     (0x00000003)
 
 #define SYNC_REG          (0x005)
 #  define CANCEL_SYNC      (0x00000000)
 #  define SYNC_NEXT_WRITE  (0x00000001)
 #  define SYNC_PENDING     (0x80000000)
 
+#define SEND_SLOPE_REG    (0x006)
+#define IDLE_SLOPE_REG    (0x007)
+
 #define CAPABILITIES_REG  (0x0FE)
+#  define SHAPER_FRACT_BITS_SHIFT     (24)
+#  define SHAPER_FRACT_BITS_MASK      (0x07F)
 #  define CLOCK_DOMAINS_SHIFT         (16)
 #  define CLOCK_DOMAINS_MASK          (0x0FF)
 #  define TEMPLATE_ADDRESS_SHIFT      (8)

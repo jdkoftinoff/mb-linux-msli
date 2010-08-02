@@ -89,7 +89,7 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	int i;
   	struct platform_device *pdev = to_platform_device(&ofdev->dev);
 
-  	printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
+  	printk(KERN_INFO "Device Tree Probing \'%s\' %d (%s)\n", ofdev->node->name, pdev->id, ofdev->node->full_name);
 	/* Obtain the resources for this instance */
 	ret = of_address_to_resource(ofdev->node, 0, addressRange);
 	if (ret) {
@@ -104,7 +104,7 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
 			dma_pdev->name) == NULL) {

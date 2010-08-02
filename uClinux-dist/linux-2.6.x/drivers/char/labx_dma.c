@@ -142,7 +142,7 @@ static int free_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 static void copy_descriptor(struct labx_dma *dma,
                             DMAConfigWords *descriptor) {
   uint32_t wordIndex;
-  uint32_t wordAddress;
+  uintptr_t wordAddress;
 
   wordAddress = (DMA_MICROCODE_BASE(dma) + (descriptor->offset * sizeof(uint32_t)));
   for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {

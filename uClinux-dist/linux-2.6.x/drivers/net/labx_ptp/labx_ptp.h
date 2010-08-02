@@ -177,10 +177,8 @@ struct ptp_device {
   PtpProperties properties;
 
   /* RTC control loop constants */
-  RtcIncrement nominalIncrement;
-  int32_t rtcPCoefficient;
-  int32_t rtcICoefficient;
-  int32_t rtcDCoefficient;
+  RtcIncrement    nominalIncrement;
+  PtpCoefficients coefficients;
 
   /* RTC control loop persistent values */
   int64_t integral;

@@ -62,14 +62,22 @@ static uint32_t instanceCount;
 
 /* Disables the passed instance */
 static void disable_packetizer(struct audio_packetizer *packetizer) {
-  DBG("Disbling the packetizer\n");
-  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), PACKETIZER_DISABLE);
+  uint32_t controlRegister;
+
+  DBG("Disabling the packetizer\n");
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  controlRegister &= ~PACKETIZER_ENABLE;
+  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
 /* Enables the passed instance */
 static void enable_packetizer(struct audio_packetizer *packetizer) {
+  uint32_t controlRegister;
+
   DBG("Enabling the packetizer\n");
-  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), PACKETIZER_ENABLE);
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  controlRegister |= PACKETIZER_ENABLE;
+  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
 /* Resets the state of the passed instance */
@@ -78,7 +86,39 @@ static void reset_packetizer(struct audio_packetizer *packetizer) {
   disable_packetizer(packetizer);
 }
 
+/* Configures the credit-based shaper stage */
+static void configure_shaper(struct audio_packetizer *packetizer,
+                             uint32_t enabled, int32_t sendSlope,
+                             int32_t idleSlope) {
+  uint32_t controlRegister;
+  uint32_t irqMask;
 
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  if(enabled == CREDIT_SHAPER_ENABLED) {
+    /* Going to be enabling the shaper; re-arm the error IRQs associated with
+     * bandwidth problems.  This allows us to detect and subsequently report any
+     * problems arising from misconfiguration of the shaper, but not get slammed
+     * with ongoing interrupts.
+     */
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), OVERRUN_IRQ);
+    irqMask = XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG));
+    irqMask |= OVERRUN_IRQ;
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), irqMask);
+
+    /* The client is responsible for ensuring that the slopes are properly-scaled
+     * signed fractional quantities, per the number of fractional bits advertised
+     * in the capabilities register.  Writing to the idleSlope register triggers
+     * an atomic load of both slopes into the credit accumulator.
+     */
+    XIo_Out32(REGISTER_ADDRESS(packetizer, SEND_SLOPE_REG), sendSlope);
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IDLE_SLOPE_REG), idleSlope);
+    controlRegister |= SHAPER_ENABLE;
+  } else {
+    /* Simply disable the shaper, ignoring the slope parameters */
+    controlRegister &= ~SHAPER_ENABLE;
+  }
+  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+}
 
 /* Waits for a synchronized write to commit, using either polling or
  * an interrupt-driven waitqueue.
@@ -240,10 +280,12 @@ static void set_presentation_offset(struct audio_packetizer *packetizer,
 static irqreturn_t labx_audio_packetizer_interrupt(int irq, void *dev_id) {
   struct audio_packetizer *packetizer = (struct audio_packetizer*) dev_id;
   uint32_t maskedFlags;
+  uint32_t irqMask;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG));
-  maskedFlags &= XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG));
+  irqMask = XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG));
+  maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), maskedFlags);
 
   /* Detect the timer IRQ */
@@ -251,7 +293,23 @@ static irqreturn_t labx_audio_packetizer_interrupt(int irq, void *dev_id) {
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(packetizer->syncedWriteQueue));
   }
-  
+
+  /* Detect the shaper overrun IRQ */
+  if((maskedFlags & OVERRUN_IRQ) != 0) {  
+    /* TODO - We need to create an AVB event mechanism using kernel events, so
+     *        that they can be propagated up to the user API!!!
+     */
+    printk("%s: Packet overrun at output stage!\n", packetizer->name);
+
+    /* Disable the interrupt source to prevent ongoing interrupts; this indicates
+     * a systemic problem.  Either the bandwidth credit has been misconfigured, or
+     * something at the system level is taking strict priority over this credit-based
+     * shaping stage, which is not permitted.
+     */
+    irqMask &= ~OVERRUN_IRQ;
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), irqMask);
+  }
+
   return(IRQ_HANDLED);
 }
 
@@ -424,9 +482,20 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
       set_presentation_offset(packetizer, presentationOffset);
-      break;
     }
+    break;
       
+  case IOC_CONFIG_CREDIT_SHAPER:
+    {
+      CreditShaperSettings shaperSettings;
+      if(copy_from_user(&shaperSettings, (void __user*)arg, sizeof(shaperSettings)) != 0) {
+        return(-EFAULT);
+      }
+      configure_shaper(packetizer, shaperSettings.enabled, shaperSettings.sendSlope,
+                       shaperSettings.idleSlope);
+    }
+    break;
+
   default:
     return(-EINVAL);
   }
@@ -479,7 +548,9 @@ static int audio_packetizer_probe(const char *name,
     goto release;
   }
 
-  /* Ensure that the interrupts are disabled */
+  /* Ensure that the engine and its interrupts are disabled */
+  disable_packetizer(packetizer);
+  configure_shaper(packetizer, CREDIT_SHAPER_DISABLED, 0, 0);
   XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), NO_IRQS);
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
@@ -525,6 +596,7 @@ static int audio_packetizer_probe(const char *name,
   packetizer->capabilities.maxTemplateBytes = 
     (0x04 << ((capsWord >> TEMPLATE_ADDRESS_SHIFT) & TEMPLATE_ADDRESS_BITS_MASK));
   packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
+  packetizer->capabilities.shaperFractionBits = ((capsWord >> SHAPER_FRACT_BITS_SHIFT) & SHAPER_FRACT_BITS_MASK);
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X, ",
@@ -559,6 +631,7 @@ static int audio_packetizer_probe(const char *name,
 
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(packetizer->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), ALL_IRQS);
     XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), SYNC_IRQ);
   }
 

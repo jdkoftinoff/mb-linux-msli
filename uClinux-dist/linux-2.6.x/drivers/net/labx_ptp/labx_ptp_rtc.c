@@ -168,17 +168,17 @@ void rtc_update_servo(struct ptp_device *ptp) {
     newRtcIncrement |= (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
     
     /* Accumulate the proportional coefficient's contribution */
-    coefficient = (int64_t) ptp->rtcPCoefficient;
+    coefficient = (int64_t) ptp->coefficients.P;
     slaveOffsetExtended = (int64_t) slaveOffset;
     accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
 
     /* Accumulate the integral coefficient's contribution */
-    coefficient = (int64_t) ptp->rtcICoefficient;
+    coefficient = (int64_t) ptp->coefficients.I;
     ptp->integral += slaveOffsetExtended; /* TODO: Scale based on the time between syncs? */
     accumulator += ((coefficient * ptp->integral) >> COEFF_PRODUCT_SHIFT);
 
     /* Accumulate the derivitave coefficient's contribution */
-    coefficient = (int64_t) ptp->rtcDCoefficient;
+    coefficient = (int64_t) ptp->coefficients.D;
     ptp->derivative += (slaveOffset - ptp->previousOffset); /* TODO: Scale based on the time between syncs? */
     accumulator += ((coefficient * (int64_t)ptp->derivative) >> COEFF_PRODUCT_SHIFT);
     ptp->previousOffset = slaveOffset;

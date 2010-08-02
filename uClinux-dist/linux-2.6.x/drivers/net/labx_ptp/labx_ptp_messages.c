@@ -135,26 +135,28 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t txBuffer,
   /* Begin with the destination and source MAC addresses.
    * The following multicast MAC addresses are used for PTP:
    * Peer delay mechanism messages : 01-80-C2-00-00-0E
-   * All other messages            : 01-1B-19-00-00-00
+   * End to end delay mechanism    : 01-1B-19-00-00-00
+   *
+   * The multicast destination address used for the peer delay
+   * mechanism is borrowed from the 802.1D MAC Bridges Standard,
+   * and is classified as a MAC bridge filtered address.  Ethernet
+   * bridges will *not* relay these packets, making this only
+   * functional for 802.1AS-aware bridges.
    */
-  switch(messageType) {
-  case MSG_PDELAY_REQ:
-  case MSG_PDELAY_RESP:
-  case MSG_PDELAY_RESP_FUP:
-  default:
+  if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
+    /* Peer-to-peer (802.1AS) */
     write_packet(bufferBase, wordOffset, 0x0180C200);
     packetWord = 0x000E0000;
     packetWord |= (ptp->properties.sourceMacAddress[0] << 8);
     packetWord |= ptp->properties.sourceMacAddress[1];
     write_packet(bufferBase, wordOffset, packetWord);
-    break;
-#if 0
+  } else {
+    /* End-to-end (legacy PTP 2.0) */
     write_packet(bufferBase, wordOffset, 0x011B1900);
     packetWord = 0x00000000;
     packetWord |= (ptp->properties.sourceMacAddress[0] << 8);
     packetWord |= ptp->properties.sourceMacAddress[1];
     write_packet(bufferBase, wordOffset, packetWord);
-#endif
   }
   packetWord = (ptp->properties.sourceMacAddress[2] << 24);
   packetWord |= (ptp->properties.sourceMacAddress[3] << 16);

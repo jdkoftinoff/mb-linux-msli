@@ -184,8 +184,14 @@ static void copy_descriptor(struct audio_depacketizer *depacketizer,
  */
 static void wait_match_config(struct audio_depacketizer *depacketizer) {
   uint32_t statusWord;
+  uint32_t timeout = 10000;
   do {
     statusWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+    if (timeout-- == 0)
+    {
+      printk("depacketizer: wait_match_config timeout!\n");
+      break;
+    }
   } while(statusWord & ID_LOAD_ACTIVE);
 }
 
