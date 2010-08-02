@@ -165,7 +165,6 @@ static int __devexit labx_dma_of_remove(struct of_device *dev)
 }
 
 static struct of_device_id labx_dma_of_match[] = {
-	{ .compatible = "xlnx,labx-local-audio-1.00.a", },
 	{ .compatible = "xlnx,labx-dma-1.00.a", },
 	{ /* end of list */ },
 };
