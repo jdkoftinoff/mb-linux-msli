@@ -79,15 +79,16 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
 		case IOC_LA_SET_CHANNEL_MAPPING:
 		{
 			struct LocalAudioChannelMapping mapping;
-
 			if(copy_from_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
+                                printk("CFU failed\n");
 				return(-EFAULT);
 			}
 			
 			if (mapping.channel >= local_audio_pdev->numChannels) {
+                                printk("Channel check failed: %d, %d\n", mapping.channel, local_audio_pdev->numChannels);
 				return(-EINVAL);
 			}
-			
+
 			XIo_Out32(LOCAL_AUDIO_REGISTER_BASE(&local_audio_pdev->dma, LOCAL_AUDIO_CHANNEL_REG + mapping.channel),
 				 mapping.streams);
 		}
@@ -126,6 +127,16 @@ static const struct file_operations labx_local_audio_fops = {
 };
 
 #ifdef CONFIG_OF
+static u32 get_u32(struct of_device *ofdev, const char *s) {
+	u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+	if(p) {
+		return *p;
+	} else {
+		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
+		return FALSE;
+	}
+}
+
 static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
 	struct resource r_mem_struct;
@@ -166,6 +177,9 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
 		goto release;
 	}
 	//printk("DMA Virtual %p\n", local_audio_pdev->dma.virtualAddress);
+        //
+        local_audio_pdev->numChannels = get_u32(ofdev, "xlnx,num-i2s-streams") * 2;
+        printk("  Local Audio interface found with %d channels.\n", local_audio_pdev->numChannels);
 
 	local_audio_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
 	local_audio_pdev->miscdev.name = local_audio_pdev->name;

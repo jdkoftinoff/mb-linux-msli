@@ -54,7 +54,7 @@ struct labx_local_audio_pdev {
 
 #define LOCAL_AUDIO_REGISTER_BASE(dma, reg)                     \
   ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_REGISTER_RANGE << ((dma)->regionShift)) + reg))
+   ((LOCAL_AUDIO_REGISTER_RANGE << ((dma)->regionShift)) + ((reg)*4)))
 
 /* Register address and control field #defines */
 #define LOCAL_AUDIO_CHANNEL_REG 0x00
