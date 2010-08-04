@@ -1,7 +1,6 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
-# Tue Jul 27 13:22:57 2010
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -943,7 +942,7 @@ CONFIG_TRACING_SUPPORT=y
 # CONFIG_WORKQUEUE_TRACER is not set
 # CONFIG_BLK_DEV_IO_TRACE is not set
 # CONFIG_SAMPLES is not set
-# CONFIG_EARLY_PRINTK is not set
+CONFIG_EARLY_PRINTK=y
 # CONFIG_HEART_BEAT is not set
 # CONFIG_DEBUG_BOOTMEM is not set
 
