@@ -1104,6 +1104,12 @@ config LABX_DMA_CDEV
 	help
 	  Select this to enable a misc device node to use for talking to DMA Coprocessor hardware.
 
+config LABX_LOCAL_AUDIO
+	bool "Lab X Local Audio character device"
+	depends on LABX_DMA
+	help
+	  Select this to enable a misc device node to use for talking to Local Audio hardware.
+
 config DEVPORT
 	bool
 	depends on !M68K

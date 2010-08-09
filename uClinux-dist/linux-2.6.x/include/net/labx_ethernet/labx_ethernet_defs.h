@@ -47,24 +47,6 @@
 #define MAC_DMA_SIMPLE	2	/* simple 2 channel DMA */
 #define MAC_DMA_SGDMA	3	/* scatter gather DMA */
 
-/**
- * Prototype for a function used to initialize vendor-specific aspects
- * of an Ethernet port's PHY
- */
-typedef void (*PhyInitMethod)(const char* portName, void *portHandle);
-
-/**
- * Prototype for a function used to respond to interrupts from an
- * Ethernet port's PHY.  Called from within a kernel thread.
- */
-typedef uint32_t (*PhyIsrMethod)(const char* portName, void *portHandle);
-
-/* Return codes for the PHY ISR hook */
-#define LINK_DOWN         (0)
-#define LINK_UP_10_MBIT   (1)
-#define LINK_UP_100_MBIT  (2)
-#define LINK_UP_1_GBIT    (3)
-
 /* Platform device data structure */
 struct labx_eth_platform_data {
   uint8_t tx_csum;
@@ -81,15 +63,22 @@ struct labx_eth_platform_data {
   /* Default MAC address for the port */
   uint8_t mac_addr[6];
 
-  /* PHY type, address, and hook function definitions.  Hook functions
-   * may be set to NULL for no implementation.
+  /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
+   * These values are for the PHY connected to this instance.
    */
   uint8_t phy_type;
   uint8_t phy_addr;
-  PhyInitMethod phy_init;
-  PhyIsrMethod phy_isr;
+  char phy_name[BUS_ID_SIZE];
+
+  /* MDIO bus parameters.
+   * phy_mask is a bitmask of MDIO addresses to probe (1's get probed)
+   * mdio_bus_name is the name of the MDIO bus to register
+   * mdio_phy_irqs are the interrupts from PHYs on this MDIO bus
+   */
   uint32_t phy_mask;
-  char phy_name[64];
+  char mdio_bus_name[MII_BUS_ID_SIZE];
+  int mdio_phy_irqs[PHY_MAX_ADDR];
+
   void *rx_ring_ptr;		/* Pointer to RxRing buffer */
 };
 

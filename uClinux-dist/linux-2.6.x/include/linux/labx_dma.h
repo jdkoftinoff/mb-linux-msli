@@ -69,7 +69,7 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 
 #define DMA_REGISTER_ADDRESS(dma, offset)                    \
   ((uintptr_t)(dma)->virtualAddress |                          \
-   (DMA_REGISTER_RANGE << (dma)->regionShift) | (offset << 2))
+   (DMA_REGISTER_RANGE << (dma)->regionShift) | ((offset) << 2))
 
 #define DMA_MICROCODE_BASE(dma)                 \
   ((uintptr_t)(dma)->virtualAddress |           \

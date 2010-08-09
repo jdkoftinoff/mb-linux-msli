@@ -64,7 +64,7 @@ fi
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
 (
 cd "$GCC4_DIR" \
-&& bash build_binutils.sh && bash build_gcc.sh && bash build_gdb.sh
+&& bash build_binutils.sh && bash build_elf2flt.sh && bash build_gcc.sh && bash build_gdb.sh
 )||(
 echo "Build failed, see mb_gnu/build directory for logs"
 exit 1

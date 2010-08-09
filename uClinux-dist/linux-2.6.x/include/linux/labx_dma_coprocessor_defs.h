@@ -171,6 +171,14 @@ typedef enum
 
 } EDMAAddressFlags;
 
+/* Constants for the interlock flag */
+typedef enum
+{
+	eNoInterlock = 0,
+	eInterlock = 1,
+
+} EInterlock;
+
 /* Field ranges for opcode bits */
 #define DMA_OPCODE_SHIFT(config)             (DMA_INSTRUCTION_WIDTH - DMA_OPCODE_BITS)
 #define  DMA_INCREMENT_B_SHIFT(config)       (DMA_OPCODE_SHIFT(config) - 1)
@@ -191,6 +199,7 @@ typedef enum
 #define    DMA_INDEX_SELECT_2_SHIFT(config)  (DMA_SOURCE_SELECT_SHIFT(config) - config.indexSelectBits)
 #define    DMA_ALU_OPCODE_SHIFT(config)      (DMA_SOURCE_SELECT_SHIFT(config) - DMA_ALU_OPCODE_BITS)
 #define     DMA_ALU_SELECT_SHIFT(config)     (DMA_ALU_OPCODE_SHIFT(config) - config.aluSelectBits)
+#define      DMA_INTERLOCK_SHIFT(config)     (DMA_ALU_SELECT_SHIFT(config) - 1)
 #define DMA_CODE_ADDRESS_SHIFT(config)       (0)
 #define DMA_CACHE_ADDRESS_SHIFT(config)      (0)
 #define DMA_CACHE_ADDRESS_MASK(config)       (((1<<DMA_CACHE_ADDRESS_BITS)-1)<<DMA_CACHE_ADDRESS_SHIFT(config))
@@ -215,16 +224,18 @@ static inline DMAInstruction DMA_LOAD_INDEX(DMAConfiguration config, EDMAIndex i
   
 /* Returns a LOAD_INDEX_INDIRECT instruction */
 /* @param index_Select   - Index counter to use as an offset to the load address */
-/* @param source_Select - Which RAM block to load from */
+/* @param source_Select  - Which RAM block to load from */
 /* @param index_Select_2 - Selects which of the index counters to load */
 /* @param load_Address   - Base location to address the RAM block */
+/* @param interlock      - Hold the parameter interlock or not */
 static inline DMAInstruction DMA_LOAD_INDEX_INDIRECT(DMAConfiguration config, EDMAIndex index_Select,
-	EDMASource source_Select, EDMAIndex index_Select_2, uint32_t load_Address)
+	EDMASource source_Select, EDMAIndex index_Select_2, uint32_t load_Address, EInterlock interlock)
 {
 	return ((DMA_OPCODE_LOAD_INDEX_INDIRECT << DMA_OPCODE_SHIFT(config)) |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config))             |
 		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))           |
 		(index_Select_2 << DMA_INDEX_SELECT_2_SHIFT(config))         |
+		(interlock << DMA_INTERLOCK_SHIFT(config))                   |
         	(load_Address << DMA_CODE_ADDRESS_SHIFT(config)));
 }
 
@@ -233,13 +244,15 @@ static inline DMAInstruction DMA_LOAD_INDEX_INDIRECT(DMAConfiguration config, ED
 /* @param source_Select - Which RAM block to load from */
 /* @param index_Select_2 - Selects which of the index counters to store */
 /* @param store_Address  - Base location to address the RAM block */
+/* @param interlock      - Hold the parameter interlock or not */
 static inline DMAInstruction DMA_STORE_INDEX_INDIRECT(DMAConfiguration config, EDMAIndex index_Select,
-	EDMASource source_Select, EDMAIndex index_Select_2, uint32_t store_Address)
+	EDMASource source_Select, EDMAIndex index_Select_2, uint32_t store_Address, EInterlock interlock)
 {
 	return ((DMA_OPCODE_STORE_INDEX_INDIRECT << DMA_OPCODE_SHIFT(config)) |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config))              |
 		(source_Select << DMA_SOURCE_SELECT_SHIFT(config))            |
 		(index_Select_2 << DMA_INDEX_SELECT_2_SHIFT(config))          |
+		(interlock << DMA_INTERLOCK_SHIFT(config))                    |
         	(store_Address << DMA_CODE_ADDRESS_SHIFT(config)));
 }
 
@@ -289,14 +302,16 @@ static inline DMAInstruction DMA_BRANCH_TARGET(DMAConfiguration config, uint32_t
 /* @param load_Address  - Base location to address the RAM block */
 /* @param index_Select  - Index counter to use as an offset to the load address */
 /* @param alu_Opcode    - ALU operation to perform with the parameter and the accumulator */
+/* @param interlock     - Hold the parameter interlock or not */
 static inline DMAInstruction DMA_LOAD_ALU(DMAConfiguration config, EDMAALU alu_Select, EDMASource source_Select,
-	uint32_t load_Address, EDMAIndex index_Select, EDMAALUOpcode alu_Opcode)
+	uint32_t load_Address, EDMAIndex index_Select, EDMAALUOpcode alu_Opcode, EInterlock interlock)
 {
 	return ((DMA_OPCODE_LOAD_ALU << DMA_OPCODE_SHIFT(config))  |
 		(alu_Select << DMA_ALU_SELECT_SHIFT(config))       |
 		(source_Select << DMA_SOURCE_SELECT_SHIFT(config)) |
 		(load_Address << DMA_CODE_ADDRESS_SHIFT(config))   |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config))   |
+		(interlock << DMA_INTERLOCK_SHIFT(config))         |
 		(alu_Opcode << DMA_ALU_OPCODE_SHIFT(config)));
 }
   
@@ -305,13 +320,15 @@ static inline DMAInstruction DMA_LOAD_ALU(DMAConfiguration config, EDMAALU alu_S
 /* @param source_Select - Which RAM block to load from */
 /* @param store_Address - Base location to address the RAM block */
 /* @param index_Select  - Index counter to use as an offset to the store address */
+/* @param interlock     - Hold the parameter interlock or not */
 static inline DMAInstruction DMA_STORE_ALU(DMAConfiguration config, EDMAALU alu_Select, EDMASource source_Select,
-	uint32_t store_Address, EDMAIndex index_Select)
+	uint32_t store_Address, EDMAIndex index_Select, EInterlock interlock)
 {
 	return ((DMA_OPCODE_STORE_ALU << DMA_OPCODE_SHIFT(config)) |
 		(alu_Select << DMA_ALU_SELECT_SHIFT(config))       |
 		(source_Select << DMA_SOURCE_SELECT_SHIFT(config)) |
 		(store_Address << DMA_CODE_ADDRESS_SHIFT(config))  |
+		(interlock << DMA_INTERLOCK_SHIFT(config))         |
 		(index_Select << DMA_INDEX_SELECT_SHIFT(config)));
 }
 

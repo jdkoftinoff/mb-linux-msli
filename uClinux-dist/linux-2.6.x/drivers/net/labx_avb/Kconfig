@@ -35,6 +35,14 @@ config XILINX_AVB_SIMPLE_IPM
 	  Say Y here if you want to include access for the Simple Input Packet Manager
 	  to run as part of the TEMAC/AVB driver.
 
+config XILINX_AVB_SIMPLE_IPM_NSTREAMS
+	int "Number of AVB streams"
+	depends on XILINX_AVB_SIMPLE_IPM
+	default "1"
+	help
+	  This option specifies the number of AVB streams supported by the hardware
+
+
 config XILINX_AVB_SIMPLE_OPM
 	bool "AVB Simple OPM support"
 	depends on XILINX_LLTEMAC_AVB_LABX

@@ -115,10 +115,8 @@ typedef struct {
   uint32_t timerDivider;
 
   /* Parameters for the RTC servo */
-  RtcIncrement nominalIncrement;
-  int32_t      rtcPCoefficient;
-  int32_t      rtcICoefficient;
-  int32_t      rtcDCoefficient;
+  RtcIncrement    nominalIncrement;
+  PtpCoefficients coefficients;
 } PtpPlatformData;
 
 #endif
