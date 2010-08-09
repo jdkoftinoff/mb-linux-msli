@@ -14,13 +14,6 @@ if ! which awk > /dev/null 2>&1
  exit 1
 fi
 
-if [ ! -x /bin/tcsh ]
- then
- echo "This script requires /bin/tcsh to be present"
- echo "(for Petalogix tools compilation procedure)"
- exit 1
-fi
-
 if ! which makeinfo > /dev/null 2>&1
  then
  echo "This script requires texinfo to be present"
@@ -46,13 +39,19 @@ if ! which gmake > /dev/null 2>&1
  exit 1
 fi
 
-GCC3_DIR="microblaze-toolchain-sources"
-GCC4_DIR="mb_gnu"
-
-if [ ! -d "$GCC3_DIR" ]; then
- echo "$GCC3_DIR should link to the gcc 3 toolchain source"
- exit 1;
+if ! which genromfs > /dev/null 2>&1
+ then
+ echo "This script requires genromfs to be present"
+ exit 1
 fi
+
+if [ ! -f /usr/include/zlib.h ]
+ then
+ echo "This script requires zlib development package to be present"
+ exit 1
+fi
+
+GCC4_DIR="mb_gnu"
 
 if [ ! -d "$GCC4_DIR" ]; then
  echo "$GCC4_DIR should link to the gcc 4 toolchain source"
@@ -70,33 +69,6 @@ echo "Build failed, see mb_gnu/build directory for logs"
 exit 1
 )
 
-# Build Petalogix toolchain
-
-echo "Building Binutils / GCC3 / GDB / uCLinux toolchain (Petalogix tree)"
-(
-cd "$GCC3_DIR" \
-&& csh do_everything.csh
-) || (
-echo "Build failed"
-exit 1
-)
-
-echo "Building boot image maker"
-(cd mbbl-mkbootimage \
-&& make
-) || (
-echo "Build failed"
-exit 1
-)
-
-echo "Building MCS file converter"
-(cd mcsbin \
-&& make
-) || (
-echo "Build failed"
-exit 1
-)
-
 echo "Building device tree compiler"
 (cd dtc \
 && make
@@ -111,7 +83,7 @@ echo "Installing both toolchains in tools/"
 
 mkdir tools 2>/dev/null
 
-rm -rf tools/gcc4 tools/gcc3
+rm -rf tools/gcc4
 if [ "`uname -m`" = "x86_64" ]
  then
  LOCALPLATFORM="lin64"
@@ -120,13 +92,9 @@ if [ "`uname -m`" = "x86_64" ]
 fi
 
 mv "mb_gnu/release/${LOCALPLATFORM}" tools/gcc4
-mv "microblaze-toolchain-sources/release/${LOCALPLATFORM}/microblaze/" tools/gcc3
 (
 cd tools/gcc4/bin \
 && ls mb-* | awk -F- '{print "ln -s " $1 "-" $2 " " $1 "-xilinx-elf-" $2 }' | /bin/sh
-)
-(cd tools/gcc3/microblaze \
-&& ln -s ../include .
 )
 
 # Preparing new PATH
@@ -135,7 +103,6 @@ CURRDIR=`pwd`
 
 NEWPATH=`(
 echo "${PATH}" | tr ':' '\n' | grep -v "${CURRDIR}"
-echo "${CURRDIR}/tools/gcc3/bin"
 echo -n "${CURRDIR}/tools/gcc4/bin"
 ) | tr '\n' ':'`
 
