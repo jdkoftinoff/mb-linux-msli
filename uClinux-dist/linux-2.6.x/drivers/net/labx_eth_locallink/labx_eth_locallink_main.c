@@ -2656,20 +2656,6 @@ static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
 	}
 }
 
-void write_phy_register(void *portHandle, uint32_t regAddress, uint16_t writeData) {
-  struct net_local *lp = (struct net_local *) portHandle;
-
-  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, regAddress, writeData);
-}
-
-uint16_t read_phy_register(void *portHandle, uint32_t regAddress) {
-  struct net_local *lp = (struct net_local *) portHandle;
-  u16 phyReg;
-
-  XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, regAddress, &phyReg);
-  return(phyReg);
-}
-
 /* MDIO interrupt service routine */
 static irqreturn_t mdio_interrupt(int irq, void *dev_id)
 {
