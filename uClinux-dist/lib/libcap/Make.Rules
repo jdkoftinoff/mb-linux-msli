@@ -22,7 +22,7 @@ WARNINGS=-Wall -Wwrite-strings \
         -Wstrict-prototypes -Wmissing-prototypes \
         -Wnested-externs -Winline -Wshadow
 #LD=$(CC) #-Wl,-x -shared
-#LDFLAGS := #-g
+LDFLAGS := #-g
 
 #SYSTEM_HEADERS = /usr/include
 INCS=$(topdir)/libcap/include/sys/capability.h
