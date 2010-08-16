@@ -464,32 +464,32 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
--include ./$(DEPDIR)/avahi_daemon-caps.Po
--include ./$(DEPDIR)/avahi_daemon-check-nss.Po
--include ./$(DEPDIR)/avahi_daemon-chroot.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-async-address-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-async-host-name-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-async-service-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-domain-browser.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-entry-group.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-protocol.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-record-browser.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-service-browser.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-service-type-browser.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-sync-address-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-sync-host-name-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-sync-service-resolver.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-util.Po
--include ./$(DEPDIR)/avahi_daemon-dbus-watch-glue.Po
--include ./$(DEPDIR)/avahi_daemon-dbus.Po
--include ./$(DEPDIR)/avahi_daemon-ini-file-parser.Po
--include ./$(DEPDIR)/avahi_daemon-main.Po
--include ./$(DEPDIR)/avahi_daemon-setproctitle.Po
--include ./$(DEPDIR)/avahi_daemon-simple-protocol.Po
--include ./$(DEPDIR)/avahi_daemon-static-hosts.Po
--include ./$(DEPDIR)/avahi_daemon-static-services.Po
--include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser-test.Po
--include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser.Po
+include ./$(DEPDIR)/avahi_daemon-caps.Po
+include ./$(DEPDIR)/avahi_daemon-check-nss.Po
+include ./$(DEPDIR)/avahi_daemon-chroot.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-async-address-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-async-host-name-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-async-service-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-domain-browser.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-entry-group.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-protocol.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-record-browser.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-service-browser.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-service-type-browser.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-sync-address-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-sync-host-name-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-sync-service-resolver.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-util.Po
+include ./$(DEPDIR)/avahi_daemon-dbus-watch-glue.Po
+include ./$(DEPDIR)/avahi_daemon-dbus.Po
+include ./$(DEPDIR)/avahi_daemon-ini-file-parser.Po
+include ./$(DEPDIR)/avahi_daemon-main.Po
+include ./$(DEPDIR)/avahi_daemon-setproctitle.Po
+include ./$(DEPDIR)/avahi_daemon-simple-protocol.Po
+include ./$(DEPDIR)/avahi_daemon-static-hosts.Po
+include ./$(DEPDIR)/avahi_daemon-static-services.Po
+include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser-test.Po
+include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

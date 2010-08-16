@@ -465,11 +465,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
--include ./$(DEPDIR)/client_browse_services-client-browse-services.Po
--include ./$(DEPDIR)/client_publish_service-client-publish-service.Po
--include ./$(DEPDIR)/core_browse_services-core-browse-services.Po
--include ./$(DEPDIR)/core_publish_service-core-publish-service.Po
--include ./$(DEPDIR)/glib_integration-glib-integration.Po
+include ./$(DEPDIR)/client_browse_services-client-browse-services.Po
+include ./$(DEPDIR)/client_publish_service-client-publish-service.Po
+include ./$(DEPDIR)/core_browse_services-core-browse-services.Po
+include ./$(DEPDIR)/core_publish_service-core-publish-service.Po
+include ./$(DEPDIR)/glib_integration-glib-integration.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
