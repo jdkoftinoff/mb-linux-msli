@@ -533,7 +533,7 @@ static int audio_packetizer_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   packetizer->physicalAddress = addressRange->start;
   packetizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(packetizer->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
+  snprintf(packetizer->name, NAME_MAX_SIZE, "%s", name);
   packetizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize,
                         packetizer->name) == NULL) {
@@ -658,9 +658,8 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   struct resource *addressRange = &r_mem_struct;
   struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
+  const char *name = dev_name(&ofdev->dev);
   int rc = 0;
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
@@ -677,7 +676,7 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   }
 
   /* Dispatch to the generic function */
-  return(audio_packetizer_probe(ofdev->node->name, pdev, addressRange, irq));
+  return(audio_packetizer_probe(name, pdev, addressRange, irq));
 }
 
 static int __devexit audio_packetizer_of_remove(struct of_device *dev)
@@ -688,8 +687,18 @@ static int __devexit audio_packetizer_of_remove(struct of_device *dev)
 }
 
 
+/* An advanced use of the Lab X Packetizer is to embed the core logic
+ * into a custom peripheral, incorporating audio interface & other
+ * additional functionality into the core.
+ *
+ * For the moment, this will call out these other peripherals, which
+ * is an improper dependency inversion; down the road, they will have
+ * their own drivers which register with this one, and then layer on
+ * additional ioctl()s through a delegation mechanism.
+ */
 static struct of_device_id packetizer_of_match[] = {
   { .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
+  { .compatible = "xlnx,labrinth-avb-packetizer-1.00.a", },
   { /* end of list */ },
 };
 
