@@ -77,3 +77,6 @@ include/system_configuration.h: .config
 
 .config:
 	$(MAKE) defconfig
+
+romfs:
+
