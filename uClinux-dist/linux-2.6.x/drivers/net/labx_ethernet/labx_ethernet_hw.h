@@ -84,9 +84,8 @@ extern "C" {
 
 /* 
  * Lab X Tri-mode MAC register definitions 
- * The first half of the address space maps to registers used for
- * PHY control and interrupts.  The second half is passed through to the
- * actual MAC registers.
+ * The first quarter of the address space maps to registers used for
+ * PHY control and interrupts.
  */
 #define MDIO_CONTROL_REG      (0x00000000)
 #  define PHY_MDIO_BUSY       (0x80000000)
@@ -104,7 +103,12 @@ extern "C" {
 #  define NO_IRQS             (0x00000000)
 #  define MDIO_IRQ_MASK       (0x00000001)
 #  define PHY_IRQ_MASK        (0x00000002)
-#define LABX_MAC_REGS_BASE    (0x00000200)
+
+/* The MAC registers are located in the second quarter of the address space */
+#define LABX_MAC_REGS_BASE    (0x00001000)
+
+/* The FIFO interface registers are located following the MAC range */
+#define LABX_FIFO_REGS_BASE   (0x00002000)
 
 /* Timeout for any MDIO operation */
 #define MDIO_TIMEOUT_JIFFIES  (msecs_to_jiffies(100))

@@ -66,8 +66,8 @@
 #define XTE_RECV_BD_CNT 256
 
 /* Must be shorter than length of ethtool_drvinfo.driver field to fit */
-#define DRIVER_NAME         "labx_eth_llink"
-#define DRIVER_DESCRIPTION  "Lab X Tri-Mode Ethernet MAC driver"
+#define DRIVER_NAME         "labx_ethernet"
+#define DRIVER_DESCRIPTION  "Lab X Direct Ethernet MAC driver"
 #define DRIVER_VERSION      "1.00a"
 
 #define TX_TIMEOUT   (3*HZ)	/* Transmission timeout is 3 seconds. */
@@ -102,12 +102,7 @@
 #define BUFFER_ALIGNSEND_PERF(adr) ((ALIGNMENT_SEND_PERF - ((u32) adr)) % ALIGNMENT_SEND_PERF)
 #define BUFFER_ALIGNRECV(adr) ((ALIGNMENT_RECV - ((u32) adr)) % ALIGNMENT_RECV)
 
-/* Default TX/RX Threshold and waitbound values for SGDMA mode */
-#define DFT_TX_THRESHOLD  24
-#define DFT_TX_WAITBOUND  254
-#define DFT_RX_THRESHOLD  4
-#define DFT_RX_WAITBOUND  254
-
+/* Auto-strip frame check sequences */
 #define XTE_AUTOSTRIPPING 1
 
 /* Put Buffer Descriptors in BRAM?
@@ -186,8 +181,6 @@ struct net_local {
 	XLlTemac Emac;
 
 	unsigned int fifo_irq;	/* fifo irq */
-	unsigned int dma_irq_s;	/* send irq */
-	unsigned int dma_irq_r;	/* recv irq */
 	unsigned int max_frame_size;
 
 	int cur_speed;
@@ -485,12 +478,10 @@ typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
 void reset(struct net_device *dev, u32 line_num)
 {
 	struct net_local *lp = netdev_priv(dev);
-	u32 TxThreshold, TxWaitBound, RxThreshold, RxWaitBound;
 	u32 Options;
 	static u32 reset_cnt = 0;
-	int status;
 
-	printk(KERN_INFO "%s: labx_eth_llink: resets (#%u) from adapter code line %d\n",
+	printk(KERN_INFO "%s: labx_ethernet: resets (#%u) from adapter code line %d\n",
 	       dev->name, ++reset_cnt, line_num);
 
 	/* Shouldn't really be necessary, but shouldn't hurt. */
@@ -507,19 +498,9 @@ void reset(struct net_device *dev, u32 line_num)
 	Options = XLlTemac_GetOptions(&lp->Emac);
 
 	/*
-	 * Capture the dma coalesce settings (if needed) and reset the
-	 * connected core, dma or fifo
+	 * Reset the FIFO
 	 */
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		XLlDma_BdRingGetCoalesce(&XLlDma_mGetRxRing(&lp->Dma),
-					 &RxThreshold, &RxWaitBound);
-		XLlDma_BdRingGetCoalesce(&XLlDma_mGetTxRing(&lp->Dma),
-					 &TxThreshold, &TxWaitBound);
-
-		XLlDma_Reset(&lp->Dma);
-	} else {
-		XLlFifo_Reset(&lp->Fifo);
-	}
+	XLlFifo_Reset(&lp->Fifo);
 
 #if 0
 
@@ -552,26 +533,11 @@ void reset(struct net_device *dev, u32 line_num)
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
 	Options = XLlTemac_GetOptions(&lp->Emac);
-	printk(KERN_INFO "%s: labx_eth_llink: Options: 0x%x\n", dev->name, Options);
+	printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
 
-	if (XLlTemac_IsDma(&lp->Emac)) {	/* SG DMA mode */
-		status = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing,
-						  RxThreshold, RxWaitBound);
-		status |= XLlDma_BdRingSetCoalesce(&lp->Dma.TxBdRing,
-						   TxThreshold, TxWaitBound);
-		if (status != XST_SUCCESS) {
-			/* Print the error, but keep on going as it's not a fatal error. */
-			printk(KERN_ERR "%s: labx_eth_llink: error setting coalesce values (probably out of range). status: %d\n",
-			       dev->name, status);
-		}
-		XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-		XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-	} else {			/* FIFO interrupt mode */
-		XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
-				XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
-				XLLF_INT_TXERROR_MASK);
-	}
-	//XLlTemac_IntDisable(&lp->Emac, XTE_INT_ALL_MASK);
+	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
+			  XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
+			  XLLF_INT_TXERROR_MASK);
 
 	if (lp->deferred_skb) {
 		dev_kfree_skb_any(lp->deferred_skb);
@@ -654,87 +620,6 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* The callback function for completed frames sent in SGDMA mode. */
-static void DmaSendHandlerBH(unsigned long p);
-static void DmaRecvHandlerBH(unsigned long p);
-
-DECLARE_TASKLET(DmaSendBH, DmaSendHandlerBH, 0);
-DECLARE_TASKLET(DmaRecvBH, DmaRecvHandlerBH, 0);
-
-static irqreturn_t xenet_dma_rx_interrupt(int irq, void *dev_id)
-{
-	u32 irq_status;
-	struct net_device *dev = dev_id;
-	struct net_local *lp = netdev_priv(dev);
-	struct list_head *cur_lp;
-
-        unsigned int flags;
-
-	/* Read pending interrupts */
-	irq_status = XLlDma_mBdRingGetIrq(&lp->Dma.RxBdRing);
-
-	XLlDma_mBdRingAckIrq(&lp->Dma.RxBdRing, irq_status);
-
-	if ((irq_status & XLLDMA_IRQ_ALL_ERR_MASK)) {
-		XLlDma_Reset(&lp->Dma);
-		return IRQ_HANDLED;
-	}
-
-	if ((irq_status & (XLLDMA_IRQ_DELAY_MASK | XLLDMA_IRQ_COALESCE_MASK))) {
-		spin_lock_irqsave(&receivedQueueSpin, flags);
-		list_for_each(cur_lp, &receivedQueue) {
-			if (cur_lp == &(lp->rcv)) {
-				break;
-			}
-		}
-		if (cur_lp != &(lp->rcv)) {
-			list_add_tail(&lp->rcv, &receivedQueue);
-			XLlDma_mBdRingIntDisable(&lp->Dma.RxBdRing,
-						 XLLDMA_CR_IRQ_ALL_EN_MASK);
-			tasklet_schedule(&DmaRecvBH);
-		}
-		spin_unlock_irqrestore(&receivedQueueSpin, flags);
-	}
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t xenet_dma_tx_interrupt(int irq, void *dev_id)
-{
-	u32 irq_status;
-	struct net_device *dev = dev_id;
-	struct net_local *lp = netdev_priv(dev);
-	struct list_head *cur_lp;
-
-	unsigned int flags;
-
-	/* Read pending interrupts */
-	irq_status = XLlDma_mBdRingGetIrq(&(lp->Dma.TxBdRing));
-
-	XLlDma_mBdRingAckIrq(&(lp->Dma.TxBdRing), irq_status);
-
-	if ((irq_status & XLLDMA_IRQ_ALL_ERR_MASK)) {
-		XLlDma_Reset(&lp->Dma);
-		return IRQ_HANDLED;
-	}
-
-	if ((irq_status & (XLLDMA_IRQ_DELAY_MASK | XLLDMA_IRQ_COALESCE_MASK))) {
-		spin_lock_irqsave(&sentQueueSpin, flags);
-		list_for_each(cur_lp, &sentQueue) {
-			if (cur_lp == &(lp->xmit)) {
- 				break;
-			}
-		}
-		if (cur_lp != &(lp->xmit)) {
-			list_add_tail(&lp->xmit, &sentQueue);
-			XLlDma_mBdRingIntDisable(&lp->Dma.TxBdRing,
-						 XLLDMA_CR_IRQ_ALL_EN_MASK);
-			tasklet_schedule(&DmaSendBH);
-		}
-		spin_unlock_irqrestore(&sentQueueSpin, flags);
-	}
-	return IRQ_HANDLED;
-}
-
 /*
  * Q:
  * Why doesn't this linux driver use an interrupt handler for the TEMAC itself?
@@ -803,7 +688,7 @@ static int xenet_open(struct net_device *dev)
 
 	/* Set the MAC address each time opened. */
 	if (_XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
-		printk(KERN_ERR "%s: labx_eth_llink: could not set MAC address.\n",
+		printk(KERN_ERR "%s: labx_ethernet: could not set MAC address.\n",
 		       dev->name);
 		return -EIO;
 	}
@@ -826,49 +711,24 @@ static int xenet_open(struct net_device *dev)
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
 	Options = XLlTemac_GetOptions(&lp->Emac);
-	printk(KERN_INFO "%s: labx_eth_llink: Options: 0x%x\n", dev->name, Options);
+	printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
 
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		printk(KERN_INFO
-		       "%s: labx_eth_llink: allocating interrupt %d for dma mode tx.\n",
-		       dev->name, lp->dma_irq_s);
-		irqval = request_irq(lp->dma_irq_s,
-			&xenet_dma_tx_interrupt, 0, "xilinx_dma_tx_int", dev);
-		if (irqval) {
-			printk(KERN_ERR
-			       "%s: labx_eth_llink: could not allocate interrupt %d.\n",
-			       dev->name, lp->dma_irq_s);
-			return irqval;
-		}
-		printk(KERN_INFO
-		       "%s: labx_eth_llink: allocating interrupt %d for dma mode rx.\n",
-		       dev->name, lp->dma_irq_r);
-		irqval = request_irq(lp->dma_irq_r,
-			&xenet_dma_rx_interrupt, 0, "xilinx_dma_rx_int", dev);
-		if (irqval) {
-			printk(KERN_ERR
-			       "%s: labx_eth_llink: could not allocate interrupt %d.\n",
-			       dev->name, lp->dma_irq_r);
-			return irqval;
-		}
-	} else {
-		printk(KERN_INFO
-		       "%s: labx_eth_llink: allocating interrupt %d for fifo mode.\n",
-		       dev->name, lp->fifo_irq);
+	printk(KERN_INFO
+	       "%s: labx_ethernet: allocating interrupt %d for fifo mode.\n",
+	       dev->name, lp->fifo_irq);
 
-		/* With the way interrupts are issued on the fifo core, this needs to be
-		 * fast interrupt handler.
-		 */
-		snprintf(lp->fifo_irq_name, IRQ_NAME_SZ, "%s FIFO", dev->name);
-		lp->fifo_irq_name[IRQ_NAME_SZ - 1] = '\0';
-		irqval = request_irq(lp->fifo_irq,
-			&xenet_fifo_interrupt, IRQF_DISABLED, lp->fifo_irq_name, dev);
-		if (irqval) {
-			printk(KERN_ERR
-			       "%s: labx_eth_llink: could not allocate interrupt %d.\n",
-			       dev->name, lp->fifo_irq);
-			return irqval;
-		}
+	/* With the way interrupts are issued on the fifo core, this needs to be
+	 * fast interrupt handler.
+	 */
+	snprintf(lp->fifo_irq_name, IRQ_NAME_SZ, "%s FIFO", dev->name);
+	lp->fifo_irq_name[IRQ_NAME_SZ - 1] = '\0';
+	irqval = request_irq(lp->fifo_irq,
+			     &xenet_fifo_interrupt, IRQF_DISABLED, lp->fifo_irq_name, dev);
+	if (irqval) {
+	  printk(KERN_ERR
+		 "%s: labx_ethernet: could not allocate interrupt %d.\n",
+		 dev->name, lp->fifo_irq);
+	  return irqval;
 	}
 
 	/* Perform PHY setup using the platform-supplied hook method */
@@ -891,38 +751,13 @@ static int xenet_open(struct net_device *dev)
 		}
 	}
 
-	/* Enable interrupts  - no polled mode */
-	if (XLlTemac_IsFifo(&lp->Emac)) { /* fifo direct interrupt driver mode */
-		XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
-			XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
-			XLLF_INT_TXERROR_MASK);
-	} else {		/* SG DMA mode */
-		XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-		XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-	}
+	/* Enable FIFO interrupts  - no polled mode */
+	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
+			  XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
+			  XLLF_INT_TXERROR_MASK);
 
 	/* Start TEMAC device */
 	_XLlTemac_Start(&lp->Emac);
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		u32 threshold_s, timer_s, threshold_r, timer_r;
-
-		XLlDma_BdRingGetCoalesce(&lp->Dma.TxBdRing, &threshold_s, &timer_s);
-		XLlDma_BdRingGetCoalesce(&lp->Dma.RxBdRing, &threshold_r, &timer_r);
-		printk(KERN_INFO
-		       "%s: labx_eth_llink: Send Threshold = %d, Receive Threshold = %d\n",
-		       dev->name, threshold_s, threshold_r);
-		printk(KERN_INFO
-		       "%s: labx_eth_llink: Send Wait bound = %d, Receive Wait bound = %d\n",
-		       dev->name, timer_s, timer_r);
-		if (XLlDma_BdRingStart(&lp->Dma.TxBdRing) == XST_FAILURE) {
-			printk(KERN_ERR "%s: labx_eth_llink: could not start dma tx channel\n", dev->name);
-			return -EIO;
-		}
-		if (XLlDma_BdRingStart(&lp->Dma.RxBdRing) == XST_FAILURE) {
-			printk(KERN_ERR "%s: labx_eth_llink: could not start dma rx channel\n", dev->name);
-			return -EIO;
-		}
-	}
 
 	/* We're ready to go. */
 	netif_start_queue(dev);
@@ -945,12 +780,7 @@ static int xenet_close(struct net_device *dev)
 	/*
 	 * Free the interrupt - not polled mode.
 	 */
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		free_irq(lp->dma_irq_s, dev);
-		free_irq(lp->dma_irq_r, dev);
-	} else {
-		free_irq(lp->fifo_irq, dev);
-	}
+	free_irq(lp->fifo_irq, dev);
 
 	spin_lock_irqsave(&receivedQueueSpin, flags);
 	list_del(&(lp->rcv));
@@ -1016,7 +846,7 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
 	_XLlTemac_Stop(&lp->Emac);
 
 	if (_XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
-		printk(KERN_ERR "labx_eth_llink: could not set MAC address.\n");
+		printk(KERN_ERR "labx_ethernet: could not set MAC address.\n");
 		err = -EIO;
 	}
 
@@ -1104,7 +934,7 @@ static void FifoSendHandler(struct net_device *dev)
 {
 	struct net_local *lp;
 	struct sk_buff *skb;
-	unsigned int flags;
+	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_tx_spinlock, flags);
 	lp = netdev_priv(dev);
@@ -1181,272 +1011,6 @@ static inline unsigned int _xenet_rx_csum(struct sk_buff *skb)
 }
 #endif
 
-/*
- * xenet_DmaSend_internal is an internal use, send routine.
- * Any locks that need to be acquired, should be acquired
- * prior to calling this routine.
- */
-static int xenet_DmaSend_internal(struct sk_buff *skb, struct net_device *dev)
-{
-	struct net_local *lp = netdev_priv(dev);
-	XLlDma_Bd *bd_ptr;
-	int result;
-	int total_frags;
-	int i;
-	void *virt_addr;
-	size_t len;
-	dma_addr_t phy_addr;
-	XLlDma_Bd *first_bd_ptr;
-	XLlDma_Bd *last_bd_ptr;
-	skb_frag_t *frag;
-
-	/* get skb_shinfo(skb)->nr_frags + 1 buffer descriptors */
-	total_frags = skb_shinfo(skb)->nr_frags + 1;
-
-	/* stats */
-	if (lp->max_frags_in_a_packet < total_frags) {
-		lp->max_frags_in_a_packet = total_frags;
-	}
-
-	if (total_frags < XTE_SEND_BD_CNT) {
-		result = XLlDma_BdRingAlloc(&lp->Dma.TxBdRing, total_frags,
-					    &bd_ptr);
-
-		if (result != XST_SUCCESS) {
-			netif_stop_queue(dev);	/* stop send queue */
-			lp->deferred_skb = skb;	/* buffer the sk_buffer and will send
-						   it in interrupt context */
-			return result;
-		}
-	} else {
-		dev_kfree_skb(skb);
-		lp->stats.tx_dropped++;
-		printk(KERN_ERR
-		       "%s: labx_eth_llink: could not send TX socket buffers (too many fragments).\n",
-		       dev->name);
-		return XST_FAILURE;
-	}
-
-	len = skb_headlen(skb);
-
-	/* get the physical address of the header */
-	phy_addr = (u32) dma_map_single(NULL, skb->data, len, DMA_TO_DEVICE);
-
-	/* get the header fragment, it's in the skb differently */
-	XLlDma_mBdSetBufAddr(bd_ptr, phy_addr);
-	XLlDma_mBdSetLength(bd_ptr, len);
-	XLlDma_mBdSetId(bd_ptr, skb);
-
-	/*
-	 * if tx checksum offloading is enabled, when the ethernet stack
-	 * wants us to perform the checksum in hardware,
-	 * skb->ip_summed is CHECKSUM_PARTIAL. Otherwise skb->ip_summed is
-	 * CHECKSUM_NONE, meaning the checksum is already done, or
-	 * CHECKSUM_UNNECESSARY, meaning checksumming is turned off (e.g.
-	 * loopback interface)
-	 *
-	 * skb->csum is an overloaded value. On send, skb->csum is the offset
-	 * into the buffer (skb_transport_header(skb)) to place the csum value.
-	 * On receive this feild gets set to the actual csum value, before it's
-	 * passed up the stack.
-	 *
-	 * When we get here, the ethernet stack above will have already
-	 * computed the pseudoheader csum value and have placed it in the
-	 * TCP/UDP header.
-	 *
-	 * The IP header csum has also already been computed and inserted.
-	 *
-	 * Since the IP header with it's own csum should compute to a null
-	 * csum, it should be ok to include it in the hw csum. If it is decided
-	 * to change this scheme, skb should be examined before dma_map_single()
-	 * is called, which flushes the page from the cpu's cache.
-	 *
-	 * skb->data points to the beginning of the whole packet
-	 * skb_transport_header(skb) points to the beginning of the ip header
-	 *
-	 */
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		unsigned int csum_start_off = 0/*skb_transport_offset(skb)*/;
-		unsigned int csum_index_off = csum_start_off + skb->csum_offset;
-
-#if 0
-		{
-			unsigned int csum = _xenet_tx_csum(skb);
-
-			*((unsigned short *) (raw + skb->csum)) =
-				csum_fold(csum);
-			BdCsumDisable(bd_ptr);
-		}
-#else
-		BdCsumEnable(bd_ptr);
-		BdCsumSetup(bd_ptr, csum_start_off,
-			csum_index_off);
-#endif
-		lp->tx_hw_csums++;
-	}
-	else {
-		/*
-		 * This routine will do no harm even if hardware checksum capability is
-		 * off.
-		 */
-		BdCsumDisable(bd_ptr);
-	}
-
-	first_bd_ptr = bd_ptr;
-	last_bd_ptr = bd_ptr;
-
-	frag = &skb_shinfo(skb)->frags[0];
-
-	for (i = 1; i < total_frags; i++, frag++) {
-		bd_ptr = XLlDma_mBdRingNext(&lp->Dma.TxBdRing, bd_ptr);
-		last_bd_ptr = bd_ptr;
-
-		virt_addr =
-			(void *) page_address(frag->page) + frag->page_offset;
-		phy_addr =
-			(u32) dma_map_single(NULL, virt_addr, frag->size,
-					     DMA_TO_DEVICE);
-
-		XLlDma_mBdSetBufAddr(bd_ptr, phy_addr);
-		XLlDma_mBdSetLength(bd_ptr, frag->size);
-		XLlDma_mBdSetId(bd_ptr, NULL);
-		BdCsumDisable(bd_ptr);
-		XLlDma_mBdSetStsCtrl(bd_ptr, 0);
-	}
-
-	if (first_bd_ptr == last_bd_ptr) {
-		XLlDma_mBdSetStsCtrl(last_bd_ptr,
-				     XLLDMA_BD_STSCTRL_SOP_MASK |
-				     XLLDMA_BD_STSCTRL_EOP_MASK);
-	} else {
-		XLlDma_mBdSetStsCtrl(first_bd_ptr, XLLDMA_BD_STSCTRL_SOP_MASK);
-		XLlDma_mBdSetStsCtrl(last_bd_ptr, XLLDMA_BD_STSCTRL_EOP_MASK);
-	}
-
-
-	/* Enqueue to HW */
-	result = XLlDma_BdRingToHw(&lp->Dma.TxBdRing, total_frags,
-				   first_bd_ptr);
-	if (result != XST_SUCCESS) {
-		netif_stop_queue(dev);	/* stop send queue */
-		dev_kfree_skb(skb);
-		XLlDma_mBdSetId(first_bd_ptr, NULL);
-		lp->stats.tx_dropped++;
-		printk(KERN_ERR
-		       "%s: labx_eth_llink: could not send commit TX buffer descriptor (%d).\n",
-		       dev->name, result);
-		reset(dev, __LINE__);
-
-		return XST_FAILURE;
-	}
-
-	dev->trans_start = jiffies;
-
-	return XST_SUCCESS;
-}
-
-/* The send function for frames sent in DMA mode */
-static int xenet_DmaSend(struct sk_buff *skb, struct net_device *dev)
-{
-	/* The following spin_lock protects
-	 * SgAlloc, SgCommit sequence, which also exists in DmaSendHandlerBH Bottom
-	 * Half, or triggered by other processor in SMP case.
-	 */
-	spin_lock_bh(&XTE_tx_spinlock);
-
-	xenet_DmaSend_internal(skb, dev);
-
-	spin_unlock_bh(&XTE_tx_spinlock);
-
-	return 0;
-}
-
-
-static void DmaSendHandlerBH(unsigned long p)
-{
-	struct net_device *dev;
-	struct net_local *lp;
-	XLlDma_Bd *BdPtr, *BdCurPtr;
-	unsigned long len;
-	unsigned long flags;
-	struct sk_buff *skb;
-	dma_addr_t skb_dma_addr;
-	int result = XST_SUCCESS;
-	unsigned int bd_processed, bd_processed_save;
-
-	while (1) {
-		spin_lock_irqsave(&sentQueueSpin, flags);
-		if (list_empty(&sentQueue)) {
-			spin_unlock_irqrestore(&sentQueueSpin, flags);
-			break;
-		}
-
-		lp = list_entry(sentQueue.next, struct net_local, xmit);
-
-		list_del_init(&(lp->xmit));
-		spin_unlock_irqrestore(&sentQueueSpin, flags);
-
-		spin_lock_irqsave(&XTE_tx_spinlock, flags);
-		dev = lp->ndev;
-		bd_processed_save = 0;
-		while ((bd_processed =
-			XLlDma_BdRingFromHw(&lp->Dma.TxBdRing, XTE_SEND_BD_CNT,
-					    &BdPtr)) > 0) {
-
-			bd_processed_save = bd_processed;
-			BdCurPtr = BdPtr;
-			do {
-				len = XLlDma_mBdGetLength(BdCurPtr);
-				skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdCurPtr);
-				dma_unmap_single(NULL, (void *)skb_dma_addr, len,
-						 DMA_TO_DEVICE);
-
-				/* get ptr to skb */
-				skb = (struct sk_buff *)
-					XLlDma_mBdGetId(BdCurPtr);
-				if (skb)
-					dev_kfree_skb(skb);
-
-				/* reset BD id */
-				XLlDma_mBdSetId(BdCurPtr, NULL);
-
-				lp->stats.tx_bytes += len;
-				if (XLlDma_mBdGetStsCtrl(BdCurPtr) & XLLDMA_BD_STSCTRL_EOP_MASK) {
-					lp->stats.tx_packets++;
-				}
-
-				BdCurPtr = XLlDma_mBdRingNext(&lp->Dma.TxBdRing, BdCurPtr);
-				bd_processed--;
-			} while (bd_processed > 0);
-
-			result = XLlDma_BdRingFree(&lp->Dma.TxBdRing,
-						   bd_processed_save, BdPtr);
-			if (result != XST_SUCCESS) {
-				printk(KERN_ERR
-				       "%s: XLlDma: BdRingFree() error %d.\n",
-				       dev->name, result);
-				reset(dev, __LINE__);
-				spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
-				return;
-			}
-		}
-		XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-
-		/* Send out the deferred skb if it exists */
-		if ((lp->deferred_skb) && bd_processed_save) {
-			skb = lp->deferred_skb;
-			lp->deferred_skb = NULL;
-
-			result = xenet_DmaSend_internal(skb, dev);
-		}
-
-		if (result == XST_SUCCESS) {
-			netif_wake_queue(dev);	/* wake up send queue */
-		}
-		spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
-	}
-}
-
 static void xenet_tx_timeout(struct net_device *dev)
 {
 	struct net_local *lp;
@@ -1460,7 +1024,7 @@ static void xenet_tx_timeout(struct net_device *dev)
 
 	lp = netdev_priv(dev);
 	printk(KERN_ERR
-	       "%s: labx_eth_llink: exceeded transmit timeout of %lu ms.  Resetting emac.\n",
+	       "%s: labx_ethernet: exceeded transmit timeout of %lu ms.  Resetting emac.\n",
 	       dev->name, TX_TIMEOUT * 1000UL / HZ);
 	lp->stats.tx_errors++;
 
@@ -1503,7 +1067,7 @@ static void FifoRecvHandler(unsigned long p)
 			/* Couldn't get memory. */
 			lp->stats.rx_dropped++;
 			printk(KERN_ERR
-			       "%s: labx_eth_llink: could not allocate receive buffer.\n",
+			       "%s: labx_ethernet: could not allocate receive buffer.\n",
 			       dev->name);
 
 			/* consume data in Xilinx TEMAC RX data fifo so it is sync with RX length fifo */
@@ -1541,445 +1105,11 @@ static void FifoRecvHandler(unsigned long p)
 
 }
 
-
-/*
- * _xenet_DmaSetupRecvBuffers allocates as many socket buffers (sk_buff's) as it
- * can up to the number of free RX buffer descriptors. Then it sets up the RX
- * buffer descriptors to DMA into the socket_buffers.
- *
- * The net_device, dev, indcates on which device to operate for buffer
- * descriptor allocation.
- */
-static void _xenet_DmaSetupRecvBuffers(struct net_device *dev)
-{
-	struct net_local *lp = netdev_priv(dev);
-
-	int free_bd_count = XLlDma_mBdRingGetFreeCnt(&lp->Dma.RxBdRing);
-	int num_sk_buffs;
-	struct sk_buff_head sk_buff_list;
-	struct sk_buff *new_skb;
-	u32 new_skb_baddr;
-	XLlDma_Bd *BdPtr, *BdCurPtr;
-	u32 align;
-	int result;
-
-#if 0
-	int align_max = ALIGNMENT_RECV;
-#else
-	int align_max = 0;
-#endif
-
-
-	skb_queue_head_init(&sk_buff_list);
-	for (num_sk_buffs = 0; num_sk_buffs < free_bd_count; num_sk_buffs++) {
-		new_skb = alloc_skb(lp->max_frame_size + align_max, GFP_ATOMIC);
-		if (new_skb == NULL) {
-			break;
-		}
-		/*
-		 * I think the XTE_spinlock, and Recv DMA int disabled will protect this
-		 * list as well, so we can use the __ version just fine
-		 */
-		__skb_queue_tail(&sk_buff_list, new_skb);
-	}
-	if (!num_sk_buffs) {
-		printk(KERN_ERR "%s: labx_eth_llink: alloc_skb unsuccessful\n",
-		       dev->name);
-		return;
-	}
-
-	/* now we got a bunch o' sk_buffs */
-	result = XLlDma_BdRingAlloc(&lp->Dma.RxBdRing, num_sk_buffs, &BdPtr);
-	if (result != XST_SUCCESS) {
-		/* we really shouldn't get this */
-		skb_queue_purge(&sk_buff_list);
-		printk(KERN_ERR "%s: XLlDma: BdRingAlloc unsuccessful (%d)\n",
-		       dev->name, result);
-		reset(dev, __LINE__);
-		return;
-	}
-
-	BdCurPtr = BdPtr;
-
-	new_skb = skb_dequeue(&sk_buff_list);
-	while (new_skb) {
-		/* make sure we're long-word aligned */
-		align = BUFFER_ALIGNRECV(new_skb->data);
-		if (align) {
-			skb_reserve(new_skb, align);
-		}
-
-		/* Get dma handle of skb->data */
-		new_skb_baddr = (u32) dma_map_single(NULL, new_skb->data,
-						     lp->max_frame_size,
-						     DMA_FROM_DEVICE);
-
-		XLlDma_mBdSetBufAddr(BdCurPtr, new_skb_baddr);
-		XLlDma_mBdSetLength(BdCurPtr, lp->max_frame_size);
-		XLlDma_mBdSetId(BdCurPtr, new_skb);
-		XLlDma_mBdSetStsCtrl(BdCurPtr,
-				     XLLDMA_BD_STSCTRL_SOP_MASK |
-				     XLLDMA_BD_STSCTRL_EOP_MASK);
-
-		BdCurPtr = XLlDma_mBdRingNext(&lp->Dma.RxBdRing, BdCurPtr);
-
-		new_skb = skb_dequeue(&sk_buff_list);
-	}
-
-	/* enqueue RxBD with the attached skb buffers such that it is
-	 * ready for frame reception */
-	result = XLlDma_BdRingToHw(&lp->Dma.RxBdRing, num_sk_buffs, BdPtr);
-	if (result != XST_SUCCESS) {
-		printk(KERN_ERR
-		       "%s: XLlDma: (DmaSetupRecvBuffers) BdRingToHw unsuccessful (%d)\n",
-		       dev->name, result);
-		skb_queue_purge(&sk_buff_list);
-		BdCurPtr = BdPtr;
-		while (num_sk_buffs > 0) {
-			XLlDma_mBdSetId(BdCurPtr, NULL);
-			BdCurPtr = XLlDma_mBdRingNext(&lp->Dma.RxBdRing,
-						      BdCurPtr);
-			num_sk_buffs--;
-		}
-		reset(dev, __LINE__);
-		return;
-	}
-}
-
-static void DmaRecvHandlerBH(unsigned long p)
-{
-	struct net_device *dev;
-	struct net_local *lp;
-	struct sk_buff *skb;
-	u32 len, skb_baddr;
-	int result;
-	unsigned long flags;
-	XLlDma_Bd *BdPtr, *BdCurPtr;
-	unsigned int bd_processed, bd_processed_saved;
-
-	while (1) {
-		spin_lock_irqsave(&receivedQueueSpin, flags);
-		if (list_empty(&receivedQueue)) {
-			spin_unlock_irqrestore(&receivedQueueSpin, flags);
-			break;
-		}
-		lp = list_entry(receivedQueue.next, struct net_local, rcv);
-
-		list_del_init(&(lp->rcv));
-		spin_unlock_irqrestore(&receivedQueueSpin, flags);
-		dev = lp->ndev;
-
-		spin_lock_irqsave(&XTE_rx_spinlock, flags);
-		if ((bd_processed =
-		     XLlDma_BdRingFromHw(&lp->Dma.RxBdRing, XTE_RECV_BD_CNT, &BdPtr)) > 0) {
-
-			bd_processed_saved = bd_processed;
-			BdCurPtr = BdPtr;
-			do {
-				/*
-				 * Regular length field not updated on rx,
-				 * USR4 updated instead.
-				 */
-				len = BdGetRxLen(BdCurPtr);
-
-				/* get ptr to skb */
-				skb = (struct sk_buff *)
-					XLlDma_mBdGetId(BdCurPtr);
-
-				/* get and free up dma handle used by skb->data */
-				skb_baddr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdCurPtr);
-				dma_unmap_single(NULL, (void *)skb_baddr,
-						 lp->max_frame_size,
-						 DMA_FROM_DEVICE);
-
-				/* reset ID */
-				XLlDma_mBdSetId(BdCurPtr, NULL);
-
-				/* setup received skb and send it upstream */
-				skb_put(skb, len);	/* Tell the skb how much data we got. */
-				skb->dev = dev;
-
-				/* this routine adjusts skb->data to skip the header */
-				skb->protocol = eth_type_trans(skb, dev);
-
-				/* default the ip_summed value */
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-				/* if we're doing rx csum offload, set it up */
-				if (((lp->local_features & LOCAL_FEATURE_RX_CSUM) != 0) &&
-				    (skb->protocol == __constant_htons(ETH_P_IP)) &&
-				    (skb->len > 64)) {
-					unsigned int csum;
-
-					/*
-					 * This hardware only supports proper checksum calculations
-					 * on TCP/UDP packets.
-					 *
-					 * skb->csum is an overloaded value. On send, skb->csum is
-					 * the offset into the buffer (skb_transport_header(skb))
-					 * to place the csum value. On receive this feild gets set
-					 * to the actual csum value, before it's passed up the stack.
-					 *
-					 * If we set skb->ip_summed to CHECKSUM_COMPLETE, the ethernet
-					 * stack above will compute the pseudoheader csum value and
-					 * add it to the partial checksum already computed (to be
-					 * placed in skb->csum) and verify it.
-					 *
-					 * Setting skb->ip_summed to CHECKSUM_NONE means that the
-					 * cheksum didn't verify and the stack will (re)check it.
-					 *
-					 * Setting skb->ip_summed to CHECKSUM_UNNECESSARY means
-					 * that the cheksum was verified/assumed to be good and the
-					 * stack does not need to (re)check it.
-					 *
-					 * The ethernet stack above will (re)compute the checksum
-					 * under the following conditions:
-					 * 1) skb->ip_summed was set to CHECKSUM_NONE
-					 * 2) skb->len does not match the length of the ethernet
-					 *    packet determined by parsing the packet. In this case
-					 *    the ethernet stack will assume any prior checksum
-					 *    value was miscomputed and throw it away.
-					 * 3) skb->ip_summed was set to CHECKSUM_COMPLETE, skb->csum was
-					 *    set, but the result does not check out ok by the
-					 *    ethernet stack.
-					 *
-					 * If the TEMAC hardware stripping feature is off, each
-					 * packet will contain an FCS feild which will have been
-					 * computed by the hardware checksum operation. This 4 byte
-					 * FCS value needs to be subtracted back out of the checksum
-					 * value computed by hardware as it's not included in a
-					 * normal ethernet packet checksum.
-					 *
-					 * The minimum transfer packet size over the wire is 64
-					 * bytes. If the packet is sent as exactly 64 bytes, then
-					 * it probably contains some random padding bytes. It's
-					 * somewhat difficult to determine the actual length of the
-					 * real packet data, so we just let the stack recheck the
-					 * checksum for us.
-					 *
-					 * After the call to eth_type_trans(), the following holds
-					 * true:
-					 *    skb->data points to the beginning of the ip header
-					 */
-					csum = BdCsumGet(BdCurPtr);
-					//printk("hw csum is 0x%08x\n",csum);
-
-#if ! XTE_AUTOSTRIPPING
-					if (!lp->stripping) {
-						/* take off the FCS */
-						u16 *data;
-
-						/* FCS is 4 bytes */
-						skb_put(skb, -4);
-
-						data = (u16 *) (&skb->
-								data[skb->len]);
-
-						/* subtract out the FCS from the csum value */
-						csum = csum_sub(csum, *data /* & 0xffff */);
-						data++;
-						csum = csum_sub(csum, *data /* & 0xffff */);
-					}
-#endif
-					skb->csum = csum;
-					skb->ip_summed = CHECKSUM_COMPLETE;
-
-					lp->rx_hw_csums++;
-				}
-
-				lp->stats.rx_packets++;
-				lp->stats.rx_bytes += len;
-#if 0
-				{
-					int i;
-
-					for(i=0;i<len;++i)
-					{
-						printk("%02X ",skb->data[i]);
-					}
-					printk("\n");
-				}
-#endif
-
-				netif_rx(skb);	/* Send the packet upstream. */
-
-				BdCurPtr =
-					XLlDma_mBdRingNext(&lp->Dma.RxBdRing,
-							   BdCurPtr);
-				bd_processed--;
-			} while (bd_processed > 0);
-
-			/* give the descriptor back to the driver */
-			result = XLlDma_BdRingFree(&lp->Dma.RxBdRing,
-						   bd_processed_saved, BdPtr);
-			if (result != XST_SUCCESS) {
-				printk(KERN_ERR
-				       "%s: XLlDma: BdRingFree unsuccessful (%d)\n",
-				       dev->name, result);
-				reset(dev, __LINE__);
-				spin_unlock_irqrestore(&XTE_rx_spinlock, flags);
-				return;
-			}
-
-			_xenet_DmaSetupRecvBuffers(dev);
-		}
-		XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-		spin_unlock_irqrestore(&XTE_rx_spinlock, flags);
-	}
-}
-
-static int descriptor_init(struct net_device *dev)
-{
-	struct net_local *lp = netdev_priv(dev);
-	int recvsize, sendsize;
-	int dftsize;
-	u32 *recvpoolptr, *sendpoolptr;
-	void *recvpoolphy, *sendpoolphy;
-	int result;
-
-/*
- * Buffer Descriptr
- * word	byte	description
- * 0	0h	next ptr
- * 1	4h	buffer addr
- * 2	8h	buffer len
- * 3	ch	sts/ctrl | app data (0) [tx csum enable (bit 31 LSB)]
- * 4	10h	app data (1) [tx csum begin (bits 0-15 MSB) | csum insert (bits 16-31 LSB)]
- * 5	14h	app data (2) [tx csum seed (bits 16-31 LSB)]
- * 6	18h	app data (3) [rx raw csum (bits 16-31 LSB)]
- * 7	1ch	app data (4) [rx recv length (bits 18-31 LSB)]
- */
-#if 0
-	int XferType = XDMAV3_DMACR_TYPE_BFBURST_MASK;
-	int XferWidth = XDMAV3_DMACR_DSIZE_64_MASK;
-#endif
-
-	/* calc size of descriptor space pool; alloc from non-cached memory */
-	dftsize = XLlDma_mBdRingMemCalc(ALIGNMENT_BD,
-					XTE_RECV_BD_CNT + XTE_SEND_BD_CNT);
-//	printk(KERN_INFO "labx_eth_llink: buffer descriptor size: %d (0x%0x)\n",
-//	       dftsize, dftsize);
-
-#if BD_IN_BRAM == 0
-	/*
-	 * Allow buffer descriptors to be cached.
-	 * Old method w/cache on buffer descriptors disabled:
-	 *     lp->desc_space = dma_alloc_coherent(NULL, dftsize,
-	 *         &lp->desc_space_handle, GFP_KERNEL);
-	 * (note if going back to dma_alloc_coherent() the CACHE macros in
-	 * xenv_linux.h need to be disabled.
-	 */
-
- //       printk(KERN_INFO "labx_eth_llink: Allocating DMA descriptors with kmalloc\n");
-        lp->desc_space = kmalloc(dftsize, GFP_KERNEL);
-	lp->desc_space_handle = (dma_addr_t) page_to_phys(virt_to_page(lp->desc_space));
-#else
-//        printk(KERN_INFO "labx_eth_llink: Allocating DMA descriptors in Block Ram\n");
-	lp->desc_space_handle = BRAM_BASEADDR;
-	lp->desc_space = ioremap(lp->desc_space_handle, dftsize);
-#endif
-	if (lp->desc_space == 0) {
-		return -1;
-	}
-
-	lp->desc_space_size = dftsize;
-
-//	printk(KERN_INFO
-//	       "labx_eth_llink: (buffer_descriptor_init) phy: 0x%x, virt: 0x%x, size: 0x%x\n",
-//	       lp->desc_space_handle, (unsigned int) lp->desc_space,
-//	       lp->desc_space_size);
-
-	/* calc size of send and recv descriptor space */
-	recvsize = XLlDma_mBdRingMemCalc(ALIGNMENT_BD, XTE_RECV_BD_CNT);
-	sendsize = XLlDma_mBdRingMemCalc(ALIGNMENT_BD, XTE_SEND_BD_CNT);
-
-	recvpoolptr = lp->desc_space;
-	sendpoolptr = (void *) ((u32) lp->desc_space + recvsize);
-
-	recvpoolphy = (void *) lp->desc_space_handle;
-	sendpoolphy = (void *) ((u32) lp->desc_space_handle + recvsize);
-
-	result = XLlDma_BdRingCreate(&lp->Dma.RxBdRing, (u32) recvpoolphy,
-				     (u32) recvpoolptr, ALIGNMENT_BD,
-				     XTE_RECV_BD_CNT);
-	if (result != XST_SUCCESS) {
-		printk(KERN_ERR "labx_eth_llink: DMA Ring Create (RECV). Error: %d\n", result);
-		return -EIO;
-	}
-
-	result = XLlDma_BdRingCreate(&lp->Dma.TxBdRing, (u32) sendpoolphy,
-				     (u32) sendpoolptr, ALIGNMENT_BD,
-				     XTE_SEND_BD_CNT);
-	if (result != XST_SUCCESS) {
-		printk(KERN_ERR "labx_eth_llink: DMA Ring Create (SEND). Error: %d\n", result);
-		return -EIO;
-	}
-
-	_xenet_DmaSetupRecvBuffers(dev);
-	return 0;
-}
-
-static void free_descriptor_skb(struct net_device *dev)
-{
-	struct net_local *lp = netdev_priv(dev);
-	XLlDma_Bd *BdPtr;
-	struct sk_buff *skb;
-	dma_addr_t skb_dma_addr;
-	u32 len, i;
-
-	/* Unmap and free skb's allocated and mapped in descriptor_init() */
-
-	/* Get the virtual address of the 1st BD in the DMA RX BD ring */
-	BdPtr = (XLlDma_Bd *) lp->Dma.RxBdRing.FirstBdAddr;
-
-	for (i = 0; i < XTE_RECV_BD_CNT; i++) {
-		skb = (struct sk_buff *) XLlDma_mBdGetId(BdPtr);
-		if (skb) {
-			skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdPtr);
-			dma_unmap_single(NULL, (void *)skb_dma_addr, lp->max_frame_size,
-					 DMA_FROM_DEVICE);
-			dev_kfree_skb(skb);
-		}
-		/* find the next BD in the DMA RX BD ring */
-		BdPtr = XLlDma_mBdRingNext(&lp->Dma.RxBdRing, BdPtr);
-	}
-
-	/* Unmap and free TX skb's that have not had a chance to be freed
-	 * in DmaSendHandlerBH(). This could happen when TX Threshold is larger
-	 * than 1 and TX waitbound is 0
-	 */
-
-	/* Get the virtual address of the 1st BD in the DMA TX BD ring */
-	BdPtr = (XLlDma_Bd *) lp->Dma.TxBdRing.FirstBdAddr;
-
-	for (i = 0; i < XTE_SEND_BD_CNT; i++) {
-		skb = (struct sk_buff *) XLlDma_mBdGetId(BdPtr);
-		if (skb) {
-			skb_dma_addr = (dma_addr_t) XLlDma_mBdGetBufAddr(BdPtr);
-			len = XLlDma_mBdGetLength(BdPtr);
-			dma_unmap_single(NULL, (void *)skb_dma_addr, len,
-					 DMA_TO_DEVICE);
-			dev_kfree_skb(skb);
-		}
-		/* find the next BD in the DMA TX BD ring */
-		BdPtr = XLlDma_mBdRingNext(&lp->Dma.TxBdRing, BdPtr);
-	}
-
-#if BD_IN_BRAM == 0
-	dma_free_coherent(NULL,
-			  lp->desc_space_size,
-			  lp->desc_space, lp->desc_space_handle);
-#else
-	iounmap(lp->desc_space);
-#endif
-}
-
 static int
 xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 {
 	struct net_local *lp = netdev_priv(dev);
 	u32 mac_options;
-	u32 threshold, timer;
 	u16 gmii_cmd, gmii_status, gmii_advControl;
 
 	memset(ecmd, 0, sizeof(struct ethtool_cmd));
@@ -2014,17 +1144,6 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	}
 	ecmd->phy_address = lp->Emac.Config.BaseAddress;
 	ecmd->transceiver = XCVR_INTERNAL;
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		/* get TX threshold */
-
-		XLlDma_BdRingGetCoalesce(&lp->Dma.TxBdRing, &threshold, &timer);
-		ecmd->maxtxpkt = threshold;
-
-		/* get RX threshold */
-		XLlDma_BdRingGetCoalesce(&lp->Dma.RxBdRing, &threshold, &timer);
-		ecmd->maxrxpkt = threshold;
-	}
-
 	ecmd->supported |= SUPPORTED_10baseT_Full | SUPPORTED_100baseT_Full |
 		SUPPORTED_1000baseT_Full | SUPPORTED_Autoneg;
 
@@ -2046,139 +1165,11 @@ xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	if ((ecmd->speed != 1000) && (ecmd->speed != 100) &&
 	    (ecmd->speed != 10)) {
 		printk(KERN_ERR
-		       "%s: labx_eth_llink: xenet_ethtool_set_settings speed not supported: %d\n",
+		       "%s: labx_ethernet: xenet_ethtool_set_settings speed not supported: %d\n",
 		       dev->name, ecmd->speed);
 		return -EOPNOTSUPP;
 	}
 
-	return 0;
-}
-
-static int
-xenet_ethtool_get_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
-{
-	struct net_local *lp = netdev_priv(dev);
-	u32 threshold, waitbound;
-
-	memset(ec, 0, sizeof(struct ethtool_coalesce));
-
-	XLlDma_BdRingGetCoalesce(&lp->Dma.RxBdRing, &threshold, &waitbound);
-	ec->rx_max_coalesced_frames = threshold;
-	ec->rx_coalesce_usecs = waitbound;
-
-	XLlDma_BdRingGetCoalesce(&lp->Dma.TxBdRing, &threshold, &waitbound);
-	ec->tx_max_coalesced_frames = threshold;
-	ec->tx_coalesce_usecs = waitbound;
-
-	return 0;
-}
-
-void disp_bd_ring(XLlDma_BdRing *bd_ring)
-{
-	int num_bds = bd_ring->AllCnt;
-	u32 *cur_bd_ptr = (u32 *) bd_ring->FirstBdAddr;
-	int idx;
-
-	printk("ChanBase: %p\n", (void *) bd_ring->ChanBase);
-	printk("FirstBdPhysAddr: %p\n", (void *) bd_ring->FirstBdPhysAddr);
-	printk("FirstBdAddr: %p\n", (void *) bd_ring->FirstBdAddr);
-	printk("LastBdAddr: %p\n", (void *) bd_ring->LastBdAddr);
-	printk("Length: %d (0x%0x)\n", bd_ring->Length, bd_ring->Length);
-	printk("RunState: %d (0x%0x)\n", bd_ring->RunState, bd_ring->RunState);
-	printk("Separation: %d (0x%0x)\n", bd_ring->Separation,
-	       bd_ring->Separation);
-	printk("BD Count: %d\n", bd_ring->AllCnt);
-
-	printk("\n");
-
-	printk("FreeHead: %p\n", (void *) bd_ring->FreeHead);
-	printk("PreHead: %p\n", (void *) bd_ring->PreHead);
-	printk("HwHead: %p\n", (void *) bd_ring->HwHead);
-	printk("HwTail: %p\n", (void *) bd_ring->HwTail);
-	printk("PostHead: %p\n", (void *) bd_ring->PostHead);
-	printk("BdaRestart: %p\n", (void *) bd_ring->BdaRestart);
-
-	printk("Ring Contents:\n");
-/*
- * Buffer Descriptr
- * word	byte	description
- * 0	0h	next ptr
- * 1	4h	buffer addr
- * 2	8h	buffer len
- * 3	ch	sts/ctrl | app data (0) [tx csum enable (bit 31 LSB)]
- * 4	10h	app data (1) [tx csum begin (bits 0-15 MSB) | csum insert (bits 16-31 LSB)]
- * 5	14h	app data (2) [tx csum seed (bits 16-31 LSB)]
- * 6	18h	app data (3) [rx raw csum (bits 16-31 LSB)]
- * 7	1ch	app data (4) [rx recv length (bits 18-31 LSB)]
- * 8	20h	sw app data (0) [id]
- */
-	printk("Idx   NextBD BuffAddr   Length  CTL/CSE CSUM B/I CSUMSeed Raw CSUM  RecvLen       ID\n");
-	printk("--- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/--------\n");
-
-	for (idx = 0; idx < num_bds; idx++) {
-		printk("%3d %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
-		       idx,
-		       cur_bd_ptr[XLLDMA_BD_NDESC_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_BUFA_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_BUFL_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_STSCTRL_USR0_OFFSET /
-				  sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_USR1_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_USR2_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_USR3_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_USR4_OFFSET / sizeof(*cur_bd_ptr)],
-		       cur_bd_ptr[XLLDMA_BD_ID_OFFSET / sizeof(*cur_bd_ptr)]);
-
-		cur_bd_ptr += bd_ring->Separation / sizeof(int);
-	}
-	printk("--------------------------------------- software/linux-2.6.x-petalogix/Done ---------------------------------------\n");
-}
-
-static int
-xenet_ethtool_set_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
-{
-	int ret;
-	struct net_local *lp = netdev_priv(dev);
-
-	if (ec->rx_coalesce_usecs == 0) {
-		ec->rx_coalesce_usecs = 1;
-		dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-	}
-	if ((ret = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing,
-			(u16) (ec->rx_max_coalesced_frames),
-			(u16) (ec->rx_coalesce_usecs))) != XST_SUCCESS) {
-		printk(KERN_ERR "%s: XLlDma: BdRingSetCoalesce error %d\n",
-		       dev->name, ret);
-		return -EIO;
-	}
-	XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-
-	if (ec->tx_coalesce_usecs == 0) {
-		ec->tx_coalesce_usecs = 1;
-		dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-	}
-	if ((ret = XLlDma_BdRingSetCoalesce(&lp->Dma.TxBdRing,
-			(u16) (ec->tx_max_coalesced_frames),
-			(u16) (ec->tx_coalesce_usecs))) != XST_SUCCESS) {
-		printk(KERN_ERR "%s: XLlDma: BdRingSetCoalesce error %d\n",
-		       dev->name, ret);
-		return -EIO;
-	}
-	XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-
-	return 0;
-}
-
-static int
-xenet_ethtool_get_ringparam(struct net_device *dev,
-			    struct ethtool_ringparam *erp)
-{
-	memset(erp, 0, sizeof(struct ethtool_ringparam));
-
-	erp->rx_max_pending = XTE_RECV_BD_CNT;
-	erp->tx_max_pending = XTE_SEND_BD_CNT;
-	erp->rx_pending = XTE_RECV_BD_CNT;
-	erp->tx_pending = XTE_SEND_BD_CNT;
 	return 0;
 }
 
@@ -2227,9 +1218,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 {
 	struct net_local *lp = netdev_priv(dev);
 	struct ethtool_cmd ecmd;
-	struct ethtool_coalesce eco;
 	struct ethtool_drvinfo edrv;
-	struct ethtool_ringparam erp;
 	struct ethtool_pauseparam epp;
 	struct mac_regsDump regs;
 	int ret = -EOPNOTSUPP;
@@ -2344,10 +1333,13 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 				return -EFAULT;
 
 			if (edata.data) {
+			  /* Features for DMA, preserve for future */
+			  /*
 				if (XLlTemac_IsDma(&lp->Emac)) {
 					dev->features |=
 						NETIF_F_SG | NETIF_F_FRAGLIST;
 				}
+			  */
 			}
 			else {
 				dev->features &=
@@ -2358,27 +1350,13 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 			break;
 		}
 	case ETHTOOL_GCOALESCE:	/* Get coalescing info. Use "-c" w/ ethtool */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			break;
-		eco.cmd = ecmd.cmd;
-		ret = xenet_ethtool_get_coalesce(dev, &eco);
-		if (ret < 0) {
-			return -EIO;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &eco, sizeof(struct ethtool_coalesce))) {
-			return -EFAULT;
-		}
-		ret = 0;
-		break;
+	  /* For the moment, break since no DMA is supported */
+	  break;
+
 	case ETHTOOL_SCOALESCE:	/* Set coalescing info. Use "-C" w/ ethtool */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			break;
-		if (copy_from_user
-		    (&eco, rq->ifr_data, sizeof(struct ethtool_coalesce)))
-			return -EFAULT;
-		ret = xenet_ethtool_set_coalesce(dev, &eco);
-		break;
+	  /* For the moment, break since no DMA is supported */
+	  break;
+
 	case ETHTOOL_GDRVINFO:	/* Get driver information. Use "-i" w/ ethtool */
 		edrv.cmd = edrv.cmd;
 		ret = xenet_ethtool_get_drvinfo(dev, &edrv);
@@ -2405,17 +1383,10 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 		ret = 0;
 		break;
 	case ETHTOOL_GRINGPARAM:	/* Get RX/TX ring parameters. Use "-g" w/ ethtool */
-		erp.cmd = edrv.cmd;
-		ret = xenet_ethtool_get_ringparam(dev, &(erp));
-		if (ret < 0) {
-			return ret;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &erp, sizeof(struct ethtool_ringparam))) {
-			return -EFAULT;
-		}
-		ret = 0;
+	  /* For the moment, return error since no DMA is supported */
+	  return -EFAULT;
 		break;
+
 	case ETHTOOL_NWAY_RST:	/* Restart auto negotiation if enabled. Use "-r" w/ ethtool */
 		return -EOPNOTSUPP;	/* TODO: To support in next version */
 	case ETHTOOL_GSTRINGS:{
@@ -2495,19 +1466,6 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	/* gmii_ioctl_data has 4 u16 fields: phy_id, reg_num, val_in & val_out */
 	struct mii_ioctl_data *data = (struct mii_ioctl_data *) &rq->ifr_data;
-	struct {
-		__u16 threshold;
-		__u32 direction;
-	} thr_arg;
-	struct {
-		__u16 waitbound;
-		__u32 direction;
-	} wbnd_arg;
-
-	int ret;
-	u32 threshold, timer;
-	XLlDma_BdRing *RingPtr;
-	u32 *dma_int_mask_ptr;
 
 	switch (cmd) {
 	case SIOCETHTOOL:
@@ -2523,98 +1481,11 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		return phy_mii_ioctl(lp->phy_dev, data, cmd);
 
 	case SIOCDEVPRIVATE + 3:	/* set THRESHOLD */
-		if (XLlTemac_IsFifo(&lp->Emac))
-			return -EFAULT;
-
-		if (copy_from_user(&thr_arg, rq->ifr_data, sizeof(thr_arg)))
-			return -EFAULT;
-
-		if (thr_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-		}
-		XLlDma_BdRingGetCoalesce(RingPtr, &threshold, &timer);
-		if (thr_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-		}
-		if ((ret = XLlDma_BdRingSetCoalesce(RingPtr, thr_arg.threshold,
-						    timer)) != XST_SUCCESS) {
-			return -EIO;
-		}
-		return 0;
-
 	case SIOCDEVPRIVATE + 4:	/* set WAITBOUND */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			return -EFAULT;
-
-		if (copy_from_user(&wbnd_arg, rq->ifr_data, sizeof(wbnd_arg)))
-			return -EFAULT;
-
-		if (wbnd_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-		}
-		XLlDma_BdRingGetCoalesce(RingPtr, &threshold, &timer);
-		if (wbnd_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-			dma_int_mask_ptr = &dma_tx_int_mask;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-			dma_int_mask_ptr = &dma_rx_int_mask;
-		}
-		if (wbnd_arg.waitbound == 0) {
-			wbnd_arg.waitbound = 1;
-			*dma_int_mask_ptr = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-		}
-		if ((ret = XLlDma_BdRingSetCoalesce(RingPtr, threshold,
-					wbnd_arg.waitbound)) != XST_SUCCESS) {
-			return -EIO;
-		}
-		XLlDma_mBdRingIntEnable(RingPtr, *dma_int_mask_ptr);
-
-		return 0;
-
 	case SIOCDEVPRIVATE + 5:	/* get THRESHOLD */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			return -EFAULT;
-
-		if (copy_from_user(&thr_arg, rq->ifr_data, sizeof(thr_arg)))
-			return -EFAULT;
-
-		if (thr_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-		}
-		XLlDma_BdRingGetCoalesce(RingPtr,
-				(u32 *) &(thr_arg.threshold), &timer);
-		if (copy_to_user(rq->ifr_data, &thr_arg, sizeof(thr_arg))) {
-			return -EFAULT;
-		}
-		return 0;
-
 	case SIOCDEVPRIVATE + 6:	/* get WAITBOUND */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			return -EFAULT;
-
-		if (copy_from_user(&wbnd_arg, rq->ifr_data, sizeof(wbnd_arg))) {
-			return -EFAULT;
-		}
-		if (thr_arg.direction == XTE_SEND) {
-			RingPtr = &lp->Dma.TxBdRing;
-		} else {
-			RingPtr = &lp->Dma.RxBdRing;
-		}
-		XLlDma_BdRingGetCoalesce(RingPtr, &threshold,
-					 (u32 *) &(wbnd_arg.waitbound));
-		if (copy_to_user(rq->ifr_data, &wbnd_arg, sizeof(wbnd_arg))) {
-			return -EFAULT;
-		}
-		return 0;
+	  /* For the moment, return error since no DMA is supported */
+	  return -EFAULT;
 
 	default:
 		return -EOPNOTSUPP;
@@ -2632,9 +1503,6 @@ static void xtenet_remove_ndev(struct net_device *ndev)
 {
 	if (ndev) {
 		struct net_local *lp = netdev_priv(ndev);
-
-		if (XLlTemac_IsDma(&lp->Emac) && (lp->desc_space))
-			free_descriptor_skb(ndev);
 
 		iounmap((void *) (lp->Emac.Config.BaseAddress));
 		free_netdev(ndev);
@@ -2701,7 +1569,6 @@ static int xtenet_setup(
 		struct resource *r_mem,
 		struct resource *r_irq,
 		struct labx_eth_platform_data *pdata) {
-	int xs;
 	u32 virt_baddr;		/* virtual base address of TEMAC */
 	int i;
 
@@ -2715,7 +1582,7 @@ static int xtenet_setup(
 	/* Create an ethernet device instance */
 	ndev = alloc_etherdev(sizeof(struct net_local));
 	if (!ndev) {
-		dev_err(dev, "labx_eth_llink: Could not allocate net device.\n");
+		dev_err(dev, "labx_ethernet: Could not allocate net device.\n");
 		rc = -ENOMEM;
 		goto error;
 	}
@@ -2726,37 +1593,27 @@ static int xtenet_setup(
 	 */
 	lp = netdev_priv(ndev);
 	lp->ndev = ndev;
-	lp->dma_irq_r = pdata->ll_dev_dma_rx_irq;
-	lp->dma_irq_s = pdata->ll_dev_dma_tx_irq;
 	lp->fifo_irq = pdata->ll_dev_fifo_irq;
 	strncpy(lp->phy_name,pdata->phy_name,64);
 
 	/* Setup the Config structure for the XLlTemac_CfgInitialize() call. */
 	Temac_Config.BaseAddress = r_mem->start;
-#if 0
-	Config.RxPktFifoDepth = pdata->rx_pkt_fifo_depth;
-	Config.TxPktFifoDepth = pdata->tx_pkt_fifo_depth;
-	Config.MacFifoDepth = pdata->mac_fifo_depth;
-	Config.IpIfDmaConfig = pdata->dma_mode;
-#endif
 	Temac_Config.TxCsum = pdata->tx_csum;
 	Temac_Config.RxCsum = pdata->rx_csum;
-	Temac_Config.LLDevType = pdata->ll_dev_type;
-	Temac_Config.LLDevBaseAddress = pdata->ll_dev_baseaddress;
 	Temac_Config.PhyType = pdata->phy_type;
 	Temac_Config.PhyAddr = pdata->phy_addr;
 
 	/* Get the virtual base address for the device */
 	virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
 	if (0 == virt_baddr) {
-		dev_err(dev, "labx_eth_llink: Could not allocate iomem.\n");
+		dev_err(dev, "labx_ethernet: Could not allocate iomem.\n");
 		rc = -EIO;
 		goto error;
 	}
 
 	if (XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
 	    XST_SUCCESS) {
-		dev_err(dev, "labx_eth_llink: Could not initialize device.\n");
+		dev_err(dev, "labx_ethernet: Could not initialize device.\n");
 
 		rc = -ENODEV;
 		goto error;
@@ -2778,7 +1635,7 @@ static int xtenet_setup(
 
 	if (_XLlTemac_SetMacAddress(&lp->Emac, ndev->dev_addr) != XST_SUCCESS) {
 		/* should not fail right after an initialize */
-		dev_err(dev, "labx_eth_llink: could not set MAC address.\n");
+		dev_err(dev, "labx_ethernet: could not set MAC address.\n");
 		rc = -EIO;
 		goto error;
 	}
@@ -2794,74 +1651,9 @@ static int xtenet_setup(
 		ndev->mtu = XTE_JUMBO_MTU;
 
 
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		int result;
-
-		printk("%s: labx_eth_llink: using DMA mode.\n", ndev->name);
-
-#ifndef XDCRIO_H
-		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
-		if (0 == virt_baddr) {
-			dev_err(dev,
-			       "labx_eth_llink: Could not allocate iomem for local link connected device.\n");
-			rc = -EIO;
-			goto error;
-		}
-#endif
-//		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
-		XLlDma_Initialize(&lp->Dma, virt_baddr);
-
-		ndev->hard_start_xmit = xenet_DmaSend;
-
-		result = descriptor_init(ndev);
-		if (result) {
-			rc = -EIO;
-			goto error;
-		}
-
-		/* set the packet threshold and wait bound for both TX/RX directions */
-		if (DFT_TX_WAITBOUND == 0) {
-			dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-			xs = XLlDma_BdRingSetCoalesce(&lp->Dma.TxBdRing, DFT_TX_THRESHOLD, 1);
-		} else {
-			xs = XLlDma_BdRingSetCoalesce(&lp->Dma.TxBdRing, DFT_TX_THRESHOLD, DFT_TX_WAITBOUND);
-		}
-		if (xs != XST_SUCCESS) {
-			dev_err(dev,
-			       "labx_eth_llink: could not set SEND pkt threshold/waitbound, ERROR %d",
-			       xs);
-		}
-		XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-
-		if (DFT_RX_WAITBOUND == 0) {
-			dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-			xs = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing, DFT_RX_THRESHOLD, 1);
-		} else {
-			xs = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing, DFT_RX_THRESHOLD, DFT_RX_WAITBOUND);
-		}
-		if (xs != XST_SUCCESS) {
-			dev_err(dev,
-			       "labx_eth_llink: Could not set RECV pkt threshold/waitbound ERROR %d",
-			       xs);
-		}
-		XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-	}
-	else {
-		dev_err(dev,
-		       "labx_eth_llink: using FIFO direct interrupt driven mode.\n");
-
-		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
-		if (0 == virt_baddr) {
-			dev_err(dev,
-			       "labx_eth_llink: Could not allocate iomem for local link connected device.\n");
-			rc = -EIO;
-			goto error;
-		}
-		printk("labx_eth_llink: Fifo base address: 0x%0x\n", virt_baddr);
-		XLlFifo_Initialize(&lp->Fifo, virt_baddr);
-
-		ndev->hard_start_xmit = xenet_FifoSend;
-	}
+	/* Locate the FIFO as an offset from the start of the device */
+	XLlFifo_Initialize(&lp->Fifo, (lp->Emac.Config.BaseAddress + LABX_FIFO_REGS_BASE));
+	ndev->hard_start_xmit = xenet_FifoSend;
 
 	/* initialize the netdev structure */
 	ndev->open = xenet_open;
@@ -2871,22 +1663,6 @@ static int xtenet_setup(
 	ndev->set_multicast_list = xenet_set_multicast_list;
 	ndev->set_mac_address = xenet_set_mac_address;
 	ndev->flags &= ~IFF_MULTICAST;
-
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		ndev->features = NETIF_F_SG | NETIF_F_FRAGLIST;
-
-		if (XLlTemac_IsTxCsum(&lp->Emac) == TRUE) {
-			/*
-			 * This hardware only supports proper checksum calculations
-			 * on TCP/UDP packets.
-			 */
-			ndev->features |= NETIF_F_IP_CSUM;
-		}
-		if (XLlTemac_IsRxCsum(&lp->Emac) == TRUE) {
-			lp->local_features |= LOCAL_FEATURE_RX_CSUM;
-		}
-	}
-
 	ndev->do_ioctl = xenet_ioctl;
 	ndev->tx_timeout = xenet_tx_timeout;
 	ndev->watchdog_timeo = TX_TIMEOUT;
@@ -2961,13 +1737,13 @@ static int xtenet_probe_thread(void *data)
 
 	/* param check */
 	if (!pdev) {
-		dev_err(dev, "labx_eth_llink: Internal error. Probe called with NULL param.\n");
+		dev_err(dev, "labx_ethernet: Internal error. Probe called with NULL param.\n");
 		return -ENODEV;
 	}
 
 	pdata = (struct labx_eth_platform_data *) pdev->dev.platform_data;
 	if (!pdata) {
-		dev_err(dev, "labx_eth_llink: Couldn't find platform data.\n");
+		dev_err(dev, "labx_ethernet: Couldn't find platform data.\n");
 
 		return -ENODEV;
 	}
@@ -2975,7 +1751,7 @@ static int xtenet_probe_thread(void *data)
 	/* Get iospace and an irq for the device */
 	r_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if(!r_mem) {
-		dev_err(dev, "labx_eth_llink: IO resource MEM not found.\n");
+		dev_err(dev, "labx_ethernet: IO resource MEM not found.\n");
 		return -ENODEV;
 	}
 	r_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -3009,19 +1785,6 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 	}
 }
 
-static struct of_device_id xtenet_fifo_of_match[] = {
-	{ .compatible = "xlnx,xps-ll-fifo-1.00.a", },
-	{ .compatible = "xlnx,xps-ll-fifo-1.00.b", },
-	{ .compatible = "xlnx,xps-ll-fifo-1.01.a", },
-	{ .compatible = "xlnx,xps-ll-fifo-1.02.a", },
-	{ /* end of list */ },
-};
-
-static struct of_device_id xtenet_sdma_of_match[] = {
-	{ .compatible = "xlnx,ll-dma-1.00.a", },
-	{ /* end of list */ },
-};
-
 /* Note: This must be <= MII_BUS_ID_SIZE which is currently 17 (including trailing '\0') */
 #define MDIO_OF_BUSNAME_FMT "labxeth%08x"
 
@@ -3031,8 +1794,6 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct resource r_irq_phy_struct;
 	struct resource r_mem_struct;
 	struct resource r_connected_mdio_mem_struct;
-	struct resource r_connected_mem_struct;
-	struct resource r_connected_irq_struct;
 	struct resource *r_irq     = &r_irq_struct;     /* Interrupt resources */
 	struct resource *r_irq_phy = &r_irq_phy_struct; /* Interrupt resources */
 	struct resource *r_mem     = &r_mem_struct;     /* IO mem resources */
@@ -3042,12 +1803,9 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct labx_eth_platform_data *pdata = &pdata_struct;
 	const void *mac_address;
 	int rc = 0;
-	const phandle *llink_connected_handle;
-	struct device_node *llink_connected_node;
 	const phandle *mdio_controller_handle;
 	struct device_node *mdio_controller_node;
 	struct device_node *mdio_controller_node_eth;
-	u32 *dcrreg_property;
 	u32 phy_addr;
 	int i;
 
@@ -3116,83 +1874,6 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 		}
 	}
 
-	llink_connected_handle = of_get_property(ofdev->node, "llink-connected", NULL);
-	if(!llink_connected_handle) {
-		dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-		return rc;
-	}
-
-	llink_connected_node = of_find_node_by_phandle(*llink_connected_handle);
-	if (!llink_connected_node) {
-		dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-		return rc;
-	}
-
-	rc = of_address_to_resource( llink_connected_node, 0, &r_connected_mem_struct);
-
-	/** Get the right information from whatever the locallink is connected to. */
-	if(of_match_node(xtenet_fifo_of_match, llink_connected_node)) {
-		/** Connected to a fifo. */
-		if(rc) {
-			dev_warn(&ofdev->dev, "invalid address\n");
-			return rc;
-		}
-
-		pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
-		pdata_struct.ll_dev_type = XPAR_LL_FIFO;
-		pdata_struct.ll_dev_dma_rx_irq	= NO_IRQ;
-		pdata_struct.ll_dev_dma_tx_irq	= NO_IRQ;
-
-		rc = of_irq_to_resource( llink_connected_node, 0, &r_connected_irq_struct);
-		if(rc == NO_IRQ) {
-			dev_warn(&ofdev->dev, "no IRQ found.\n");
-			return rc;
-		}
-		pdata_struct.ll_dev_fifo_irq	= r_connected_irq_struct.start;
-		pdata_struct.dcr_host = 0x0;
-        } 
-	else if(of_match_node(xtenet_sdma_of_match, llink_connected_node)) {
-		/** Connected to a dma port, default to 405 type dma */
-		pdata->dcr_host = 0;
-		if(rc) {
-			printk("No Address was found, might be 440, check for dcr reg\n");
-			/* no address was found, might be 440, check for dcr reg */
-
-			dcrreg_property = (u32 *)of_get_property(llink_connected_node, "dcr-reg",NULL);
-			if(dcrreg_property) {
-			        r_connected_mem_struct.start = *dcrreg_property;
-				pdata->dcr_host = 0xFF;
-			} else {
-				dev_warn(&ofdev->dev, "invalid address\n");
-				return rc;
-			}			
-		}
-
-		pdata_struct.ll_dev_baseaddress	= r_connected_mem_struct.start;
-		pdata_struct.ll_dev_type = XPAR_LL_DMA;
-
-		rc = of_irq_to_resource(llink_connected_node, 0, &r_connected_irq_struct);
-		if(rc == NO_IRQ) {
-			dev_warn(&ofdev->dev, "First IRQ not found.\n");
-			return rc;
-		}
-		pdata_struct.ll_dev_dma_rx_irq	= r_connected_irq_struct.start;
-
-		rc = of_irq_to_resource(llink_connected_node, 1, &r_connected_irq_struct);
-		if(rc == NO_IRQ) {
-			dev_warn(&ofdev->dev, "Second IRQ not found.\n");
-			return rc;
-		}
-		pdata_struct.ll_dev_dma_tx_irq	= r_connected_irq_struct.start;
-
-		pdata_struct.ll_dev_fifo_irq	= NO_IRQ;
-        } else {
-		dev_warn(&ofdev->dev, "Locallink connection not matched.\n");
-		printk("Locallink connection no matched\n");
-		return rc;
-        }
-
-	of_node_put(llink_connected_node);
         mac_address = of_get_mac_address(ofdev->node);
         if(mac_address) {
             memcpy(pdata_struct.mac_addr, mac_address, 6);

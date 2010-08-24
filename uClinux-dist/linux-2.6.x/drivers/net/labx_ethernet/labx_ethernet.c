@@ -308,7 +308,6 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
 	u32 Reg;
-	u32 TimeoutCount = 2;
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -465,7 +464,7 @@ static void InitHw(XLlTemac *InstancePtr)
  ******************************************************************************/
 int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
-	u32 MacAddr;
+  /*	u32 MacAddr; */
 	u8 *Aptr = (u8 *) AddressPtr;
     int byteIndex;
 
@@ -527,7 +526,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_1_EN1, 0x0000FFFF);
 
-/* LAB X Note (CP) : NOTE: FILTER_2 is specific to avahi multi cast messages for my mix, we really need to inpmenet multicast filtering */
+/* LAB X Note (CP) : NOTE: FILTER_2 is specific to avahi multi cast messages for my mix, we really need to implement multicast filtering */
 	/* Multicast Filter */
 	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_2_AW0, 0x005E0001);
@@ -564,7 +563,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
-	u32 MacAddr;
+  /*	u32 MacAddr;*/
 	u8 *Aptr = (u8 *) AddressPtr;
     int byteIndex;
 
@@ -629,7 +628,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 {
-	u32 Reg;		/* Generic register contents */
+  /*	u32 Reg;*/		/* Generic register contents */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
 	u32 RegTc;		/* Reflects original contents of TC  */
 	u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
@@ -840,7 +839,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
  ******************************************************************************/
 int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
-	u32 Reg;		/* Generic */
+  /*	u32 Reg;*/		/* Generic */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
 	u32 RegTc;		/* Reflects original contents of TC  */
 	u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
