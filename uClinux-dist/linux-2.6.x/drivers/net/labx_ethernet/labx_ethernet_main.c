@@ -500,7 +500,8 @@ void reset(struct net_device *dev, u32 line_num)
 	/*
 	 * Reset the FIFO
 	 */
-	XLlFifo_Reset(&lp->Fifo);
+	XLlFifo_TxReset(&lp->Fifo);
+	XLlFifo_RxReset(&lp->Fifo);
 
 #if 0
 
@@ -604,11 +605,11 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 		} else if (irq_status & XLLF_INT_TXERROR_MASK) {
 			lp->stats.tx_errors++;
 			lp->stats.tx_fifo_errors++;
-			XLlFifo_Reset(&lp->Fifo);
+			XLlFifo_TxReset(&lp->Fifo);
 			irq_status &= ~XLLF_INT_TXERROR_MASK;
 		} else if (irq_status & XLLF_INT_RXERROR_MASK) {
 			lp->stats.rx_errors++;
-			XLlFifo_Reset(&lp->Fifo);
+			XLlFifo_RxReset(&lp->Fifo);
 			irq_status &= ~XLLF_INT_RXERROR_MASK;
 		} else {
 			/* debug
@@ -750,6 +751,10 @@ static int xenet_open(struct net_device *dev)
 			printk("Not able to find Phy");
 		}
 	}
+
+	/* Reset the FIFO core */
+	XLlFifo_TxReset(&lp->Fifo);
+	XLlFifo_RxReset(&lp->Fifo);
 
 	/* Enable FIFO interrupts  - no polled mode */
 	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
