@@ -782,7 +782,7 @@ int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
 
-extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_ll_eth_platform_data *pdata, XLlTemac *InstancePtr);
+extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus
 }
 #endif

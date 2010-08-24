@@ -47,8 +47,8 @@
 #define MAC_DMA_SIMPLE	2	/* simple 2 channel DMA */
 #define MAC_DMA_SGDMA	3	/* scatter gather DMA */
 
-/* Platform device data structure */
-struct labx_eth_platform_data {
+/* Platform device data structure for LocalLink Ethernet */
+struct labx_ll_eth_platform_data {
   uint8_t tx_csum;
   uint8_t rx_csum;
   uint8_t dcr_host;

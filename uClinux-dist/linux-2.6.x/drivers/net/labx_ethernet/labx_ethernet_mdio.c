@@ -60,7 +60,7 @@ int labx_eth_ll_mdio_reset(struct mii_bus *bus)
 	return 0;
 }
 
-int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_ll_eth_platform_data *pdata, XLlTemac *InstancePtr)
+int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr)
 {
 	struct mii_bus *new_bus;
 	int ret = -ENOMEM;

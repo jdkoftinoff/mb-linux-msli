@@ -2700,7 +2700,7 @@ static int xtenet_setup(
 		struct device *dev,
 		struct resource *r_mem,
 		struct resource *r_irq,
-		struct labx_ll_eth_platform_data *pdata) {
+		struct labx_eth_platform_data *pdata) {
 	int xs;
 	u32 virt_baddr;		/* virtual base address of TEMAC */
 	int i;
@@ -2956,7 +2956,7 @@ static int xtenet_probe_thread(void *data)
 
 	struct resource *r_irq     = NULL; /* Interrupt resources */
 	struct resource *r_mem     = NULL; /* IO mem resources */
-	struct labx_ll_eth_platform_data *pdata;
+	struct labx_eth_platform_data *pdata;
 	struct platform_device *pdev = to_platform_device(dev);
 
 	/* param check */
@@ -2965,7 +2965,7 @@ static int xtenet_probe_thread(void *data)
 		return -ENODEV;
 	}
 
-	pdata = (struct labx_ll_eth_platform_data *) pdev->dev.platform_data;
+	pdata = (struct labx_eth_platform_data *) pdev->dev.platform_data;
 	if (!pdata) {
 		dev_err(dev, "labx_eth_llink: Couldn't find platform data.\n");
 
@@ -3037,9 +3037,9 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct resource *r_irq_phy = &r_irq_phy_struct; /* Interrupt resources */
 	struct resource *r_mem     = &r_mem_struct;     /* IO mem resources */
 
-	struct labx_ll_eth_platform_data pdata_struct = {};
+	struct labx_eth_platform_data pdata_struct = {};
 
-	struct labx_ll_eth_platform_data *pdata = &pdata_struct;
+	struct labx_eth_platform_data *pdata = &pdata_struct;
 	const void *mac_address;
 	int rc = 0;
 	const phandle *llink_connected_handle;
