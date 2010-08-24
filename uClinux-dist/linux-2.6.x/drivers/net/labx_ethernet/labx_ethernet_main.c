@@ -1593,7 +1593,7 @@ static int xtenet_setup(
 	 */
 	lp = netdev_priv(ndev);
 	lp->ndev = ndev;
-	lp->fifo_irq = pdata->ll_dev_fifo_irq;
+	lp->fifo_irq = pdata->fifo_irq;
 	strncpy(lp->phy_name,pdata->phy_name,64);
 
 	/* Setup the Config structure for the XLlTemac_CfgInitialize() call. */
@@ -1791,12 +1791,14 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
 	struct resource r_irq_struct;
+	struct resource r_irq_fifo_struct;
 	struct resource r_irq_phy_struct;
 	struct resource r_mem_struct;
 	struct resource r_connected_mdio_mem_struct;
-	struct resource *r_irq     = &r_irq_struct;     /* Interrupt resources */
-	struct resource *r_irq_phy = &r_irq_phy_struct; /* Interrupt resources */
-	struct resource *r_mem     = &r_mem_struct;     /* IO mem resources */
+	struct resource *r_irq      = &r_irq_struct;      /* Interrupt resources */
+	struct resource *r_irq_fifo = &r_irq_fifo_struct; /* Interrupt resources */
+	struct resource *r_irq_phy  = &r_irq_phy_struct;  /* Interrupt resources */
+	struct resource *r_mem      = &r_mem_struct;      /* IO mem resources */
 
 	struct labx_eth_platform_data pdata_struct = {};
 
@@ -1818,14 +1820,24 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 		return rc;
 	}
 
-	/* Get IRQ for the device */
+	/* Get IRQ for the device; this primary one handles MDIO and *can*
+	 * also multiplex the PHY IRQ if configured to
+	 */
 	rc = of_irq_to_resource(ofdev->node, 0, r_irq);
 	if(rc == NO_IRQ) {
 		r_irq = NULL;
 	}
 
+	/* Get IRQ for the FIFO logic */
+	rc = of_irq_to_resource(ofdev->node, 1, r_irq_fifo);
+	if(rc == NO_IRQ) {
+	  dev_err(&ofdev->dev, "labx_ethernet: No FIFO IRQ found.\n");
+	  r_irq_fifo = NULL;
+	}
+	pdata_struct.fifo_irq = r_irq_fifo->start;
+
 	/* Get IRQ of the attached phy (if any) */
-	rc = of_irq_to_resource(ofdev->node, 1, r_irq_phy);
+	rc = of_irq_to_resource(ofdev->node, 2, r_irq_phy);
 	if(rc == NO_IRQ) {
 		r_irq_phy = NULL;
 	}
