@@ -93,11 +93,7 @@ struct labx_eth_platform_data {
   uint8_t dcr_host;
 
   /* LocalLink datapath definitions */
-  /* TEMPORARY DEBUG */
-  uint8_t ll_dev_type;
   uint32_t ll_dev_baseaddress;
-  uint32_t ll_dev_dma_rx_irq;
-  uint32_t ll_dev_dma_tx_irq;
   uint32_t ll_dev_fifo_irq;
   
   /* Default MAC address for the port */

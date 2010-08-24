@@ -1943,7 +1943,7 @@ menuconfig NETDEV_1000
 
 if NETDEV_1000
 config LABX_ETH_LOCALLINK
-	tristate "Lab X 10/100/1000 Ethernet MAC support"
+	tristate "Lab X 10/100/1000 LocalLink Ethernet MAC support"
 	select NEED_XILINX_LLDMA
 	select PHYLIB
 	help
@@ -1954,6 +1954,7 @@ config LABX_ETH_LOCALLINK
 
 config LABX_ETHERNET
 	tristate "Lab X 10/100/1000 Direct Ethernet MAC support"
+	select NEED_XILINX_LLFIFO
 	select PHYLIB
 	help
 	  This driver supports the Lab X Technologies direct MAC,
