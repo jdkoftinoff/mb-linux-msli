@@ -19,7 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/phy.h>
 
-#include "labx_eth_locallink.h"
+#include "labx_ethernet.h"
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 
 

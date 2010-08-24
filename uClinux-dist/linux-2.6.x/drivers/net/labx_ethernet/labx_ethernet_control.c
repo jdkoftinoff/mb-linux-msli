@@ -38,7 +38,7 @@
 
 /***************************** Include Files *********************************/
 
-#include "labx_eth_locallink.h"
+#include "labx_ethernet.h"
 
 /************************** Constant Definitions *****************************/
 

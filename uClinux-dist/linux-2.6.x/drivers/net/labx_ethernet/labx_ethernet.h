@@ -265,7 +265,7 @@ extern "C" {
 #include "xenv.h"
 #include "xbasic_types.h"
 #include "xstatus.h"
-#include "labx_eth_locallink_hw.h"
+#include "labx_ethernet_hw.h"
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 #include <linux/interrupt.h>
 

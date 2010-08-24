@@ -41,7 +41,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
-#include "labx_eth_locallink.h"
+#include "labx_ethernet.h"
 
 /************************** Constant Definitions *****************************/
 

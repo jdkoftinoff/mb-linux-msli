@@ -1947,11 +1947,22 @@ config LABX_ETH_LOCALLINK
 	select NEED_XILINX_LLDMA
 	select PHYLIB
 	help
-	  This driver supports the Lab X Technologies LocalLink MAC
+	  This driver supports the Lab X Technologies LocalLink MAC;
+	  this hardware is deprecated and will be removed in future
+	  distributions.  The Lab X "Direct Ethernet" peripheral is
+	  its intended replacement.
+
+config LABX_ETHERNET
+	tristate "Lab X 10/100/1000 Direct Ethernet MAC support"
+	select PHYLIB
+	help
+	  This driver supports the Lab X Technologies direct MAC,
+	  which is presently FIFO-based only.  Future incarnations may
+	  incorporate an integrated SGDMA engine for performance.
 
 config LABX_ETH_LOCALLINK_HARD_MAC
 	tristate "Xilinx Hard MAC"
-	depends on LABX_ETH_LOCALLINK
+	depends on (LABX_ETHERNET || LABX_ETH_LOCALLINK)
 	help
 	  Select this if the locallink is connected to a Xilinx hard MAC tile.
 

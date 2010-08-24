@@ -48,7 +48,7 @@
 #endif
 
 #include "xbasic_types.h"
-#include "labx_eth_locallink.h"
+#include "labx_ethernet.h"
 #include "xllfifo.h"
 #include "xlldma.h"
 #include "xlldma_bdring.h"
@@ -3214,7 +3214,7 @@ static int __devexit xtenet_of_remove(struct of_device *dev)
 }
 
 static struct of_device_id xtenet_of_match[] = {
-	{ .compatible = "xlnx,labx-eth-locallink-1.00.a", },
+	{ .compatible = "xlnx,labx-ethernet-1.00.a", },
 	{ /* end of list */ },
 };
 
