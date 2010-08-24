@@ -92,9 +92,8 @@ struct labx_eth_platform_data {
   uint8_t rx_csum;
   uint8_t dcr_host;
 
-  /* LocalLink datapath definitions */
-  uint32_t ll_dev_baseaddress;
-  uint32_t ll_dev_fifo_irq;
+  /* FIFO IRQ */
+  uint32_t fifo_irq;
   
   /* Default MAC address for the port */
   uint8_t mac_addr[6];

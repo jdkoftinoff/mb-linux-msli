@@ -110,6 +110,40 @@ extern "C" {
 /* The FIFO interface registers are located following the MAC range */
 #define LABX_FIFO_REGS_BASE   (0x00002000)
 
+  /* FIFO register definitions */
+#define FIFO_ISR_OFFSET  0x00000000  /**< Interrupt Status */
+#define FIFO_IER_OFFSET  0x00000004 /**< Interrupt Enable */
+#  define FIFO_INT_RPURE_MASK       0x80000000 /**< Receive under-read */
+#  define FIFO_INT_RPORE_MASK       0x40000000 /**< Receive over-read */
+#  define FIFO_INT_RPUE_MASK        0x20000000 /**< Receive underrun (empty) */
+#  define FIFO_INT_TPOE_MASK        0x10000000 /**< Transmit overrun */
+#  define FIFO_INT_TC_MASK          0x08000000 /**< Transmit complete */
+#  define FIFO_INT_RC_MASK          0x04000000 /**< Receive complete */
+#  define FIFO_INT_ALL_MASK         0xFC000000 /**< All the ints */
+#  define FIFO_INT_ERROR_MASK       0xF2000000 /**< Error status ints */
+#  define FIFO_INT_RXERROR_MASK     0xE0000000 /**< Receive Error status ints */
+#  define FIFO_INT_TXERROR_MASK     0x12000000 /**< Transmit Error status ints */
+
+#define FIFO_TDFR_OFFSET 0x00000008  /**< Transmit Reset */
+#define FIFO_TDFV_OFFSET 0x0000000c  /**< Transmit Vacancy */
+#define FIFO_TDFD_OFFSET 0x00000010  /**< Transmit Data */
+#define FIFO_TLF_OFFSET  0x00000014  /**< Transmit Length */
+
+#define FIFO_RDFR_OFFSET 0x00000018  /**< Receive Reset */
+#define FIFO_RDFO_OFFSET 0x0000001c  /**< Receive Occupancy */
+#define FIFO_RDFD_OFFSET 0x00000020  /**< Receive Data */
+#define FIFO_RLF_OFFSET  0x00000024  /**< Receive Length */
+
+#define FIFO_RESET_MAGIC 0x000000A5  /* Pattern to reset FIFOs */
+
+  /* Macros for FIFO register access */
+#define Read_Fifo32(emac, offset) \
+  XIo_In32(emac.Config.BaseAddress + LABX_FIFO_REGS_BASE + offset)
+
+#define Write_Fifo32(emac, offset, value)			      \
+  XIo_Out32((emac.Config.BaseAddress + LABX_FIFO_REGS_BASE + offset), \
+            value)
+
 /* Timeout for any MDIO operation */
 #define MDIO_TIMEOUT_JIFFIES  (msecs_to_jiffies(100))
 
