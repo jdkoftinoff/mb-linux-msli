@@ -1830,7 +1830,6 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
   int rc = 0;
   const phandle *mdio_controller_handle;
   struct device_node *mdio_controller_node;
-  struct device_node *mdio_controller_node_eth;
   u32 phy_addr;
   int i;
 
@@ -1881,16 +1880,12 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
     if (!mdio_controller_node) {
       dev_warn(&ofdev->dev, "no MDIO connection found.\n");
     } else {
-      /* The ethernet@xxxxxxxx should be the first child... */
-      mdio_controller_node_eth = of_get_next_child(mdio_controller_node, NULL);
-
-      if (!mdio_controller_node_eth) {
-	dev_warn(&ofdev->dev, "MDIO connection node has no ethernet child.\n");
-      } else {
-	rc = of_address_to_resource(mdio_controller_node_eth, 0, &r_connected_mdio_mem_struct);
-	snprintf(pdata->phy_name, BUS_ID_SIZE, MDIO_OF_BUSNAME_FMT ":%02x", (u32)r_connected_mdio_mem_struct.start, phy_addr);
-	printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
-      }
+      /* The MDIO controller node is itself the entity able to talk over MDIO;
+       * it is not a compound device.
+       */
+      rc = of_address_to_resource(mdio_controller_node, 0, &r_connected_mdio_mem_struct);
+      snprintf(pdata->phy_name, BUS_ID_SIZE, MDIO_OF_BUSNAME_FMT ":%02x", (u32)r_connected_mdio_mem_struct.start, phy_addr);
+      printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
     }
   }
 
