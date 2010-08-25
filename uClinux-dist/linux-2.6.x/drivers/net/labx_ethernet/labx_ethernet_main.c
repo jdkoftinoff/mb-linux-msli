@@ -499,8 +499,8 @@ void reset(struct net_device *dev, u32 line_num)
   /*
    * Reset the FIFO
    */
-  XLlFifo_TxReset(&lp->Fifo);
-  XLlFifo_RxReset(&lp->Fifo);
+  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
 
 #if 0
 
@@ -535,9 +535,9 @@ void reset(struct net_device *dev, u32 line_num)
   Options = XLlTemac_GetOptions(&lp->Emac);
   printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
 
-  XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
-		    XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
-		    XLLF_INT_TXERROR_MASK);
+  XLlFifo_IntEnable(&lp->Fifo, FIFO_INT_TC_MASK |
+		    FIFO_INT_RC_MASK | FIFO_INT_RXERROR_MASK |
+		    FIFO_INT_TXERROR_MASK);
 
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
@@ -581,7 +581,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
   irq_status = XLlFifo_IntPending(&lp->Fifo);
   XLlFifo_IntClear(&lp->Fifo, irq_status);
   while (irq_status) {
-    if (irq_status & XLLF_INT_RC_MASK) {
+    if (irq_status & FIFO_INT_RC_MASK) {
       /* handle the receive completion */
       struct list_head *cur_lp;
       spin_lock_irqsave(&receivedQueueSpin, flags);
@@ -592,24 +592,24 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       }
       if (cur_lp != &(lp->rcv)) {
 	list_add_tail(&lp->rcv, &receivedQueue);
-	XLlFifo_IntDisable(&lp->Fifo, XLLF_INT_ALL_MASK);
+	XLlFifo_IntDisable(&lp->Fifo, FIFO_INT_ALL_MASK);
 	tasklet_schedule(&FifoRecvBH);
       }
       spin_unlock_irqrestore(&receivedQueueSpin, flags);
-      irq_status &= ~XLLF_INT_RC_MASK;
-    } else if (irq_status & XLLF_INT_TC_MASK) {
+      irq_status &= ~FIFO_INT_RC_MASK;
+    } else if (irq_status & FIFO_INT_TC_MASK) {
       /* handle the transmit completion */
       FifoSendHandler(dev);
-      irq_status &= ~XLLF_INT_TC_MASK;
-    } else if (irq_status & XLLF_INT_TXERROR_MASK) {
+      irq_status &= ~FIFO_INT_TC_MASK;
+    } else if (irq_status & FIFO_INT_TXERROR_MASK) {
       lp->stats.tx_errors++;
       lp->stats.tx_fifo_errors++;
-      XLlFifo_TxReset(&lp->Fifo);
-      irq_status &= ~XLLF_INT_TXERROR_MASK;
-    } else if (irq_status & XLLF_INT_RXERROR_MASK) {
+      Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+      irq_status &= ~FIFO_INT_TXERROR_MASK;
+    } else if (irq_status & FIFO_INT_RXERROR_MASK) {
       lp->stats.rx_errors++;
-      XLlFifo_RxReset(&lp->Fifo);
-      irq_status &= ~XLLF_INT_RXERROR_MASK;
+      Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
+      irq_status &= ~FIFO_INT_RXERROR_MASK;
     } else {
       /* debug
        * if (irq_status == 0) printk("Temac: spurious fifo int\n");
@@ -752,13 +752,13 @@ static int xenet_open(struct net_device *dev)
   }
 
   /* Reset the FIFO core */
-  XLlFifo_TxReset(&lp->Fifo);
-  XLlFifo_RxReset(&lp->Fifo);
+  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
 
   /* Enable FIFO interrupts  - no polled mode */
-  XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
-		    XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
-		    XLLF_INT_TXERROR_MASK);
+  XLlFifo_IntEnable(&lp->Fifo, FIFO_INT_TC_MASK |
+		    FIFO_INT_RC_MASK | FIFO_INT_RXERROR_MASK |
+		    FIFO_INT_TXERROR_MASK);
 
   /* Start TEMAC device */
   _XLlTemac_Start(&lp->Emac);
@@ -889,6 +889,9 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   skb_frag_t *frag;
   int i;
   void *virt_addr;
+  int word_index;
+  u32 word_len;
+  u32 *buf_ptr;
 
   total_len = skb_headlen(skb);
 
@@ -904,7 +907,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   spin_lock_irqsave(&XTE_tx_spinlock, flags);
   lp = netdev_priv(dev);
 
-  fifo_free_bytes = XLlFifo_TxVacancy(&lp->Fifo) * 4;
+  fifo_free_bytes = (Read_Fifo32(lp->Emac, FIFO_TDFV_OFFSET) << 2);
   if (fifo_free_bytes < total_len) {
     netif_stop_queue(dev);	/* stop send queue */
     lp->deferred_skb = skb;	/* buffer the sk_buffer and will send
@@ -913,18 +916,33 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
     return 0;
   }
 
-  /* Write frame data to FIFO */
-  XLlFifo_Write(&lp->Fifo, (void *) skb->data, skb_headlen(skb));
+  /* Write frame data to FIFO, starting with the header and following
+   * up with each of the fragments
+   */
+  word_len = ((skb_headlen(skb) + 3) >> 2);
+  buf_ptr = (u32*) skb->data;
+  for(word_index = 0; word_index < word_len; word_index++) {
+    Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
+  }
+  /*  XLlFifo_Write(&lp->Fifo, (void *) skb->data, skb_headlen(skb));*/
 
   frag = &skb_shinfo(skb)->frags[0];
   for (i = 1; i < total_frags; i++, frag++) {
+    word_len = ((frag->size + 3) >> 2);
+    buf_ptr = (u32*) (page_address(frag->page) + frag->page_offset);
+    for(word_index = 0; word_index < word_len; word_index++) {
+      Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
+    }
+  /*
     virt_addr =
       (void *) page_address(frag->page) + frag->page_offset;
     XLlFifo_Write(&lp->Fifo, virt_addr, frag->size);
+  */
   }
 
   /* Initiate transmit */
-  XLlFifo_TxSetLen(&lp->Fifo, total_len);
+  Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
+  /*  XLlFifo_TxSetLen(&lp->Fifo, total_len); */
   lp->stats.tx_bytes += total_len;
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 
@@ -1093,8 +1111,7 @@ static void FifoRecvHandler(unsigned long p)
     lp->stats.rx_packets++;
     lp->stats.rx_bytes += len;
 
-    /*
-    printk("Got %d Rx:\n", len);
+    printk("G1t %d Rx:\n", len);
     {
       int idx;
       for(idx = 0; idx < len; idx++) {
@@ -1103,15 +1120,17 @@ static void FifoRecvHandler(unsigned long p)
       }
       printk("\n");
     }
-    */
+
     skb_put(skb, len);	/* Tell the skb how much data we got. */
     skb->dev = dev;		/* Fill out required meta-data. */
     skb->protocol = eth_type_trans(skb, dev);
     skb->ip_summed = CHECKSUM_UNNECESSARY;
     netif_rx(skb);		/* Send the packet upstream. */
   }
-  XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK | XLLF_INT_RC_MASK |
-		    XLLF_INT_RXERROR_MASK | XLLF_INT_TXERROR_MASK);
+  
+
+  XLlFifo_IntEnable(&lp->Fifo, FIFO_INT_TC_MASK | FIFO_INT_RC_MASK |
+		    FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK);
 
 }
 
