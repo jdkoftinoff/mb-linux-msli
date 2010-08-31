@@ -2,6 +2,8 @@
 LTC=libtomcrypt/libtomcrypt.a
 LTM=libtommath/libtommath.a
 
+FLTFLAGS += -s 65536
+
 OBJS=dbutil.o session.o packet.o algo.o buffer.o kex.o dss.o bignum.o \
 		signkey.o rsa.o random.o service.o auth.o authpasswd.o channel.o \
 		chansession.o queue.o sshpty.o termcodes.o authpubkey.o runopts.o \
@@ -67,7 +69,7 @@ dropbearkey-host:
 	fi
 	./dropbearkey-host -t rsa -f dropbear_rsa_host_key
 	./dropbearkey-host -t dss -f dropbear_dss_host_key
-	
+
 strip: all
 	-$(STRIP) dropbear
 	-$(STRIP) dropbearkey
