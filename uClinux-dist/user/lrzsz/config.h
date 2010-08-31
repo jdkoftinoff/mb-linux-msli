@@ -1,5 +1,6 @@
 /* config.h.  Generated automatically by configure.  */
 /* config.h.in.  Generated automatically from configure.in by autoheader.  */
+#define _GNU_SOURCE
 
 /* Define if on AIX 3.
    System headers sometimes define this.
