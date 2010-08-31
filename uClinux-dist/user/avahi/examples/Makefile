@@ -158,13 +158,13 @@ DIST_SOURCES = $(am__client_browse_services_SOURCES_DIST) \
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run aclocal-1.10
+ACLOCAL = true
 ALL_LINGUAS = 
-AMTAR = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run tar
+AMTAR = tar
 AR = ar
-AUTOCONF = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run automake-1.10
+AUTOCONF = true
+AUTOHEADER = true
+AUTOMAKE = true
 AVAHI_AUTOIPD_GROUP = avahi-autoipd
 AVAHI_AUTOIPD_USER = avahi-autoipd
 AVAHI_GROUP = avahi
@@ -267,7 +267,7 @@ LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/missing --run makeinfo
+MAKEINFO = true
 MCS = 
 MDASSEMBLER = 
 MKDIR_P = /bin/mkdir -p
@@ -323,15 +323,15 @@ VISIBILITY_HIDDEN_CFLAGS = -fvisibility=hidden -DHAVE_VISIBILITY_HIDDEN
 XGETTEXT = /usr/bin/xgettext
 XML_CFLAGS = -DUSE_EXPAT_H
 XML_LIBS = -lexpat
-abs_builddir = /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/examples
-abs_srcdir = /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/examples
-abs_top_builddir = /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi
-abs_top_srcdir = /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi
+abs_builddir = $(ROOTDIR)/user/avahi/examples
+abs_srcdir = $(ROOTDIR)/user/avahi/examples
+abs_top_builddir = $(ROOTDIR)/user/avahi
+abs_top_srcdir = $(ROOTDIR)/user/avahi
 ac_ct_CC = gcc
 ac_ct_CXX = g++
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -361,7 +361,7 @@ host_vendor = pc
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = $(SHELL) /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/install-sh
+install_sh = $(SHELL) $(ROOTDIR)/user/avahi/install-sh
 interfacesdir = 
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
@@ -465,11 +465,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/client_browse_services-client-browse-services.Po
-include ./$(DEPDIR)/client_publish_service-client-publish-service.Po
-include ./$(DEPDIR)/core_browse_services-core-browse-services.Po
-include ./$(DEPDIR)/core_publish_service-core-publish-service.Po
-include ./$(DEPDIR)/glib_integration-glib-integration.Po
+-include ./$(DEPDIR)/client_browse_services-client-browse-services.Po
+-include ./$(DEPDIR)/client_publish_service-client-publish-service.Po
+-include ./$(DEPDIR)/core_browse_services-core-browse-services.Po
+-include ./$(DEPDIR)/core_publish_service-core-publish-service.Po
+-include ./$(DEPDIR)/glib_integration-glib-integration.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

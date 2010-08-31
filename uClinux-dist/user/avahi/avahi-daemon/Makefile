@@ -289,7 +289,7 @@ ac_ct_CC = $(CC)
 ac_ct_CXX = $(CXX)
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -427,8 +427,8 @@ avahi-dbus.conf: $(top_builddir)/config.status $(srcdir)/avahi-dbus.conf.in
 
 clean-noinstPROGRAMS:
 	@list='$(noinst_PROGRAMS)'; for p in $$list; do \
-	  echo " rm -f $$p"; \
-	  rm -f $$p ; \
+	  echo " rm -f $$p $$p.gdb"; \
+	  rm -f $$p $$p.gdb ; \
 	done
 install-sbinPROGRAMS: $(sbin_PROGRAMS)
 	@$(NORMAL_INSTALL)
@@ -448,14 +448,14 @@ uninstall-sbinPROGRAMS:
 
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
-	  echo " rm -f $$p"; \
-	  rm -f $$p ; \
+	  echo " rm -f $$p $$p.gdb"; \
+	  rm -f $$p $$p.gdb ; \
 	done
 avahi-daemon: $(avahi_daemon_OBJECTS) $(avahi_daemon_DEPENDENCIES) 
-	@rm -f avahi-daemon
+	@rm -f avahi-daemon avahi-daemon.gdb
 	$(avahi_daemon_LINK) $(avahi_daemon_OBJECTS) $(avahi_daemon_LDADD) $(LIBS)
 ini-file-parser-test: $(ini_file_parser_test_OBJECTS) $(ini_file_parser_test_DEPENDENCIES) 
-	@rm -f ini-file-parser-test
+	@rm -f ini-file-parser-test ini-file-parser-test.gdb
 	$(ini_file_parser_test_LINK) $(ini_file_parser_test_OBJECTS) $(ini_file_parser_test_LDADD) $(LIBS)
 
 mostlyclean-compile:
@@ -464,32 +464,32 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/avahi_daemon-caps.Po
-include ./$(DEPDIR)/avahi_daemon-check-nss.Po
-include ./$(DEPDIR)/avahi_daemon-chroot.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-async-address-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-async-host-name-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-async-service-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-domain-browser.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-entry-group.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-protocol.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-record-browser.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-service-browser.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-service-type-browser.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-sync-address-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-sync-host-name-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-sync-service-resolver.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-util.Po
-include ./$(DEPDIR)/avahi_daemon-dbus-watch-glue.Po
-include ./$(DEPDIR)/avahi_daemon-dbus.Po
-include ./$(DEPDIR)/avahi_daemon-ini-file-parser.Po
-include ./$(DEPDIR)/avahi_daemon-main.Po
-include ./$(DEPDIR)/avahi_daemon-setproctitle.Po
-include ./$(DEPDIR)/avahi_daemon-simple-protocol.Po
-include ./$(DEPDIR)/avahi_daemon-static-hosts.Po
-include ./$(DEPDIR)/avahi_daemon-static-services.Po
-include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser-test.Po
-include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser.Po
+-include ./$(DEPDIR)/avahi_daemon-caps.Po
+-include ./$(DEPDIR)/avahi_daemon-check-nss.Po
+-include ./$(DEPDIR)/avahi_daemon-chroot.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-async-address-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-async-host-name-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-async-service-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-domain-browser.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-entry-group.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-protocol.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-record-browser.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-service-browser.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-service-type-browser.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-sync-address-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-sync-host-name-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-sync-service-resolver.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-util.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus-watch-glue.Po
+-include ./$(DEPDIR)/avahi_daemon-dbus.Po
+-include ./$(DEPDIR)/avahi_daemon-ini-file-parser.Po
+-include ./$(DEPDIR)/avahi_daemon-main.Po
+-include ./$(DEPDIR)/avahi_daemon-setproctitle.Po
+-include ./$(DEPDIR)/avahi_daemon-simple-protocol.Po
+-include ./$(DEPDIR)/avahi_daemon-static-hosts.Po
+-include ./$(DEPDIR)/avahi_daemon-static-services.Po
+-include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser-test.Po
+-include ./$(DEPDIR)/ini_file_parser_test-ini-file-parser.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

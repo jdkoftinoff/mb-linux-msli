@@ -20,6 +20,8 @@
 
 LD=$(CC)
 
+AUTOMAKE = true
+
 pkgdatadir = $(datadir)/avahi
 pkglibdir = $(libdir)/avahi
 pkgincludedir = $(includedir)/avahi
@@ -356,7 +358,7 @@ ac_ct_CC = $(CC)
 ac_ct_CXX = $(CXX)
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -609,63 +611,63 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/avahi_reflector-avahi-reflector.Po
-include ./$(DEPDIR)/avahi_test-avahi-test.Po
-include ./$(DEPDIR)/conformance_test-conformance-test.Po
-include ./$(DEPDIR)/dns_spin_test-dns-spin-test.Po
-include ./$(DEPDIR)/dns_test-dns-test.Po
-include ./$(DEPDIR)/dns_test-dns.Po
-include ./$(DEPDIR)/dns_test-domain-util.Po
-include ./$(DEPDIR)/dns_test-hashmap.Po
-include ./$(DEPDIR)/dns_test-log.Po
-include ./$(DEPDIR)/dns_test-rr.Po
-include ./$(DEPDIR)/dns_test-util.Po
-include ./$(DEPDIR)/hashmap_test-hashmap-test.Po
-include ./$(DEPDIR)/hashmap_test-hashmap.Po
-include ./$(DEPDIR)/hashmap_test-util.Po
-include ./$(DEPDIR)/libavahi_core_la-addr-util.Plo
-include ./$(DEPDIR)/libavahi_core_la-announce.Plo
-include ./$(DEPDIR)/libavahi_core_la-browse-dns-server.Plo
-include ./$(DEPDIR)/libavahi_core_la-browse-domain.Plo
-include ./$(DEPDIR)/libavahi_core_la-browse-service-type.Plo
-include ./$(DEPDIR)/libavahi_core_la-browse-service.Plo
-include ./$(DEPDIR)/libavahi_core_la-browse.Plo
-include ./$(DEPDIR)/libavahi_core_la-cache.Plo
-include ./$(DEPDIR)/libavahi_core_la-dns.Plo
-include ./$(DEPDIR)/libavahi_core_la-domain-util.Plo
-include ./$(DEPDIR)/libavahi_core_la-entry.Plo
-include ./$(DEPDIR)/libavahi_core_la-fdutil.Plo
-include ./$(DEPDIR)/libavahi_core_la-hashmap.Plo
-include ./$(DEPDIR)/libavahi_core_la-iface-linux.Plo
-include ./$(DEPDIR)/libavahi_core_la-iface-none.Plo
-include ./$(DEPDIR)/libavahi_core_la-iface-pfroute.Plo
-include ./$(DEPDIR)/libavahi_core_la-iface.Plo
-include ./$(DEPDIR)/libavahi_core_la-log.Plo
-include ./$(DEPDIR)/libavahi_core_la-multicast-lookup.Plo
-include ./$(DEPDIR)/libavahi_core_la-netlink.Plo
-include ./$(DEPDIR)/libavahi_core_la-prioq.Plo
-include ./$(DEPDIR)/libavahi_core_la-probe-sched.Plo
-include ./$(DEPDIR)/libavahi_core_la-querier.Plo
-include ./$(DEPDIR)/libavahi_core_la-query-sched.Plo
-include ./$(DEPDIR)/libavahi_core_la-resolve-address.Plo
-include ./$(DEPDIR)/libavahi_core_la-resolve-host-name.Plo
-include ./$(DEPDIR)/libavahi_core_la-resolve-service.Plo
-include ./$(DEPDIR)/libavahi_core_la-response-sched.Plo
-include ./$(DEPDIR)/libavahi_core_la-rr.Plo
-include ./$(DEPDIR)/libavahi_core_la-rrlist.Plo
-include ./$(DEPDIR)/libavahi_core_la-server.Plo
-include ./$(DEPDIR)/libavahi_core_la-socket.Plo
-include ./$(DEPDIR)/libavahi_core_la-timeeventq.Plo
-include ./$(DEPDIR)/libavahi_core_la-util.Plo
-include ./$(DEPDIR)/libavahi_core_la-wide-area.Plo
-include ./$(DEPDIR)/prioq_test-prioq-test.Po
-include ./$(DEPDIR)/prioq_test-prioq.Po
-include ./$(DEPDIR)/querier_test-querier-test.Po
-include ./$(DEPDIR)/timeeventq_test-log.Po
-include ./$(DEPDIR)/timeeventq_test-prioq.Po
-include ./$(DEPDIR)/timeeventq_test-timeeventq-test.Po
-include ./$(DEPDIR)/timeeventq_test-timeeventq.Po
-include ./$(DEPDIR)/update_test-update-test.Po
+-include ./$(DEPDIR)/avahi_reflector-avahi-reflector.Po
+-include ./$(DEPDIR)/avahi_test-avahi-test.Po
+-include ./$(DEPDIR)/conformance_test-conformance-test.Po
+-include ./$(DEPDIR)/dns_spin_test-dns-spin-test.Po
+-include ./$(DEPDIR)/dns_test-dns-test.Po
+-include ./$(DEPDIR)/dns_test-dns.Po
+-include ./$(DEPDIR)/dns_test-domain-util.Po
+-include ./$(DEPDIR)/dns_test-hashmap.Po
+-include ./$(DEPDIR)/dns_test-log.Po
+-include ./$(DEPDIR)/dns_test-rr.Po
+-include ./$(DEPDIR)/dns_test-util.Po
+-include ./$(DEPDIR)/hashmap_test-hashmap-test.Po
+-include ./$(DEPDIR)/hashmap_test-hashmap.Po
+-include ./$(DEPDIR)/hashmap_test-util.Po
+-include ./$(DEPDIR)/libavahi_core_la-addr-util.Plo
+-include ./$(DEPDIR)/libavahi_core_la-announce.Plo
+-include ./$(DEPDIR)/libavahi_core_la-browse-dns-server.Plo
+-include ./$(DEPDIR)/libavahi_core_la-browse-domain.Plo
+-include ./$(DEPDIR)/libavahi_core_la-browse-service-type.Plo
+-include ./$(DEPDIR)/libavahi_core_la-browse-service.Plo
+-include ./$(DEPDIR)/libavahi_core_la-browse.Plo
+-include ./$(DEPDIR)/libavahi_core_la-cache.Plo
+-include ./$(DEPDIR)/libavahi_core_la-dns.Plo
+-include ./$(DEPDIR)/libavahi_core_la-domain-util.Plo
+-include ./$(DEPDIR)/libavahi_core_la-entry.Plo
+-include ./$(DEPDIR)/libavahi_core_la-fdutil.Plo
+-include ./$(DEPDIR)/libavahi_core_la-hashmap.Plo
+-include ./$(DEPDIR)/libavahi_core_la-iface-linux.Plo
+-include ./$(DEPDIR)/libavahi_core_la-iface-none.Plo
+-include ./$(DEPDIR)/libavahi_core_la-iface-pfroute.Plo
+-include ./$(DEPDIR)/libavahi_core_la-iface.Plo
+-include ./$(DEPDIR)/libavahi_core_la-log.Plo
+-include ./$(DEPDIR)/libavahi_core_la-multicast-lookup.Plo
+-include ./$(DEPDIR)/libavahi_core_la-netlink.Plo
+-include ./$(DEPDIR)/libavahi_core_la-prioq.Plo
+-include ./$(DEPDIR)/libavahi_core_la-probe-sched.Plo
+-include ./$(DEPDIR)/libavahi_core_la-querier.Plo
+-include ./$(DEPDIR)/libavahi_core_la-query-sched.Plo
+-include ./$(DEPDIR)/libavahi_core_la-resolve-address.Plo
+-include ./$(DEPDIR)/libavahi_core_la-resolve-host-name.Plo
+-include ./$(DEPDIR)/libavahi_core_la-resolve-service.Plo
+-include ./$(DEPDIR)/libavahi_core_la-response-sched.Plo
+-include ./$(DEPDIR)/libavahi_core_la-rr.Plo
+-include ./$(DEPDIR)/libavahi_core_la-rrlist.Plo
+-include ./$(DEPDIR)/libavahi_core_la-server.Plo
+-include ./$(DEPDIR)/libavahi_core_la-socket.Plo
+-include ./$(DEPDIR)/libavahi_core_la-timeeventq.Plo
+-include ./$(DEPDIR)/libavahi_core_la-util.Plo
+-include ./$(DEPDIR)/libavahi_core_la-wide-area.Plo
+-include ./$(DEPDIR)/prioq_test-prioq-test.Po
+-include ./$(DEPDIR)/prioq_test-prioq.Po
+-include ./$(DEPDIR)/querier_test-querier-test.Po
+-include ./$(DEPDIR)/timeeventq_test-log.Po
+-include ./$(DEPDIR)/timeeventq_test-prioq.Po
+-include ./$(DEPDIR)/timeeventq_test-timeeventq-test.Po
+-include ./$(DEPDIR)/timeeventq_test-timeeventq.Po
+-include ./$(DEPDIR)/update_test-update-test.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

@@ -36,7 +36,7 @@ libdir = ${exec_prefix}/lib
 DATADIRNAME = share
 itlocaledir = $(prefix)/$(DATADIRNAME)/locale
 subdir = po
-install_sh = $(SHELL) /home/alexb/polaris-svn-build/xilinx-linux/mb-linux/uClinux-dist/user/avahi/install-sh
+install_sh = $(SHELL) $(top_builddir)/install-sh
 # Automake >= 1.8 provides /bin/mkdir -p.
 # Until it can be supposed, use the safe fallback:
 mkdir_p = $(install_sh) -d

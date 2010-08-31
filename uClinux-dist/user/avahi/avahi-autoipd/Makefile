@@ -230,7 +230,7 @@ ac_ct_CC = $(CC)
 ac_ct_CXX = $(CXX)
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -343,11 +343,11 @@ uninstall-sbinPROGRAMS:
 
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
-	  echo " rm -f $$p"; \
-	  rm -f $$p ; \
+	  echo " rm -f $$p $$p.gdb"; \
+	  rm -f $$p $$p.gdb ; \
 	done
 avahi-autoipd: $(avahi_autoipd_OBJECTS) $(avahi_autoipd_DEPENDENCIES) 
-	@rm -f avahi-autoipd
+	@rm -f avahi-autoipd avahi-autoipd.gdb
 	$(avahi_autoipd_LINK) $(avahi_autoipd_OBJECTS) $(avahi_autoipd_LDADD) $(LIBS)
 install-nodist_pkgsysconfSCRIPTS: $(nodist_pkgsysconf_SCRIPTS)
 	@$(NORMAL_INSTALL)
@@ -373,12 +373,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/avahi_autoipd-iface-bsd.Po
-include ./$(DEPDIR)/avahi_autoipd-iface-linux.Po
-include ./$(DEPDIR)/avahi_autoipd-main.Po
-include ./$(DEPDIR)/avahi_autoipd-malloc.Po
-include ./$(DEPDIR)/avahi_autoipd-setproctitle.Po
-include ./$(DEPDIR)/avahi_autoipd-timeval.Po
+-include ./$(DEPDIR)/avahi_autoipd-iface-bsd.Po
+-include ./$(DEPDIR)/avahi_autoipd-iface-linux.Po
+-include ./$(DEPDIR)/avahi_autoipd-main.Po
+-include ./$(DEPDIR)/avahi_autoipd-malloc.Po
+-include ./$(DEPDIR)/avahi_autoipd-setproctitle.Po
+-include ./$(DEPDIR)/avahi_autoipd-timeval.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

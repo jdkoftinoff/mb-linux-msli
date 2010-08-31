@@ -276,7 +276,7 @@ ac_ct_CC = gcc
 ac_ct_CXX = g++
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -401,7 +401,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/c_plus_plus_test-c-plus-plus-test.Po
+-include ./$(DEPDIR)/c_plus_plus_test-c-plus-plus-test.Po
 
 .cc.o:
 	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

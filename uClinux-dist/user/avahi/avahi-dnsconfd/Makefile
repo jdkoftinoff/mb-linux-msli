@@ -220,7 +220,7 @@ ac_ct_CC = $(CC)
 ac_ct_CXX = $(CXX)
 ac_ct_DUMPBIN = 
 acx_pthread_config = 
-am__include = include
+am__include = -include
 am__leading_dot = .
 am__quote = 
 am__tar = ${AMTAR} chof - "$$tardir"
@@ -312,11 +312,11 @@ uninstall-sbinPROGRAMS:
 
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
-	  echo " rm -f $$p"; \
-	  rm -f $$p ; \
+	  echo " rm -f $$p $$p.gdb"; \
+	  rm -f $$p $$p.gdb ; \
 	done
 avahi-dnsconfd: $(avahi_dnsconfd_OBJECTS) $(avahi_dnsconfd_DEPENDENCIES) 
-	@rm -f avahi-dnsconfd
+	@rm -f avahi-dnsconfd avahi-dnsconfd.gdb
 	$(avahi_dnsconfd_LINK) $(avahi_dnsconfd_OBJECTS) $(avahi_dnsconfd_LDADD) $(LIBS)
 install-pkgsysconfSCRIPTS: $(pkgsysconf_SCRIPTS)
 	@$(NORMAL_INSTALL)
@@ -342,7 +342,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/avahi_dnsconfd-main.Po
+-include ./$(DEPDIR)/avahi_dnsconfd-main.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
