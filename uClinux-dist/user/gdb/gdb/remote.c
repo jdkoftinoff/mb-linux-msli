@@ -7205,6 +7205,65 @@ remote_command (char *args, int from_tty)
   help_list (remote_cmdlist, "remote ", -1, gdb_stdout);
 }
 
+void 
+xmd_load_program(char* args, int from_tty) {
+  struct remote_state *rs = get_remote_state ();
+  int i;
+  char *buf2 = alloca (rs->remote_packet_size);
+  char *p2 = &buf2[0];
+  char outbuf[4096]; /* FIXME: this should be bigger than rs->remote_packet_size, allocate dynamically */
+  /* except for querying the minimum buffer size, target must be open */
+  if (!remote_desc)
+    error ("remote query is only available after target open");
+
+
+  *p2++ = 'q';
+  *p2++ = 'x';
+  *p2++ = 'i';
+  *p2++ = 'l';
+  *p2++ = ',';
+  *p2++ = 'D';
+  *p2++ = '0';
+  *p2++ = ',';
+
+/*
+  *p2++ = 'R';
+  *p2++ = 'c';  
+  *p2++ = 'm';
+  *p2++ = 'd';
+  *p2++ = ',';
+*/
+
+  /* we used one buffer char for the remote protocol q command and another
+     for the query type.  As the remote protocol encapsulation uses 4 chars
+     plus one extra in case we are debugging (remote_debug),
+     we have PBUFZIZ - 7 left to pack the query string */
+
+  bin2hex(args, p2, 0);
+  //  bin2hex(tempbuf, p2, 0); //assuming args ends with a zero
+
+  //printf_filtered("Sending filename : %s\n", buf2);
+
+  i = putpkt (buf2);
+  if (i < 0)
+    return i;
+
+  getpkt (&rs->buf, &rs->buf_size, 0);
+
+/*
+  // Now qxil,D0,<filename> is just an info for XMD to reset the target (optionally)
+  // So no need for response
+  if (rs->buf[0] == 'O' && rs->buf[1] == 'K')
+    return 0;
+
+  printf_filtered("Fast download failed. Using normal download.\n");
+*/
+  //  warning("Reply to filename is : %s\n", outbuf);
+
+  generic_load(args, from_tty);
+}
+
+
 static void
 init_remote_ops (void)
 {
@@ -7235,7 +7294,9 @@ Specify the serial device it is connected to\n\
   remote_ops.to_insert_watchpoint = remote_insert_watchpoint;
   remote_ops.to_remove_watchpoint = remote_remove_watchpoint;
   remote_ops.to_kill = remote_kill;
-  remote_ops.to_load = generic_load;
+// changes to program loading - send info to XMD to reset target (based on user option) before every program download
+// remote_ops.to_load = generic_load;
+  remote_ops.to_load = xmd_load_program;
   remote_ops.to_mourn_inferior = remote_mourn;
   remote_ops.to_thread_alive = remote_thread_alive;
   remote_ops.to_find_new_threads = remote_threads_info;
@@ -7715,4 +7776,11 @@ Show the remote pathname for \"run\""), NULL, NULL, NULL,
 
   /* Eventually initialize fileio.  See fileio.c */
   initialize_remote_fileio (remote_set_cmdlist, remote_show_cmdlist);
+
+  /* Use the maximum possible remote read/write packet sizes, since the defaults are quite conservative */
+  /* FIXME: this may not be the right location to do such initializations */
+  set_memory_read_packet_size("fixed", 0);
+  set_memory_read_packet_size("16384", 0);
+  set_memory_write_packet_size("fixed", 0);
+  set_memory_write_packet_size("16384", 0);
 }

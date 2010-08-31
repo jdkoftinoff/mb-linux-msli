@@ -1564,6 +1564,7 @@ ALLDEPFILES = \
 	m68kbsd-nat.c m68kbsd-tdep.c \
 	m68klinux-nat.c m68klinux-tdep.c \
 	m88k-tdep.c m88kbsd-nat.c \
+	microblaze-tdep.c microblaze-linux-tdep.c \
 	mingw-hdep.c \
 	mips-linux-nat.c mips-linux-tdep.c \
 	mips-irix-tdep.c \
@@ -2455,6 +2456,15 @@ mep-tdep.o: $(defs_h) $(frame_h) $(frame_unwind_h) $(frame_base_h) \
 	$(floatformat_h) $(sim_regno_h) $(disasm_h) $(trad_frame_h) \
 	$(reggroups_h) $(elf_bfd_h) $(elf_mep_h) $(gdb_assert_h) \
 	$(mep_desc_h) $(mep_opc_h) $(prologue_value_h) $(infcall_h)
+microblaze-tdep.o: microblaze-tdep.c $(defs_h) $(frame_h) $(gdbcmd_h) \
+	$(value_h) $(symtab_h) $(symfile_h) $(gdbcore_h) $(inferior_h)
+microblaze-rom.o: microblaze-rom.c $(defs_h) $(gdbcore_h) $(target_h) \
+	$(monitor_h) $(gdb_string_h) $(regcache_h)
+microblaze-linux-tdep.o: microblaze-linux-tdep.c $(defs_h) $(frame_h) \
+	$(inferior_h) $(symtab_h) $(target_h) $(gdbcore_h) $(gdbcmd_h) \
+	$(symfile_h) $(objfiles_h) $(regcache_h) $(value_h) $(osabi_h) \
+	$(regset_h) $(solib_svr4_h) $(microblaze_tdep_h) $(trad_frame_h) \
+	$(frame_unwind_h) $(tramp_frame_h)
 mingw-hdep.o: mingw-hdep.c $(defs_h) $(serial_h) $(gdb_assert_h) \
 	$(gdb_select_h) $(gdb_string_h)
 minsyms.o: minsyms.c $(defs_h) $(gdb_string_h) $(symtab_h) $(bfd_h) \

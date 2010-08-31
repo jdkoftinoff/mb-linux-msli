@@ -90,6 +90,11 @@ case "${target}" in
 			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
 			;;
+  microblaze*-*)	srv_regobj=reg-mb.o
+			srv_tgtobj="linux-low.o linux-mb-low.o"
+			srv_linux_usrregs=yes
+			srv_linux_thread_db=yes
+			;;
   mips*64*-*-linux*)	srv_regobj=mips64-linux.o
 			srv_xmltarget=mips64-linux.xml
 			srv_xmlfiles="mips64-cpu.xml mips64-cp0.xml mips64-fpu.xml"

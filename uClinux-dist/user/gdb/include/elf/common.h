@@ -187,6 +187,7 @@
 #define EM_ALTERA_NIOS2	113	/* Altera Nios II soft-core processor */
 #define EM_CRX		114	/* National Semiconductor CRX */
 #define EM_CR16		115	/* National Semiconductor CompactRISC - CR16 */
+#define EM_MICROBLAZE	116	/* Xilinx MicroBlaze */
 #define EM_SCORE        135     /* Sunplus Score */
 
 /* If it is necessary to assign new unofficial EM_* values, please pick large
