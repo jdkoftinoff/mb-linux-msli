@@ -1381,10 +1381,10 @@ int main(int argc, char **argv)
 
 		  if(vert_shift==0)
 		    oled_copy_rectangle(16,0,16+2,0,
-					64+16-2,ipaddr_label_1->height+1);
+					64+16-2,ipaddr_label_0->height+1);
 		  else
 		    oled_copy_rectangle(16,vert_shift-1,16+2,vert_shift-1,
-					64+16-2,ipaddr_label_1->height+2);
+					64+16-2,ipaddr_label_0->height+2);
 		  if((ipaddr_label_offset&0x0f)==0)
 		    oled_send_image_fragment(ipaddr_label_0,
 					     64-ipaddr_label_offset,0,

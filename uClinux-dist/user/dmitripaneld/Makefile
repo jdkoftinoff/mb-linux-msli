@@ -1,6 +1,6 @@
 EXEC = dmitripaneld
 OBJS = dmitripaneld.o
-FLTFLAGS = "-s 8192"
+FLTFLAGS += -s 8192
 
 all: $(EXEC)
 
