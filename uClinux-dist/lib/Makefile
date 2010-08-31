@@ -184,6 +184,7 @@ romfs:
 ##############################################################################
 
 clean: clean_links
+	rm -f *.a
 	-for i in $(DIRS_all); do \
 		if [ -f $$i/.sgbuilt_lib ]; then \
 			$(MAKE) -C $$i clean ; \
