@@ -8,10 +8,20 @@
 
 menu "Core Applications"
 
+config USER_LIBTC
+	bool "midi time code server - libtc"
+	help
+	  Include the midi server executable for DGPIO.
+
 config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"
 	help
 	  Include the D-Mitri panel server.
+
+config USER_GSBD
+	bool "Galileo Serial Bus daemon - gsbd"
+	help
+	  Include Galileo Serial Bus daemon.
 
 config USER_INIT_INIT
 	bool "init"
@@ -137,6 +147,11 @@ config USER_MIDILOOPBACK_MIDILOOPBACK
 	bool "midiloopback"
 	help
 	  MIDI Loopback
+
+config USER_MBBL_MKBOOTIMAGE
+	bool "mbbl_mkbootimage"
+	help
+	  MBBL Boot Image Maker
 
 config USER_AVAHI_AVAHI
 	bool "avahi"
