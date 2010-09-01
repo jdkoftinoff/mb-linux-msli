@@ -21,32 +21,38 @@
 #if CONFIG_XILINX_MICROBLAZE0_USE_MSR_INSTR
 	.macro	disable_irq
 	msrclr r0, MSR_IE
+	nop
 	.endm
 
 	.macro	enable_irq
 	msrset r0, MSR_IE
+	nop
 	.endm
 
 	.macro	clear_bip
 	msrclr r0, MSR_BIP
+	nop
 	.endm
 #else
 	.macro	disable_irq
 	mfs r11, rmsr
 	andi r11, r11, ~MSR_IE
 	mts rmsr, r11
+	nop
 	.endm
 
 	.macro	enable_irq
 	mfs r11, rmsr
 	ori r11, r11, MSR_IE
 	mts rmsr, r11
+	nop
 	.endm
 
 	.macro	clear_bip
 	mfs r11, rmsr
 	andi r11, r11, ~MSR_BIP
 	mts rmsr, r11
+	nop
 	.endm
 #endif
 
@@ -158,7 +164,9 @@ restore_context:
 	lwi	r11, r1, PT_EAR
 	mts	rear, r11
 	lwi	r11, r1, PT_MSR
+	andi	r11, r11, ~MSR_IE
 	mts	rmsr, r11
+	nop
 
 	lwi	r31, r1, PT_R31
 	lwi	r30, r1, PT_R30
@@ -251,9 +259,7 @@ ENTRY(_user_exception)
 	swi	r31, r1, PT_R31
 
 	disable_irq
-	nop		/* make sure IE bit is in effect */
-	clear_bip	/* once IE is in effect it is safe to clear BIP */
-	nop
+	clear_bip	/* once IE is disabled it is safe to clear BIP */
 
 	/* special purpose registers */
 	mfs	r11, rmsr
@@ -341,9 +347,7 @@ ENTRY(_debug_exception)
 	swi	r31, r1, PT_R31
 
 	disable_irq
-	nop		/* make sure IE bit is in effect */
-	clear_bip	/* once IE is in effect it is safe to clear BIP */
-	nop
+	clear_bip	/* once IE is disabled it is safe to clear BIP */
 
 	/* special purpose registers */
 	mfs	r11, rmsr
@@ -437,6 +441,8 @@ ENTRY(_switch_to)
 	mts	rear, r12
 	lwi	r12, r11, CC_MSR
 	mts	rmsr, r12
+	nop
+	
 	/* non-volatile registers */
 	lwi	r30, r11, CC_R30
 	lwi	r29, r11, CC_R29
@@ -516,7 +522,9 @@ no_work_pending:
 	lwi	r18, r1, PT_EAR
 	mts	rear, r18
 	lwi	r18, r1, PT_MSR
+	andi	r18, r18, ~MSR_IE
 	mts	rmsr, r18
+	nop
 
 	lwi	r31, r1, PT_R31
 	lwi	r30, r1, PT_R30
