@@ -59,6 +59,7 @@ endif
 $(LIBNAME).a: libgcc_eh libsupc $(EXOBJS)
 	$(AR) $(ARFLAGS) $@ $(EXOBJS) $(GCCOBJS) $(SUPOBJS)
 	$(RANLIB) $@
+	ln -sf $(LIBNAME).a libstdc++.a # symlink to prevent pickup of the stdc++ library
 
 $(SHARED_FULLNAME): libgcc_eh libsupc $(EXOBJS)
 	$(CC) $(LDFLAGS) -o $@ $(EXOBJS) $(SUPOBJS) $(GCCOBJS) $(LIBS)
