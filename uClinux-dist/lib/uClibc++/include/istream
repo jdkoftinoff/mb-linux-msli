@@ -61,7 +61,13 @@ namespace std{
 	
 		basic_istream<charT,traits>& operator>>(basic_istream<charT,traits>& (*pf)(basic_istream<charT,traits>&));
 		basic_istream<charT,traits>& operator>>(basic_ios<charT,traits>& (*pf)(basic_ios<charT,traits>&));
-		basic_istream<charT,traits>& operator>>(ios_base& (*pf)(ios_base&));
+
+		_UCXXEXPORT basic_istream<charT,traits>& operator>>(ios_base& (*pf)(ios_base&))
+		{
+			pf(*this);
+			return *this;
+		}
+
 		basic_istream<charT,traits>& operator>>(bool& n);
 		basic_istream<charT,traits>& operator>>(short& n);
 		basic_istream<charT,traits>& operator>>(unsigned short& n);
@@ -351,7 +357,7 @@ namespace std{
 			if(os.tie() != 0){
 				os.tie()->flush();
 			}
-			if(!noskipws){
+			if((!noskipws) && (os.flags() & ios_base::skipws)){
 				__skipws(os);
 			}
 

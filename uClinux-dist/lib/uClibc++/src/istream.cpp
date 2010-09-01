@@ -49,6 +49,7 @@ namespace std{
 	template _UCXXEXPORT istream::int_type istream::get();
 	template _UCXXEXPORT istream & istream::get(char &c);
 
+	template _UCXXEXPORT istream & istream::operator>>(ios_base& (*pf)(ios_base&));
 	template _UCXXEXPORT istream & istream::operator>>(bool &n);
 	template _UCXXEXPORT istream & istream::operator>>(short &n);
 	template _UCXXEXPORT istream & istream::operator>>(unsigned short &n);
