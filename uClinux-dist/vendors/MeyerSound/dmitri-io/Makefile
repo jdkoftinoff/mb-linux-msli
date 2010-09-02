@@ -137,6 +137,11 @@ DEVICES +=	\
 	spidev0,c,153,0
 endif
 
+ifdef CONFIG_I2S_SWITCH
+DEVICES +=	\
+	i2s_switch0,c,254,0
+endif
+	
 # Add the AVB packet engine device nodes
 ifdef CONFIG_LABX_AUDIO_PACKETIZER
 DEVICES += packetizer0,c,250,0
