@@ -51,7 +51,7 @@ void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
 /* Captures the present RTC time, returning it into the passed structure */
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   uint32_t timeWord;
-  uint32_t flags;
+  unsigned long flags;
 
   /* Write to the capture flag in the upper seconds word to initiate a capture,
    * then poll the same bit to determine when it has completed.  The capture only
@@ -78,7 +78,7 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
 
 /* Sets a new RTC time from the passed structure */
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
-  uint32_t flags;
+  unsigned long flags;
 
   /* Write to the time register, beginning with the seconds.  The write to the 
    * nanoseconds register is what actually effects the change to the RTC.

@@ -81,7 +81,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
   struct ptp_device *ptp = dev_id;
   uint32_t maskedFlags;
   uint32_t txCompletedFlags;
-  uint32_t flags;
+  unsigned long flags;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(ptp, PTP_IRQ_FLAGS_REG));
@@ -127,7 +127,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
 static int ptp_device_open(struct inode *inode, struct file *filp)
 {
   struct ptp_device *ptp;
-  uint32_t flags;
+  unsigned long flags;
   int returnValue = 0;
 
   ptp = container_of(inode->i_cdev, struct ptp_device, cdev);
@@ -151,7 +151,7 @@ static int ptp_device_open(struct inode *inode, struct file *filp)
 static int ptp_device_release(struct inode *inode, struct file *filp)
 {
   struct ptp_device *ptp = (struct ptp_device*)filp->private_data;
-  uint32_t flags;
+  unsigned long flags;
 
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
@@ -240,7 +240,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
 {
   // Switch on the request
   struct ptp_device *ptp = (struct ptp_device*) filp->private_data;
-  uint32_t flags;
+  unsigned long flags;
 
   switch(command) {
   case IOC_PTP_STOP_SERVICE:
