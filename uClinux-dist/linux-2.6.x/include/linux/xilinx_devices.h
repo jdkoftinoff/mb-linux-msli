@@ -85,7 +85,6 @@ struct xlltemac_platform_data {
 	u8 tx_csum;
 	u8 rx_csum;
 	u8 phy_type;
-	u8 phy_addr;
 	u8 dcr_host;
 	u8 ll_dev_type;
         u8 ext_filter;

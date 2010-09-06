@@ -1942,24 +1942,6 @@ menuconfig NETDEV_1000
 	  If you say N, all options in this submenu will be skipped and disabled.
 
 if NETDEV_1000
-config LABX_ETH_LOCALLINK
-	tristate "Lab X 10/100/1000 Ethernet MAC support"
-	select NEED_XILINX_LLDMA
-	select PHYLIB
-	help
-	  This driver supports the Lab X Technologies LocalLink MAC
-
-config LABX_ETH_LOCALLINK_HARD_MAC
-	tristate "Xilinx Hard MAC"
-	depends on LABX_ETH_LOCALLINK
-	help
-	  Select this if the locallink is connected to a Xilinx hard MAC tile.
-
-config LABX_PTP
-	bool "Lab X PTP support"
-	help
-	  This driver supports the Lab X Technologies PTP hardware.
-source "drivers/net/labx_avb/Kconfig"
 
 config ACENIC
 	tristate "Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support"

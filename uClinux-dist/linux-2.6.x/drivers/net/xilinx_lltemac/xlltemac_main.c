@@ -608,7 +608,7 @@ static void initialize_leds(struct net_local *lp,int phy_addr,led_state state)
   lp->led_blink^=1;
   if((led_state_flags[state]&LED_STATE_FLAG_BLINK_SLOW) && lp->led_blink)
     {
-      led_reg16=(0x08<<12)|(0x08<<4);
+      led_reg16=(0x08<<12)|(0x08<<4)|0x08;
     }
   else
     {
@@ -644,23 +644,23 @@ static void initialize_leds(struct net_local *lp,int phy_addr,led_state state)
 	{
 	  if(led_state_flags[state]&LED_STATE_FLAG_BLINK_ACTIVITY)
 	    {
-	      led_reg16|=0x1<<4;
+	      led_reg16|=(0x1<<4)|0x1;
 	    }
 	  else
 	    {
 	      if(led_state_flags[state]&LED_STATE_FLAG_BLINK)
 		{
-		  led_reg16|=0xb<<4;
+		  led_reg16|=(0xb<<4)|0xb;
 		}
 	      else
 		{
-		  led_reg16|=0x9<<4;
+		  led_reg16|=(0x9<<4)|0x9;
 		}
 	    }
 	}
       else
 	{
-	  led_reg16|=0x8<<4;
+	  led_reg16|=(0x8<<4)|0x8;
 	}
     }
   _XLlTemac_PhyWritePage(&lp->Emac, phy_addr, 17, 
@@ -4135,6 +4135,7 @@ static struct of_device_id xtenet_fifo_of_match[] = {
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.a", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.00.b", },
 	{ .compatible = "xlnx,xps-ll-fifo-1.01.a", },
+	{ .compatible = "xlnx,xps-ll-fifo-1.02.a", },
 	{ /* end of list */ },
 };
 

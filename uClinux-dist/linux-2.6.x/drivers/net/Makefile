@@ -24,7 +24,6 @@ obj-$(CONFIG_TEHUTI) += tehuti.o
 obj-$(CONFIG_ENIC) += enic/
 obj-$(CONFIG_JME) += jme.o
 obj-$(CONFIG_BE2NET) += benet/
-obj-$(CONFIG_LABX_AVB) += labx_avb/
 
 gianfar_driver-objs := gianfar.o \
 		gianfar_ethtool.o \
@@ -275,9 +274,4 @@ obj-$(CONFIG_WIMAX) += wimax/
 
 obj-$(CONFIG_XILINX_EMACLITE) += xilinx_emaclite.o
 obj-$(CONFIG_XILINX_LLTEMAC) += xilinx_lltemac/
-obj-$(CONFIG_XILINX_EMACLITE_LABX) += xilinx_emaclite_labx/
-obj-$(CONFIG_XILINX_LLTEMAC) += xilinx_lltemac/
-obj-$(CONFIG_XILINX_LLTEMAC_AVB_LABX) += xilinx_lltemac_avb_labx/
-obj-$(CONFIG_LABX_ETH_LOCALLINK) += labx_eth_locallink/
-obj-$(CONFIG_LABX_PTP) += labx_ptp/
 

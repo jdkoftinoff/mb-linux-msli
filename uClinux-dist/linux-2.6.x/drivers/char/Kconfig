@@ -1093,23 +1093,6 @@ config TELCLOCK
 	  /sys/devices/platform/telco_clock, with a number of files for
 	  controlling the behavior of this hardware.
 
-config LABX_DMA
-	bool "Lab X DMA Coprocessor support"
-	help
-	  Select this to enable support for DMA Coprocessor hardware.
-
-config LABX_DMA_CDEV
-	bool "Lab X DMA Coprocessor character device"
-	depends on LABX_DMA
-	help
-	  Select this to enable a misc device node to use for talking to DMA Coprocessor hardware.
-
-config LABX_LOCAL_AUDIO
-	bool "Lab X Local Audio character device"
-	depends on LABX_DMA
-	help
-	  Select this to enable a misc device node to use for talking to Local Audio hardware.
-
 config DEVPORT
 	bool
 	depends on !M68K
@@ -1117,6 +1100,12 @@ config DEVPORT
 	default y
 
 source "drivers/s390/char/Kconfig"
+
+config I2S_SWITCH
+	tristate "FPGA-based I2S Switch"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  I2S switch, implemented on Xilinx FPGA.
 
 endmenu
 
