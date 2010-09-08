@@ -443,6 +443,7 @@ dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
 dir_$(CONFIG_USER_MIDILOOPBACK_MIDILOOPBACK) += midiloopback
 dir_$(CONFIG_USER_MBBL_MKBOOTIMAGE)         += mbbl-mkbootimage
+dir_$(CONFIG_USER_MTD_STORAGE)              += mtd-storage
 dir_$(CONFIG_USER_AVAHI_AVAHI)              += avahi 
  
 dir_y += games

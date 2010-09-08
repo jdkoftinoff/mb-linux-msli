@@ -153,6 +153,11 @@ config USER_MBBL_MKBOOTIMAGE
 	help
 	  MBBL Boot Image Maker
 
+config USER_MTD_STORAGE
+	bool "mtd_storage"
+	help
+	  MTD-based persistent storage of relatively frequently changed files
+
 config USER_AVAHI_AVAHI
 	bool "avahi"
 	help
