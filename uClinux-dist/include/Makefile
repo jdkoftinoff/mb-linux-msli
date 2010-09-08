@@ -124,11 +124,7 @@ ifndef CONFIG_DEFAULTS_LIBC_NONE
 	@ln -s `$(CC) -print-file-name=include` gcc
 	@echo "Making include/c++ symlink to compiler c++ includes"
 	@rm -f c++
-	@ln -s /usr/local/include/g++-v3 c++
-	@for i in `$(CXX) -v -E -xc++ /dev/null 2>&1 | sed -e '/^Reading specs/,/^#include <\.\.\.>/d' -e '/End of search list/Q'`; do \
-		if [ -f $$i/new ]; then rm -f c++; ln -s $$i c++; break; fi; \
-	done
-	@ln -s c++ `$(CC) --version | head -1 | cut -d " " -f3`
+	@ln -s ../lib/uClibc++/include c++ #`$(CC) --version | head -1 | cut -d " " -f3`
 	@ln -s c++ g++-v3
 	@rm -f bits ; \
 	 GCCVER=`$(CC) --version | head -1 | cut -d " " -f3` ; \
