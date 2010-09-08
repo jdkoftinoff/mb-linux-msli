@@ -26,9 +26,11 @@
 #define min(x,y) ((x)<(y))?(x):(y)
 #define max(x,y) ((x)>(y))?(x):(y)
 
-typedef unsigned long u32;
-typedef unsigned short u16;
-typedef unsigned char u8;
+#include <linux/types.h>
+
+typedef __u32 u32;
+typedef __u16 u16;
+typedef __u8 u8;
 
 /* limit imposed by the kernel boot procedure */
 #define FDT_SIZE 16384
