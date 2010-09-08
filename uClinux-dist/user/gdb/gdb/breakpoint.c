@@ -2797,6 +2797,12 @@ bpstat_stop_status (CORE_ADDR bp_addr, ptid_t ptid)
 		/* Stop.  */
 		break;
 	      case WP_VALUE_CHANGED:
+#if 0
+		/* microblaze supports true read watchpoints. gdb does not support
+		   such watchpoints due to compatibility requirements for x86.
+		   More info @ http://sources.redhat.com/ml/gdb/2005-11/msg00251.html
+		   To work around this, we'll just comment out this section
+		 */
 		if (b->type == bp_read_watchpoint)
 		  {
 		    /* Don't stop: read watchpoints shouldn't fire if
@@ -2806,6 +2812,7 @@ bpstat_stop_status (CORE_ADDR bp_addr, ptid_t ptid)
 		    bs->stop = 0;
 		    continue;
 		  }
+#endif
 		++(b->hit_count);
 		break;
 	      case WP_VALUE_NOT_CHANGED:

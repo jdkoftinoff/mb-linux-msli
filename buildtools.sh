@@ -107,5 +107,6 @@ echo -n "${CURRDIR}/tools/gcc4/bin"
 ) | tr '\n' ':'`
 
 echo "PATH=${NEWPATH}" > prepare.sh
+echo "MB_LINUX=$CURRDIR" >> prepare.sh
 
 echo "Run \". prepare.sh\" from this directory before cross-compiling for MicroBlaze"
