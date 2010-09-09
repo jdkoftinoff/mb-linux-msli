@@ -34,6 +34,8 @@ dir_2_n +=
 dir_2_  +=
 endif
 
+dir_2_$(CONFIG_LIB_UCLIBCPP)     += uClibc++
+
 #
 # and build these if someone needs them
 #
