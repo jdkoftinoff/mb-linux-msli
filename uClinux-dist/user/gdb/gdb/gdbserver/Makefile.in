@@ -220,7 +220,7 @@ clean:
 	rm -f reg-arm.c reg-i386.c reg-ia64.c reg-m32r.c reg-m68k.c
 	rm -f reg-ppc.c reg-sh.c reg-spu.c reg-x86-64.c reg-i386-linux.c
 	rm -f reg-cris.c reg-crisv32.c reg-x86-64-linux.c reg-xtensa.c
-	rm -f arm-with-iwmmxt.c mips-linux.c mips64-linux.c
+	rm -f arm-with-iwmmxt.c mips-linux.c mips64-linux.c reg-mb.c
 	rm -f powerpc-32.c powerpc-64.c powerpc-e500.c
 	rm -f xml-builtin.c stamp-xml target.xml
 
@@ -355,6 +355,9 @@ reg-m32r.c : $(srcdir)/../regformats/reg-m32r.dat $(regdat_sh)
 reg-m68k.o : reg-m68k.c $(regdef_h)
 reg-m68k.c : $(srcdir)/../regformats/reg-m68k.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-m68k.dat reg-m68k.c
+reg-mb.o : reg-mb.c $(regdef_h)
+reg-mb.c : $(srcdir)/../regformats/reg-mb.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-mb.dat reg-mb.c
 mips-linux.o : mips-linux.c $(regdef_h)
 mips-linux.c : $(srcdir)/../regformats/mips-linux.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/mips-linux.dat mips-linux.c
