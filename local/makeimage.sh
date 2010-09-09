@@ -11,7 +11,7 @@ fi
 echo installing extra scripts
 cp -pv io-firmware-update.sh ../uClinux-dist/romfs/bin/
 
-echo "device tree..." 
+echo "device tree... (${DMITRI_IO_DTS})" 
 ../dtc/dtc -o dt.dtb -O dtb "${DMITRI_IO_DTS}" 2>/dev/null 
 
 echo "kernel..." 
@@ -23,7 +23,7 @@ rm -f romfs.bin.gz
 gzip -9 romfs.bin 
 
 echo "final binary image..." 
-mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
+../mbbl-mkbootimage/mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
 
 if [ -f "${DMITRI_IO_DOWNLOAD_BIT}" ]
 then 
