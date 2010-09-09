@@ -47,8 +47,8 @@
 #define MAC_DMA_SIMPLE	2	/* simple 2 channel DMA */
 #define MAC_DMA_SGDMA	3	/* scatter gather DMA */
 
-/* Platform device data structure */
-struct labx_eth_platform_data {
+/* Platform device data structure for LocalLink Ethernet */
+struct labx_ll_eth_platform_data {
   uint8_t tx_csum;
   uint8_t rx_csum;
   uint8_t dcr_host;
@@ -85,6 +85,37 @@ struct labx_eth_platform_data {
 /* LocalLink TYPE Enumerations */
 #define XPAR_LL_FIFO    1
 #define XPAR_LL_DMA     2
+
+/* Platform device data structure for Direct Ethernet */
+struct labx_eth_platform_data {
+  uint8_t tx_csum;
+  uint8_t rx_csum;
+  uint8_t dcr_host;
+
+  /* FIFO IRQ */
+  uint32_t fifo_irq;
+  
+  /* Default MAC address for the port */
+  uint8_t mac_addr[6];
+
+  /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
+   * These values are for the PHY connected to this instance.
+   */
+  uint8_t phy_type;
+  uint8_t phy_addr;
+  char phy_name[BUS_ID_SIZE];
+
+  /* MDIO bus parameters.
+   * phy_mask is a bitmask of MDIO addresses to probe (1's get probed)
+   * mdio_bus_name is the name of the MDIO bus to register
+   * mdio_phy_irqs are the interrupts from PHYs on this MDIO bus
+   */
+  uint32_t phy_mask;
+  char mdio_bus_name[MII_BUS_ID_SIZE];
+  int mdio_phy_irqs[PHY_MAX_ADDR];
+
+  void *rx_ring_ptr;		/* Pointer to RxRing buffer */
+};
 
 /**
  * Writes a value to a register within the specified port's Ethernet PHY

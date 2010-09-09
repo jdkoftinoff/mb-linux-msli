@@ -786,7 +786,7 @@ static int audio_depacketizer_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   depacketizer->physicalAddress = addressRange->start;
   depacketizer->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
+  snprintf(depacketizer->name, NAME_MAX_SIZE, "%s", name);
   depacketizer->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(depacketizer->physicalAddress, depacketizer->addressRangeSize,
                         depacketizer->name) == NULL) {
@@ -929,15 +929,14 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   struct resource *addressRange = &r_mem_struct;
   struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
+  const char *name = dev_name(&ofdev->dev);
   int rc;
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node,0,addressRange);
   if (rc) {
-	  dev_warn(&ofdev->dev,"invalid address\n");
-	  return rc;
+    dev_warn(&ofdev->dev,"invalid address\n");
+    return rc;
   }
 
   rc = of_irq_to_resource(ofdev->node, 0, irq);
@@ -948,7 +947,7 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   }
 
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(ofdev->node->name, pdev, addressRange, irq));
+  return(audio_depacketizer_probe(name, pdev, addressRange, irq));
 }
 
 static int __devexit audio_depacketizer_of_remove(struct of_device *dev)

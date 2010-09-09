@@ -55,7 +55,7 @@ typedef enum {
 /* Tasklet function for responding to timer interrupts */
 static void timer_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device*) data;
-  uint32_t flags;
+  unsigned long flags;
 
   /* We behave differently as a master than as a slave */
   switch(ptp->presentRole) {
@@ -195,7 +195,7 @@ static BmcaResult bmca_comparison(PtpProperties *presentMaster, PtpProperties *c
 /* Processes a newly-received ANNOUNCE packet for the passed instance */
 static void process_rx_announce(struct ptp_device *ptp, uint32_t rxBuffer) {
   PtpProperties portProperties;
-  uint32_t flags;
+  unsigned long flags;
   uint32_t byteIndex;
 
   /* Extract the properties of the port which sent the message, and compare 
@@ -246,7 +246,7 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t rxBuffer) {
 
 /* Processes a newly-received SYNC packet for the passed instance */
 static void process_rx_sync(struct ptp_device *ptp, uint32_t rxBuffer) {
-  uint32_t flags;
+  unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
 
   /* Only process this packet if we are a slave and it has come from the master
@@ -280,7 +280,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t rxBuffer) {
 
 /* Processes a newly-received FUP packet for the passed instance */
 static void process_rx_fup(struct ptp_device *ptp, uint32_t rxBuffer) {
-  uint32_t flags;
+  unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
 
   /* Make certain of the following:
@@ -320,7 +320,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t rxBuffer) {
       /* Reset the time using the uncorrected timestamp, and invalidate the SYNC */
       printk("Resetting time!\n");
       set_rtc_time(ptp, &syncTxTimestamp);
-    } else {
+   } else {
       /* Less than a second, leave these timestamps and update the servo */
 #ifdef SYNC_DEBUG
       printk("Sync Rx: %08X%08X.%08X\n", ptp->syncRxTimestampTemp.secondsUpper,
@@ -356,7 +356,7 @@ static void process_rx_delay_req(struct ptp_device *ptp, uint32_t rxBuffer) {
 
 /* Processes a newly-received DELAY_RESP packet for the passed instance */
 static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t rxBuffer) {
-  uint32_t flags;
+  unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
   uint8_t rxRequestingPortId[PORT_ID_BYTES];
   uint8_t txRequestingPortId[PORT_ID_BYTES];
@@ -498,7 +498,7 @@ static void tx_state_task(unsigned long data) {
   uint32_t pendingTxFlags;
   uint32_t whichBuffer;
   uint32_t bufferMask;
-  uint32_t flags;
+  unsigned long flags;
 
   /* A packet has been transmitted; examine the pending flags to to see which one(s).
    * Lock the mutex to avoid a race condition with the Tx IRQ.

@@ -265,7 +265,7 @@ extern "C" {
 #include "xenv.h"
 #include "xbasic_types.h"
 #include "xstatus.h"
-#include "labx_eth_locallink_hw.h"
+#include "labx_ethernet_hw.h"
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 #include <linux/interrupt.h>
 
@@ -426,16 +426,7 @@ typedef struct {
 			  */ 
 	u8 TemacIntr;	/**< TEMAC interrupt ID */
 
-	int LLDevType;	/**< LLDevType is the type of device attached to the
-			 *   temac's local link interface.
-			 */
-	u32 LLDevBaseAddress; /**< LLDevBaseAddress is the base address of then
-			       *   device attached to the temac's local link
-			       *   interface.
-			       */
-	u8 LLFifoIntr;	/**< LL FIFO interrupt ID (unused if DMA) */
-	u8 LLDmaRxIntr;	/**< LL DMA RX interrupt ID (unused if FIFO) */
-	u8 LLDmaTxIntr;	/**< LL DMA TX interrupt ID (unused if FIFO) */
+	u8 LLFifoIntr;	/**< LL FIFO interrupt ID */
   u8 MacAddress[6];  /** TEMPORARY software cache of MAC address */
 } XLlTemac_Config;
 
@@ -485,42 +476,6 @@ typedef struct XLlTemac {
  ******************************************************************************/
 #define XLlTemac_IsStarted(InstancePtr) \
 	(((InstancePtr)->IsStarted == XCOMPONENT_IS_STARTED) ? TRUE : FALSE)
-
-/*****************************************************************************/
-/**
-*
-* XLlTemac_IsDma reports if the device is currently connected to DMA.
-*
-* @param InstancePtr references the TEMAC channel on which to operate.
-*
-* @return XLlTemac_IsDma returns TRUE if the device is connected DMA. Otherwise,
-*         XLlTemac_IsDma returns FALSE.
-*
-* @note
-*
-* Signature: u32 XLlTemac_IsDma(XLlTemac *InstancePtr)
-*
-******************************************************************************/
-#define XLlTemac_IsDma(InstancePtr) \
-	(((InstancePtr)->Config.LLDevType == XPAR_LL_DMA) ? TRUE: FALSE)
-
-/*****************************************************************************/
-/**
-*
-* XLlTemac_IsFifo reports if the device is currently connected to a fifo core.
-*
-* @param InstancePtr references the TEMAC channel on which to operate.
-*
-* @return XLlTemac_IsFifo returns TRUE if the device is connected to a fifo core.
-*         Otherwise, XLlTemac_IsFifo returns FALSE.
-*
-* @note
-*
-* Signature: u32 XLlTemac_IsFifo(XLlTemac *InstancePtr)
-*
-******************************************************************************/
-#define XLlTemac_IsFifo(InstancePtr) \
-	(((InstancePtr)->Config.LLDevType == XPAR_LL_FIFO) ? TRUE: FALSE)
 
 /*****************************************************************************/
 /**
@@ -782,7 +737,7 @@ int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
 
-extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_ll_eth_platform_data *pdata, XLlTemac *InstancePtr);
+extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus
 }
 #endif

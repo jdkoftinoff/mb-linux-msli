@@ -81,7 +81,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
   struct ptp_device *ptp = dev_id;
   uint32_t maskedFlags;
   uint32_t txCompletedFlags;
-  uint32_t flags;
+  unsigned long flags;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(ptp, PTP_IRQ_FLAGS_REG));
@@ -127,7 +127,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
 static int ptp_device_open(struct inode *inode, struct file *filp)
 {
   struct ptp_device *ptp;
-  uint32_t flags;
+  unsigned long flags;
   int returnValue = 0;
 
   ptp = container_of(inode->i_cdev, struct ptp_device, cdev);
@@ -151,7 +151,7 @@ static int ptp_device_open(struct inode *inode, struct file *filp)
 static int ptp_device_release(struct inode *inode, struct file *filp)
 {
   struct ptp_device *ptp = (struct ptp_device*)filp->private_data;
-  uint32_t flags;
+  unsigned long flags;
 
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
@@ -240,7 +240,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
 {
   // Switch on the request
   struct ptp_device *ptp = (struct ptp_device*) filp->private_data;
-  uint32_t flags;
+  unsigned long flags;
 
   switch(command) {
   case IOC_PTP_STOP_SERVICE:
@@ -367,7 +367,7 @@ static int ptp_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   ptp->physicalAddress = addressRange->start;
   ptp->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(ptp->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
+  snprintf(ptp->name, NAME_MAX_SIZE, "%s", name);
   ptp->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(ptp->physicalAddress, ptp->addressRangeSize,
                         ptp->name) == NULL) {
@@ -515,10 +515,9 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   struct resource r_irq_struct;
   struct resource *irq = &r_irq_struct;
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
+  const char *name = dev_name(&ofdev->dev);
   PtpPlatformData platformData;
   int rc = 0;
-
-  printk(KERN_INFO "Device Tree Probing \'%s\'\n", ofdev->node->name);
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node,0,addressRange);
@@ -544,7 +543,7 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   platformData.coefficients.D            = get_u32(ofdev,"xlnx,rtc-d-coefficient");
 
   /* Dispatch to the common probe function */
-  return(ptp_probe(ofdev->node->name, pdev, addressRange, irq, &platformData));
+  return(ptp_probe(name, pdev, addressRange, irq, &platformData));
 }
 
 static int __devexit ptp_of_remove(struct of_device *dev)

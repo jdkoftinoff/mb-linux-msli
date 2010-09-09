@@ -161,6 +161,7 @@ MODULE_PARM_DESC(macaddr, "MAC address to set");
  * Our private per device data.  When a net_device is allocated we will
  * ask for enough extra space for this.
  */
+#define IRQ_NAME_SZ (64)
 struct net_local {
 	struct phy_device *phy_dev;
 	char phy_name[64];
@@ -215,6 +216,10 @@ struct net_local {
 #if ! XTE_AUTOSTRIPPING
 	unsigned long stripping;
 #endif
+
+  /* IRQ names */
+  char fifo_irq_name[IRQ_NAME_SZ];
+  char mdio_irq_name[IRQ_NAME_SZ];
 };
 
 static void labx_eth_ll_mac_adjust_link(struct net_device *dev);
@@ -850,11 +855,14 @@ static int xenet_open(struct net_device *dev)
 		printk(KERN_INFO
 		       "%s: labx_eth_llink: allocating interrupt %d for fifo mode.\n",
 		       dev->name, lp->fifo_irq);
+
 		/* With the way interrupts are issued on the fifo core, this needs to be
 		 * fast interrupt handler.
 		 */
+		snprintf(lp->fifo_irq_name, IRQ_NAME_SZ, "%s FIFO", dev->name);
+		lp->fifo_irq_name[IRQ_NAME_SZ - 1] = '\0';
 		irqval = request_irq(lp->fifo_irq,
-			&xenet_fifo_interrupt, IRQF_DISABLED, "xilinx_fifo_int", dev);
+			&xenet_fifo_interrupt, IRQF_DISABLED, lp->fifo_irq_name, dev);
 		if (irqval) {
 			printk(KERN_ERR
 			       "%s: labx_eth_llink: could not allocate interrupt %d.\n",
@@ -1513,6 +1521,15 @@ static void FifoRecvHandler(unsigned long p)
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
 
+		printk("Got %d Rx:\n", len);
+		{
+		  int idx;
+		  for(idx = 0; idx < len; idx++) {
+		    printk("%02X ", skb->data[idx]);
+		    if((idx % 16) == 15) printk("\n");
+		  }
+		  printk("\n");
+		}
 		skb_put(skb, len);	/* Tell the skb how much data we got. */
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);
@@ -2656,20 +2673,6 @@ static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
 	}
 }
 
-void write_phy_register(void *portHandle, uint32_t regAddress, uint16_t writeData) {
-  struct net_local *lp = (struct net_local *) portHandle;
-
-  XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, regAddress, writeData);
-}
-
-uint16_t read_phy_register(void *portHandle, uint32_t regAddress) {
-  struct net_local *lp = (struct net_local *) portHandle;
-  u16 phyReg;
-
-  XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, regAddress, &phyReg);
-  return(phyReg);
-}
-
 /* MDIO interrupt service routine */
 static irqreturn_t mdio_interrupt(int irq, void *dev_id)
 {
@@ -2697,7 +2700,7 @@ static int xtenet_setup(
 		struct device *dev,
 		struct resource *r_mem,
 		struct resource *r_irq,
-		struct labx_eth_platform_data *pdata) {
+		struct labx_ll_eth_platform_data *pdata) {
 	int xs;
 	u32 virt_baddr;		/* virtual base address of TEMAC */
 	int i;
@@ -2909,7 +2912,9 @@ static int xtenet_setup(
 	/* Setup MDIO IRQ handling */
 	if (NULL != r_irq) {
 		ndev->irq = r_irq->start;
-		rc = request_irq(ndev->irq, &mdio_interrupt, IRQF_DISABLED, "Lab X MDIO", lp);
+		snprintf(lp->mdio_irq_name, IRQ_NAME_SZ, "%s MDIO", ndev->name);
+		lp->mdio_irq_name[IRQ_NAME_SZ - 1] = '\0';
+		rc = request_irq(ndev->irq, &mdio_interrupt, IRQF_DISABLED, lp->mdio_irq_name, lp);
 		if(rc) {
 			printk(KERN_ERR "%s: Could not allocate Lab X Ethernet MDIO interrupt (%d).\n",
 				ndev->name, ndev->irq);
@@ -2951,7 +2956,7 @@ static int xtenet_probe_thread(void *data)
 
 	struct resource *r_irq     = NULL; /* Interrupt resources */
 	struct resource *r_mem     = NULL; /* IO mem resources */
-	struct labx_eth_platform_data *pdata;
+	struct labx_ll_eth_platform_data *pdata;
 	struct platform_device *pdev = to_platform_device(dev);
 
 	/* param check */
@@ -2960,7 +2965,7 @@ static int xtenet_probe_thread(void *data)
 		return -ENODEV;
 	}
 
-	pdata = (struct labx_eth_platform_data *) pdev->dev.platform_data;
+	pdata = (struct labx_ll_eth_platform_data *) pdev->dev.platform_data;
 	if (!pdata) {
 		dev_err(dev, "labx_eth_llink: Couldn't find platform data.\n");
 
@@ -3032,9 +3037,9 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 	struct resource *r_irq_phy = &r_irq_phy_struct; /* Interrupt resources */
 	struct resource *r_mem     = &r_mem_struct;     /* IO mem resources */
 
-	struct labx_eth_platform_data pdata_struct = {};
+	struct labx_ll_eth_platform_data pdata_struct = {};
 
-	struct labx_eth_platform_data *pdata = &pdata_struct;
+	struct labx_ll_eth_platform_data *pdata = &pdata_struct;
 	const void *mac_address;
 	int rc = 0;
 	const phandle *llink_connected_handle;

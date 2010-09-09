@@ -12,6 +12,9 @@ obj-$(CONFIG_NEED_XILINX_LLDMA) += \
 			    xlldma_bdring.o xlldma.o				\
 			    xllfifo.o xstreamer.o
 
+obj-$(CONFIG_NEED_XILINX_LLFIFO) += \
+			    xllfifo.o xstreamer.o
+
 obj-$(CONFIG_XILINX_LLDMA_USE_DCR) += \
 					xio_dcr.o
 
