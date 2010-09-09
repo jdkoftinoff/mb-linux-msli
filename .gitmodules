@@ -1,3 +1,0 @@
-[submodule "uClinux-dist/user/gsbd"]
-	path = uClinux-dist/user/gsbd
-	url = ssh://git@github.com/jdkoftinoff/gsbd
