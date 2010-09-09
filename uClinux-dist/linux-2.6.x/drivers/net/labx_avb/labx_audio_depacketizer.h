@@ -145,7 +145,8 @@
  */
 typedef enum {
   STREAM_MATCH_SRLC16E = 0x10,
-  STREAM_MATCH_SRLC32E = 0x11
+  STREAM_MATCH_SRLC32E = 0x11,
+  STREAM_MATCH_UNIFIED = 0xFF
 } StreamMatchArchitecture;
 
 /* Number of units and configuration words required for each architecture we support */

@@ -36,13 +36,24 @@
 #endif // CONFIG_OF
 
 
-/* Driver name and the revision of hardware expected (1.1) */
+/* Driver name and the revision of hardware expected (1.1 - 1.2) */
 #define DRIVER_NAME "labx_audio_depacketizer"
-#define HARDWARE_VERSION_MAJOR  1
-#define HARDWARE_VERSION_MINOR  1
+#define DRIVER_VERSION_MIN  0x11
+#define DRIVER_VERSION_MAX  0x12
+
+/* Version of the hardware beyond which a unified architecture is
+ * used for stream matching (1.2)
+ */
+#define UNIFIED_MATCH_VERSION_MIN  0x12
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 252
+
+/* Interface type string prefix which indicates a Dma_Coprocessor is
+ * in use for the instance.  This could be one of the following:
+ * DMA_RAW, DMA_NPI, DMA_PLB, or DMA_AXI
+ */
+#define DMA_INTERFACE_PREFIX  "DMA_"
 
 /* Maximum number of depacketizers and instance count */
 #define MAX_INSTANCES 64
@@ -269,6 +280,8 @@ static void clear_selected_matchers(struct audio_depacketizer *depacketizer) {
   /* Load the appropriate number of clearing words to the LUTs */
   switch(depacketizer->matchArchitecture) {
   case STREAM_MATCH_SRLC16E:
+  case STREAM_MATCH_UNIFIED:
+    /* The unified architecture actually makes use of SRLC16Es */
     numClearWords = NUM_SRLC16E_CONFIG_WORDS;
     break;
 
@@ -418,6 +431,10 @@ static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
       case STREAM_MATCH_SRLC32E:
         load_srlc32e_matcher(depacketizer, matcherConfig->matchStreamId);
         break;
+
+      case STREAM_MATCH_UNIFIED:
+	printk("No method for unified matcher load yet!\n");
+	break;
       
       default:
         /* Unrecognized architecture, do nothing */
@@ -770,12 +787,14 @@ static struct file_operations audio_depacketizer_fops = {
 static int audio_depacketizer_probe(const char *name, 
                                     struct platform_device *pdev,
                                     struct resource *addressRange,
-                                    struct resource *irq) {
+                                    struct resource *irq,
+				    const char *interfaceType) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t versionCompare;
   int returnValue;
   
   /* Create and populate a device structure */
@@ -828,8 +847,9 @@ static int audio_depacketizer_probe(const char *name,
   versionWord = XIo_In32(REGISTER_ADDRESS(depacketizer, REVISION_REG));
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != HARDWARE_VERSION_MINOR)) {
+  versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
+  if((versionCompare < DRIVER_VERSION_MIN) | 
+     (versionCompare > DRIVER_VERSION_MAX)) {
     printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
            depacketizer->name, versionMajor, versionMinor, (uint32_t)depacketizer->physicalAddress);
     returnValue = -ENXIO;
@@ -838,18 +858,23 @@ static int audio_depacketizer_probe(const char *name,
   depacketizer->capabilities.versionMajor = versionMajor;
   depacketizer->capabilities.versionMinor = versionMinor;
 
-  /* Test and sanity-check the stream-matching architecture */
-  depacketizer->matchArchitecture = ((capsWord >> MATCH_ARCH_SHIFT) & MATCH_ARCH_MASK);
-  switch(depacketizer->matchArchitecture) {
-  case STREAM_MATCH_SRLC16E:
-  case STREAM_MATCH_SRLC32E:
-    break;
-  default:
-    printk(KERN_INFO "%s: Invalid match architecture 0x%02X\n", 
-           depacketizer->name, depacketizer->matchArchitecture);
-    returnValue = -ENXIO;
-    goto unmap;
-  }
+  /* Test and sanity-check the stream-matching architecture for legacy
+   * implementations; version 1.2 and up uses a more efficient and unified
+   * architecture for all device families.
+   */
+  if(versionCompare < UNIFIED_MATCH_VERSION_MIN) {
+    depacketizer->matchArchitecture = ((capsWord >> MATCH_ARCH_SHIFT) & MATCH_ARCH_MASK);
+    switch(depacketizer->matchArchitecture) {
+    case STREAM_MATCH_SRLC16E:
+    case STREAM_MATCH_SRLC32E:
+      break;
+    default:
+      printk(KERN_INFO "%s: Invalid match architecture 0x%02X\n", 
+	     depacketizer->name, depacketizer->matchArchitecture);
+      returnValue = -ENXIO;
+      goto unmap;
+    }
+  } else depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
 
   /* Capture more capabilities information */
   depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
@@ -863,22 +888,35 @@ static int audio_depacketizer_probe(const char *name,
          depacketizer->name, versionMajor, versionMinor, 
          (uint32_t)depacketizer->physicalAddress);
   if(depacketizer->irq == NO_IRQ_SUPPLIED) {
-    printk("polled interlocks\n");
+    printk("polled interlocks");
   } else {
-    printk("IRQ %d\n", depacketizer->irq);
+    printk("IRQ %d", depacketizer->irq);
   }
+  printk(", %s interface\n", interfaceType);
 
   /* Initialize other resources */
   spin_lock_init(&depacketizer->mutex);
   depacketizer->opened = false;
 
+  /* Test to see whether the depacketizer instance has a Dma_Coprocessor
+   * module contained within for handling the back-end of the audio data
+   */
+  if(strncmp(interfaceType, DMA_INTERFACE_PREFIX, strlen(DMA_INTERFACE_PREFIX)) == 0) {
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
-  /* There are 4 address blocks in the depacketizer, each sized the same as the instruction RAM (which is 4 bytes wide).
-   * DMA is selected with the next bit up in the address */
-  depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
- 
-  labx_dma_probe(&depacketizer->dma); 
+    /* There are 4 address blocks in the depacketizer, each sized the same 
+     * as the instruction RAM (which is 4 bytes wide).
+     * DMA is selected with the next bit up in the address
+     */
+    depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
+    labx_dma_probe(&depacketizer->dma); 
+#else
+    /* The interface type specified by the platform involves a DMA instance,
+     * but the driver for the Dma_Coprocessor hasn't been enabled in the
+     * build configuration!
+     */
+    printk("%s\n has a Dma_Coprocessor, but DMA driver is not built\n", depacketizer->name);
 #endif
+  }
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, depacketizer);
@@ -930,6 +968,7 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
   const char *name = dev_name(&ofdev->dev);
+  const char *interfaceType;
   int rc;
 
   /* Obtain the resources for this instance */
@@ -943,11 +982,16 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   if(rc == NO_IRQ) {
     /* No IRQ was defined; null the resource pointer to indicate polled mode */
     irq = NULL;
-    return(rc);
+  }
+
+  interfaceType = (char *) of_get_property(ofdev->node, "xlnx,interface-type", NULL);
+  if(interfaceType == NULL) {
+    dev_warn(&ofdev->dev, "No interface type specified in device tree\n");
+    return(-EFAULT);
   }
 
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(name, pdev, addressRange, irq));
+  return(audio_depacketizer_probe(name, pdev, addressRange, irq, interfaceType));
 }
 
 static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
@@ -981,6 +1025,7 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
 {
   struct resource *addressRange;
   struct resource *irq;
+  char *interfaceType;
 
   /* Obtain the resources for this instance */
   addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -994,8 +1039,17 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
    */
   irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
+  /* The only other platform data provided is a string specifying the
+   * interface type for the instance
+   */
+  interfaceType = (char *) pdev->dev.platform_data;
+  if(interfaceType == NULL) {
+    printk(KERN_ERR "%s: No interface type string specified\n", pdev->name);
+    return(-EFAULT);
+  }
+
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq));
+  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq, interfaceType));
 }
 
 static int audio_depacketizer_platform_remove(struct platform_device *pdev)
@@ -1027,8 +1081,7 @@ static struct platform_driver audio_depacketizer_driver = {
 static int __init audio_depacketizer_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer %d.%d driver\n",
-         HARDWARE_VERSION_MAJOR, HARDWARE_VERSION_MINOR);
+  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer driver\n");
   printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
