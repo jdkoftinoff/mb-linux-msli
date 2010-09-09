@@ -68,7 +68,7 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
 /*****************************************************************************/
 /**
  *
- * XLlTemac_CfgInitialize initializes a TEMAC channel along with the
+ * labx_XLlTemac_CfgInitialize initializes a TEMAC channel along with the
  * <i>InstancePtr</i> that references it. Each TEMAC channel is treated as a
  * separate device from the point of view of this driver.
  *
@@ -86,7 +86,7 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
  *         without an active MMU, <i>EffectiveAddress</i> should be set to the
  *         same value as <code>ConfigPtr->Config.BaseAddress</code>.
  *
- * @return XLlTemac_CfgInitialize returns XST_SUCCESS.
+ * @return labx_XLlTemac_CfgInitialize returns XST_SUCCESS.
  *
  * @note
  *
@@ -97,7 +97,7 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
  *
  *
  ******************************************************************************/
-int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
+int labx_XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
                            XLlTemac_Config *CfgPtr, u32 EffectiveAddress)
 {
 	/* Verify arguments */
@@ -107,24 +107,24 @@ int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
 	memset(InstancePtr, 0, sizeof(XLlTemac));
 	memcpy(&InstancePtr->Config, CfgPtr, sizeof(XLlTemac_Config));
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_CfgInitialize\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_CfgInitialize\n");
 	/* Set device base address */
 	InstancePtr->Config.BaseAddress = EffectiveAddress;
 
 	/* Reset the hardware and set default options */
 	InstancePtr->IsReady = XCOMPONENT_IS_READY;
 
-	XLlTemac_Reset(InstancePtr, XTE_NORESET_HARD);
+	labx_XLlTemac_Reset(InstancePtr, XTE_NORESET_HARD);
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "Temac_CfgInitialize: returning SUCCESS\n");
+		    "labx_XLlTemac_CfgInitialize: returning SUCCESS\n");
 	return XST_SUCCESS;
 }
 
 
 /*****************************************************************************/
 /**
- * XLlTemac_Start starts the TEMAC channel as follows:
+ * labx_XLlTemac_Start starts the TEMAC channel as follows:
  *   - Enable transmitter if XTE_TRANSMIT_ENABLE_OPTION is set
  *   - Enable receiver if XTE_RECEIVER_ENABLE_OPTION is set
  *
@@ -140,7 +140,7 @@ int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Start(XLlTemac *InstancePtr)
+void labx_XLlTemac_Start(XLlTemac *InstancePtr)
 {
 	u32 Reg;
 
@@ -161,7 +161,7 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 		return;
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Start\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Start\n");
 	/* Enable transmitter if not already enabled */
 	if (InstancePtr->Options & XTE_TRANSMITTER_ENABLE_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL, "enabling transmitter\n");
@@ -195,16 +195,16 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 
 	/* Mark as started */
 	InstancePtr->IsStarted = XCOMPONENT_IS_STARTED;
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Start: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Start: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_Stop gracefully stops the TEMAC channel as follows:
+ * labx_XLlTemac_Stop gracefully stops the TEMAC channel as follows:
  *   - Disable all interrupts from this device
  *   - Disable the receiver
  *
- * XLlTemac_Stop does not modify any of the current device options.
+ * labx_XLlTemac_Stop does not modify any of the current device options.
  *
  * Since the transmitter is not disabled, frames currently in internal buffers
  * or in process by a DMA engine are allowed to be transmitted.
@@ -221,7 +221,7 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Stop(XLlTemac *InstancePtr)
+void labx_XLlTemac_Stop(XLlTemac *InstancePtr)
 {
 	u32 Reg;
 
@@ -241,13 +241,13 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 		return;
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Stop\n");
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_Stop: disabling interrupts\n");
+		    "labx_XLlTemac_Stop: disabling interrupts\n");
 	/* Disable interrupts */
 	//XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, XTE_IE_OFFSET, 0);
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop: disabling receiver\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Stop: disabling receiver\n");
 	/* Disable the receiver */
 	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 				       XTE_RCW1_OFFSET);
@@ -270,31 +270,31 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 
 	/* Mark as stopped */
 	InstancePtr->IsStarted = 0;
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Stop: done\n");
 }
 
 
 /*****************************************************************************/
 /**
- * XLlTemac_Reset performs a reset of the TEMAC channel, specified by
+ * labx_XLlTemac_Reset performs a reset of the TEMAC channel, specified by
  * <i>InstancePtr</i>, or both channels if <i>HardCoreAction</i> is set to
  * XTE_RESET_HARD.
  *
- * XLlTemac_Reset also resets the TEMAC channel's options to their default values.
+ * labx_XLlTemac_Reset also resets the TEMAC channel's options to their default values.
  *
  * The calling software is responsible for re-configuring the TEMAC channel
  * (if necessary) and restarting the MAC after the reset.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
- * @param HardCoreAction describes how XLlTemac_Reset should treat the hard core
+ * @param HardCoreAction describes how labx_XLlTemac_Reset should treat the hard core
  *        block of the TEMAC.<br><br>
  *
- *        If XTE_RESET_HARD is set to XTE_RESET_HARD, then XLlTemac_Reset asserts
+ *        If XTE_RESET_HARD is set to XTE_RESET_HARD, then labx_XLlTemac_Reset asserts
  *        the reset signal to the hard core block which will reset both channels
  *        of the TEMAC. This, of course, will bork any activity that may be
  *        occuring on the other channel. So, be careful here.<br><br>
  *
- *        Otherwise, XLlTemac_Reset resets just the transmitter and receiver of
+ *        Otherwise, labx_XLlTemac_Reset resets just the transmitter and receiver of
  *        this TEMAC channel.
  *
  * @note
@@ -305,7 +305,7 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
+void labx_XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
 	u32 Reg;
 	u32 TimeoutCount = 2;
@@ -321,9 +321,9 @@ void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Reset\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_Reset\n");
 	/* Stop the device and reset HW */
-	XLlTemac_Stop(InstancePtr);
+	labx_XLlTemac_Stop(InstancePtr);
 	InstancePtr->Options = XTE_DEFAULT_OPTIONS;
 
 	/* Reset the receiver */
@@ -428,32 +428,32 @@ static void InitHw(XLlTemac *InstancePtr)
 	}
 #endif
 	/* Sync default options with HW but leave receiver and transmitter
-	 * disabled. They get enabled with XLlTemac_Start() if
+	 * disabled. They get enabled with labx_XLlTemac_Start() if
 	 * XTE_TRANSMITTER_ENABLE_OPTION and XTE_RECEIVER_ENABLE_OPTION are set
 	 */
-	XLlTemac_SetOptions(InstancePtr, InstancePtr->Options &
+	labx_XLlTemac_SetOptions(InstancePtr, InstancePtr->Options &
 			    ~(XTE_TRANSMITTER_ENABLE_OPTION |
 			      XTE_RECEIVER_ENABLE_OPTION));
 
-	XLlTemac_ClearOptions(InstancePtr, ~InstancePtr->Options);
+	labx_XLlTemac_ClearOptions(InstancePtr, ~InstancePtr->Options);
 
 	/* Set default MDIO divisor */
-	XLlTemac_PhySetMdioDivisor(InstancePtr, XTE_MDIO_DIV_DFT);
+	labx_XLlTemac_PhySetMdioDivisor(InstancePtr, XTE_MDIO_DIV_DFT);
 	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac InitHw: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetMacAddress sets the MAC address for the TEMAC channel, specified
+ * labx_XLlTemac_SetMacAddress sets the MAC address for the TEMAC channel, specified
  * by <i>InstancePtr</i> to the MAC address specified by <i>AddressPtr</i>.
  * The TEMAC channel must be stopped before calling this function.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param AddressPtr is a reference to the 6-byte MAC address to set.
  *
- * @return On successful completion, XLlTemac_SetMacAddress returns XST_SUCCESS.
+ * @return On successful completion, labx_XLlTemac_SetMacAddress returns XST_SUCCESS.
  *         Otherwise, if the TEMAC channel has not stopped,
- *         XLlTemac_SetMacAddress returns XST_DEVICE_IS_STARTED.
+ *         labx_XLlTemac_SetMacAddress returns XST_DEVICE_IS_STARTED.
  *
  * @note
  *
@@ -463,7 +463,7 @@ static void InitHw(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
+int labx_XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
 	u32 MacAddr;
 	u8 *Aptr = (u8 *) AddressPtr;
@@ -487,7 +487,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetMacAddress: setting mac address to: 0x%08x%8x%8x%8x%8x%8x\n",
+		    "labx_XLlTemac_SetMacAddress: setting mac address to: 0x%08x%8x%8x%8x%8x%8x\n",
 		    Aptr[0], Aptr[1], Aptr[2], Aptr[3], Aptr[4], Aptr[5]);
 	/*
 	 * Set the MAC bits [31:0] in UAW0
@@ -545,7 +545,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetMacAddress gets the MAC address for the TEMAC channel, specified
+ * labx_XLlTemac_GetMacAddress gets the MAC address for the TEMAC channel, specified
  * by <i>InstancePtr</i> into the memory buffer specified by <i>AddressPtr</i>.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
@@ -562,7 +562,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
+void labx_XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
 	u32 MacAddr;
 	u8 *Aptr = (u8 *) AddressPtr;
@@ -606,16 +606,16 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetOptions enables the options, <i>Options</i> for the TEMAC channel,
+ * labx_XLlTemac_SetOptions enables the options, <i>Options</i> for the TEMAC channel,
  * specified by <i>InstancePtr</i>. The TEMAC channel should be stopped with
- * XLlTemac_Stop() before changing options.
+ * labx_XLlTemac_Stop() before changing options.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Options is a bitmask of OR'd XTE_*_OPTION values for options to
  *        set. Options not specified are not affected.
  *
- * @return On successful completion, XLlTemac_SetOptions returns XST_SUCCESS.
- *         Otherwise, if the device has not been stopped, XLlTemac_SetOptions
+ * @return On successful completion, labx_XLlTemac_SetOptions returns XST_SUCCESS.
+ *         Otherwise, if the device has not been stopped, labx_XLlTemac_SetOptions
  *         returns XST_DEVICE_IS_STARTED.
  *
  * @note
@@ -627,7 +627,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
+int labx_XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 {
 	u32 Reg;		/* Generic register contents */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
@@ -651,7 +651,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 		return (XST_DEVICE_IS_STARTED);
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOptions\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_SetOptions\n");
 	/* Many of these options will change the RCW1 or TC registers.
 	 * To reduce the amount of IO to the device, group these options here
 	 * and change them all at once.
@@ -817,16 +817,16 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 
 /*****************************************************************************/
 /**
- * XLlTemac_ClearOptions clears the options, <i>Options</i> for the TEMAC channel,
+ * labx_XLlTemac_ClearOptions clears the options, <i>Options</i> for the TEMAC channel,
  * specified by <i>InstancePtr</i>. The TEMAC channel should be stopped with
- * XLlTemac_Stop() before changing options.
+ * labx_XLlTemac_Stop() before changing options.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Options is a bitmask of OR'd XTE_*_OPTION values for options to
  *        clear. Options not specified are not affected.
  *
- * @return On successful completion, XLlTemac_ClearOptions returns XST_SUCCESS.
- *         Otherwise, if the device has not been stopped, XLlTemac_ClearOptions
+ * @return On successful completion, labx_XLlTemac_ClearOptions returns XST_SUCCESS.
+ *         Otherwise, if the device has not been stopped, labx_XLlTemac_ClearOptions
  *         returns XST_DEVICE_IS_STARTED.
  *
  * @note
@@ -838,7 +838,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
+int labx_XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
 	u32 Reg;		/* Generic */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
@@ -1015,18 +1015,18 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetOptions returns the current option settings.
+ * labx_XLlTemac_GetOptions returns the current option settings.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_GetOptions returns a bitmask of XTE_*_OPTION constants,
+ * @return labx_XLlTemac_GetOptions returns a bitmask of XTE_*_OPTION constants,
  *         each bit specifying an option that is currently active.
  *
  * @note
  * See xlltemac.h for a description of the available options.
  *
  ******************************************************************************/
-u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
+u32 labx_XLlTemac_GetOptions(XLlTemac *InstancePtr)
 {
 	XASSERT_NONVOID(InstancePtr != NULL);
 	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1036,12 +1036,12 @@ u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetOperatingSpeed gets the current operating link speed. This may be
- * the value set by XLlTemac_SetOperatingSpeed() or a hardware default.
+ * labx_XLlTemac_GetOperatingSpeed gets the current operating link speed. This may be
+ * the value set by labx_XLlTemac_SetOperatingSpeed() or a hardware default.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_GetOperatingSpeed returns the link speed in units of megabits
+ * @return labx_XLlTemac_GetOperatingSpeed returns the link speed in units of megabits
  *         per second.
  *
  * @note
@@ -1052,7 +1052,7 @@ u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
+u16 labx_XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 {
 	XASSERT_NONVOID(InstancePtr != NULL);
 	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1065,23 +1065,23 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 					 XTE_RDY_OFFSET) &
 			XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_GetOperatingSpeed\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_GetOperatingSpeed\n");
 	switch (XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					 XTE_EMMC_OFFSET) &
 		XTE_EMMC_LINKSPEED_MASK) {
 	case XTE_EMMC_LINKSPD_1000:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 1000\n");
+			    "labx_XLlTemac_GetOperatingSpeed: returning 1000\n");
 		return (1000);
 
 	case XTE_EMMC_LINKSPD_100:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 100\n");
+			    "labx_XLlTemac_GetOperatingSpeed: returning 100\n");
 		return (100);
 
 	case XTE_EMMC_LINKSPD_10:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 10\n");
+			    "labx_XLlTemac_GetOperatingSpeed: returning 10\n");
 		return (10);
 
 	default:
@@ -1092,13 +1092,13 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetOperatingSpeed sets the current operating link speed. For any
+ * labx_XLlTemac_SetOperatingSpeed sets the current operating link speed. For any
  * traffic to be passed, this speed must match the current MII/GMII/SGMII/RGMII
  * link speed.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Speed is the speed to set in units of Mbps. Valid values are 10, 100,
- *        or 1000. XLlTemac_SetOperatingSpeed ignores invalid values.
+ *        or 1000. labx_XLlTemac_SetOperatingSpeed ignores invalid values.
  *
  * @note
  *
@@ -1108,7 +1108,7 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
+void labx_XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 {
 	u32 EmmcReg;
 
@@ -1124,9 +1124,9 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOperatingSpeed\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_SetOperatingSpeed\n");
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: setting speed to: %d (0x%0x)\n",
+		    "labx_XLlTemac_SetOperatingSpeed: setting speed to: %d (0x%0x)\n",
 		    Speed, Speed);
 	/* Get the current contents of the EMAC config register and zero out
 	 * speed bits
@@ -1136,7 +1136,7 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 		~XTE_EMMC_LINKSPEED_MASK;
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: current speed: 0x%0x\n",
+		    "labx_XLlTemac_SetOperatingSpeed: current speed: 0x%0x\n",
 		    EmmcReg);
 	switch (Speed) {
 	case 10:
@@ -1155,16 +1155,16 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
+		    "labx_XLlTemac_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
 	/* Set register and return */
 	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_EMMC_OFFSET, EmmcReg);
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOperatingSpeed: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_SetOperatingSpeed: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_PhySetMdioDivisor sets the MDIO clock divisor in the TEMAC channel,
+ * labx_XLlTemac_PhySetMdioDivisor sets the MDIO clock divisor in the TEMAC channel,
  * specified by <i>InstancePtr</i> to the value, <i>Divisor</i>. This function
  * must be called once after each reset prior to accessing MII PHY registers.
  *
@@ -1194,7 +1194,7 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
+void labx_XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 {
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY)
@@ -1208,7 +1208,7 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_PhySetMdioDivisor\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_PhySetMdioDivisor\n");
 	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_MC_OFFSET,
 				  (u32) Divisor | XTE_MC_MDIOEN_MASK);
@@ -1216,7 +1216,7 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 
 /*****************************************************************************/
 /*
- * XLlTemac_PhyRead reads the specified PHY register, <i>RegiseterNum</i> on the
+ * labx_XLlTemac_PhyRead reads the specified PHY register, <i>RegiseterNum</i> on the
  * PHY specified by <i>PhyAddress</i> into <i>PhyDataPtr</i>. This Ethernet
  * driver does not require the device to be stopped before reading from the PHY.
  * It is the responsibility of the calling code to stop the device if it is
@@ -1227,7 +1227,7 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
  * standard.
  *
  * <b>It is important that calling code set up the MDIO clock with
- * XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
+ * labx_XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param PhyAddress is the address of the PHY to be written (multiple
@@ -1253,7 +1253,7 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
  * suitable for recovery.
  *
  ******************************************************************************/
-void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+void labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
                       u32 RegisterNum, u16 *PhyDataPtr)
 {
 	XASSERT_VOID(InstancePtr != NULL);
@@ -1290,7 +1290,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 
 /*****************************************************************************/
 /*
- * XLlTemac_PhyWrite writes <i>PhyData</i> to the specified PHY register,
+ * labx_XLlTemac_PhyWrite writes <i>PhyData</i> to the specified PHY register,
  * <i>RegiseterNum</i> on the PHY specified by <i>PhyAddress</i>. This Ethernet
  * driver does not require the device to be stopped before writing to the PHY.
  * It is the responsibility of the calling code to stop the device if it is
@@ -1301,7 +1301,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
  * standard.
  *
  * <b>It is important that calling code set up the MDIO clock with
- * XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
+ * labx_XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param PhyAddress is the address of the PHY to be written (multiple
@@ -1325,7 +1325,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
  * suitable for recovery.
  *
  ******************************************************************************/
-void XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+void labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
                        u32 RegisterNum, u16 PhyData)
 {
 	XASSERT_VOID(InstancePtr != NULL);
