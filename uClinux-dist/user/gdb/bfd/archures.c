@@ -402,6 +402,7 @@ DESCRIPTION
 .#define bfd_mach_z80            3 {* With ixl, ixh, iyl, and iyh.  *}
 .#define bfd_mach_z80full        7 {* All undocumented instructions.  *}
 .#define bfd_mach_r800           11 {* R800: successor with multiplication.  *}
+   bfd_arch_microblaze,
 .  bfd_arch_last
 .  };
 */
@@ -472,6 +473,7 @@ extern const bfd_arch_info_type bfd_m68k_arch;
 extern const bfd_arch_info_type bfd_m88k_arch;
 extern const bfd_arch_info_type bfd_maxq_arch;
 extern const bfd_arch_info_type bfd_mcore_arch;
+extern const bfd_arch_info_type bfd_microblaze_arch;
 extern const bfd_arch_info_type bfd_mep_arch;
 extern const bfd_arch_info_type bfd_mips_arch;
 extern const bfd_arch_info_type bfd_mmix_arch;
@@ -543,6 +545,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_m88k_arch,
     &bfd_maxq_arch,
     &bfd_mcore_arch,
+    &bfd_microblaze_arch,
     &bfd_mep_arch,
     &bfd_mips_arch,
     &bfd_mmix_arch,

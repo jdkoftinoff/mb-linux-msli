@@ -2079,6 +2079,7 @@ enum bfd_architecture
 #define bfd_mach_z80            3 /* With ixl, ixh, iyl, and iyh.  */
 #define bfd_mach_z80full        7 /* All undocumented instructions.  */
 #define bfd_mach_r800           11 /* R800: successor with multiplication.  */
+  bfd_arch_microblaze,
   bfd_arch_last
   };
 
@@ -4420,6 +4421,23 @@ BFD_RELOC_XTENSA_ASM_EXPAND.  */
 
 /* 4 bit value.  */
   BFD_RELOC_Z8K_IMM4L,
+
+/* This is a 32 bit reloc for the microblaze that stores low 16 bits of a 
+   value */
+  BFD_RELOC_MICROBLAZE_32_LO,
+
+/* This is a 32 bit pc-relative reloc for the microblaze that stores low 16 
+   bits of a value */
+  BFD_RELOC_MICROBLAZE_32_LO_PCREL,
+
+/* This is a 32 bit reloc for the microblaze that stores a value relative to
+   the read-only small data area anchor */
+  BFD_RELOC_MICROBLAZE_32_ROSDA,
+
+/* This is a 32 bit reloc for the microblaze that stores a value relative to
+   the read-write small data area anchor */
+  BFD_RELOC_MICROBLAZE_32_RWSDA,
+
   BFD_RELOC_UNUSED };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;
 reloc_howto_type *bfd_reloc_type_lookup

@@ -18,6 +18,10 @@ config LIB_BITVECTOR
 	  Only enable this if you want to force the library to be built.
 	  The Config will make sure this library is built if it is needed.
 
+config LIB_UCLIBCPP
+	bool "Build uClibc++"
+	default n
+
 config LIB_FLEX
 	bool "Build flex"
 	default n

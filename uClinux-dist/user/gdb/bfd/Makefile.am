@@ -94,6 +94,7 @@ ALL_MACHINES = \
 	cpu-maxq.lo \
 	cpu-mcore.lo \
 	cpu-mep.lo \
+	cpu-microblaze.lo \
 	cpu-mips.lo \
 	cpu-mmix.lo \
 	cpu-mt.lo \
@@ -160,6 +161,7 @@ ALL_MACHINES_CFILES = \
 	cpu-maxq.c \
 	cpu-mcore.c \
 	cpu-mep.c \
+	cpu-microblaze.c \
 	cpu-mips.c \
 	cpu-mmix.c \
 	cpu-mt.c \
@@ -275,6 +277,7 @@ BFD32_BACKENDS = \
 	elf-m10300.lo \
 	elf32-mcore.lo \
 	elf32-mep.lo \
+	elf32-microblaze.lo \
 	elfxx-mips.lo \
 	elf32-mips.lo \
 	elf32-mt.lo \
@@ -456,6 +459,7 @@ BFD32_BACKENDS_CFILES = \
 	elf-m10300.c \
 	elf32-mcore.c \
 	elf32-mep.c \
+	elf32-microblaze.c \
 	elfxx-mips.c \
 	elf32-mips.c \
 	elf32-mt.c \
@@ -1106,6 +1110,7 @@ cpu-m10300.lo: cpu-m10300.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-maxq.lo: cpu-maxq.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-mcore.lo: cpu-mcore.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-mep.lo: cpu-mep.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
+cpu-microblaze.lo: cpu-microblaze.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-mips.lo: cpu-mips.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-mmix.lo: cpu-mmix.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
 cpu-mt.lo: cpu-mt.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
@@ -1470,6 +1475,10 @@ elf32-mep.lo: elf32-mep.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/mep.h \
   $(INCDIR)/elf/reloc-macros.h $(INCDIR)/libiberty.h \
   elf32-target.h
+elf32-microblaze.lo: elf32-microblaze.c $(INCDIR)/filenames.h \
+  $(INCDIR)/bfdlink.h $(INCDIR)/hashtab.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/microblaze.h \
+  $(INCDIR)/elf/reloc-macros.h elf32-target.h
 elfxx-mips.lo: elfxx-mips.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h \
   $(INCDIR)/libiberty.h elf-bfd.h $(INCDIR)/elf/common.h \
   $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h \

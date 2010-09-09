@@ -281,6 +281,11 @@ mep-*-*)
 	# No sim needed. Target uses SID.
 	;;
 
+microblaze-*-*)
+	# Target: Xilinx Microblaze
+	gdb_target_objs="microblaze-tdep.o"
+	;;
+
 mips*-sgi-irix5*)
 	# Target: MIPS SGI running Irix 5
 	gdb_target_obs="mips-tdep.o mips-irix-tdep.o solib.o solib-irix.o"
