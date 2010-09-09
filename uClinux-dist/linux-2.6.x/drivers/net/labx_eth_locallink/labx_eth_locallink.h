@@ -742,11 +742,11 @@ typedef struct XLlTemac {
 /*
  * Initialization functions in xlltemac.c
  */
-int XLlTemac_CfgInitialize(XLlTemac *InstancePtr, XLlTemac_Config *CfgPtr,
+int labx_XLlTemac_CfgInitialize(XLlTemac *InstancePtr, XLlTemac_Config *CfgPtr,
 			   u32 VirtualAddress);
-void XLlTemac_Start(XLlTemac *InstancePtr);
-void XLlTemac_Stop(XLlTemac *InstancePtr);
-void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction);
+void labx_XLlTemac_Start(XLlTemac *InstancePtr);
+void labx_XLlTemac_Stop(XLlTemac *InstancePtr);
+void labx_XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction);
 
 /*
  * Initialization functions in xlltemac_sinit.c
@@ -756,31 +756,31 @@ XLlTemac_Config *XLlTemac_LookupConfig(u16 DeviceId);
 /*
  * MAC configuration/control functions in xlltemac_control.c
  */
-int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options);
-int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options);
-u32 XLlTemac_GetOptions(XLlTemac *InstancePtr);
+int labx_XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options);
+int labx_XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options);
+u32 labx_XLlTemac_GetOptions(XLlTemac *InstancePtr);
 
-int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
-void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
+int labx_XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
+void labx_XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
 
-int XLlTemac_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
-void XLlTemac_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
-int XLlTemac_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue);
+int labx_XLlTemac_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
+void labx_XLlTemac_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
+int labx_XLlTemac_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue);
 
-int XLlTemac_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr);
-int XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr,
+int labx_XLlTemac_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr);
+int labx_XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr,
 			    int *IsFullDuplexPtr, int *IsLinkUpPtr);
-u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr);
-void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed);
+u16 labx_XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr);
+void labx_XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed);
 
-void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor);
-void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
+void labx_XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor);
+void labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		      u16 *PhyDataPtr);
-void XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
+void labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		       u16 PhyData);
-int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
+int labx_XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
+void labx_XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
+int labx_XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
 
 extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_ll_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus

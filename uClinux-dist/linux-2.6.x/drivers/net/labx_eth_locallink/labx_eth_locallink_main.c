@@ -224,13 +224,13 @@ struct net_local {
 
 static void labx_eth_ll_mac_adjust_link(struct net_device *dev);
 
-u32 dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
-u32 dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
+static u32 dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
+static u32 dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK;
 
 /* for exclusion of all program flows (processes, ISRs and BHs) */
-spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
-spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
-spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
 /*
  * ethtool has a status reporting feature where we can report any sort of
@@ -289,7 +289,7 @@ static inline void _XLlTemac_Start(XLlTemac *InstancePtr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_Start(InstancePtr);
+	labx_XLlTemac_Start(InstancePtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -298,7 +298,7 @@ static inline void _XLlTemac_Stop(XLlTemac *InstancePtr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_Stop(InstancePtr);
+	labx_XLlTemac_Stop(InstancePtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -307,7 +307,7 @@ static inline void _XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_Reset(InstancePtr, HardCoreAction);
+	labx_XLlTemac_Reset(InstancePtr, HardCoreAction);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -318,7 +318,7 @@ static inline int _XLlTemac_SetMacAddress(XLlTemac *InstancePtr,
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_SetMacAddress(InstancePtr, AddressPtr);
+	status = labx_XLlTemac_SetMacAddress(InstancePtr, AddressPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -330,7 +330,7 @@ static inline void _XLlTemac_GetMacAddress(XLlTemac *InstancePtr,
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_GetMacAddress(InstancePtr, AddressPtr);
+	labx_XLlTemac_GetMacAddress(InstancePtr, AddressPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -340,7 +340,7 @@ static inline int _XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_SetOptions(InstancePtr, Options);
+	status = labx_XLlTemac_SetOptions(InstancePtr, Options);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -352,7 +352,7 @@ static inline int _XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_ClearOptions(InstancePtr, Options);
+	status = labx_XLlTemac_ClearOptions(InstancePtr, Options);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -364,7 +364,7 @@ static inline u16 _XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	speed = XLlTemac_GetOperatingSpeed(InstancePtr);
+	speed = labx_XLlTemac_GetOperatingSpeed(InstancePtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return speed;
@@ -375,7 +375,7 @@ static inline void _XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_SetOperatingSpeed(InstancePtr, Speed);
+	labx_XLlTemac_SetOperatingSpeed(InstancePtr, Speed);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	/* We need a delay after we set the speed. Otherwise the PHY will not be ready. */
@@ -387,7 +387,7 @@ static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_PhySetMdioDivisor(InstancePtr, Divisor);
+	labx_XLlTemac_PhySetMdioDivisor(InstancePtr, Divisor);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -397,7 +397,7 @@ inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
+	labx_XLlTemac_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -407,7 +407,7 @@ inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
+	labx_XLlTemac_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -418,7 +418,7 @@ static inline int _XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_MulticastClear(InstancePtr, Entry);
+	status = labx_XLlTemac_MulticastClear(InstancePtr, Entry);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -430,7 +430,7 @@ static inline int _XLlTemac_SetMacPauseAddress(XLlTemac *InstancePtr, void *Addr
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_SetMacPauseAddress(InstancePtr, AddressPtr);
+	status = labx_XLlTemac_SetMacPauseAddress(InstancePtr, AddressPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -441,7 +441,7 @@ static inline void _XLlTemac_GetMacPauseAddress(XLlTemac *InstancePtr, void *Add
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	XLlTemac_GetMacPauseAddress(InstancePtr, AddressPtr);
+	labx_XLlTemac_GetMacPauseAddress(InstancePtr, AddressPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
@@ -451,7 +451,7 @@ static inline int _XLlTemac_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_GetSgmiiStatus(InstancePtr, SpeedPtr);
+	status = labx_XLlTemac_GetSgmiiStatus(InstancePtr, SpeedPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -466,7 +466,7 @@ static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
 	unsigned long flags;
 
 	spin_lock_irqsave(&XTE_spinlock, flags);
-	status = XLlTemac_GetRgmiiStatus(InstancePtr, SpeedPtr, IsFullDuplexPtr, IsLinkUpPtr);
+	status = labx_XLlTemac_GetRgmiiStatus(InstancePtr, SpeedPtr, IsFullDuplexPtr, IsLinkUpPtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 
 	return status;
@@ -482,7 +482,7 @@ typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
  * when we get into such deep trouble that we don't know how to handle
  * otherwise.
  */
-void reset(struct net_device *dev, u32 line_num)
+static void reset(struct net_device *dev, u32 line_num)
 {
 	struct net_local *lp = netdev_priv(dev);
 	u32 TxThreshold, TxWaitBound, RxThreshold, RxWaitBound;
@@ -504,7 +504,7 @@ void reset(struct net_device *dev, u32 line_num)
 	 * to save all the settings we don't already know, reset, restore
 	 * the settings, and then restart the TEMAC.
 	 */
-	Options = XLlTemac_GetOptions(&lp->Emac);
+	Options = labx_XLlTemac_GetOptions(&lp->Emac);
 
 	/*
 	 * Capture the dma coalesce settings (if needed) and reset the
@@ -551,7 +551,7 @@ void reset(struct net_device *dev, u32 line_num)
 	(int) _XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr);
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
-	Options = XLlTemac_GetOptions(&lp->Emac);
+	Options = labx_XLlTemac_GetOptions(&lp->Emac);
 	printk(KERN_INFO "%s: labx_eth_llink: Options: 0x%x\n", dev->name, Options);
 
 	if (XLlTemac_IsDma(&lp->Emac)) {	/* SG DMA mode */
@@ -595,7 +595,7 @@ void reset(struct net_device *dev, u32 line_num)
 static void FifoSendHandler(struct net_device *dev);
 static void FifoRecvHandler(unsigned long p /*struct net_device *dev*/);
 
-DECLARE_TASKLET(FifoRecvBH, FifoRecvHandler, 0);
+static DECLARE_TASKLET(FifoRecvBH, FifoRecvHandler, 0);
 
 static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 {
@@ -658,8 +658,8 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 static void DmaSendHandlerBH(unsigned long p);
 static void DmaRecvHandlerBH(unsigned long p);
 
-DECLARE_TASKLET(DmaSendBH, DmaSendHandlerBH, 0);
-DECLARE_TASKLET(DmaRecvBH, DmaRecvHandlerBH, 0);
+static DECLARE_TASKLET(DmaSendBH, DmaSendHandlerBH, 0);
+static DECLARE_TASKLET(DmaRecvBH, DmaRecvHandlerBH, 0);
 
 static irqreturn_t xenet_dma_rx_interrupt(int irq, void *dev_id)
 {
@@ -814,7 +814,7 @@ static int xenet_open(struct net_device *dev)
 	 * isn't any code to set polled mode, so this check is probably
 	 * superfluous.
 	 */
-	Options = XLlTemac_GetOptions(&lp->Emac);
+	Options = labx_XLlTemac_GetOptions(&lp->Emac);
 	Options |= XTE_FLOW_CONTROL_OPTION;
 	Options |= XTE_JUMBO_OPTION;
 	Options |= XTE_TRANSMITTER_ENABLE_OPTION;
@@ -825,7 +825,7 @@ static int xenet_open(struct net_device *dev)
 
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
-	Options = XLlTemac_GetOptions(&lp->Emac);
+	Options = labx_XLlTemac_GetOptions(&lp->Emac);
 	printk(KERN_INFO "%s: labx_eth_llink: Options: 0x%x\n", dev->name, Options);
 
 	if (XLlTemac_IsDma(&lp->Emac)) {
@@ -974,7 +974,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 {
 	struct net_local *lp = netdev_priv(dev);
 
-	u32 Options = XLlTemac_GetOptions(&lp->Emac);
+	u32 Options = labx_XLlTemac_GetOptions(&lp->Emac);
 
         if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
         {
@@ -1989,7 +1989,7 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 		return -ENODEV;
 	}
 
-	mac_options = XLlTemac_GetOptions(&(lp->Emac));
+	mac_options = labx_XLlTemac_GetOptions(&(lp->Emac));
 	gmii_cmd = phy_read(lp->phy_dev, MII_BMCR);
 	gmii_status = phy_read(lp->phy_dev, MII_BMSR);
 	gmii_advControl = phy_read(lp->phy_dev, MII_ADVERTISE);
@@ -2073,7 +2073,7 @@ xenet_ethtool_get_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
 	return 0;
 }
 
-void disp_bd_ring(XLlDma_BdRing *bd_ring)
+static void disp_bd_ring(XLlDma_BdRing *bd_ring)
 {
 	int num_bds = bd_ring->AllCnt;
 	u32 *cur_bd_ptr = (u32 *) bd_ring->FirstBdAddr;
@@ -2255,7 +2255,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 			return ret;
 		epp.cmd = ecmd.cmd;
 		epp.autoneg = ecmd.autoneg;
-		Options = XLlTemac_GetOptions(&lp->Emac);
+		Options = labx_XLlTemac_GetOptions(&lp->Emac);
 		if (Options & XTE_FCS_INSERT_OPTION) {
 			epp.rx_pause = 1;
 			epp.tx_pause = 1;
@@ -2658,7 +2658,7 @@ static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
 	{
 		if (lp->cur_speed != lp->phy_dev->speed)
 		{
-			XLlTemac_SetOperatingSpeed(&lp->Emac, lp->phy_dev->speed);
+			labx_XLlTemac_SetOperatingSpeed(&lp->Emac, lp->phy_dev->speed);
 			lp->cur_speed = lp->phy_dev->speed;
 			printk("%s: Link up, %d Mb/s\n", lp->ndev->name, lp->cur_speed);
 		}
@@ -2754,7 +2754,7 @@ static int xtenet_setup(
 		goto error;
 	}
 
-	if (XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
+	if (labx_XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
 	    XST_SUCCESS) {
 		dev_err(dev, "labx_eth_llink: Could not initialize device.\n");
 
@@ -2898,7 +2898,7 @@ static int xtenet_setup(
 
 #if ! XTE_AUTOSTRIPPING
 	lp->stripping =
-		(XLlTemac_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
+		(labx_XLlTemac_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
 #endif
 
 	rc = register_netdev(ndev);
