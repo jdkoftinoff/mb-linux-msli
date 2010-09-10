@@ -175,6 +175,8 @@ romfs:
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
 	$(ROMFSINST) -s /var/tmp/dhcpc/resolv.conf /etc/resolv.conf
 	$(ROMFSINST) -s /var/tmp/avahi /etc/avahi
+	$(ROMFSINST) -s /var/tmp/identity /etc/identity
+	$(ROMFSINST) -s /var/tmp/persist /etc/persist
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname

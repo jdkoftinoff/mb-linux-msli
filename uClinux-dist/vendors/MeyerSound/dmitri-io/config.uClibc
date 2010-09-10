@@ -34,6 +34,7 @@ TARGET_microblaze=y
 TARGET_ARCH="microblaze"
 FORCE_OPTIONS_FOR_ARCH=y
 ARCH_SUPPORTS_BIG_ENDIAN=y
+CROSS_COMPILER_PREFIX="mb-"
 TARGET_SUBARCH=""
 # UCLIBC_FORMAT_ELF is not set
 # UCLIBC_FORMAT_FDPIC_ELF is not set
@@ -201,7 +202,6 @@ UCLIBC_BUILD_NOEXECSTACK=y
 #
 # uClibc development/debugging options
 #
-CROSS_COMPILER_PREFIX="mb-"
 UCLIBC_EXTRA_CFLAGS=""
 # DODEBUG is not set
 # DODEBUG_PT is not set

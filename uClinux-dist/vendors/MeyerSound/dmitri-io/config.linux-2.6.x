@@ -598,13 +598,7 @@ CONFIG_SSB_POSSIBLE=y
 # CONFIG_MFD_CORE is not set
 # CONFIG_MFD_SM501 is not set
 # CONFIG_HTC_PASIC3 is not set
-# CONFIG_TPS65010 is not set
-# CONFIG_TWL4030_CORE is not set
 # CONFIG_MFD_TMIO is not set
-# CONFIG_PMIC_DA903X is not set
-# CONFIG_MFD_WM8400 is not set
-# CONFIG_MFD_WM8350_I2C is not set
-# CONFIG_MFD_PCF50633 is not set
 # CONFIG_REGULATOR is not set
 
 #

@@ -23,7 +23,11 @@ echo "Populating /var: "
 mkdir /var/run
 mkdir /var/tmp
 chmod 1777 /var/tmp
-
+echo "Restoring persistent settings."
+mkdir /var/tmp/persist
+touch /var/tmp/persist/environment
+/bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
+. /var/tmp/persist/environment
 echo "Running system startup scripts."
 for i in /etc/rc.d/S*
 do
@@ -31,5 +35,3 @@ do
     /bin/sh $i
   fi
 done
-
-
