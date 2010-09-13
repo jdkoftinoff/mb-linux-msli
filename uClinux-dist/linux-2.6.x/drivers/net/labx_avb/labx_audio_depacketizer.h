@@ -44,43 +44,48 @@
 #define MICROCODE_RANGE     0x2
 
 /* Global control registers */
-#define CONTROL_STATUS_REG   0x000
+#define CONTROL_STATUS_REG   (0x000)
 #  define DEPACKETIZER_DISABLE  0x000
 #  define DEPACKETIZER_ENABLE   0x001
 #  define ID_LOAD_ACTIVE        0x100
 #  define ID_LOAD_LAST_WORD     0x200
 
-#define VECTOR_BAR_REG       0x001
+#define VECTOR_BAR_REG       (0x001)
 
-#define ID_SELECT_0_REG      0x002
-#define ID_SELECT_1_REG      0x003
-#define ID_SELECT_2_REG      0x004
-#define ID_SELECT_3_REG      0x005
+#define ID_SELECT_0_REG      (0x002)
+#define ID_SELECT_1_REG      (0x003)
+#define ID_SELECT_2_REG      (0x004)
+#define ID_SELECT_3_REG      (0x005)
 #  define ID_SELECT_NONE  0x00000000
 #  define ID_SELECT_ALL   0xFFFFFFFF
 
-#define ID_CONFIG_DATA_REG   0x006
+#define ID_CONFIG_DATA_REG   (0x006)
 
-#define RTC_INCREMENT_REG    0x007
+#define RTC_INCREMENT_REG    (0x007)
 #  define NOMINAL_RTC_INCREMENT  0x00800000
 
-#define IRQ_MASK_REG      (0x008)
-#define IRQ_FLAGS_REG     (0x009)
+#define IRQ_MASK_REG         (0x008)
+#define IRQ_FLAGS_REG        (0x009)
 #  define NO_IRQS   (0x00000000)
 #  define SYNC_IRQ  (0x00000001)
 
-#define SYNC_REG          (0x00A)
+#define SYNC_REG             (0x00A)
 #  define CANCEL_SYNC      (0x00000000)
 #  define SYNC_NEXT_WRITE  (0x00000001)
 #  define SYNC_PENDING     (0x80000000)
 
-#define RELOCATE_REG      (0x00B)
+#define RELOCATE_REG         (0x00B)
 #  define RELOCATION_INACTIVE       (0x00000000)
 #  define RELOCATION_ACTIVE         (0x80000000)
 #  define RELOCATION_MATCH_MASK     (0x0000007F)
 #  define RELOCATION_ADDRESS_SHIFT  (7)
 
-#define CAPABILITIES_REG     0x0FE
+#define STREAM_STATUS_0_REG  (0x00C)
+#define STREAM_STATUS_1_REG  (0x00D)
+#define STREAM_STATUS_2_REG  (0x00E)
+#define STREAM_STATUS_3_REG  (0x00F)
+
+#define CAPABILITIES_REG     (0x0FE)
 #  define MATCH_ARCH_SHIFT          24
 #  define MATCH_ARCH_MASK           0x0FF
 #  define MAX_STREAMS_SHIFT         16
@@ -91,7 +96,7 @@
 #  define PARAM_ADDRESS_BITS_MASK   0x0F
 #  define CODE_ADDRESS_BITS_MASK    0x0F
 
-#define REVISION_REG         0x0FF
+#define REVISION_REG         (0x0FF)
 #  define REVISION_FIELD_BITS  4
 #  define REVISION_FIELD_MASK  0x0F
 
@@ -150,6 +155,8 @@ typedef enum {
 } StreamMatchArchitecture;
 
 /* Number of units and configuration words required for each architecture we support */
+#define NUM_SRL16E_INSTANCES      16
+#  define NUM_SRL16E_CONFIG_WORDS   (NUM_SRL16E_INSTANCES / 2)
 #define NUM_SRLC16E_INSTANCES     16
 #  define NUM_SRLC16E_CONFIG_WORDS  (NUM_SRLC16E_INSTANCES / 2)
 #define NUM_SRLC32E_INSTANCES     13
@@ -206,22 +213,5 @@ struct audio_depacketizer {
   spinlock_t mutex;
   bool opened;
 };
-
-/*
- * 802.1AS callback registration interface
- *
- * The 802.1AS (PTP 2.0) daemon must export a symbol to permit a callback
- * to be registered for notification of an update to the RTC offset register.
- * This is necessary since the Xilinx AVB endpoint doesn't provide direct
- * access to its syntonized hardware counter; so the media clock recovery
- * logic needs to maintain its own.
- *
- * This callback may be invoked in interrupt context, possibly with interrupts
- * disabled, so it should do nothing more than a register write!
- */
-extern void add_syntonize_callback(void (*callbackFunc)(uint32_t, void*),
-                                   void *callbackParam);
-extern void remove_syntonize_callback(void (*callbackFunc)(uint32_t, void*),
-                                      void *callbackParam);
 
 #endif
