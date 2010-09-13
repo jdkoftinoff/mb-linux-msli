@@ -1520,7 +1520,7 @@ static void FifoRecvHandler(unsigned long p)
 		XLlFifo_Read(&lp->Fifo, skb->data, len);
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
-
+#if 0
 		printk("Got %d Rx:\n", len);
 		{
 		  int idx;
@@ -1530,6 +1530,7 @@ static void FifoRecvHandler(unsigned long p)
 		  }
 		  printk("\n");
 		}
+#endif
 		skb_put(skb, len);	/* Tell the skb how much data we got. */
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);
