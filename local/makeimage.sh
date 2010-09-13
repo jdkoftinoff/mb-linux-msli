@@ -23,7 +23,7 @@ rm -f romfs.bin.gz
 gzip -9 romfs.bin 
 
 echo "final binary image..." 
-../mbbl-mkbootimage/mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
+mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
 
 if [ -f "${DMITRI_IO_DOWNLOAD_BIT}" ]
 then 
