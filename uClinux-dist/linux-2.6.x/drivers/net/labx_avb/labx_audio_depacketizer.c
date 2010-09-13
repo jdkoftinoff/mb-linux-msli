@@ -890,8 +890,8 @@ static int audio_depacketizer_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&depacketizer->cdev, &audio_depacketizer_fops);
   depacketizer->cdev.owner = THIS_MODULE;
-  kobject_set_name(&depacketizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
   depacketizer->instanceNumber = instanceCount++;
+  kobject_set_name(&depacketizer->cdev.kobj, "%s.%d", depacketizer->name, depacketizer->instanceNumber);
   returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
   if (returnValue < 0)
   {
