@@ -438,7 +438,7 @@ CONFIG_PHYLIB=y
 #
 # MII PHY device drivers
 #
-# CONFIG_MARVELL_PHY is not set
+CONFIG_MARVELL_PHY=y
 # CONFIG_DAVICOM_PHY is not set
 # CONFIG_QSEMI_PHY is not set
 # CONFIG_LXT_PHY is not set
