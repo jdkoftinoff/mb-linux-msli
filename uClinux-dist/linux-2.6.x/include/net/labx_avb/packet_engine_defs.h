@@ -393,6 +393,9 @@ typedef struct {
 
 #define IOC_GET_DEPACKETIZER_CAPS  _IOR('d', 0x24, DepacketizerCaps)
 
+#define IOC_GET_STREAM_STATUS      _IOR('d', 0x25, uint32_t*)
+#  define STREAM_STATUS_WORDS  4
+
 /* Type definitions and macros for depacketizer microcode */
 
 
