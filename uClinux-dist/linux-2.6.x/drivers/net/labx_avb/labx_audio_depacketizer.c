@@ -68,36 +68,20 @@ static uint32_t instanceCount;
 #define DBG(f, x...)
 #endif
 
-/* Syntonization callback */
-static void depacketizer_syntonize(uint32_t rtcIncrement, void *callbackParam) {
-  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)callbackParam;
-  
-  /* Write the new RTC increment to the depacketizer's local syntonization
-   * counter so that it remains syntonized to 802.1AS network time.
-   */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, RTC_INCREMENT_REG), rtcIncrement);
-}
-
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   DBG("Disbling the depacketizer\n");
 
-  /* Disable the micro-engine, and unregister its syntonization callback */
-  // TEMPORARY
+  /* Disable the micro-engine */
   XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_DISABLE);
-  //  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), (ID_LOAD_LAST_WORD | DEPACKETIZER_DISABLE));
-  remove_syntonize_callback(&depacketizer_syntonize, (void*)depacketizer);
 }
 
 /* Enables the passed instance */
 static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
   DBG("Enabling the depacketizer\n");
 
-  /* Initialize the local syntonized counter to start at a nominal rate, and
-   * then register the instance with a callback for syntonization updates 
-   */
+  /* Initialize the local syntonized counter to start at a nominal rate */
   XIo_Out32(REGISTER_ADDRESS(depacketizer, RTC_INCREMENT_REG), NOMINAL_RTC_INCREMENT);
-  add_syntonize_callback(&depacketizer_syntonize, (void*) depacketizer);
 
   /* Enable the micro-engine, with the "last load" flag for match unit configuration
    * disabled (the loading methods should assert this as needed.)
@@ -393,6 +377,39 @@ static void load_srlc32e_matcher(struct audio_depacketizer *depacketizer,
   }
 }
 
+/* Loads truth tables into a match unit using the newest, "unified" match
+ * architecture.  This is SRL16E based (not cascaded) due to the efficient
+ * packing of these primitives into Xilinx LUT6-based architectures.
+ */
+static void load_unified_matcher(struct audio_depacketizer *depacketizer,
+                                 uint64_t matchStreamId) {
+  int32_t wordIndex;
+  int32_t lutIndex;
+  uint32_t configWord = 0x00000000;
+  uint32_t matchChunk;
+  
+  /* In this architecture, all of the SRL16Es are loaded in parallel, with each
+   * configuration word supplying two bits to each.  Only one of the two bits can
+   * ever be set, so there is just an explicit check for one.
+   */
+  for(wordIndex = (NUM_SRL16E_CONFIG_WORDS - 1); wordIndex >= 0; wordIndex--) {
+    for(lutIndex = (NUM_SRL16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+      matchChunk = ((matchStreamId >> (lutIndex << 2)) & 0x0F);
+      configWord <<= 2;
+      if(matchChunk == (wordIndex << 1)) configWord |= 0x01;
+      if(matchChunk == ((wordIndex << 1) + 1)) configWord |= 0x02;
+    }
+
+    /* Two bits of truth table have been determined for each SRL16E, load the
+     * word and wait for the configuration to occur.  Be sure to flag the last
+     * word to automatically re-enable the match unit(s) as the last word completes.
+     */
+      if(lutIndex == 0) set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
+      XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
+      wait_match_config(depacketizer);
+  }
+}
+
 /* Configures one of the passed instance's match units */
 static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
                                  MatcherConfig *matcherConfig) {
@@ -433,7 +450,7 @@ static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
         break;
 
       case STREAM_MATCH_UNIFIED:
-	printk("No method for unified matcher load yet!\n");
+	load_unified_matcher(depacketizer, matcherConfig->matchStreamId);
 	break;
       
       default:
@@ -588,6 +605,15 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    *       Once they exist, a lock detection kernel event mechanism can be added to the driver
    *       and used when in slave mode.
    */
+}
+
+/* Collects the stream status from the hardware */
+static void get_stream_status(struct audio_depacketizer *depacketizer,
+			      uint32_t *statusWords) {
+  statusWords[0] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_0_REG));
+  statusWords[1] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_1_REG));
+  statusWords[2] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_2_REG));
+  statusWords[3] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_3_REG));
 }
 
 /* Resets the state of the passed instance */
@@ -757,6 +783,19 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
   case IOC_GET_DEPACKETIZER_CAPS:
     {
       if(copy_to_user((void __user*)arg, &depacketizer->capabilities, sizeof(DepacketizerCaps)) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+
+  case IOC_GET_STREAM_STATUS:
+    {
+      uint32_t statusWords[STREAM_STATUS_WORDS];
+
+      /* Get the stream status, then copy into the userspace pointer */
+      get_stream_status(depacketizer, statusWords);
+      if(copy_to_user((void __user*)arg, statusWords, 
+                      (STREAM_STATUS_WORDS * sizeof(uint32_t))) != 0) {
         return(-EFAULT);
       }
     }
