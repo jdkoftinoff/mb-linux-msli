@@ -622,8 +622,8 @@ static int audio_packetizer_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&packetizer->cdev, &audio_packetizer_fops);
   packetizer->cdev.owner = THIS_MODULE;
-  kobject_set_name(&packetizer->cdev.kobj, "%s%d", pdev->name, pdev->id);
   packetizer->instanceNumber = instanceCount++;
+  kobject_set_name(&packetizer->cdev.kobj, "%s.%d", packetizer->name, packetizer->instanceNumber);
   cdev_add(&packetizer->cdev, MKDEV(DRIVER_MAJOR, packetizer->instanceNumber), 1);
 
   /* Initialize the waitqueue used for synchronized writes */

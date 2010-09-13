@@ -122,7 +122,14 @@ int mdiobus_register(struct mii_bus *bus)
 				err = PTR_ERR(phydev);
 				goto error;
 			}
-			if (phydev) printk("%s: Found Phy !, id:%d, bus_addr:%d,phydev->drv->name:%s, phydev->drv->phy_id:%d\n",__func__,phydev->phy_id,phydev->addr,phydev->drv->name, phydev->drv->phy_id);
+			if (phydev)
+			{
+				printk("%s: Found Phy !, id:%d, bus_addr:%d\n", __func__, phydev->phy_id, phydev->addr);
+				if (phydev->drv)
+				{
+					printk("  phydev->drv->name:%s, phydev->drv->phy_id:%d\n", phydev->drv->name, phydev->drv->phy_id);
+				}
+			}
 		}
 	}
 

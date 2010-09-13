@@ -23,9 +23,9 @@
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 
 
-extern void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, 
+extern void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, 
 		u32 RegisterNum, u16 *PhyDataPtr);
-extern void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
+extern void _labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
 		u32 RegisterNum, u16 PhyData);
 extern void reset(struct net_device *dev, u32 line_num);
 
@@ -43,14 +43,14 @@ int labx_eth_ll_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
 {
 	u16 val=0;
 	//printk("MR%d", phy_id);
-	_XLlTemac_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
+	_labx_XLlTemac_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
 	return val;
 }
 
 int labx_eth_ll_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
 {
 	//printk("MW%d", phy_id);
-	_XLlTemac_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
+	_labx_XLlTemac_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
 	return 0;
 }
 

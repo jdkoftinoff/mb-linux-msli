@@ -391,7 +391,7 @@ static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 				     u32 RegisterNum, u16 *PhyDataPtr)
 {
 	unsigned long flags;
@@ -401,7 +401,7 @@ inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 				      u32 RegisterNum, u16 PhyData)
 {
 	unsigned long flags;
@@ -2986,8 +2986,9 @@ static int xtenet_probe_thread(void *data)
 
 static int xtenet_probe(struct device *dev)
 {
-	kthread_run(xtenet_probe_thread, dev, "xtenet_probe_thread");
-	return 0;
+	//kthread_run(xtenet_probe_thread, dev, "xtenet_probe_thread");
+	//return 0;
+	return xtenet_probe_thread(dev);
 }
 
 static struct device_driver xtenet_driver = {

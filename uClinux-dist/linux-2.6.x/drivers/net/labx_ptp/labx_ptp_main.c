@@ -425,8 +425,8 @@ static int ptp_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&ptp->cdev, &ptp_device_fops);
   ptp->cdev.owner = THIS_MODULE;
-  kobject_set_name(&ptp->cdev.kobj, "%s%d", pdev->name, pdev->id);
   ptp->instanceNumber = instanceCount++;
+  kobject_set_name(&ptp->cdev.kobj, "%s.%d", name, ptp->instanceNumber);
   cdev_add(&ptp->cdev, MKDEV(DRIVER_MAJOR, ptp->instanceNumber), 1);
 
   /* Configure the prescaler and divider used to generate a 10 msec event timer.
