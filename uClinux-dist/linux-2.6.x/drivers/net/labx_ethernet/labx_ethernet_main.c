@@ -1600,6 +1600,7 @@ static int xtenet_setup(struct device *dev,
   struct net_local *lp = NULL;
 
   int rc = 0;
+  u32 address_size;
 
   /* Create an ethernet device instance */
   ndev = alloc_etherdev(sizeof(struct net_local));
@@ -1625,8 +1626,15 @@ static int xtenet_setup(struct device *dev,
   Temac_Config.PhyType = pdata->phy_type;
   Temac_Config.PhyAddr = pdata->phy_addr;
 
+  /* Request the memory range for the device */
+  address_size = (r_mem->end - r_mem->start + 1);
+  if(request_mem_region(r_mem->start, address_size, "labx-ethernet") == NULL) {
+    rc = -ENOMEM;
+    goto error;
+  }
+
   /* Get the virtual base address for the device */
-  virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
+  virt_baddr = (u32) ioremap_nocache(r_mem->start, address_size);
   if (0 == virt_baddr) {
     dev_err(dev, "labx_ethernet: Could not allocate iomem.\n");
     rc = -EIO;
@@ -1724,9 +1732,9 @@ static int xtenet_setup(struct device *dev,
   }
   init_waitqueue_head(&lp->Emac.PhyWait);
   lp->Emac.MdioState = MDIO_STATE_READY;
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
