@@ -147,7 +147,10 @@ server_mode (const char *pidfile, struct sockaddr_in *phis_addr)
     {
       int addrlen = sizeof (*phis_addr);
       fd = accept (ctl_sock, (struct sockaddr *)phis_addr, &addrlen);
-#ifdef HAVE_WORKING_FORK
+
+      /* Never use fork against uClibc */
+/* #ifdef HAVE_WORKING_FORK */
+#if 0 
       if (fork () == 0) /* child */
 #else
       if (vfork () == 0) /* child */
