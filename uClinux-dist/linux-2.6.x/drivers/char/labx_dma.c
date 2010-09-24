@@ -32,8 +32,9 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 
-#define DMA_HARDWARE_VERSION_MAJOR  1
-#define DMA_HARDWARE_VERSION_MINOR  0
+#define DRIVER_VERSION_MIN  0x10
+#define DRIVER_VERSION_MAX  0x11
+#define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
 void labx_dma_probe(struct labx_dma *dma)
 {
@@ -41,6 +42,7 @@ void labx_dma_probe(struct labx_dma *dma)
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t versionCompare;
   
 
   /* Read the capabilities word to determine how many of the lowest
@@ -49,14 +51,14 @@ void labx_dma_probe(struct labx_dma *dma)
    * 32 bits, and therefore inherently eats two lower address bits.
    */
   capsWord = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CAPABILITIES_REG));
-  dma->regionShift = ((capsWord & DMA_CODE_ADDRESS_BITS_MASK) + 2);
 
   /* Inspect and check the version */
   versionWord = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_REVISION_REG));
   versionMajor = ((versionWord >> DMA_REVISION_FIELD_BITS) & DMA_REVISION_FIELD_MASK);
   versionMinor = (versionWord & DMA_REVISION_FIELD_MASK);
-  if((versionMajor != DMA_HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != DMA_HARDWARE_VERSION_MINOR)) {
+  versionCompare = ((versionMajor << DMA_REVISION_FIELD_BITS) | versionMinor);
+  if((versionCompare < DRIVER_VERSION_MIN) | 
+     (versionCompare > DRIVER_VERSION_MAX)) {
     dma->regionShift = 0;
 
     printk(KERN_INFO "Found incompatible hardware version %d.%d at %p\n",
@@ -64,9 +66,24 @@ void labx_dma_probe(struct labx_dma *dma)
     return;
   }
 
-  printk(KERN_INFO "Found DMA unit at %p: %d channels, %d alus, %d shift\n", dma->virtualAddress,
-    ((capsWord>>DMA_CHANNELS_SHIFT)&DMA_CHANNELS_MASK),
-    ((capsWord>>DMA_ALU_SHIFT)&DMA_ALU_MASK), dma->regionShift);
+  /* Decode the various bits in the capabilities word */
+  if (versionCompare < CAPS_INDEX_VERSION) {
+    dma->capabilities.indexCounters = 4;
+  }
+  else {
+    dma->capabilities.indexCounters = (capsWord >> DMA_CAPS_INDEX_SHIFT) & DMA_CAPS_INDEX_MASK;
+  }
+  dma->capabilities.alus = (capsWord >> DMA_CAPS_ALU_SHIFT) & DMA_CAPS_ALU_MASK;
+  dma->capabilities.dmaChannels = (capsWord >> DMA_CAPS_CHANNELS_SHIFT) & DMA_CAPS_CHANNELS_MASK;
+  dma->capabilities.parameterAddressBits = (capsWord >> DMA_CAPS_PARAM_ADDRESS_BITS_SHIFT) & DMA_CAPS_PARAM_ADDRESS_BITS_MASK;
+  dma->capabilities.codeAddressBits = (capsWord >> DMA_CAPS_CODE_ADDRESS_BITS_SHIFT) & DMA_CAPS_CODE_ADDRESS_BITS_MASK;
+
+  dma->regionShift = (dma->capabilities.codeAddressBits + 2);
+
+  printk(KERN_INFO "Found DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
+    dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
+  printk(KERN_INFO "   %d param bits, %d code bits, %d shift\n",
+    dma->capabilities.parameterAddressBits, dma->capabilities.codeAddressBits, dma->regionShift);
 }
 
 /* Loads the passed microcode descriptor into the instance */
@@ -255,6 +272,14 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
       }
 
       XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_VECTORS_BASE_ADDRESS + vector.channel), vector.address);
+    }
+    break;
+
+  case DMA_IOC_GET_CAPS:
+    {
+      if(copy_to_user((void __user*)arg, &dma->capabilities, sizeof(DMACapabilities)) != 0) {
+        return(-EFAULT);
+      }
     }
     break;
 

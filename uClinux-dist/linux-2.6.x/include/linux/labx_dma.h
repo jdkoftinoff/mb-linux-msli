@@ -28,6 +28,7 @@
 
 #include <linux/ioport.h>
 #include <linux/miscdevice.h>
+#include <linux/labx_dma_coprocessor_defs.h>
 
 #define NAME_MAX_SIZE  256
 
@@ -37,6 +38,9 @@ struct labx_dma {
 
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
+
+  /* Capabilites from the CAPS registers */
+  DMACapabilities capabilities;
 
 };
 
@@ -84,13 +88,16 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 #define DMA_CHANNEL_IRQ_ENABLE_REG      0x03
 #define DMA_CHANNEL_IRQ_REG             0x04
 #define DMA_CAPABILITIES_REG            0x7E
-#  define DMA_CHANNELS_SHIFT            10
-#  define DMA_CHANNELS_MASK             0x03
-#  define DMA_ALU_SHIFT                 8
-#  define DMA_ALU_MASK                  0x03
-#  define DMA_PARAM_ADDRESS_BITS_SHIFT  4
-#  define DMA_PARAM_ADDRESS_BITS_MASK   0x0F
-#  define DMA_CODE_ADDRESS_BITS_MASK    0x0F
+#  define DMA_CAPS_INDEX_SHIFT               12
+#  define DMA_CAPS_INDEX_MASK                0x0F
+#  define DMA_CAPS_CHANNELS_SHIFT            10
+#  define DMA_CAPS_CHANNELS_MASK             0x03
+#  define DMA_CAPS_ALU_SHIFT                 8
+#  define DMA_CAPS_ALU_MASK                  0x03
+#  define DMA_CAPS_PARAM_ADDRESS_BITS_SHIFT  4
+#  define DMA_CAPS_PARAM_ADDRESS_BITS_MASK   0x0F
+#  define DMA_CAPS_CODE_ADDRESS_BITS_SHIFT   0
+#  define DMA_CAPS_CODE_ADDRESS_BITS_MASK    0x0F
 
 #define DMA_REVISION_REG                0x7F
 #  define DMA_REVISION_FIELD_BITS  4

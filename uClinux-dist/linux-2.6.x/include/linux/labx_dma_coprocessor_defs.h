@@ -632,6 +632,15 @@ typedef struct {
 } DMAVector;
 #define DMA_IOC_SET_VECTOR             (0x89)
 
+typedef struct {
+  uint32_t indexCounters;
+  uint32_t dmaChannels;
+  uint32_t alus;
+  uint32_t parameterAddressBits;
+  uint32_t codeAddressBits;
+} DMACapabilities;
+#define DMA_IOC_GET_CAPS               (0x90)
+
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)
 #define LABX_DMA_NUM_RESOURCES             (1)
