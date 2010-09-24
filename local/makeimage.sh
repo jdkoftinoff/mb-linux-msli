@@ -25,6 +25,9 @@ gzip -9 romfs.bin
 echo "final binary image..." 
 mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
 
+echo "final MCS image..." 
+mcsbin -m -o 3145728 -y bootimage.bin bootimage.mcs 
+
 if [ -f "${DMITRI_IO_DOWNLOAD_BIT}" ]
 then 
   echo "extended final binary image 0..." 
@@ -32,9 +35,6 @@ then
 
   echo "extended final binary image 1..." 
   mbbl-imagetool -o firmware1.bin -s 0x800000 -b "${DMITRI_IO_DOWNLOAD_BIT}" -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb -i identity.txt 
-
-  echo "final MCS image..." 
-  mcsbin -m -o 3145728 -y bootimage.bin bootimage.mcs 
 
   echo "extended final MCS image 0..." 
   mcsbin -m -o 0 -y firmware0.bin firmware0.mcs 
