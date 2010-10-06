@@ -2,9 +2,15 @@
 # Makefile for kernel SPI drivers.
 #
 
+# Include Xilinx common definitions
+EXTRA_CFLAGS += -I$(TOPDIR)/drivers/xilinx_common
+
 ifeq ($(CONFIG_SPI_DEBUG),y)
 EXTRA_CFLAGS += -DDEBUG
 endif
+
+# SPI mailbox controller driver
+obj-$(CONFIG_SPI_MAILBOX)		+= biamp_spi_mailbox.o
 
 # small core, mostly translating board-specific
 # config declarations into driver model code

@@ -150,6 +150,16 @@ ifdef CONFIG_LABX_PTP
 DEVICES += ptp0,c,253,0
 endif
 
+# Add the Biamp SPI mailbox peripheral device node
+ifdef CONFIG_SPI_MAILBOX
+DEVICES += mailbox0,c,255,0
+endif
+
+# Add the Xilinx SPI Master peripheral device node
+ifdef CONFIG_XILINX_SPI
+DEVICES += spidev0,c,153,0
+endif
+
 I2C_MAJOR = 89
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
