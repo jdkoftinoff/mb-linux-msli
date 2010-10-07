@@ -138,6 +138,23 @@ struct audio_packetizer {
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
+
+  /* File operations and private data for a polymorphic
+   * driver to use
+   */
+  struct file_operations *derivedFops;
+  void *derivedData;
 };
+
+/* Function prototypes for derived drivers to use */
+int audio_packetizer_probe(const char *name, 
+			   struct platform_device *pdev,
+			   struct resource *addressRange,
+			   struct resource *irq,
+			   struct file_operations *derivedFops,
+			   void *derivedData,
+			   struct audio_packetizer **newInstance);
+
+int audio_packetizer_remove(struct audio_packetizer *packetizer);
 
 #endif
