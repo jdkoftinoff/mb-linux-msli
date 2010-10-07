@@ -55,6 +55,10 @@ static void disable_packetizer(struct audio_packetizer *packetizer) {
 }
 #endif
 
+static void reset_labrinth_packetizer(struct labrinth_packetizer *packetizer) {
+  /* TODO - Disable the generator */
+}
+
 /*
  * Character device hook functions
  */
@@ -62,44 +66,27 @@ static void disable_packetizer(struct audio_packetizer *packetizer) {
 static int labrinth_packetizer_open(struct inode *inode, struct file *filp)
 {
   int returnValue = 0;
-#if 0
-  TODO - navigate to our private data packetizer
+  struct audio_packetizer *labxPacketizer;
   struct labrinth_packetizer *packetizer;
-  unsigned long flags;
 
-  packetizer = container_of(inode->i_cdev, struct labrinth_packetizer, cdev);
-  filp->private_data = packetizer;
+  labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
+  packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
 
-  /* Lock the mutex and ensure there is only one owner */
-  preempt_disable();
-  spin_lock_irqsave(&packetizer->mutex, flags);
-  if(packetizer->opened) {
-    returnValue = -1;
-  } else {
-    packetizer->opened = true;
-  }
-
-  spin_unlock_irqrestore(&packetizer->mutex, flags);
-  preempt_enable();
-#endif
+  printk("labrinth_packetizer_open()!\n");
   
   return(returnValue);
 }
 
 static int labrinth_packetizer_release(struct inode *inode, struct file *filp)
 {
-#if 0
-  TODO - navigate to our private data packetizer
-  struct labrinth_packetizer *packetizer = (struct labrinth_packetizer*)filp->private_data;
-  unsigned long flags;
+  struct audio_packetizer *labxPacketizer;
+  struct labrinth_packetizer *packetizer;
 
-  preempt_disable();
-  spin_lock_irqsave(&packetizer->mutex, flags);
-  packetizer->opened = false;
-  spin_unlock_irqrestore(&packetizer->mutex, flags);
-  preempt_enable();
-#endif
+  labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
+  packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
 
+  printk("labrinth_packetizer_release()!\n");
+  
   return(0);
 }
 
@@ -108,14 +95,17 @@ static int labrinth_packetizer_ioctl(struct inode *inode, struct file *filp,
 				     unsigned int command, unsigned long arg)
 {
   int returnValue = 0;
-#if 0
-  TODO - navigate to our private data packetizer
-  // Switch on the request
-  struct labrinth_packetizer *packetizer = (struct labrinth_packetizer*)filp->private_data;
+  struct audio_packetizer *labxPacketizer;
+  struct labrinth_packetizer *packetizer;
+
+  labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
+  packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
+
+  printk("labrinth_packetizer_ioctl()!\n");
 
   switch(command) {
-  case IOC_START_ENGINE:
-    enable_packetizer(packetizer);
+  case IOC_CONFIG_GENERATOR:
+    printk("CONFIG_GENERATOR\n");
     break;
 
   default:
@@ -124,7 +114,6 @@ static int labrinth_packetizer_ioctl(struct inode *inode, struct file *filp,
      */
     return(-EINVAL);
   }
-#endif
 
   /* Return an error code appropriate to the command */
   return(returnValue);
@@ -272,9 +261,8 @@ static int labrinth_packetizer_platform_remove(struct platform_device *pdev) {
     returnValue = audio_packetizer_remove(packetizer->labxPacketizer);
   } else returnValue = -1;
 
-  /* TODO: reset the device (stop generator, etc.)
+  /* Reset our portion of the device and free our structure */
   reset_labrinth_packetizer(packetizer);
-  */
   kfree(packetizer);
   return(returnValue);
 }

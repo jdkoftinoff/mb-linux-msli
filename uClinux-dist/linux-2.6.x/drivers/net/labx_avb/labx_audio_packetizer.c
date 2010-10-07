@@ -335,6 +335,12 @@ static int audio_packetizer_open(struct inode *inode, struct file *filp)
     packetizer->opened = true;
   }
 
+  /* Invoke the open() operation on the derived driver, if there is one */
+  if((packetizer->derivedFops != NULL) && 
+     (packetizer->derivedFops->open != NULL)) {
+    packetizer->derivedFops->open(inode, filp);
+  }
+
   spin_unlock_irqrestore(&packetizer->mutex, flags);
   preempt_enable();
   
@@ -349,6 +355,13 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
   preempt_disable();
   spin_lock_irqsave(&packetizer->mutex, flags);
   packetizer->opened = false;
+
+  /* Invoke the release() operation on the derived driver, if there is one */
+  if((packetizer->derivedFops != NULL) && 
+     (packetizer->derivedFops->release != NULL)) {
+    packetizer->derivedFops->release(inode, filp);
+  }
+
   spin_unlock_irqrestore(&packetizer->mutex, flags);
   preempt_enable();
   return(0);
@@ -497,7 +510,13 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     break;
 
   default:
-    return(-EINVAL);
+    /* We don't recognize this command; give our derived driver's ioctl()
+     * a crack at it, if one exists.
+     */
+    if((packetizer->derivedFops != NULL) && 
+       (packetizer->derivedFops->ioctl != NULL)) {
+      returnValue = packetizer->derivedFops->ioctl(inode, filp, command, arg);
+    } else returnValue = -EINVAL;
   }
 
   /* Return an error code appropriate to the command */

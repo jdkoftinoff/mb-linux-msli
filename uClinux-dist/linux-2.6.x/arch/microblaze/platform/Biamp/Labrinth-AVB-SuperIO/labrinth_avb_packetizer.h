@@ -27,10 +27,24 @@
 #ifndef _LABRINTH_AVB_PACKETIZER_H_
 #define _LABRINTH_AVB_PACKETIZER_H_
 
+#include <linux/types.h>
+#include <linux/ioctl.h>
+
 /* Driver structure to maintain state for each device instance */
 struct labrinth_packetizer {
   /* Pointer back to the platform device */
   struct audio_packetizer *labxPacketizer;
 };
+
+/* I/O control commands defined by the driver */
+#define LFSR_GENERATOR_DISABLE  (0x00)
+#define LFSR_GENERATOR_ENABLE   (0x01)
+typedef struct {
+  uint32_t enable;
+  uint32_t sportLane;
+  uint32_t sportChannel;
+} GeneratorConfig;
+
+#define IOC_CONFIG_GENERATOR  _IOR('l', 0x01, GeneratorConfig)
 
 #endif
