@@ -26,6 +26,7 @@
 #ifndef _LABX_LOCAL_AUDIO_H_
 #define _LABX_LOCAL_AUDIO_H_
 
+#include <linux/fs.h>
 #include <linux/labx_dma.h>
 
 /* Local Audio Platform device structure */
@@ -47,6 +48,12 @@ struct labx_local_audio_pdev {
 
   /* DMA structure */
   struct labx_dma dma;
+
+  /* File operations and private data for a polymorphic
+   * driver to use
+   */
+  struct file_operations *derivedFops;
+  void *derivedData;
 };
 
 /* Local audio registers come after the DMA microcode */

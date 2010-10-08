@@ -27,6 +27,7 @@
 #define _LABX_AUDIO_PACKETIZER_H_
 
 #include <linux/cdev.h>
+#include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
