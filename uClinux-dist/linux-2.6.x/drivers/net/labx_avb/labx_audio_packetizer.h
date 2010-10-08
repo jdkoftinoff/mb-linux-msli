@@ -37,10 +37,11 @@
  * These are affected by the amount of address space devoted to packet template and 
  * microcode storage, which is hardware-configurable.
  */
-#define REGISTER_RANGE      (0x0)
-#define CLOCK_DOMAIN_RANGE  (0x1)
-#define MICROCODE_RANGE     (0x2)
-#define TEMPLATE_RANGE      (0x3)
+#define REGISTER_RANGE         (0x0)
+#define CLOCK_DOMAIN_RANGE     (0x1)
+#define MICROCODE_RANGE        (0x2)
+#define TEMPLATE_RANGE         (0x3)
+#define PACKETIZER_RANGE_BITS    (2)
 
 /* Global control registers */
 #define CONTROL_REG       (0x000)

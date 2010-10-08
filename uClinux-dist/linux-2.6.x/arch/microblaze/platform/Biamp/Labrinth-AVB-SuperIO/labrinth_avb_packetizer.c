@@ -43,20 +43,50 @@
 /* Driver name */
 #define DRIVER_NAME "labrinth_avb_packetizer"
 
-#if 0
-/* Disables the passed instance */
-static void disable_packetizer(struct audio_packetizer *packetizer) {
+/* Private register constants and macros */
+
+/* Global control registers */
+#define TDM_CONTROL_REG       (0x000)
+#  define GENERATOR_ENABLE      (0x80000000)
+#  define GENERATOR_SLOT_MASK   (0x01F)
+#  define GENERATOR_LANE_MASK   (0x1E0)
+#  define GENERATOR_LANE_SHIFT      (5)
+
+/* Locates a register within the TDM multiplexer logic, using the
+ * hardware-configured region shift detected by the audio packetizer
+ * driver.
+ */
+#define TDM_MUX_RANGE  (0x01 << PACKETIZER_RANGE_BITS)
+#define TDM_MUX_ADDRESS(device, offset)                     \
+  ((uintptr_t)device->labxPacketizer->virtualAddress |      \
+   (TDM_MUX_RANGE << device->labxPacketizer->regionShift) | (offset << 2))
+
+/* Configures the psuedorandom generator */
+static void configure_generator(struct labrinth_packetizer *packetizer,
+				GeneratorConfig *generatorConfig) {
   uint32_t controlRegister;
 
-  DBG("Disabling the packetizer\n");
-  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
-  controlRegister &= ~PACKETIZER_ENABLE;
-  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+  controlRegister = XIo_In32(TDM_MUX_ADDRESS(packetizer, TDM_CONTROL_REG));
+  if(generatorConfig->enable == LFSR_GENERATOR_ENABLE) {
+    /* Enable the generator on the appropriate channel */
+    controlRegister &= ~(GENERATOR_LANE_MASK | GENERATOR_SLOT_MASK);
+    controlRegister |= ((generatorConfig->sportPort << GENERATOR_LANE_SHIFT) &
+			GENERATOR_LANE_MASK);
+    controlRegister |= (generatorConfig->sportChannel & GENERATOR_SLOT_MASK);
+    controlRegister |= GENERATOR_ENABLE;
+  } else {
+    /* Just disable the generator */
+    controlRegister &= ~GENERATOR_ENABLE;
+  }
+  XIo_Out32(TDM_MUX_ADDRESS(packetizer, TDM_CONTROL_REG), controlRegister);
 }
-#endif
 
 static void reset_labrinth_packetizer(struct labrinth_packetizer *packetizer) {
-  /* TODO - Disable the generator */
+  GeneratorConfig generatorConfig;
+
+  /* Disable the psuedorandom generator */
+  generatorConfig.enable = LFSR_GENERATOR_DISABLE;
+  configure_generator(packetizer, &generatorConfig);
 }
 
 /*
@@ -72,8 +102,6 @@ static int labrinth_packetizer_open(struct inode *inode, struct file *filp)
   labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
   packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
 
-  printk("labrinth_packetizer_open()!\n");
-  
   return(returnValue);
 }
 
@@ -84,8 +112,6 @@ static int labrinth_packetizer_release(struct inode *inode, struct file *filp)
 
   labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
   packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
-
-  printk("labrinth_packetizer_release()!\n");
   
   return(0);
 }
@@ -101,11 +127,16 @@ static int labrinth_packetizer_ioctl(struct inode *inode, struct file *filp,
   labxPacketizer = container_of(inode->i_cdev, struct audio_packetizer, cdev);
   packetizer = (struct labrinth_packetizer *) labxPacketizer->derivedData;
 
-  printk("labrinth_packetizer_ioctl()!\n");
-
   switch(command) {
   case IOC_CONFIG_GENERATOR:
-    printk("CONFIG_GENERATOR\n");
+    {
+      GeneratorConfig generatorConfig;
+
+      if(copy_from_user(&generatorConfig, (void __user*)arg, sizeof(generatorConfig)) != 0) {
+        return(-EFAULT);
+      }
+      configure_generator(packetizer, &generatorConfig);
+    }
     break;
 
   default:

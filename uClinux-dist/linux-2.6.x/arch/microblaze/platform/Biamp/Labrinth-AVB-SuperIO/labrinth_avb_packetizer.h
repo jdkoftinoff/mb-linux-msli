@@ -41,7 +41,7 @@ struct labrinth_packetizer {
 #define LFSR_GENERATOR_ENABLE   (0x01)
 typedef struct {
   uint32_t enable;
-  uint32_t sportLane;
+  uint32_t sportPort;
   uint32_t sportChannel;
 } GeneratorConfig;
 
