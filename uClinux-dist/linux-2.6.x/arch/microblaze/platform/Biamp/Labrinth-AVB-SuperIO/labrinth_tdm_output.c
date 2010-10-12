@@ -55,11 +55,15 @@
 /* Private register constants and macros */
 
 /* Global control registers */
-#define TDM_CONTROL_REG       (0x000)
+#define TDM_CONTROL_REG        (0x000)
 #  define ANALYZER_ENABLE      (0x80000000)
 #  define ANALYZER_SLOT_MASK   (0x01F)
 #  define ANALYZER_LANE_MASK   (0x1E0)
 #  define ANALYZER_LANE_SHIFT      (5)
+
+#define TDM_ERROR_COUNT_REG    (0x001)
+#define TDM_ERROR_PREDICT_REG  (0x002)
+#define TDM_ERROR_ACTUAL_REG   (0x003)
 
 /* Locates a register within the TDM demultiplexer logic, using the
  * hardware-configured region shift detected by the audio packetizer
@@ -90,6 +94,14 @@ static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
   XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG), controlRegister);
 }
 
+static void get_analyzer_results(struct labrinth_tdm_output *tdmOutput,
+				 AnalyzerResults *analyzerResults) {
+  /* Fetch the most recent snapshot of analysis results */
+  analyzerResults->errorCount = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_COUNT_REG));
+  analyzerResults->predictedSample = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_PREDICT_REG));
+  analyzerResults->actualSample = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_ACTUAL_REG));
+}
+
 static void reset_labrinth_tdm(struct labrinth_tdm_output *tdmOutput) {
   AnalyzerConfig analyzerConfig;
 
@@ -110,8 +122,6 @@ static int labrinth_tdm_open(struct inode *inode, struct file *filp)
 
   labxLocalAudio = (struct labx_local_audio_pdev *) filp->private_data;
   tdmOutput = (struct labrinth_tdm_output *) labxLocalAudio->derivedData;
-
-  printk("FOO: labrinth_tdm_open()\n");
 
   return(returnValue);
 }
@@ -135,6 +145,17 @@ static int labrinth_tdm_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
       configure_analyzer(tdmOutput, &analyzerConfig);
+    }
+    break;
+
+  case IOC_GET_ANALYZER_RESULTS:
+    {
+      AnalyzerResults analyzerResults;
+
+      get_analyzer_results(tdmOutput, &analyzerResults);
+      if(copy_to_user((void __user*)arg, &analyzerResults, sizeof(analyzerResults)) != 0) {
+        return(-EFAULT);
+      }
     }
     break;
 
@@ -175,8 +196,6 @@ int labrinth_tdm_probe(const char *name,
   /* Create and populate a device structure */
   tdmOutput = (struct labrinth_tdm_output*) kmalloc(sizeof(struct labrinth_tdm_output), GFP_KERNEL);
   if(!tdmOutput) return(-ENOMEM);
-
-  printk("FOO: labrinth_tdm_probe()\n");
 
   /* Dispatch to the Lab X audio tdmOutput driver for most of the setup.
    * We pass it our file operations structure to be invoked polymorphically.

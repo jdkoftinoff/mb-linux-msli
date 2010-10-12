@@ -47,4 +47,12 @@ typedef struct {
 
 #define IOC_CONFIG_ANALYZER  _IOR('l', 0x01, AnalyzerConfig)
 
+typedef struct {
+  uint32_t errorCount;
+  uint32_t predictedSample;
+  uint32_t actualSample;
+} AnalyzerResults;
+
+#define IOC_GET_ANALYZER_RESULTS  _IOW('l', 0x02, AnalyzerResults)
+
 #endif
