@@ -261,8 +261,7 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
   }
 
   /* Look up the number of channels in the device tree */
-  /* TEMPORARY
-     numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2); */
+  numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2);
   numChannels = 24;
 
   /* Dispatch to the generic function */
