@@ -328,6 +328,10 @@ struct phy_device {
 };
 #define to_phy_device(d) container_of(d, struct phy_device, dev)
 
+/* Loopback modes */
+#define PHY_LOOPBACK_NONE      (0x00)
+#define PHY_LOOPBACK_EXTERNAL  (0x01)
+
 /* struct phy_driver: Driver structure for a particular PHY type
  *
  * phy_id: The result of reading the UID registers of this PHY
@@ -396,6 +400,9 @@ struct phy_driver {
 
 	/* Clears up any memory if needed */
 	void (*remove)(struct phy_device *phydev);
+
+	/* Places the PHY in or out of loopback mode */
+	void (*loopback)(struct phy_device *phydev, u32 mode);
 
 	struct device_driver driver;
 };

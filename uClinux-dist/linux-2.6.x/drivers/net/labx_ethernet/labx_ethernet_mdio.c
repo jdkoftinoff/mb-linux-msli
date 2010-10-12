@@ -49,7 +49,7 @@ int labx_eth_ll_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
 
 int labx_eth_ll_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
 {
-	//printk("MW%d", phy_id);
+  //  printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
 	_XLlTemac_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
 	return 0;
 }

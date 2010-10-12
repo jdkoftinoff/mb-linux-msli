@@ -229,19 +229,6 @@ spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
 spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
 spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
-/*
- * ethtool has a status reporting feature where we can report any sort of
- * status information we'd like. This is the list of strings used for that
- * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
- */
-static char labx_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
-  "txpkts", "txdropped", "txerr", "txfifoerr",
-  "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
-  "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
-};
-
-#define XENET_STATS_LEN sizeof(labx_ethtool_gstrings_stats) / ETH_GSTRING_LEN
-
 /* Helper function to determine if a given XLlTemac error warrants a reset. */
 extern inline int status_requires_reset(int s)
 {
@@ -520,6 +507,11 @@ void reset(struct net_device *dev, u32 line_num)
   if (NULL != lp->phy_dev)
     {
       int ret;
+
+      /* This hardware only supports full-duplex Gigabit */
+      lp->phy_dev->advertising &= ~SUPPORTED_1000baseT_Half;
+      lp->phy_dev->drv->config_aneg(lp->phy_dev);
+
       printk("%s: About to call phy_start_aneg()\n",__func__);
       ret = phy_start_aneg(lp->phy_dev);
       if (0 != ret) {
@@ -743,6 +735,11 @@ static int xenet_open(struct net_device *dev)
 			      0, PHY_INTERFACE_MODE_MII);
     if(!IS_ERR(lp->phy_dev)) {
       int ret;
+
+      /* This hardware only supports full-duplex Gigabit */
+      lp->phy_dev->advertising &= ~SUPPORTED_1000baseT_Half;
+      lp->phy_dev->drv->config_aneg(lp->phy_dev);
+
       printk("%s: About to call phy_start_aneg()\n",__func__);
       ret = phy_start_aneg(lp->phy_dev);
       if (0 != ret) {
@@ -1150,6 +1147,9 @@ labx_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
   ecmd->duplex = DUPLEX_FULL;
 
   ecmd->supported |= SUPPORTED_MII;
+  ecmd->supported |= SUPPORTED_100baseT_Full;
+  ecmd->supported |= SUPPORTED_1000baseT_Full;
+  ecmd->supported |= SUPPORTED_Autoneg;
 
   ecmd->port = PORT_MII;
 
@@ -1226,23 +1226,97 @@ labx_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
   *(int *) ret = 0;
 }
 
-static int
+static void
 labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
 {
   memset(ed, 0, sizeof(struct ethtool_drvinfo));
   strncpy(ed->driver, DRIVER_NAME, sizeof(ed->driver) - 1);
   strncpy(ed->version, DRIVER_VERSION, sizeof(ed->version) - 1);
+
   /* Also tell how much memory is needed for dumping register values */
   ed->regdump_len = sizeof(u16) * EMAC_REGS_N;
-  return 0;
+}
+
+/* Array defining all of the statistics we can return */
+/*
+ * ethtool has a status reporting feature where we can report any sort of
+ * status information we'd like. This is the list of strings used for that
+ * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
+ */
+static char labx_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
+  "txpkts", "txdropped", "txerr", "txfifoerr",
+  "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
+  "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
+};
+
+#define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethtool_gstrings_stats)
+
+/* Array defining the test modes we support */
+static const char labx_ethernet_gstrings_test[][ETH_GSTRING_LEN] = {
+  "Local_Loopback"
+};
+
+#define LABX_ETHERNET_TEST_LEN	ARRAY_SIZE(labx_ethernet_gstrings_test)
+
+static int labx_ethtool_get_sset_count(struct net_device *dev, int sset) {
+  switch (sset) {
+  case ETH_SS_TEST:
+    return LABX_ETHERNET_TEST_LEN;
+  case ETH_SS_STATS:
+    return LABX_ETHERNET_STATS_LEN;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
+
+static void
+labx_ethtool_get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+  switch (stringset) {
+  case ETH_SS_TEST:
+    memcpy(data, *labx_ethernet_gstrings_test,
+	   (LABX_ETHERNET_TEST_LEN * ETH_GSTRING_LEN));
+    break;
+  case ETH_SS_STATS:
+    memcpy(data, *labx_ethernet_gstrings_test,
+	   (LABX_ETHERNET_STATS_LEN * ETH_GSTRING_LEN));
+    break;
+  }
+}
+
+static void
+labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info, 
+		       u64 *test_results) {
+  struct net_local *lp = netdev_priv(dev);
+  u32 loopback_mode;
+
+  /* Clear the test results */
+  memset(test_results, 0, (sizeof(uint64_t) * LABX_ETHERNET_TEST_LEN));
+  printk("Setting PHY mode: %s\n",
+	 ((test_info->flags & ETH_TEST_FL_OFFLINE) ? "loopback" : "normal"));
+
+  /* We have co-opted this self-test ioctl for use as a means to put the
+   * PHY into local loopback mode, with "offline" meaning "local loopback"
+   * and "online" meaning "no loopback" (normal operation).
+   */
+  if(lp->phy_dev->drv->loopback) {
+    if(test_info->flags & ETH_TEST_FL_OFFLINE) {
+      loopback_mode = PHY_LOOPBACK_EXTERNAL;
+    } else loopback_mode = PHY_LOOPBACK_NONE;
+    lp->phy_dev->drv->loopback(lp->phy_dev, loopback_mode);
+  } else printk("%s PHY driver does not support loopback\n",
+		lp->phy_dev->drv->name);
 }
 
 /* ethtool operations structure */
 static const struct ethtool_ops labx_ethtool_ops = {
-  .get_settings = labx_ethtool_get_settings,
-  .set_settings = labx_ethtool_set_settings,
-  .get_drvinfo  = labx_ethtool_get_drvinfo,
-  .get_regs     = labx_ethtool_get_regs
+  .get_settings   = labx_ethtool_get_settings,
+  .set_settings   = labx_ethtool_set_settings,
+  .get_drvinfo    = labx_ethtool_get_drvinfo,
+  .get_regs       = labx_ethtool_get_regs,
+  .self_test      = labx_ethtool_self_test,
+  .get_sset_count = labx_ethtool_get_sset_count,
+  .get_strings    = labx_ethtool_get_strings,
 #if 0
   .get_link = ethtool_op_get_link,
   .nway_reset = labx_ethtool_nwayreset,
