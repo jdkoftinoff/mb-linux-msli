@@ -32,7 +32,7 @@
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RTC_INC_REG), PTP_RTC_DISABLE);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), PTP_RTC_DISABLE);
 }
 
 /* Sets the RTC increment, simultaneously enabling the RTC */
@@ -45,7 +45,7 @@ void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
   incrementWord |= PTP_RTC_ENABLE;
 
   /* The actual write is already atomic, so no need to ensure mutual exclusion */
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RTC_INC_REG), incrementWord);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), incrementWord);
 }
 
 /* Captures the present RTC time, returning it into the passed structure */
@@ -61,17 +61,17 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_SECONDS_HIGH_REG), PTP_RTC_CAPTURE_FLAG);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), PTP_RTC_CAPTURE_FLAG);
   do {
-    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, PTP_SECONDS_HIGH_REG));
+    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
   } while((timeWord & PTP_RTC_CAPTURE_FLAG) != 0);
 
   /* Now read the entire captured time and pack it into the structure.  The last
    * value read during polling is perfectly valid.
    */
   time->secondsUpper = (uint16_t) timeWord;
-  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, PTP_SECONDS_LOW_REG));
-  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, PTP_NANOSECONDS_REG));
+  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG));
+  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG));
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 }
@@ -85,9 +85,9 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_SECONDS_HIGH_REG), time->secondsUpper);
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_SECONDS_LOW_REG), time->secondsLower);
-  XIo_Out32(REGISTER_ADDRESS(ptp, PTP_NANOSECONDS_REG), time->nanoseconds);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), time->secondsUpper);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG), time->secondsLower);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG), time->nanoseconds);
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 }
@@ -104,7 +104,7 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
 static uint32_t servoCount = 0;
 #endif
 
-void rtc_update_servo(struct ptp_device *ptp) {
+void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
   int32_t slaveOffset;
   uint32_t slaveOffsetValid = 0;
   PtpTime difference;
@@ -114,7 +114,7 @@ void rtc_update_servo(struct ptp_device *ptp) {
     /* Make certain there are both sets of valid timestamps available for a master->
      * slave offset calculation employing the end-to-end mechanism.
      */
-    if(ptp->syncTimestampsValid && ptp->delayReqTimestampsValid) {
+    if(ptp->ports[port].syncTimestampsValid && ptp->ports[port].delayReqTimestampsValid) {
       PtpTime difference2;
       
       /* The core of the algorithm is the calculation of the slave's offset from the
@@ -128,8 +128,8 @@ void rtc_update_servo(struct ptp_device *ptp) {
        *
        * Offset_m_s = [(SYNC_Rx - SYNC_Tx) + (DELAY_REQ_Tx - DELAY_REQ_Rx)] / 2
        */
-      timestamp_difference(&ptp->syncRxTimestamp, &ptp->syncTxTimestamp, &difference);
-      timestamp_difference(&ptp->delayReqTxTimestamp, &ptp->delayReqRxTimestamp, &difference2);
+      timestamp_difference(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncTxTimestamp, &difference);
+      timestamp_difference(&ptp->ports[port].delayReqTxTimestamp, &ptp->ports[port].delayReqRxTimestamp, &difference2);
       
       /* The fact that this is called at all implies there's a < 1 sec slaveOffset; deal
        * strictly with nanoseconds now that the seconds have been normalized.
@@ -145,12 +145,12 @@ void rtc_update_servo(struct ptp_device *ptp) {
      * to be made is to subtract out the path delay to our peer, which is periodically
      * calculated (and should be pretty small.)
      */
-    timestamp_difference(&ptp->syncRxTimestamp, &ptp->syncTxTimestamp, &difference);
+    timestamp_difference(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncTxTimestamp, &difference);
       
     /* The fact that this is called at all implies there's a < 1 sec slaveOffset; deal
      * strictly with nanoseconds now that the seconds have been normalized.
      */
-    slaveOffset = (((int32_t) difference.nanoseconds) - ptp->neighborPropDelay);
+    slaveOffset = (((int32_t) difference.nanoseconds) - ptp->ports[port].neighborPropDelay);
     slaveOffsetValid = 1;
   }
 
@@ -195,15 +195,16 @@ void rtc_update_servo(struct ptp_device *ptp) {
     
     /* Write the new increment out to the hardware, incorporating the enable bit */
     newRtcIncrement |= PTP_RTC_ENABLE;
-    XIo_Out32(REGISTER_ADDRESS(ptp, PTP_RTC_INC_REG), newRtcIncrement);
+    XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement);
 
 #ifdef SLAVE_OFFSET_DEBUG
     if(++servoCount >= 10) {
       printk("Slave offset %d, Increment 0x%08X\n", slaveOffset, newRtcIncrement);
-      printk("  syncRxNS %d, syncTxNS %d (%d), MeanPathNS %d\n", (int)ptp->syncRxTimestamp.nanoseconds,
-        (int)ptp->syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->neighborPropDelay);
+      printk("  syncRxNS %d, syncTxNS %d (%d), MeanPathNS %d\n", (int)ptp->ports[port].syncRxTimestamp.nanoseconds,
+        (int)ptp->ports[port].syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->ports[port].neighborPropDelay);
       servoCount = 0;
     }
 #endif
   } /* if(slaveOffsetValid) */
 }
+
