@@ -38,6 +38,15 @@ typedef struct {
   uint16_t offsetScaledLogVariance;
 } PtpClockQuality;
 
+/* Enumerated type identifying PTP roles. Defined to match 802.1AS Table 14-5 */
+typedef enum {
+  PTP_MASTER   = 6,
+  PTP_SLAVE    = 9,
+  PTP_PASSIVE  = 7,
+  PTP_DISABLED = 3
+    
+} PtpRole;
+
 #define PTP_CLOCK_IDENTITY_CHARS  (8)
 
 /* timeSource enumeration */
@@ -56,41 +65,54 @@ typedef struct {
 #define PTP_DELAY_MECHANISM_DISABLED  (0xFE)
 
 /* I/O control commands and structures for the PTP driver */
-#define IOC_PTP_STOP_SERVICE    (0x10)
-#define IOC_PTP_START_SERVICE   (0x11)
-#define IOC_PTP_GET_PROPERTIES  (0x12)
-#define IOC_PTP_SET_PROPERTIES  (0x13)
+#define IOC_PTP_STOP_SERVICE    _IO('p', 0x10)
+#define IOC_PTP_START_SERVICE   _IO('p', 0x11)
+
+typedef uint8_t PtpClockIdentity[PTP_CLOCK_IDENTITY_CHARS];
 
 typedef struct {
+  /* Various PTP-defined properties */
+  uint8_t          domainNumber;
+  int16_t          currentUtcOffset;
+  uint8_t          grandmasterPriority1;
+  PtpClockQuality  grandmasterClockQuality;
+  uint8_t          grandmasterPriority2;
+  PtpClockIdentity grandmasterIdentity;
+  uint8_t          timeSource;
+  uint8_t          delayMechanism;
+} PtpProperties;
+#define IOC_PTP_GET_PROPERTIES  _IOR('p', 0x12, PtpProperties)
+#define IOC_PTP_SET_PROPERTIES  _IOW('p', 0x13, PtpProperties)
+
+typedef struct {
+  /* Port number to get/set */
+  uint32_t portNumber;
+
   /* Source MAC address of the interface the PTP hardware uses */
   uint8_t sourceMacAddress[MAC_ADDRESS_BYTES];
 
-  /* Various PTP-defined properties */
-  uint8_t         domainNumber;
-  int16_t         currentUtcOffset;
-  uint8_t         grandmasterPriority1;
-  PtpClockQuality grandmasterClockQuality;
-  uint8_t         grandmasterPriority2;
-  uint8_t         grandmasterIdentity[PTP_CLOCK_IDENTITY_CHARS];
-  uint8_t         timeSource;
-  uint8_t         delayMechanism;
-} PtpProperties;
+  /* Steps removed from the master */
+  uint16_t stepsRemoved;
 
-#define IOC_PTP_GET_TIME  (0x14)
-#define IOC_PTP_SET_TIME  (0x15)
+} PtpPortProperties;
+#define IOC_PTP_GET_PORT_PROPERTIES  _IOWR('p', 0x14, PtpPortProperties)
+#define IOC_PTP_SET_PORT_PROPERTIES  _IOW('p', 0x15, PtpPortProperties)
+
 typedef struct {
   int32_t  secondsUpper;
   uint32_t secondsLower;
   int32_t nanoseconds;
 } PtpTime;
+#define IOC_PTP_GET_TIME  _IOR('p', 0x16, PtpTime)
+#define IOC_PTP_SET_TIME  _IOW('p', 0x17, PtpTime)
 
-#define IOC_PTP_GET_RTC_COEF (0x16)
-#define IOC_PTP_SET_RTC_COEF (0x17)
 typedef struct {
   int32_t P;
   int32_t I;
   int32_t D;
 } PtpCoefficients;
+#define IOC_PTP_GET_RTC_COEF _IOR('p', 0x18, PtpCoefficients)
+#define IOC_PTP_SET_RTC_COEF _IOW('p', 0x19, PtpCoefficients)
 
 /* Type used to represent RTC increments */
 #define LABX_PTP_RTC_MANTISSA_BITS   (4)
@@ -110,6 +132,17 @@ typedef struct {
  * Proportional coefficients must be negative to converge.
  */
 typedef struct {
+  /* Number of PTP ports attached to this instance */
+  uint32_t numPorts;
+
+  /* Net interface associated with each PTP port */
+  const char** interfaceName;
+
+#ifdef CONFIG_OF
+  /* OpenFirmware nodes associated with each PTP port */
+  struct device_node **interfaceNode;
+#endif
+
   /* Parameters for the monotonic 10 msec event timer */
   uint32_t timerPrescaler;
   uint32_t timerDivider;
@@ -117,6 +150,72 @@ typedef struct {
   /* Parameters for the RTC servo */
   RtcIncrement    nominalIncrement;
   PtpCoefficients coefficients;
+  
+  /* Parameters for the MAC/PHY delay */
+  PtpTime rxPhyMacDelay;
+  PtpTime txPhyMacDelay;
+
 } PtpPlatformData;
 
-#endif
+/*
+ * The following structures expose information for MIBs in 802.1AS (draft 7.2)
+ */
+
+/* Port status information: ieee802AsPortDataSet Port Parameter Data Set Table 14-6 */
+typedef struct {
+  uint32_t index; /* Port index to read */
+
+  PtpClockIdentity clockIdentity;          /* 14.6.2 */
+  uint16_t portNumber;                     /* 14.6.2 */
+  uint32_t portRole;                       /* 14.6.3 - PtpRole */
+  uint32_t pttPortEnabled;                 /* 14.6.4 - Boolean */
+  uint32_t isMeasuringDelay;               /* 14.6.5 - Boolean */
+  uint32_t asCapable;                      /* 14.6.6 - Boolean */
+  uint64_t neighborPropDelay;              /* 14.6.7 - UScaledNs */
+  uint64_t neighborPropDelayThresh;        /* 14.6.8 - UScaledNs */
+  uint64_t delayAsymmetry;                 /* 14.6.9 - ScaledNs */
+  uint64_t neighborRateRatio;              /* 14.6.10 */
+  uint32_t initialLogAnnounceInterval;     /* 14.6.11 */
+  uint32_t currentLogAnnounceInterval;     /* 14.6.12 */
+  uint32_t announceReceiptTimeout;         /* 14.6.13 */
+  uint32_t initialLogSyncInterval;         /* 14.6.14 */
+  uint32_t currentLogSyncInterval;         /* 14.6.15 */
+  uint32_t syncReceiptTimeout;             /* 14.6.16 */
+  uint32_t syncReceiptTimeoutTimeInterval; /* 14.6.17 */
+  uint32_t initialLogPdelayReqInterval;    /* 14.6.18 */
+  uint32_t currentLogPdelayReqInterval;    /* 14.6.19 */
+  uint32_t allowedLostResponses;           /* 14.6.20 */
+  uint32_t versionNumber;                  /* 14.6.21 */
+  uint32_t nup;                            /* 14.6.22 */
+  uint32_t ndown;                          /* 14.6.23 */
+  uint32_t acceptableMasterTableEnabled;   /* 14.6.24 - Boolean */
+
+} PtpAsPortDataSet;
+#define IOC_PTP_GET_AS_PORT_DATA_SET _IOWR('p', 0x1a, PtpAsPortDataSet)
+
+/* Port statistics: ieee802AsPortStatistics Port Statistics Data Set Table 14-7 */
+typedef struct {
+  uint32_t index; /* Port index to read */
+
+  uint32_t rxSyncCount;                             /* 14.7.2 */
+  uint32_t rxFollowupCount;                         /* 14.7.3 */
+  uint32_t rxPDelayRequestCount;                    /* 14.7.4 */
+  uint32_t rxPDelayResponseCount;                   /* 14.7.5 */
+  uint32_t rxPDelayResponseFollowupCount;           /* 14.7.6 */
+  uint32_t rxAnnounceCount;                         /* 14.7.7 */
+  uint32_t rxPTPPacketDiscardCount;                 /* 14.7.8 */
+  uint32_t syncReceiptTimeoutCount;                 /* 14.7.9 */
+  uint32_t announceReceiptTimeoutCount;             /* 14.7.10 */
+  uint32_t pDelayAllowedLostResponsesExceededCount; /* 14.7.11 */
+  uint32_t txSyncCount;                             /* 14.7.12 */
+  uint32_t txFollowupCount;                         /* 14.7.13 */
+  uint32_t txPDelayRequestCount;                    /* 14.7.14 */
+  uint32_t txPDelayResponseCount;                   /* 14.7.15 */
+  uint32_t txPDelayResponseFollowupCount;           /* 14.7.16 */
+  uint32_t txAnnounceCount;                         /* 14.7.17 */
+
+} PtpAsPortStatistics;
+#define IOC_PTP_GET_AS_PORT_STATISTICS _IOWR('p', 0x1b, PtpAsPortStatistics)
+
+#endif /* _LABX_PTP_DEFS_H_ */
+

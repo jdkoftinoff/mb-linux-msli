@@ -26,6 +26,7 @@
 #ifndef _LABX_PTP_H_
 #define _LABX_PTP_H_
 
+#include <linux/if.h>
 #include <linux/cdev.h>
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
@@ -39,6 +40,7 @@
 #define TX_PACKET_RANGE     (0x2)
 #define RX_PACKET_RANGE     (0x3)
 #define ADDRESS_RANGE_SHIFT (11)
+#define PORT_RANGE_SHIFT    (13)
 
 /* Bytes per packet buffer */
 #define PTP_MAX_PACKET_BYTES     (256)
@@ -91,26 +93,19 @@
 #  define REVISION_FIELD_BITS  4
 #  define REVISION_FIELD_MASK  (0x0F)
 
-#define REGISTER_ADDRESS(device, offset) \
-  ((uint32_t)device->virtualAddress |                       \
+#define REGISTER_ADDRESS(device, port, offset) \
+  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (REGISTER_RANGE << ADDRESS_RANGE_SHIFT) | (offset << 2))
 
-#define PTP_TX_PACKET_BUFFER(device, whichBuffer)                       \
-  ((uint32_t)device->virtualAddress |                                   \
+#define PTP_TX_PACKET_BUFFER(device, port, whichBuffer)                 \
+  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (TX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & (PTP_TX_BUFFER_COUNT-1)) << PTP_PACKET_BUFFER_SHIFT))
 
-#define PTP_RX_PACKET_BUFFER(device, whichBuffer)                       \
-  ((uint32_t)device->virtualAddress |                                   \
+#define PTP_RX_PACKET_BUFFER(device, port, whichBuffer)                 \
+  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (RX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & PTP_RX_BUFFER_MASK) << PTP_PACKET_BUFFER_SHIFT))
-
-/* Enumerated type identifying PTP roles */
-typedef enum {
-  PTP_MASTER  = 0x00,
-  PTP_SLAVE   = 0x01,
-  PTP_PASSIVE = 0x02
-} PtpRole;
 
 /* PTP message type enumeration */
 #define MSG_TYPE_MASK        (0x0F)
@@ -148,66 +143,22 @@ typedef enum { MDPdelayReq_NOT_ENABLED, MDPdelayReq_INITIAL_SEND_PDELAY_REQ,
   MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP, MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER
 } MDPdelayReq_State_t;
 
-/* Driver structure to maintain state for each device instance */
-#define NAME_MAX_SIZE  (256)
-struct ptp_device {
-  /* Pointer back to the platform device */
-  struct platform_device *pdev;
+/* 802.1AS LinkDelaySyncIntervalSettings state machine states */
+typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSetting_INITIALIZE,
+  LinkDelaySyncIntervalSetting_SET_INTERVALS
+} LinkDelaySyncIntervalSetting_State_t;
 
-  /* Character device data */
-  struct cdev cdev;
-  dev_t       deviceNumber;
-  uint32_t    instanceNumber;
 
-  /* Name for use in identification */
-  char name[NAME_MAX_SIZE];
+struct ptp_port {
 
-  /* Physical and virtual base address */
-  uint32_t      physicalAddress;
-  uint32_t      addressRangeSize;
-  void __iomem  *virtualAddress;
+  /* Net interface name associated with this port */
+  char interfaceName[IFNAMSIZ];
+#ifdef CONFIG_OF
+  struct device_node *interfaceNode;
+#endif
 
-  /* Interrupt request for the device and mask of pending transmit
-   * interrupts to respond to
-   */
-  int32_t irq;
-  uint32_t pendingTxFlags;
-
-  /* Properties for the instance */
-  PtpProperties properties;
-
-  /* RTC control loop constants */
-  RtcIncrement    nominalIncrement;
-  PtpCoefficients coefficients;
-
-  /* RTC control loop persistent values */
-  int64_t integral;
-  int32_t derivative;
-  int32_t previousOffset;
-
-  /* Present role and delay mechanism for the endpoint */
-  PtpRole presentRole;
-
-  /* Properties for the present grandmaster */
-  PtpProperties presentMaster;
-
-  /* Timer state space */
-  struct tasklet_struct timerTasklet;
-  uint32_t announceCounter;
-  uint16_t announceSequenceId;
-  uint32_t syncCounter;
-  uint16_t syncSequenceId;
-  uint32_t delayReqCounter;
-  uint32_t delayReqSequenceId;
-
-  /* Packet Rx state space */
-  struct tasklet_struct rxTasklet;
-  uint32_t lastRxBuffer;
-  uint32_t announceTimeoutCounter;
-  uint32_t syncSequenceIdValid;
-
-  /* Packet Tx state space */
-  struct tasklet_struct txTasklet;
+  /* Port properties */
+  PtpPortProperties portProperties;
 
   /* Timing parameters; these consist of raw timestamps for the slave as
    * well as the derived and filtered delay measurements.
@@ -222,6 +173,13 @@ struct ptp_device {
   PtpTime delayReqTxTimestamp;
   PtpTime delayReqRxTimestamp;
   uint32_t delayReqTimestampsValid;
+
+  /* Configured delay for the PHY/MAC to where timestamping actually happens */
+  PtpTime rxPhyMacDelay;
+  PtpTime txPhyMacDelay;
+
+  /* Mask of pending transmit interrupts to respond to */
+  uint32_t pendingTxFlags;
 
   /* 802.1AS per-port variables (10.2.4) */
   uint32_t asCapable;
@@ -252,6 +210,9 @@ struct ptp_device {
   uint32_t lostResponses;
   uint32_t neighborRateRatioValid;
 
+  /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
+  LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
+
   /* Current PDelay Request/Response timestamps */
   PtpTime pdelayReqTxTimestamp;  // pdelayReqEventEgressTimestamp (Treq1)
   PtpTime pdelayReqRxTimestamp;  // pdelayReqEventIngressTimestamp (Trsp2)
@@ -264,6 +225,79 @@ struct ptp_device {
 
   /* pdelay response variables */
   uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
+
+  /* Timer state space */
+  uint32_t announceCounter;
+  uint16_t announceSequenceId;
+  uint32_t syncCounter;
+  uint16_t syncSequenceId;
+  uint32_t delayReqCounter;
+  uint32_t delayReqSequenceId;
+
+  /* Packet Rx state space */
+  uint32_t lastRxBuffer;
+  uint32_t syncSequenceIdValid;
+
+  /* Packet statistics */
+  PtpAsPortStatistics stats;
+};
+
+/* Driver structure to maintain state for each device instance */
+#define NAME_MAX_SIZE  (256)
+struct ptp_device {
+  /* Pointer back to the platform device */
+  struct platform_device *pdev;
+
+  /* Character device data */
+  struct cdev cdev;
+  dev_t       deviceNumber;
+  uint32_t    instanceNumber;
+
+  /* Name for use in identification */
+  char name[NAME_MAX_SIZE];
+
+  /* Physical and virtual base address */
+  uint32_t      physicalAddress;
+  uint32_t      addressRangeSize;
+  void __iomem  *virtualAddress;
+
+  /* Interrupt request for the device */
+  int32_t irq;
+
+  /* Number of ports attached to this instance */
+  uint32_t numPorts;
+
+  /* Properties for the instance */
+  PtpProperties properties;
+
+  /* RTC control loop constants */
+  RtcIncrement    nominalIncrement;
+  PtpCoefficients coefficients;
+
+  /* RTC control loop persistent values */
+  int64_t integral;
+  int32_t derivative;
+  int32_t previousOffset;
+
+  /* Present role and delay mechanism for the endpoint */
+  PtpRole presentRole;
+
+  /* Properties for the present grandmaster */
+  PtpProperties presentMaster;
+  PtpPortProperties presentMasterPort;
+
+  /* Timer state space */
+  struct tasklet_struct timerTasklet;
+
+  /* Packet Rx state space */
+  struct tasklet_struct rxTasklet;
+  uint32_t announceTimeoutCounter;
+
+  /* Packet Tx state space */
+  struct tasklet_struct txTasklet;
+
+  /* Per-port data */
+  struct ptp_port *ports;
 
   /* Mutex for the device instance */
   spinlock_t mutex;
@@ -284,48 +318,50 @@ typedef enum {
 /* Function prototypes for inter-module calls */
 
 /* From labx_ptp_messages.c */
-void init_tx_templates(struct ptp_device *ptp);
-uint32_t get_message_type(struct ptp_device *ptp, uint32_t rxBuffer);
-void get_rx_mac_address(struct ptp_device *ptp, uint32_t rxBuffer, uint8_t *macAddress);
-void get_source_port_id(struct ptp_device *ptp, PacketDirection bufferDirection, uint32_t rxBuffer, uint8_t *sourcePortId);
-void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t rxBuffer, uint8_t *requestingPortId);
-void extract_announce(struct ptp_device *ptp, uint32_t rxBuffer, PtpProperties *properties);
+void init_tx_templates(struct ptp_device *ptp, uint32_t port);
+uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer);
+void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, uint8_t *macAddress);
+void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint32_t rxBuffer, uint8_t *sourcePortId);
+void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, uint8_t *requestingPortId);
+void extract_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, PtpProperties *properties, PtpPortProperties *portProperties);
 void copy_ptp_properties(PtpProperties *to, PtpProperties *from);
+void copy_ptp_port_properties(PtpPortProperties *to, PtpPortProperties *from);
 int32_t compare_mac_addresses(const uint8_t *macAddressA, const uint8_t *macAddressB);
 int32_t compare_clock_identity(const uint8_t *clockIdentityA, const uint8_t *clockIdentityB);
 int32_t compare_port_ids(const uint8_t *portIdA, const uint8_t *portIdB);
-void transmit_announce(struct ptp_device *ptp);
-void transmit_sync(struct ptp_device *ptp);
-void transmit_fup(struct ptp_device *ptp);
-void transmit_delay_request(struct ptp_device *ptp);
-void transmit_delay_response(struct ptp_device *ptp, uint32_t requestRxBuffer);
-void transmit_pdelay_request(struct ptp_device *ptp);
-void transmit_pdelay_response(struct ptp_device *ptp, uint32_t requestRxBuffer);
-void transmit_pdelay_response_fup(struct ptp_device *ptp);
-void print_packet_buffer(struct ptp_device *ptp, PacketDirection bufferDirection,
+void transmit_announce(struct ptp_device *ptp, uint32_t port);
+void transmit_sync(struct ptp_device *ptp, uint32_t port);
+void transmit_fup(struct ptp_device *ptp, uint32_t port);
+void transmit_delay_request(struct ptp_device *ptp, uint32_t port);
+void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer);
+void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port);
+void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer);
+void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port);
+void print_packet_buffer(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                          uint32_t packetBuffer);
-uint16_t get_sequence_id(struct ptp_device *ptp, PacketDirection bufferDirection,
+uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                          uint32_t packetBuffer);
-void get_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
+void get_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                             uint32_t packetBuffer, PtpTime *timestamp);
-void get_local_hardware_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
+void get_local_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                                   uint32_t packetBuffer, PtpTime *timestamp);
-void get_timestamp(struct ptp_device *ptp, PacketDirection bufferDirection,
+void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                    uint32_t packetBuffer, PtpTime *timestamp);
-void get_correction_field(struct ptp_device *ptp, uint32_t txBuffer, PtpTime *correctionField);
+void get_correction_field(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, PtpTime *correctionField);
 
 /* From labx_ptp_state.c */
 void init_state_machines(struct ptp_device *ptp);
 
 /* From labx_ptp_pdelay_state.c */
-void MDPdelayReq_StateMachine(struct ptp_device *ptp);
+void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port);
+void LinkDelaySyncIntervalSetting_StateMachine(struct ptp_device *ptp, uint32_t port);
 
 /* From labx_ptp_rtc.c */
 void disable_rtc(struct ptp_device *ptp);
 void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
-void rtc_update_servo(struct ptp_device *ptp);
+void rtc_update_servo(struct ptp_device *ptp, uint32_t port);
 
 /* From labx_ptp_arithmetic.c */
 void timestamp_sum(PtpTime *addend, PtpTime *augend, PtpTime *sum);
@@ -333,4 +369,5 @@ void timestamp_difference(PtpTime *minuend, PtpTime *subtrahend, PtpTime *differ
 void timestamp_abs(PtpTime *operand, PtpTime *result);
 void timestamp_copy(PtpTime *destination, PtpTime *source);
 
-#endif
+#endif /* _LABX_PTP_H_ */
+

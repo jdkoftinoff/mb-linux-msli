@@ -1971,6 +1971,7 @@ config LABX_PTP
 	bool "Lab X PTP support"
 	help
 	  This driver supports the Lab X Technologies PTP hardware.
+
 source "drivers/net/labx_avb/Kconfig"
 
 config ACENIC
