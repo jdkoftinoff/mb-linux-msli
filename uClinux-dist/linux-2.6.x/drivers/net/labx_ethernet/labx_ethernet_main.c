@@ -163,7 +163,6 @@ struct net_local {
 
   struct net_device *ndev;	/* this device */
   struct net_device *next_dev;	/* The next device in dev_list */
-  struct net_device_stats stats;	/* Statistics for this device */
 
   u32 index;		/* Which interface is this */
   u8 gmii_addr;		/* The GMII address of the PHY */
@@ -538,7 +537,7 @@ void reset(struct net_device *dev, u32 line_num)
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
     lp->deferred_skb = NULL;
-    lp->stats.tx_errors++;
+    lp->ndev->stats.tx_errors++;
   }
 
   /*
@@ -598,12 +597,12 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       FifoSendHandler(dev);
       irq_status &= ~FIFO_INT_TC_MASK;
     } else if (irq_status & FIFO_INT_TXERROR_MASK) {
-      lp->stats.tx_errors++;
-      lp->stats.tx_fifo_errors++;
+      lp->ndev->stats.tx_errors++;
+      lp->ndev->stats.tx_fifo_errors++;
       Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
       irq_status &= ~FIFO_INT_TXERROR_MASK;
     } else if (irq_status & FIFO_INT_RXERROR_MASK) {
-      lp->stats.rx_errors++;
+      lp->ndev->stats.rx_errors++;
       Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
       irq_status &= ~FIFO_INT_RXERROR_MASK;
     } else {
@@ -799,9 +798,7 @@ static int xenet_close(struct net_device *dev)
 
 static struct net_device_stats *xenet_get_stats(struct net_device *dev)
 {
-  struct net_local *lp = netdev_priv(dev);
-
-  return &lp->stats;
+  return &dev->stats;
 }
 
 static void xenet_set_multicast_list(struct net_device *dev)
@@ -935,7 +932,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 
   /* Initiate transmit */
   Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
-  lp->stats.tx_bytes += total_len;
+  lp->ndev->stats.tx_bytes += total_len;
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 
   dev_kfree_skb(skb);	/* free skb */
@@ -952,7 +949,7 @@ static void FifoSendHandler(struct net_device *dev)
 
   spin_lock_irqsave(&XTE_tx_spinlock, flags);
   lp = netdev_priv(dev);
-  lp->stats.tx_packets++;
+  lp->ndev->stats.tx_packets++;
 
   /*Send out the deferred skb and wake up send queue if a deferred skb exists */
   if (lp->deferred_skb) {
@@ -1004,8 +1001,8 @@ static void FifoSendHandler(struct net_device *dev)
 
     dev_kfree_skb(skb);	/* free skb */
     lp->deferred_skb = NULL;
-    lp->stats.tx_packets++;
-    lp->stats.tx_bytes += total_len;
+    lp->ndev->stats.tx_packets++;
+    lp->ndev->stats.tx_bytes += total_len;
     dev->trans_start = jiffies;
     netif_wake_queue(dev);	/* wake up send queue */
   }
@@ -1050,7 +1047,7 @@ static void xenet_tx_timeout(struct net_device *dev)
   printk(KERN_ERR
 	 "%s: labx_ethernet: exceeded transmit timeout of %lu ms.  Resetting emac.\n",
 	 dev->name, TX_TIMEOUT * 1000UL / HZ);
-  lp->stats.tx_errors++;
+  lp->ndev->stats.tx_errors++;
 
   reset(dev, __LINE__);
 
@@ -1090,7 +1087,7 @@ static void FifoRecvHandler(unsigned long p)
 
     if (!(skb = alloc_skb(len + ALIGNMENT_RECV, GFP_ATOMIC))) {
       /* Couldn't get memory. */
-      lp->stats.rx_dropped++;
+      lp->ndev->stats.rx_dropped++;
       printk(KERN_ERR
 	     "%s: labx_ethernet: could not allocate receive buffer.\n",
 	     dev->name);
@@ -1110,8 +1107,8 @@ static void FifoRecvHandler(unsigned long p)
     for(word_index = 0; word_index < word_len; word_index++) {
       *buf_ptr++ = ntohl(Read_Fifo32(lp->Emac, FIFO_RDFD_OFFSET));
     }
-    lp->stats.rx_packets++;
-    lp->stats.rx_bytes += len;
+    lp->ndev->stats.rx_packets++;
+    lp->ndev->stats.rx_bytes += len;
 
     skb_put(skb, len);	/* Tell the skb how much data we got. */
     skb->dev = dev;		/* Fill out required meta-data. */
@@ -1541,15 +1538,15 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     } stats = { {
 	ETHTOOL_GSTATS, XENET_STATS_LEN}};
 
-    stats.data[0] = lp->stats.tx_packets;
-    stats.data[1] = lp->stats.tx_dropped;
-    stats.data[2] = lp->stats.tx_errors;
-    stats.data[3] = lp->stats.tx_fifo_errors;
-    stats.data[4] = lp->stats.rx_packets;
-    stats.data[5] = lp->stats.rx_dropped;
-    stats.data[6] = lp->stats.rx_errors;
-    stats.data[7] = lp->stats.rx_fifo_errors;
-    stats.data[8] = lp->stats.rx_crc_errors;
+    stats.data[0] = lp->ndev->stats.tx_packets;
+    stats.data[1] = lp->ndev->stats.tx_dropped;
+    stats.data[2] = lp->ndev->stats.tx_errors;
+    stats.data[3] = lp->ndev->stats.tx_fifo_errors;
+    stats.data[4] = lp->ndev->stats.rx_packets;
+    stats.data[5] = lp->ndev->stats.rx_dropped;
+    stats.data[6] = lp->ndev->stats.rx_errors;
+    stats.data[7] = lp->ndev->stats.rx_fifo_errors;
+    stats.data[8] = lp->ndev->stats.rx_crc_errors;
     stats.data[9] = lp->max_frags_in_a_packet;
     stats.data[10] = lp->tx_hw_csums;
     stats.data[11] = lp->rx_hw_csums;
@@ -1702,7 +1699,14 @@ static int xtenet_setup(struct device *dev,
     rc = -ENOMEM;
     goto error;
   }
+  SET_NETDEV_DEV(ndev, dev);
   dev_set_drvdata(dev, ndev);
+
+  /* Allocate the dev name early so we can use it in our messages */
+  if (strchr(ndev->name, '%')) {
+    err = dev_alloc_name(ndev, ndev->name);
+    if (err < 0) goto error;
+  }
 
   /* Initialize the private data used by XEmac_LookupConfig().
    * The private data are zeroed out by alloc_etherdev() already.
@@ -1729,14 +1733,14 @@ static int xtenet_setup(struct device *dev,
   /* Get the virtual base address for the device */
   virt_baddr = (u32) ioremap_nocache(r_mem->start, address_size);
   if (0 == virt_baddr) {
-    dev_err(dev, "labx_ethernet: Could not allocate iomem.\n");
+    dev_err(dev, "%s: Could not allocate iomem.\n", ndev->name);
     rc = -EIO;
     goto error;
   }
 
   if (XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
       XST_SUCCESS) {
-    dev_err(dev, "labx_ethernet: Could not initialize device.\n");
+    dev_err(dev, "%s: Could not initialize device.\n", ndev->name);
 
     rc = -ENODEV;
     goto error;
@@ -1758,7 +1762,7 @@ static int xtenet_setup(struct device *dev,
 
   if (_XLlTemac_SetMacAddress(&lp->Emac, ndev->dev_addr) != XST_SUCCESS) {
     /* should not fail right after an initialize */
-    dev_err(dev, "labx_ethernet: could not set MAC address.\n");
+    dev_err(dev, "%s: could not set MAC address.\n", ndev->name);
     rc = -EIO;
     goto error;
   }

@@ -2719,7 +2719,14 @@ static int xtenet_setup(
 		rc = -ENOMEM;
 		goto error;
 	}
+	SET_NETDEV_DEV(ndev, dev);
 	dev_set_drvdata(dev, ndev);
+
+	/* Allocate the dev name early so we can use it in our messages */
+	if (strchr(ndev->name, '%')) {
+		rc = dev_alloc_name(ndev, ndev->name);
+		if (rc < 0) goto error;
+ 	}
 
 	/* Initialize the private data used by XEmac_LookupConfig().
 	 * The private data are zeroed out by alloc_etherdev() already.
@@ -2749,14 +2756,14 @@ static int xtenet_setup(
 	/* Get the virtual base address for the device */
 	virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
 	if (0 == virt_baddr) {
-		dev_err(dev, "labx_eth_llink: Could not allocate iomem.\n");
+		dev_err(dev, "%s: Could not allocate iomem.\n", ndev->name);
 		rc = -EIO;
 		goto error;
 	}
 
 	if (labx_XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
 	    XST_SUCCESS) {
-		dev_err(dev, "labx_eth_llink: Could not initialize device.\n");
+		dev_err(dev, "%s: Could not initialize device.\n", ndev->name);
 
 		rc = -ENODEV;
 		goto error;
@@ -2778,7 +2785,7 @@ static int xtenet_setup(
 
 	if (_XLlTemac_SetMacAddress(&lp->Emac, ndev->dev_addr) != XST_SUCCESS) {
 		/* should not fail right after an initialize */
-		dev_err(dev, "labx_eth_llink: could not set MAC address.\n");
+		dev_err(dev, "%s: could not set MAC address.\n", ndev->name);
 		rc = -EIO;
 		goto error;
 	}
@@ -2803,12 +2810,12 @@ static int xtenet_setup(
 		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
 		if (0 == virt_baddr) {
 			dev_err(dev,
-			       "labx_eth_llink: Could not allocate iomem for local link connected device.\n");
+			       "%s: Could not allocate iomem for local link connected device.\n", ndev->name);
 			rc = -EIO;
 			goto error;
 		}
 #endif
-//		printk("labx_eth_llink: Dma base address: phy: 0x%x, virt: 0x%x\n", pdata->ll_dev_baseaddress, virt_baddr);
+//		printk("%s: Dma base address: phy: 0x%x, virt: 0x%x\n", ndev->name, pdata->ll_dev_baseaddress, virt_baddr);
 		XLlDma_Initialize(&lp->Dma, virt_baddr);
 
 		ndev->hard_start_xmit = xenet_DmaSend;
@@ -2828,8 +2835,8 @@ static int xtenet_setup(
 		}
 		if (xs != XST_SUCCESS) {
 			dev_err(dev,
-			       "labx_eth_llink: could not set SEND pkt threshold/waitbound, ERROR %d",
-			       xs);
+			       "%s: could not set SEND pkt threshold/waitbound, ERROR %d",
+			       ndev->name, xs);
 		}
 		XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
 
@@ -2841,23 +2848,23 @@ static int xtenet_setup(
 		}
 		if (xs != XST_SUCCESS) {
 			dev_err(dev,
-			       "labx_eth_llink: Could not set RECV pkt threshold/waitbound ERROR %d",
-			       xs);
+			       "%s: Could not set RECV pkt threshold/waitbound ERROR %d",
+			       ndev->name, xs);
 		}
 		XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
 	}
 	else {
 		dev_err(dev,
-		       "labx_eth_llink: using FIFO direct interrupt driven mode.\n");
+		       "%s: using FIFO direct interrupt driven mode.\n", ndev->name);
 
 		virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
 		if (0 == virt_baddr) {
 			dev_err(dev,
-			       "labx_eth_llink: Could not allocate iomem for local link connected device.\n");
+			       "%s: Could not allocate iomem for local link connected device.\n", ndev->name);
 			rc = -EIO;
 			goto error;
 		}
-		printk("labx_eth_llink: Fifo base address: 0x%0x\n", virt_baddr);
+		printk("%s: Fifo base address: 0x%0x\n", ndev->name, virt_baddr);
 		XLlFifo_Initialize(&lp->Fifo, virt_baddr);
 
 		ndev->hard_start_xmit = xenet_FifoSend;
