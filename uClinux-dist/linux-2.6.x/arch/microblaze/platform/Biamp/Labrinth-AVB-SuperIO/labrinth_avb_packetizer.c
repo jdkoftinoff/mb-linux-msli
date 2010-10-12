@@ -212,7 +212,7 @@ static int __devinit labrinth_packetizer_of_probe(struct of_device *ofdev, const
   struct resource *addressRange = &r_mem_struct;
   struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
-  const char *name = dev_name(&ofdev->dev);
+  const char *name = ofdev->node->name;
   int rc = 0;
 
   /* Obtain the resources for this instance */

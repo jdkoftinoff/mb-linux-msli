@@ -261,7 +261,9 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
   }
 
   /* Look up the number of channels in the device tree */
-  numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2);
+  /* TEMPORARY
+     numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2); */
+  numChannels = 24;
 
   /* Dispatch to the generic function */
   return(labx_local_audio_probe(name, pdev, addressRange, numChannels, NULL, NULL, NULL));
@@ -305,25 +307,28 @@ static int labx_local_audio_pdev_probe(struct platform_device *pdev)
   return(labx_local_audio_probe(pdev->name, pdev, addressRange, 24, NULL, NULL, NULL));
 }
 
-static int __exit labx_local_audio_pdev_remove(struct platform_device *pdev)
-{
-  int i;
-  struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)platform_get_drvdata(pdev);
+/* This is exported to allow polymorphic drivers to invoke it */
+int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev) {
+  int dmaIndex;
 
   /* Make sure the DMA unit is no longer running */
   XIo_Out32(DMA_REGISTER_ADDRESS(&local_audio_pdev->dma, DMA_CONTROL_REG), DMA_DISABLE);
 
   misc_deregister(&local_audio_pdev->miscdev);
 
-  for (i=0; i<MAX_DMA_DEVICES; i++)
-    {
-      if (local_audio_pdev == devices[i])
-	{
-	  devices[i] = NULL;
-	  break;
-	}
+  for (dmaIndex=0; dmaIndex<MAX_DMA_DEVICES; dmaIndex++) {
+    if (local_audio_pdev == devices[dmaIndex]) {
+      devices[dmaIndex] = NULL;
+      break;
     }
-  return 0;
+  }
+  return(0);
+}
+
+static __exit int labx_local_audio_pdev_remove(struct platform_device *pdev)
+{
+  struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)platform_get_drvdata(pdev);
+  return(labx_local_audio_remove(local_audio_pdev));
 }
 
 /* Platform device driver structure */

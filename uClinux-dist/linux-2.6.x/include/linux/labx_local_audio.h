@@ -66,5 +66,16 @@ struct labx_local_audio_pdev {
 /* Register address and control field #defines */
 #define LOCAL_AUDIO_CHANNEL_REG 0x00
 
+/* Function prototypes for use by derived drivers */
+int labx_local_audio_probe(const char *name, 
+			   struct platform_device *pdev,
+			   struct resource *addressRange,
+			   u32 numChannels,
+			   struct file_operations *derivedFops,
+			   void *derivedData,
+			   struct labx_local_audio_pdev **newInstance);
+
+int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev);
+
 #endif /* _LABX_LOCAL_AUDIO_H_ */
 
