@@ -27,6 +27,7 @@
 #define _LABX_AUDIO_PACKETIZER_H_
 
 #include <linux/cdev.h>
+#include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
@@ -37,10 +38,11 @@
  * These are affected by the amount of address space devoted to packet template and 
  * microcode storage, which is hardware-configurable.
  */
-#define REGISTER_RANGE      (0x0)
-#define CLOCK_DOMAIN_RANGE  (0x1)
-#define MICROCODE_RANGE     (0x2)
-#define TEMPLATE_RANGE      (0x3)
+#define REGISTER_RANGE         (0x0)
+#define CLOCK_DOMAIN_RANGE     (0x1)
+#define MICROCODE_RANGE        (0x2)
+#define TEMPLATE_RANGE         (0x3)
+#define PACKETIZER_RANGE_BITS    (2)
 
 /* Global control registers */
 #define CONTROL_REG       (0x000)
@@ -138,6 +140,23 @@ struct audio_packetizer {
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
+
+  /* File operations and private data for a polymorphic
+   * driver to use
+   */
+  struct file_operations *derivedFops;
+  void *derivedData;
 };
+
+/* Function prototypes for derived drivers to use */
+int audio_packetizer_probe(const char *name, 
+			   struct platform_device *pdev,
+			   struct resource *addressRange,
+			   struct resource *irq,
+			   struct file_operations *derivedFops,
+			   void *derivedData,
+			   struct audio_packetizer **newInstance);
+
+int audio_packetizer_remove(struct audio_packetizer *packetizer);
 
 #endif

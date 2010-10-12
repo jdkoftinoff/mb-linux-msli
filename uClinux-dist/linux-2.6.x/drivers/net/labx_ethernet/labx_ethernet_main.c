@@ -228,19 +228,6 @@ spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
 spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
 spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
-/*
- * ethtool has a status reporting feature where we can report any sort of
- * status information we'd like. This is the list of strings used for that
- * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
- */
-static char xenet_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
-  "txpkts", "txdropped", "txerr", "txfifoerr",
-  "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
-  "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
-};
-
-#define XENET_STATS_LEN sizeof(xenet_ethtool_gstrings_stats) / ETH_GSTRING_LEN
-
 /* Helper function to determine if a given XLlTemac error warrants a reset. */
 extern inline int status_requires_reset(int s)
 {
@@ -519,6 +506,11 @@ void reset(struct net_device *dev, u32 line_num)
   if (NULL != lp->phy_dev)
     {
       int ret;
+
+      /* This hardware only supports full-duplex Gigabit */
+      lp->phy_dev->advertising &= ~SUPPORTED_1000baseT_Half;
+      lp->phy_dev->drv->config_aneg(lp->phy_dev);
+
       printk("%s: About to call phy_start_aneg()\n",__func__);
       ret = phy_start_aneg(lp->phy_dev);
       if (0 != ret) {
@@ -742,6 +734,11 @@ static int xenet_open(struct net_device *dev)
 			      0, PHY_INTERFACE_MODE_MII);
     if(!IS_ERR(lp->phy_dev)) {
       int ret;
+
+      /* This hardware only supports full-duplex Gigabit */
+      lp->phy_dev->advertising &= ~SUPPORTED_1000baseT_Half;
+      lp->phy_dev->drv->config_aneg(lp->phy_dev);
+
       printk("%s: About to call phy_start_aneg()\n",__func__);
       ret = phy_start_aneg(lp->phy_dev);
       if (0 != ret) {
@@ -1126,7 +1123,7 @@ static void FifoRecvHandler(unsigned long p)
 }
 
 static int
-xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+labx_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 {
   struct net_local *lp = netdev_priv(dev);
   u32 mac_options;
@@ -1147,6 +1144,9 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
   ecmd->duplex = DUPLEX_FULL;
 
   ecmd->supported |= SUPPORTED_MII;
+  ecmd->supported |= SUPPORTED_100baseT_Full;
+  ecmd->supported |= SUPPORTED_1000baseT_Full;
+  ecmd->supported |= SUPPORTED_Autoneg;
 
   ecmd->port = PORT_MII;
 
@@ -1171,7 +1171,7 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 }
 
 static int
-xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+labx_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 {
   struct net_local *lp = netdev_priv(dev);
 
@@ -1185,7 +1185,7 @@ xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
   if ((ecmd->speed != 1000) && (ecmd->speed != 100) &&
       (ecmd->speed != 10)) {
     printk(KERN_ERR
-	   "%s: labx_ethernet: xenet_ethtool_set_settings speed not supported: %d\n",
+	   "%s: labx_ethernet: labx_ethtool_set_settings speed not supported: %d\n",
 	   dev->name, ecmd->speed);
     return -EOPNOTSUPP;
   }
@@ -1200,8 +1200,8 @@ struct mac_regsDump {
 };
 
 static void
-xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
-		       void *ret)
+labx_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
+		      void *ret)
 {
   struct net_local *lp = netdev_priv(dev);
   struct mac_regsDump *dump = (struct mac_regsDump *) regs;
@@ -1223,17 +1223,112 @@ xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
   *(int *) ret = 0;
 }
 
-static int
-xenet_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
+static void
+labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
 {
   memset(ed, 0, sizeof(struct ethtool_drvinfo));
   strncpy(ed->driver, DRIVER_NAME, sizeof(ed->driver) - 1);
   strncpy(ed->version, DRIVER_VERSION, sizeof(ed->version) - 1);
+
   /* Also tell how much memory is needed for dumping register values */
   ed->regdump_len = sizeof(u16) * EMAC_REGS_N;
-  return 0;
 }
 
+/* Array defining all of the statistics we can return */
+/*
+ * ethtool has a status reporting feature where we can report any sort of
+ * status information we'd like. This is the list of strings used for that
+ * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
+ */
+static char labx_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
+  "txpkts", "txdropped", "txerr", "txfifoerr",
+  "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
+  "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
+};
+
+#define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethtool_gstrings_stats)
+
+/* Array defining the test modes we support */
+static const char labx_ethernet_gstrings_test[][ETH_GSTRING_LEN] = {
+  "Local_Loopback"
+};
+
+#define LABX_ETHERNET_TEST_LEN	ARRAY_SIZE(labx_ethernet_gstrings_test)
+
+static int labx_ethtool_get_sset_count(struct net_device *dev, int sset) {
+  switch (sset) {
+  case ETH_SS_TEST:
+    return LABX_ETHERNET_TEST_LEN;
+  case ETH_SS_STATS:
+    return LABX_ETHERNET_STATS_LEN;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
+
+static void
+labx_ethtool_get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+  switch (stringset) {
+  case ETH_SS_TEST:
+    memcpy(data, *labx_ethernet_gstrings_test,
+	   (LABX_ETHERNET_TEST_LEN * ETH_GSTRING_LEN));
+    break;
+  case ETH_SS_STATS:
+    memcpy(data, *labx_ethernet_gstrings_test,
+	   (LABX_ETHERNET_STATS_LEN * ETH_GSTRING_LEN));
+    break;
+  }
+}
+
+static void
+labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info, 
+		       u64 *test_results) {
+  struct net_local *lp = netdev_priv(dev);
+  u32 loopback_mode;
+
+  /* Clear the test results */
+  memset(test_results, 0, (sizeof(uint64_t) * LABX_ETHERNET_TEST_LEN));
+  printk("Setting PHY mode: %s\n",
+	 ((test_info->flags & ETH_TEST_FL_OFFLINE) ? "loopback" : "normal"));
+
+  /* We have co-opted this self-test ioctl for use as a means to put the
+   * PHY into local loopback mode, with "offline" meaning "local loopback"
+   * and "online" meaning "no loopback" (normal operation).
+   */
+  if(lp->phy_dev->drv->loopback) {
+    if(test_info->flags & ETH_TEST_FL_OFFLINE) {
+      loopback_mode = PHY_LOOPBACK_EXTERNAL;
+    } else loopback_mode = PHY_LOOPBACK_NONE;
+    lp->phy_dev->drv->loopback(lp->phy_dev, loopback_mode);
+  } else printk("%s PHY driver does not support loopback\n",
+		lp->phy_dev->drv->name);
+}
+
+/* ethtool operations structure */
+static const struct ethtool_ops labx_ethtool_ops = {
+  .get_settings   = labx_ethtool_get_settings,
+  .set_settings   = labx_ethtool_set_settings,
+  .get_drvinfo    = labx_ethtool_get_drvinfo,
+  .get_regs       = labx_ethtool_get_regs,
+  .self_test      = labx_ethtool_self_test,
+  .get_sset_count = labx_ethtool_get_sset_count,
+  .get_strings    = labx_ethtool_get_strings,
+#if 0
+  .get_link = ethtool_op_get_link,
+  .nway_reset = labx_ethtool_nwayreset,
+  .get_msglevel = labx_ethtool_getmsglevel,
+  .set_msglevel = labx_ethtool_setmsglevel,
+  .get_regs_len = labx_ethtool_getregslen,
+  .get_regs = labx_ethtool_getregs,
+  .get_eeprom_len = labx_ethtool_get_eeprom_len,
+  .get_eeprom = labx_ethtool_get_eeprom,
+  .set_eeprom = labx_ethtool_set_eeprom,
+#endif
+};
+
+/* DEPRECATED ethtool ioctl() */
+#if 0
 static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 {
   struct net_local *lp = netdev_priv(dev);
@@ -1248,7 +1343,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     return -EFAULT;
   switch (ecmd.cmd) {
   case ETHTOOL_GSET:	/* Get setting. No command option needed w/ ethtool */
-    ret = xenet_ethtool_get_settings(dev, &ecmd);
+    ret = labx_ethtool_get_settings(dev, &ecmd);
     if (ret < 0)
       return -EIO;
     if (copy_to_user(rq->ifr_data, &ecmd, sizeof(ecmd)))
@@ -1256,10 +1351,10 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     ret = 0;
     break;
   case ETHTOOL_SSET:	/* Change setting. Use "-s" command option w/ ethtool */
-    ret = xenet_ethtool_set_settings(dev, &ecmd);
+    ret = labx_ethtool_set_settings(dev, &ecmd);
     break;
   case ETHTOOL_GPAUSEPARAM:	/* Get pause parameter information. Use "-a" w/ ethtool */
-    ret = xenet_ethtool_get_settings(dev, &ecmd);
+    ret = labx_ethtool_get_settings(dev, &ecmd);
     if (ret < 0)
       return ret;
     epp.cmd = ecmd.cmd;
@@ -1379,7 +1474,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
 
   case ETHTOOL_GDRVINFO:	/* Get driver information. Use "-i" w/ ethtool */
     edrv.cmd = edrv.cmd;
-    ret = xenet_ethtool_get_drvinfo(dev, &edrv);
+    ret = labx_ethtool_get_drvinfo(dev, &edrv);
     if (ret < 0) {
       return -EIO;
     }
@@ -1392,7 +1487,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     break;
   case ETHTOOL_GREGS:	/* Get register values. Use "-d" with ethtool */
     regs.hd.cmd = edrv.cmd;
-    xenet_ethtool_get_regs(dev, &(regs.hd), &ret);
+    labx_ethtool_get_regs(dev, &(regs.hd), &ret);
     if (ret < 0) {
       return ret;
     }
@@ -1420,7 +1515,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     switch (gstrings.string_set) {
     case ETH_SS_STATS:
       gstrings.len = XENET_STATS_LEN;
-      strings = *xenet_ethtool_gstrings_stats;
+      strings = *labx_ethtool_gstrings_stats;
       break;
     default:
       return -EOPNOTSUPP;
@@ -1479,6 +1574,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
   }
   return ret;
 }
+#endif /* DEPRECATED ethtool ioctl() */
 
 static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
@@ -1488,9 +1584,6 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
   struct mii_ioctl_data *data = (struct mii_ioctl_data *) &rq->ifr_data;
 
   switch (cmd) {
-  case SIOCETHTOOL:
-    return xenet_do_ethtool_ioctl(dev, rq);
-
   case SIOCGMIIPHY:	/* Get address of GMII PHY in use. */
   case SIOCGMIIREG:	/* Read GMII PHY register. */
   case SIOCSMIIREG:	/* Write GMII PHY register. */
@@ -1597,6 +1690,7 @@ static int xtenet_setup(struct device *dev,
   struct net_local *lp = NULL;
 
   int rc = 0;
+  u32 address_size;
 
   /* Create an ethernet device instance */
   ndev = alloc_etherdev(sizeof(struct net_local));
@@ -1629,8 +1723,15 @@ static int xtenet_setup(struct device *dev,
   Temac_Config.PhyType = pdata->phy_type;
   Temac_Config.PhyAddr = pdata->phy_addr;
 
+  /* Request the memory range for the device */
+  address_size = (r_mem->end - r_mem->start + 1);
+  if(request_mem_region(r_mem->start, address_size, "labx-ethernet") == NULL) {
+    rc = -ENOMEM;
+    goto error;
+  }
+
   /* Get the virtual base address for the device */
-  virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
+  virt_baddr = (u32) ioremap_nocache(r_mem->start, address_size);
   if (0 == virt_baddr) {
     dev_err(dev, "%s: Could not allocate iomem.\n", ndev->name);
     rc = -EIO;
@@ -1693,6 +1794,7 @@ static int xtenet_setup(struct device *dev,
   ndev->do_ioctl = xenet_ioctl;
   ndev->tx_timeout = xenet_tx_timeout;
   ndev->watchdog_timeo = TX_TIMEOUT;
+  ndev->ethtool_ops = &labx_ethtool_ops;
 
   /* init the stats */
   lp->max_frags_in_a_packet = 0;
@@ -1728,9 +1830,9 @@ static int xtenet_setup(struct device *dev,
   }
   init_waitqueue_head(&lp->Emac.PhyWait);
   lp->Emac.MdioState = MDIO_STATE_READY;
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-  XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
+  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 

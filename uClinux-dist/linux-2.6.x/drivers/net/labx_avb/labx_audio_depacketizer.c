@@ -404,7 +404,7 @@ static void load_unified_matcher(struct audio_depacketizer *depacketizer,
      * word and wait for the configuration to occur.  Be sure to flag the last
      * word to automatically re-enable the match unit(s) as the last word completes.
      */
-      if(lutIndex == 0) set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
+      if(wordIndex == 0) set_matcher_loading_mode(depacketizer, LOADING_LAST_WORD);
       XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_CONFIG_DATA_REG), configWord);
       wait_match_config(depacketizer);
   }

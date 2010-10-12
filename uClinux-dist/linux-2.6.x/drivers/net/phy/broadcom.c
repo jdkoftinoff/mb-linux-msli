@@ -18,6 +18,7 @@
 #include <linux/phy.h>
 
 #define PHY_ID_BCM50610		0x0143bd60
+#define PHY_ID_BCM54610		0x0143bd63
 
 #define MII_BCM54XX_ECR		0x10	/* BCM54xx extended control register */
 #define MII_BCM54XX_ECR_IM	0x1000	/* Interrupt mask */
@@ -435,6 +436,40 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 	return ret;
 }
 
+/* MII_CTRL1000 register bits */
+#define BCM54610_MST_SLV_AUTO    (0x0000)
+#define BCM54610_MST_SLV_MANUAL  (0x1000)
+#define BCM54610_MANUAL_MASTER   (0x0800)
+#define BCM54610_MANUAL_SLAVE    (0x0000)
+
+/* Loopback register bits */
+#define BCM54610_LBR_EXT_LOOPBACK    (0x8000)
+#define BCM54610_LBR_TX_TEST_MODE    (0x0000)
+#define BCM54610_LBR_TX_NORMAL_MODE  (0x0400)
+
+static void bcm54610_loopback(struct phy_device *phydev, u32 mode) {
+  /* Only external loopback mode with a loopback plug is supported */
+  switch(mode) {
+  case PHY_LOOPBACK_EXTERNAL:
+    phy_write(phydev, MII_CTRL1000, 
+	      (BCM54610_MST_SLV_MANUAL | BCM54610_MANUAL_MASTER));
+    phy_write(phydev, MII_BMCR, (BMCR_FULLDPLX | BMCR_SPEED1000));
+    phy_write(phydev, MII_LBRERROR, 
+	      (BCM54610_LBR_EXT_LOOPBACK | BCM54610_LBR_TX_NORMAL_MODE));
+    phydev->autoneg = AUTONEG_DISABLE;
+    printk("BCM54610 loopback configured; insert loopback jumper\n");
+    break;
+
+  default:
+    phy_write(phydev, MII_LBRERROR, BCM54610_LBR_TX_NORMAL_MODE);
+    phy_write(phydev, MII_BMCR, (BMCR_ANENABLE | BMCR_FULLDPLX | BMCR_SPEED1000));
+    phy_write(phydev, MII_CTRL1000, 
+	      (ADVERTISE_1000FULL | BCM54610_MST_SLV_AUTO));
+    phydev->autoneg = AUTONEG_ENABLE;
+    printk("BCM54610 loopback disabled; remove loopback jumper\n");
+  }
+}
+
 static struct phy_driver bcm5411_driver = {
 	.phy_id		= 0x00206070,
 	.phy_id_mask	= 0xfffffff0,
@@ -527,7 +562,7 @@ static struct phy_driver bcm5482_driver = {
 
 static struct phy_driver bcm50610_driver = {
 	.phy_id		= PHY_ID_BCM50610,
-	.phy_id_mask	= 0xfffffff0,
+	.phy_id_mask	= 0xffffffff,
 	.name		= "Broadcom BCM50610",
 	.features	= PHY_GBIT_FEATURES |
 			  SUPPORTED_Pause | SUPPORTED_Asym_Pause,
@@ -537,6 +572,22 @@ static struct phy_driver bcm50610_driver = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm54xx_ack_interrupt,
 	.config_intr	= bcm54xx_config_intr,
+	.driver 	= { .owner = THIS_MODULE },
+};
+
+static struct phy_driver bcm54610_driver = {
+	.phy_id		= PHY_ID_BCM54610,
+	.phy_id_mask	= 0xffffffff,
+	.name		= "Broadcom BCM54610",
+	.features	= PHY_GBIT_FEATURES |
+			  SUPPORTED_Pause | SUPPORTED_Asym_Pause,
+	.flags		= PHY_HAS_MAGICANEG | PHY_HAS_INTERRUPT,
+	.config_init	= bcm54xx_config_init,
+	.config_aneg	= genphy_config_aneg,
+	.read_status	= genphy_read_status,
+	.ack_interrupt	= bcm54xx_ack_interrupt,
+	.config_intr	= bcm54xx_config_intr,
+	.loopback       = bcm54610_loopback,
 	.driver 	= { .owner = THIS_MODULE },
 };
 
@@ -580,12 +631,17 @@ static int __init broadcom_init(void)
 	ret = phy_driver_register(&bcm50610_driver);
 	if (ret)
 		goto out_50610;
+	ret = phy_driver_register(&bcm54610_driver);
+	if (ret)
+		goto out_54610;
 	ret = phy_driver_register(&bcm57780_driver);
 	if (ret)
 		goto out_57780;
 	return ret;
 
 out_57780:
+	phy_driver_unregister(&bcm54610_driver);
+out_54610:
 	phy_driver_unregister(&bcm50610_driver);
 out_50610:
 	phy_driver_unregister(&bcm5482_driver);
@@ -606,6 +662,7 @@ out_5411:
 static void __exit broadcom_exit(void)
 {
 	phy_driver_unregister(&bcm57780_driver);
+	phy_driver_unregister(&bcm54610_driver);
 	phy_driver_unregister(&bcm50610_driver);
 	phy_driver_unregister(&bcm5482_driver);
 	phy_driver_unregister(&bcm5481_driver);

@@ -335,6 +335,12 @@ static int audio_packetizer_open(struct inode *inode, struct file *filp)
     packetizer->opened = true;
   }
 
+  /* Invoke the open() operation on the derived driver, if there is one */
+  if((packetizer->derivedFops != NULL) && 
+     (packetizer->derivedFops->open != NULL)) {
+    packetizer->derivedFops->open(inode, filp);
+  }
+
   spin_unlock_irqrestore(&packetizer->mutex, flags);
   preempt_enable();
   
@@ -349,6 +355,13 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
   preempt_disable();
   spin_lock_irqsave(&packetizer->mutex, flags);
   packetizer->opened = false;
+
+  /* Invoke the release() operation on the derived driver, if there is one */
+  if((packetizer->derivedFops != NULL) && 
+     (packetizer->derivedFops->release != NULL)) {
+    packetizer->derivedFops->release(inode, filp);
+  }
+
   spin_unlock_irqrestore(&packetizer->mutex, flags);
   preempt_enable();
   return(0);
@@ -497,7 +510,13 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     break;
 
   default:
-    return(-EINVAL);
+    /* We don't recognize this command; give our derived driver's ioctl()
+     * a crack at it, if one exists.
+     */
+    if((packetizer->derivedFops != NULL) && 
+       (packetizer->derivedFops->ioctl != NULL)) {
+      returnValue = packetizer->derivedFops->ioctl(inode, filp, command, arg);
+    } else returnValue = -EINVAL;
   }
 
   /* Return an error code appropriate to the command */
@@ -514,11 +533,22 @@ static struct file_operations audio_packetizer_fops = {
 
 /* Function containing the "meat" of the probe mechanism - this is used by
  * the OpenFirmware probe as well as the standard platform device mechanism.
+ * This is exported to allow polymorphic drivers to invoke it.
+ * @param name - Name of the instance
+ * @param pdev - Platform device structure
+ * @param addressRange - Resource describing the hardware's I/O range
+ * @param irq          - Resource describing the hardware's IRQ
+ * @param derivedFops  - File operations to delegate to, NULL if unused
+ * @param derivedData  - Pointer for derived driver to make use of
+ * @param newInstance  - Pointer to the new driver instance, NULL if unused
  */
-static int audio_packetizer_probe(const char *name, 
-                                  struct platform_device *pdev,
-                                  struct resource *addressRange,
-                                  struct resource *irq) {
+int audio_packetizer_probe(const char *name, 
+			   struct platform_device *pdev,
+			   struct resource *addressRange,
+			   struct resource *irq,
+			   struct file_operations *derivedFops,
+			   void *derivedData,
+			   struct audio_packetizer **newInstance) {
   struct audio_packetizer *packetizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -635,7 +665,12 @@ static int audio_packetizer_probe(const char *name,
     XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), SYNC_IRQ);
   }
 
-  /* Return success */
+  /* Retain any derived file operations & data to dispatch to */
+  packetizer->derivedFops = derivedFops;
+  packetizer->derivedData = derivedData;
+
+  /* Return success, setting the return pointer if valid */
+  if(newInstance != NULL) *newInstance = packetizer;
   return(0);
 
  unmap:
@@ -676,7 +711,7 @@ static int __devinit audio_packetizer_of_probe(struct of_device *ofdev, const st
   }
 
   /* Dispatch to the generic function */
-  return(audio_packetizer_probe(name, pdev, addressRange, irq));
+  return(audio_packetizer_probe(name, pdev, addressRange, irq, NULL, NULL, NULL));
 }
 
 static int __devexit audio_packetizer_of_remove(struct of_device *dev)
@@ -687,18 +722,16 @@ static int __devexit audio_packetizer_of_remove(struct of_device *dev)
 }
 
 
-/* An advanced use of the Lab X Packetizer is to embed the core logic
- * into a custom peripheral, incorporating audio interface & other
- * additional functionality into the core.
+/* Directly compatible with "pure" Lab X Audio Packetizer peripherals.
  *
- * For the moment, this will call out these other peripherals, which
- * is an improper dependency inversion; down the road, they will have
- * their own drivers which register with this one, and then layer on
- * additional ioctl()s through a delegation mechanism.
+ * An advanced use of the Lab X AVB Audio_Packetizer is to incorporate
+ * it into a custom peripheral, incorporating audio interface & other
+ * additional functionality into the core.  In this case, a custom
+ * driver directly matches the instance, and registers character device
+ * hooks with this driver.
  */
 static struct of_device_id packetizer_of_match[] = {
   { .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
-  { .compatible = "xlnx,labrinth-avb-packetizer-1.00.a", },
   { /* end of list */ },
 };
 
@@ -733,7 +766,17 @@ static int audio_packetizer_platform_probe(struct platform_device *pdev) {
   irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
   /* Dispatch to the generic function */
-  return(audio_packetizer_probe(pdev->name, pdev, addressRange, irq));
+  return(audio_packetizer_probe(pdev->name, pdev, addressRange, irq, NULL, NULL, NULL));
+}
+
+/* This is exported to allow polymorphic drivers to invoke it. */
+int audio_packetizer_remove(struct audio_packetizer *packetizer) {
+  cdev_del(&packetizer->cdev);
+  reset_packetizer(packetizer);
+  iounmap(packetizer->virtualAddress);
+  release_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize);
+  kfree(packetizer);
+  return(0);
 }
 
 static int audio_packetizer_platform_remove(struct platform_device *pdev) {
@@ -742,12 +785,7 @@ static int audio_packetizer_platform_remove(struct platform_device *pdev) {
   /* Get a handle to the packetizer and begin shutting it down */
   packetizer = platform_get_drvdata(pdev);
   if(!packetizer) return(-1);
-  cdev_del(&packetizer->cdev);
-  reset_packetizer(packetizer);
-  iounmap(packetizer->virtualAddress);
-  release_mem_region(packetizer->physicalAddress, packetizer->addressRangeSize);
-  kfree(packetizer);
-  return(0);
+  return(audio_packetizer_remove(packetizer));
 }
 
 /* Platform device driver structure */

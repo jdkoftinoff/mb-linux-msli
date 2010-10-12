@@ -91,7 +91,7 @@ typedef struct {
 
 /* I/O control commands and structures specific to the packetizer */
 #define IOC_LOAD_PACKET_TEMPLATE     _IOW('d', 0x10, ConfigWords)
-#define IOC_COPY_PACKET_TEMPLATE     _IOW('d', 0x11, ConfigWords)
+#define IOC_COPY_PACKET_TEMPLATE     _IOWR('d', 0x11, ConfigWords)
 #define IOC_SET_START_VECTOR         _IOW('d', 0x12, uint32_t)
 
 typedef struct {
