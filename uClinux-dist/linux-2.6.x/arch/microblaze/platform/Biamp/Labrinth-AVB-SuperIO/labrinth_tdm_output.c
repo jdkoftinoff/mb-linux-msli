@@ -65,6 +65,11 @@
 #define TDM_ERROR_PREDICT_REG  (0x002)
 #define TDM_ERROR_ACTUAL_REG   (0x003)
 
+#define TDM_IRQ_MASK_REG       (0x004)
+#define TDM_IRQ_FLAGS_REG      (0x005)
+#  define DMA_ERROR_IRQ       (0x001)
+#  define ANALYSIS_ERROR_IRQ  (0x002)
+
 /* Locates a register within the TDM demultiplexer logic, using the
  * hardware-configured region shift detected by the audio packetizer
  * driver.
@@ -76,10 +81,12 @@
 
 /* Configures the psuedorandom analyzer */
 static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
-			       AnalyzerConfig *analyzerConfig) {
+                               AnalyzerConfig *analyzerConfig) {
   uint32_t controlRegister;
+  uint32_t irqMask;
 
   controlRegister = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG));
+  irqMask = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG));
   if(analyzerConfig->enable == LFSR_ANALYZER_ENABLE) {
     /* Enable the analyzer on the appropriate channel */
     controlRegister &= ~(ANALYZER_LANE_MASK | ANALYZER_SLOT_MASK);
@@ -87,15 +94,21 @@ static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
 			ANALYZER_LANE_MASK);
     controlRegister |= (analyzerConfig->sportChannel & ANALYZER_SLOT_MASK);
     controlRegister |= ANALYZER_ENABLE;
+
+    /* Enable the analysis error interrupt as a "one-shot" */
+    irqMask |= ANALYSIS_ERROR_IRQ;
+    XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG), ANALYSIS_ERROR_IRQ);
   } else {
-    /* Just disable the analyzer */
+    /* Just disable the analyzer and its IRQ */
+    irqMask &= ~ANALYSIS_ERROR_IRQ;
     controlRegister &= ~ANALYZER_ENABLE;
   }
+  XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG), irqMask);
   XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG), controlRegister);
 }
 
 static void get_analyzer_results(struct labrinth_tdm_output *tdmOutput,
-				 AnalyzerResults *analyzerResults) {
+                                 AnalyzerResults *analyzerResults) {
   /* Fetch the most recent snapshot of analysis results */
   analyzerResults->errorCount = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_COUNT_REG));
   analyzerResults->predictedSample = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_PREDICT_REG));
@@ -128,7 +141,7 @@ static int labrinth_tdm_open(struct inode *inode, struct file *filp)
 
 /* I/O control operations for the driver */
 static int labrinth_tdm_ioctl(struct inode *inode, struct file *filp,
-			      unsigned int command, unsigned long arg) {
+                              unsigned int command, unsigned long arg) {
   int returnValue = 0;
   struct labx_local_audio_pdev *labxLocalAudio;
   struct labrinth_tdm_output *tdmOutput;
@@ -177,19 +190,53 @@ static struct file_operations labrinth_tdm_fops = {
   .owner   = THIS_MODULE,
 };
 
+/* Interrupt service routine for the driver */
+static irqreturn_t labrinth_tdm_interrupt(int irq, void *dev_id) {
+  struct labrinth_tdm_output *tdmOutput = (struct labrinth_tdm_output*) dev_id;
+  uint32_t maskedFlags;
+  uint32_t irqMask;
+
+  /* Read the interrupt flags and immediately clear them */
+  maskedFlags = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG));
+  irqMask = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG));
+  maskedFlags &= irqMask;
+  XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG), maskedFlags);
+
+  /* Detect the psuedorandom analysis error IRQ */
+  if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
+    /* TEMPORARY - Just announce this and treat it as a one-shot.
+     *             Ultimately this should be communicated via generic Netlink.
+     */
+    irqMask &= ~ANALYSIS_ERROR_IRQ;
+    XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG), irqMask);
+    printk("%s: Analysis error!\n", tdmOutput->labxLocalAudio->name);
+  }
+
+  /* Detect the psuedorandom analysis error IRQ */
+  if((maskedFlags & DMA_ERROR_IRQ) != 0) {
+    /* TEMPORARY - Just announce this and treat it as a one-shot.
+     *             Ultimately this should be communicated via generic Netlink.
+     */
+    irqMask &= ~DMA_ERROR_IRQ;
+    XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG), irqMask);
+    printk("%s: DMA error!\n", tdmOutput->labxLocalAudio->name);
+  }
+
+  return(IRQ_HANDLED);
+}
+
 /* Function containing the "meat" of the probe mechanism - this is used by
  * the OpenFirmware probe as well as the standard platform device mechanism.
  * This is exported to allow polymorphic drivers to invoke it.
  * @param name - Name of the instance
  * @param pdev - Platform device structure
- * @param addressRange - Resource describing the hardware's I/O range
- * @param derivedFops  - File operations to delegate to, NULL if unused
- * @param derivedData  - Pointer for derived driver to make use of
- * @param newInstance  - Pointer to the new driver instance, NULL if unused
+ * @param addressRange - Resource describing the hardware's I/O 
+ * @param irq          - Resource describing the hardware's interrupt
  */
 int labrinth_tdm_probe(const char *name, 
-		       struct platform_device *pdev,
-		       struct resource *addressRange) {
+                       struct platform_device *pdev,
+                       struct resource *addressRange,
+                       struct resource *irq) {
   struct labrinth_tdm_output *tdmOutput;
   int returnValue;
 
@@ -197,22 +244,38 @@ int labrinth_tdm_probe(const char *name,
   tdmOutput = (struct labrinth_tdm_output*) kmalloc(sizeof(struct labrinth_tdm_output), GFP_KERNEL);
   if(!tdmOutput) return(-ENOMEM);
 
-  /* Dispatch to the Lab X audio tdmOutput driver for most of the setup.
+  /* Dispatch to the Lab X local audio driver for most of the setup.
    * We pass it our file operations structure to be invoked polymorphically.
    */
-  returnValue = 
-    labx_local_audio_probe(name, pdev, addressRange,
-			   LABRINTH_TDM_NUM_CHANNELS,
-			   &labrinth_tdm_fops, tdmOutput,
-			   &tdmOutput->labxLocalAudio);
+  returnValue = labx_local_audio_probe(name, pdev, addressRange,
+                                       LABRINTH_TDM_NUM_CHANNELS,
+                                       &labrinth_tdm_fops, tdmOutput,
+                                       &tdmOutput->labxLocalAudio);
   if(returnValue != 0) goto free;
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Labrinth TDM Output at 0x%08X\n", name,
 	 (uint32_t)tdmOutput->labxLocalAudio->physicalAddress);
 
+  /* Retain the IRQ and register our handler */
+  if(irq == NULL) {
+    printk(KERN_ERR "%s: No IRQ supplied by platform!", name);
+    goto remove;
+  }
+  tdmOutput->irq = irq->start;
+  returnValue = request_irq(tdmOutput->irq, &labrinth_tdm_interrupt, 
+                            IRQF_DISABLED, name, tdmOutput);
+  if(returnValue) {
+    printk(KERN_ERR "%s : Could not allocate Labrinth TDM Output interrupt (%d).\n",
+           name, tdmOutput->irq);
+    goto remove;
+  }
+
   /* Return success */
   return(0);
+
+ remove:
+  labx_local_audio_remove(tdmOutput->labxLocalAudio);
 
  free:
   kfree(tdmOutput);
@@ -226,7 +289,9 @@ static int labrinth_tdm_platform_remove(struct platform_device *pdev);
 static int __devinit labrinth_tdm_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct = {};
+  struct resource r_irq_struct = {};
   struct resource *addressRange = &r_mem_struct;
+  struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
   const char *name = ofdev->node->name;
   int rc = 0;
@@ -234,12 +299,18 @@ static int __devinit labrinth_tdm_of_probe(struct of_device *ofdev, const struct
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
   if(rc) {
-    dev_warn(&ofdev->dev, "Invalid address\n");
+    printk(KERN_ERR "%s : No address found in device tree\n", name);
+    return(rc);
+  }
+
+  rc = of_irq_to_resource(ofdev->node, 0, irq);
+  if(rc == NO_IRQ) {
+    printk(KERN_ERR "%s : No IRQ found in device tree\n", name);
     return(rc);
   }
 
   /* Dispatch to the generic function */
-  return(labrinth_tdm_probe(name, pdev, addressRange));
+  return(labrinth_tdm_probe(name, pdev, addressRange, irq));
 }
 
 static int __devexit labrinth_tdm_of_remove(struct of_device *dev)
@@ -257,10 +328,10 @@ static struct of_device_id labrinth_tdm_of_match[] = {
 
 
 static struct of_platform_driver of_labrinth_tdm_driver = {
-  .name		= DRIVER_NAME,
-  .match_table	= labrinth_tdm_of_match,
-  .probe   	= labrinth_tdm_of_probe,
-  .remove       = __devexit_p(labrinth_tdm_of_remove),
+  .name        = DRIVER_NAME,
+  .match_table = labrinth_tdm_of_match,
+  .probe       = labrinth_tdm_of_probe,
+  .remove      = __devexit_p(labrinth_tdm_of_remove),
 };
 #endif
 
@@ -271,6 +342,7 @@ static struct of_platform_driver of_labrinth_tdm_driver = {
 /* Probe for registered devices */
 static int labrinth_tdm_platform_probe(struct platform_device *pdev) {
   struct resource *addressRange;
+  struct resource *irq;
 
   /* Obtain the resources for this instance */
   addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -278,9 +350,10 @@ static int labrinth_tdm_platform_probe(struct platform_device *pdev) {
     printk(KERN_ERR "%s: IO resource address not found.\n", pdev->name);
     return(-ENXIO);
   }
+  irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
   /* Dispatch to the generic function */
-  return(labrinth_tdm_probe(pdev->name, pdev, addressRange));
+  return(labrinth_tdm_probe(pdev->name, pdev, addressRange, irq));
 }
 
 static int labrinth_tdm_platform_remove(struct platform_device *pdev) {

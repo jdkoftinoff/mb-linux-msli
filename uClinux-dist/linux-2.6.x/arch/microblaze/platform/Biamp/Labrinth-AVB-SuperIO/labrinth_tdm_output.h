@@ -34,6 +34,9 @@
 struct labrinth_tdm_output {
   /* Pointer back to the platform device */
   struct labx_local_audio_pdev *labxLocalAudio;
+
+  /* Interrupt request number */
+  int32_t irq;
 };
 
 /* I/O control commands defined by the driver */

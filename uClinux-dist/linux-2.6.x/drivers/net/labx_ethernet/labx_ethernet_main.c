@@ -1704,8 +1704,8 @@ static int xtenet_setup(struct device *dev,
 
   /* Allocate the dev name early so we can use it in our messages */
   if (strchr(ndev->name, '%')) {
-    err = dev_alloc_name(ndev, ndev->name);
-    if (err < 0) goto error;
+    rc = dev_alloc_name(ndev, ndev->name);
+    if (rc < 0) goto error;
   }
 
   /* Initialize the private data used by XEmac_LookupConfig().
