@@ -58,4 +58,6 @@ typedef struct {
 
 #define IOC_GET_ANALYZER_RESULTS  _IOW('l', 0x02, AnalyzerResults)
 
+#define IOC_ARM_ERROR_IRQS        _IO('l', 0x03)
+
 #endif

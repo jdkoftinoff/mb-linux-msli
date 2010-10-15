@@ -172,6 +172,16 @@ static int labrinth_tdm_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_ARM_ERROR_IRQS:
+    {
+      /* Enable the DMA error interrupt as a "one-shot" */
+      uint32_t irqMask = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG));
+      irqMask |= DMA_ERROR_IRQ;
+      XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG), DMA_ERROR_IRQ);
+      XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG), irqMask);
+    }
+    break;
+
   default:
     /* We are only invoked from the parent driver if it doesn't recognize
      * an ioctl(); anything we don't recognize is invalid.
