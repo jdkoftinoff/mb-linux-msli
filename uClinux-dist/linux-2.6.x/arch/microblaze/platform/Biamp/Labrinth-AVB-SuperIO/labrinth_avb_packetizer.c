@@ -48,6 +48,7 @@
 /* Global control registers */
 #define TDM_CONTROL_REG       (0x000)
 #  define GENERATOR_ENABLE      (0x80000000)
+#  define GENERATOR_MUTE        (0x40000000)
 #  define GENERATOR_SLOT_MASK   (0x01F)
 #  define GENERATOR_LANE_MASK   (0x1E0)
 #  define GENERATOR_LANE_SHIFT      (5)
@@ -74,6 +75,13 @@ static void configure_generator(struct labrinth_packetizer *packetizer,
 			GENERATOR_LANE_MASK);
     controlRegister |= (generatorConfig->sportChannel & GENERATOR_SLOT_MASK);
     controlRegister |= GENERATOR_ENABLE;
+
+    /* Test to see whether we are muting the channel or applying the
+     * psuedo-random sequence to it
+     */
+    if(generatorConfig->signalControl == SIGNAL_PSUEDORANDOM) {
+      controlRegister &= ~GENERATOR_MUTE;
+    } else controlRegister |= GENERATOR_MUTE;
   } else {
     /* Just disable the generator */
     controlRegister &= ~GENERATOR_ENABLE;

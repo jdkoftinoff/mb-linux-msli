@@ -39,8 +39,13 @@ struct labrinth_packetizer {
 /* I/O control commands defined by the driver */
 #define LFSR_GENERATOR_DISABLE  (0x00)
 #define LFSR_GENERATOR_ENABLE   (0x01)
+
+#define SIGNAL_PSUEDORANDOM  (0x00)
+#define SIGNAL_MUTE          (0x01)
+
 typedef struct {
   uint32_t enable;
+  uint32_t signalControl;
   uint32_t sportPort;
   uint32_t sportChannel;
 } GeneratorConfig;
