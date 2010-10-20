@@ -49,6 +49,7 @@
 #define TDM_CONTROL_REG       (0x000)
 #  define GENERATOR_ENABLE      (0x80000000)
 #  define GENERATOR_MUTE        (0x40000000)
+#  define GENERATOR_DC_PATTERN  (0x20000000)
 #  define GENERATOR_SLOT_MASK   (0x01F)
 #  define GENERATOR_LANE_MASK   (0x1E0)
 #  define GENERATOR_LANE_SHIFT      (5)
@@ -58,13 +59,13 @@
  * driver.
  */
 #define TDM_MUX_RANGE  (0x01 << PACKETIZER_RANGE_BITS)
-#define TDM_MUX_ADDRESS(device, offset)                     \
-  ((uintptr_t)device->labxPacketizer->virtualAddress |      \
+#define TDM_MUX_ADDRESS(device, offset)                                 \
+  ((uintptr_t)device->labxPacketizer->virtualAddress |                  \
    (TDM_MUX_RANGE << device->labxPacketizer->regionShift) | (offset << 2))
 
 /* Configures the psuedorandom generator */
 static void configure_generator(struct labrinth_packetizer *packetizer,
-				GeneratorConfig *generatorConfig) {
+                                GeneratorConfig *generatorConfig) {
   uint32_t controlRegister;
 
   controlRegister = XIo_In32(TDM_MUX_ADDRESS(packetizer, TDM_CONTROL_REG));
@@ -72,19 +73,30 @@ static void configure_generator(struct labrinth_packetizer *packetizer,
     /* Enable the generator on the appropriate channel */
     controlRegister &= ~(GENERATOR_LANE_MASK | GENERATOR_SLOT_MASK);
     controlRegister |= ((generatorConfig->sportPort << GENERATOR_LANE_SHIFT) &
-			GENERATOR_LANE_MASK);
+                        GENERATOR_LANE_MASK);
     controlRegister |= (generatorConfig->sportChannel & GENERATOR_SLOT_MASK);
     controlRegister |= GENERATOR_ENABLE;
 
     /* Test to see whether we are muting the channel or applying the
      * psuedo-random sequence to it
      */
-    if(generatorConfig->signalControl == SIGNAL_PSUEDORANDOM) {
+    switch(generatorConfig->signalControl) {
+    case SIGNAL_PSUEDORANDOM:
+      controlRegister &= ~(GENERATOR_MUTE | GENERATOR_DC_PATTERN);
+      break;
+
+    case SIGNAL_MUTE:
+      controlRegister &= ~GENERATOR_DC_PATTERN;
+      controlRegister |= GENERATOR_MUTE;
+      break;
+
+    default:
       controlRegister &= ~GENERATOR_MUTE;
-    } else controlRegister |= GENERATOR_MUTE;
+      controlRegister |= GENERATOR_DC_PATTERN;
+    }
   } else {
     /* Just disable the generator */
-    controlRegister &= ~GENERATOR_ENABLE;
+    controlRegister &= ~(GENERATOR_ENABLE | GENERATOR_MUTE | GENERATOR_DC_PATTERN);
   }
   XIo_Out32(TDM_MUX_ADDRESS(packetizer, TDM_CONTROL_REG), controlRegister);
 }
@@ -126,7 +138,7 @@ static int labrinth_packetizer_release(struct inode *inode, struct file *filp)
 
 /* I/O control operations for the driver */
 static int labrinth_packetizer_ioctl(struct inode *inode, struct file *filp,
-				     unsigned int command, unsigned long arg)
+                                     unsigned int command, unsigned long arg)
 {
   int returnValue = 0;
   struct audio_packetizer *labxPacketizer;
@@ -178,9 +190,9 @@ static struct file_operations labrinth_packetizer_fops = {
  * @param newInstance  - Pointer to the new driver instance, NULL if unused
  */
 int labrinth_packetizer_probe(const char *name, 
-			      struct platform_device *pdev,
-			      struct resource *addressRange,
-			      struct resource *irq) {
+                              struct platform_device *pdev,
+                              struct resource *addressRange,
+                              struct resource *irq) {
   struct labrinth_packetizer *packetizer;
   int returnValue;
 
@@ -193,13 +205,13 @@ int labrinth_packetizer_probe(const char *name,
    */
   returnValue = 
     audio_packetizer_probe(name, pdev, addressRange, irq,
-			   &labrinth_packetizer_fops, packetizer,
-			   &packetizer->labxPacketizer);
+                           &labrinth_packetizer_fops, packetizer,
+                           &packetizer->labxPacketizer);
   if(returnValue != 0) goto free;
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Labrinth packetizer at 0x%08X\n", name,
-	 (uint32_t)packetizer->labxPacketizer->physicalAddress);
+         (uint32_t)packetizer->labxPacketizer->physicalAddress);
 
   /* Return success */
   return(0);
