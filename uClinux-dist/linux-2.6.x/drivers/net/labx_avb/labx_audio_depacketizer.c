@@ -109,8 +109,8 @@ static int32_t await_synced_write(struct audio_depacketizer *depacketizer) {
     waitResult =
       wait_event_interruptible_timeout(depacketizer->syncedWriteQueue,
                                        ((XIo_In32(REGISTER_ADDRESS(depacketizer, SYNC_REG)) & 
-					 SYNC_PENDING) == 0),
-				       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
+                                         SYNC_PENDING) == 0),
+                                       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
 
     /* If the wait returns zero, then the timeout elapsed; if negative, a signal
      * interrupted the wait.
