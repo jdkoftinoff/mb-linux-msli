@@ -47,9 +47,7 @@ endif
 DEVICES =								      \
 	tty,c,5,0      console,c,5,1   mem,c,1,1     kmem,c,1,2    null,c,1,3 \
 									      \
-	ttyS0,c,4,64   ttyS1,c,4,65    ttyS2,c,4,66  ttyS3,c,4,67	      \
-	ttyUL0,c,204,187	ttyUL1,c,204,188			      \
-	ttyUL2,c,204,189	ttyUL3,c,204,190			      \
+	ttyS0,c,204,187	ttyUL0,c,204,187				      \
 	rtc,c,10,135   nvram,c,10,144					      \
 									      \
 	zero,c,1,5     random,c,1,8    urandom,c,1,9			      \
@@ -268,6 +266,7 @@ else
 	$(ROMFSINST) $(COMMON)/etc/inittab.sh /etc/inittab
 endif
 endif
+	$(ROMFSINST) -s /mnt/config/avb_audio_start /etc/rc.d/S99avb_audio_start
 
 
 ############################################
