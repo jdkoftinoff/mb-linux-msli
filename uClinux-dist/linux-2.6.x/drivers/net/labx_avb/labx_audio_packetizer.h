@@ -70,7 +70,10 @@
 #define SEND_SLOPE_REG    (0x006)
 #define IDLE_SLOPE_REG    (0x007)
 
-#define CAPABILITIES_REG  (0x0FE)
+#define CAPABILITIES_REG_A  (0x0FD)
+#  define MAX_STREAM_SLOTS_MASK  (0x7F)
+
+#define CAPABILITIES_REG_B  (0x0FE)
 #  define SHAPER_FRACT_BITS_SHIFT     (24)
 #  define SHAPER_FRACT_BITS_MASK      (0x07F)
 #  define CLOCK_DOMAINS_SHIFT         (16)

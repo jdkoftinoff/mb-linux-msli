@@ -39,10 +39,16 @@
  * This driver will work with revision 1.1 only.
  */
 #define DRIVER_NAME "labx_audio_packetizer"
-#define HARDWARE_MIN_VERSION_MAJOR  1
-#define HARDWARE_MIN_VERSION_MINOR  1
-#define HARDWARE_MAX_VERSION_MAJOR  1
-#define HARDWARE_MAX_VERSION_MINOR  1
+#define DRIVER_VERSION_MIN  0x11
+#define DRIVER_VERSION_MAX  0x12
+
+/* "Breakpoint" revision numbers for certain features */
+#define EXTENDED_CAPS_VERSION_MIN  0x12
+
+/* Instances before the extended capabilities version typically had
+ * 32 stream slots maximum
+ */
+#define ASSUMED_MAX_STREAM_SLOTS  32
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 250
@@ -554,6 +560,7 @@ int audio_packetizer_probe(const char *name,
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t versionCompare;
   int returnValue;
 
   /* Create and populate a device structure */
@@ -600,7 +607,7 @@ int audio_packetizer_probe(const char *name,
    * many bits an address sub-range field gets shifted up.  Each instruction is
    * 32 bits, and therefore inherently eats two lower address bits.
    */
-  capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG));
+  capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG_B));
   packetizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
 
   /* Inspect and check the version to ensure it lies within the range of hardware
@@ -609,10 +616,9 @@ int audio_packetizer_probe(const char *name,
   versionWord = XIo_In32(REGISTER_ADDRESS(packetizer, REVISION_REG));
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if(((versionMajor < HARDWARE_MIN_VERSION_MAJOR) & 
-      (versionMinor < HARDWARE_MIN_VERSION_MINOR)) |
-     ((versionMajor > HARDWARE_MAX_VERSION_MAJOR) & 
-      (versionMinor > HARDWARE_MAX_VERSION_MINOR))) {
+  versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
+  if((versionCompare < DRIVER_VERSION_MIN) | 
+     (versionCompare > DRIVER_VERSION_MAX)) {
     printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
            packetizer->name, versionMajor, versionMinor, (uint32_t)packetizer->physicalAddress);
     returnValue = -ENXIO;
@@ -627,6 +633,16 @@ int audio_packetizer_probe(const char *name,
     (0x04 << ((capsWord >> TEMPLATE_ADDRESS_SHIFT) & TEMPLATE_ADDRESS_BITS_MASK));
   packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
   packetizer->capabilities.shaperFractionBits = ((capsWord >> SHAPER_FRACT_BITS_SHIFT) & SHAPER_FRACT_BITS_MASK);
+
+  /* Instances below a particular version lack the 'A' capabilities register */
+  if(versionCompare < EXTENDED_CAPS_VERSION_MIN) {
+    /* Use an assumed value for the maximum stream slots */
+    packetizer->capabilities.maxStreamSlots = ASSUMED_MAX_STREAM_SLOTS;
+  } else {
+    /* Fetch this capability from the 'A' capabilities register */
+    capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG_A));
+    packetizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
+  }
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X, ",
