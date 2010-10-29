@@ -380,6 +380,7 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t maxStreamSlots;
   uint32_t maxInstructions;
   uint32_t maxParameters;
   uint32_t maxClockDomains;
@@ -394,13 +395,8 @@ typedef struct {
 /* Type definitions and macros for depacketizer microcode */
 
 
-/* Parameter maxima
- * NOTE - The first constant is related to the DEPACKETIZER_MAX_STREAM_SLOTS
- *        constant within Audio_Depacketizer_Params.vhd.  
- *        Should the VHDL constant ever be changed, these must be revisited.
- */
-#define DEPACKETIZER_MAX_STREAM_SLOTS   (32)
-#define DEPACKETIZER_MAX_STREAMS       (128)
+/* Parameter maxima */
+#define DEPACKETIZER_MAX_STREAMS (128)
 
 /* Opcode definitions */
 #define DEPACKETIZER_OPCODE_NOP                (0x00)
