@@ -331,6 +331,7 @@ struct phy_device {
 /* Loopback modes */
 #define PHY_LOOPBACK_NONE      (0x00)
 #define PHY_LOOPBACK_EXTERNAL  (0x01)
+#define PHY_LOOPBACK_INTERNAL  (0x02)
 
 /* struct phy_driver: Driver structure for a particular PHY type
  *

@@ -1298,7 +1298,7 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
    */
   if(lp->phy_dev->drv->loopback) {
     if(test_info->flags & ETH_TEST_FL_OFFLINE) {
-      loopback_mode = PHY_LOOPBACK_EXTERNAL;
+      loopback_mode = PHY_LOOPBACK_INTERNAL;
     } else loopback_mode = PHY_LOOPBACK_NONE;
     lp->phy_dev->drv->loopback(lp->phy_dev, loopback_mode);
   } else printk("%s PHY driver does not support loopback\n",
