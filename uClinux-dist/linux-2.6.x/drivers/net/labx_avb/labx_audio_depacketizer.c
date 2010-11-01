@@ -214,11 +214,11 @@ static void select_matchers(struct audio_depacketizer *depacketizer,
     /* Select a single unit */
     selectionWord = ((matchUnit < 32) ? (0x01 << matchUnit) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), selectionWord);
-    selectionWord = (((matchUnit < 64) & (matchUnit > 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
+    selectionWord = (((matchUnit < 64) & (matchUnit >= 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), selectionWord);
-    selectionWord = (((matchUnit < 96) & (matchUnit > 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
+    selectionWord = (((matchUnit < 96) & (matchUnit >= 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), selectionWord);
-    selectionWord = ((matchUnit > 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
+    selectionWord = ((matchUnit >= 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), selectionWord);
     break;
 
@@ -454,8 +454,8 @@ static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
         break;
 
       case STREAM_MATCH_UNIFIED:
-	load_unified_matcher(depacketizer, matcherConfig->matchStreamId);
-	break;
+        load_unified_matcher(depacketizer, matcherConfig->matchStreamId);
+        break;
       
       default:
         /* Unrecognized architecture, do nothing */
