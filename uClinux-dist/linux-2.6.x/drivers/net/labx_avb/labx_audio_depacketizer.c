@@ -39,12 +39,16 @@
 /* Driver name and the revision of hardware expected (1.1 - 1.2) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x12
+#define DRIVER_VERSION_MAX  0x14
 
-/* Version of the hardware beyond which a unified architecture is
- * used for stream matching (1.2)
- */
+/* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
+#define EXTENDED_CAPS_VERSION_MIN  0x13
+
+/* Instances before the extended capabilities version typically had
+ * 32 stream slots maximum
+ */
+#define ASSUMED_MAX_STREAM_SLOTS  32
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 252
@@ -109,8 +113,8 @@ static int32_t await_synced_write(struct audio_depacketizer *depacketizer) {
     waitResult =
       wait_event_interruptible_timeout(depacketizer->syncedWriteQueue,
                                        ((XIo_In32(REGISTER_ADDRESS(depacketizer, SYNC_REG)) & 
-					 SYNC_PENDING) == 0),
-				       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
+                                         SYNC_PENDING) == 0),
+                                       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
 
     /* If the wait returns zero, then the timeout elapsed; if negative, a signal
      * interrupted the wait.
@@ -210,11 +214,11 @@ static void select_matchers(struct audio_depacketizer *depacketizer,
     /* Select a single unit */
     selectionWord = ((matchUnit < 32) ? (0x01 << matchUnit) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_0_REG), selectionWord);
-    selectionWord = (((matchUnit < 64) & (matchUnit > 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
+    selectionWord = (((matchUnit < 64) & (matchUnit >= 32)) ? (0x01 << (matchUnit - 32)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_1_REG), selectionWord);
-    selectionWord = (((matchUnit < 96) & (matchUnit > 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
+    selectionWord = (((matchUnit < 96) & (matchUnit >= 64)) ? (0x01 << (matchUnit - 64)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_2_REG), selectionWord);
-    selectionWord = ((matchUnit > 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
+    selectionWord = ((matchUnit >= 96) ? (0x01 << (matchUnit - 96)) : ID_SELECT_NONE);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, ID_SELECT_3_REG), selectionWord);
     break;
 
@@ -450,8 +454,8 @@ static int32_t configure_matcher(struct audio_depacketizer *depacketizer,
         break;
 
       case STREAM_MATCH_UNIFIED:
-	load_unified_matcher(depacketizer, matcherConfig->matchStreamId);
-	break;
+        load_unified_matcher(depacketizer, matcherConfig->matchStreamId);
+        break;
       
       default:
         /* Unrecognized architecture, do nothing */
@@ -879,7 +883,7 @@ static int audio_depacketizer_probe(const char *name,
    * many bits an address sub-range field gets shifted up.  Each instruction is
    * 32 bits, and therefore inherently eats two lower address bits.
    */
-  capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG));
+  capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG_B));
   depacketizer->regionShift = ((capsWord & CODE_ADDRESS_BITS_MASK) + 2);
 
   /* Inspect and check the version */
@@ -921,6 +925,16 @@ static int audio_depacketizer_probe(const char *name,
                                                          PARAM_ADDRESS_BITS_MASK));
   depacketizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
   depacketizer->capabilities.maxStreams      = ((capsWord >> MAX_STREAMS_SHIFT) & MAX_STREAMS_MASK);
+
+  /* Instances below a particular version lack the 'A' capabilities register */
+  if(versionCompare < EXTENDED_CAPS_VERSION_MIN) {
+    /* Use an assumed value for the maximum stream slots */
+    depacketizer->capabilities.maxStreamSlots = ASSUMED_MAX_STREAM_SLOTS;
+  } else {
+    /* Fetch this capability from the 'A' capabilities register */
+    capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG_A));
+    depacketizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
+  }
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X, ",

@@ -107,6 +107,7 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t maxStreamSlots;
   uint32_t maxInstructions;
   uint32_t maxTemplateBytes;
   uint32_t maxClockDomains;
@@ -167,17 +168,8 @@ typedef struct {
 #define PACKETIZER_PARAM_STACK_MASK  (0x00FFFFFF)
 #define PACKETIZER_PARAM_STACK_BITS  (24)
 
-/* NOTE - These constants are related to the PACKETIZER_MAX_SAMPLE_BYTES and 
- *        PACKETIZER_MAX_STREAM_SLOTS constants within Audio_Packetizer_Params.vhd.  
- *        Should the VHDL constants ever be changed, these must be revisited.
- */
-#define PACKETIZER_MAX_STREAM_SLOTS      (32)
-#define PACKETIZER_SAMPLE_SIZE_BITS      (3)
-#define PACKETIZER_SAMPLE_SIZE_MASK      (0x07)
-#define PACKETIZER_PACKET_SLOT_BITS      (5)
-#define PACKETIZER_DATA_BLOCK_SIZE_BITS  (PACKETIZER_SAMPLE_SIZE_BITS + PACKETIZER_PACKET_SLOT_BITS)
-#define PACKETIZER_DATA_BLOCK_SIZE_MASK  (0x0FF)
-#define PACKETIZER_CHANNEL_COUNT_SHIFT   (PACKETIZER_PARAM_STACK_BITS - PACKETIZER_PACKET_SLOT_BITS)
+#define PACKETIZER_SAMPLE_SIZE_BITS  (3)
+#define PACKETIZER_SAMPLE_SIZE_MASK  (0x07)
 
 /* Returns an instruction word containing a clock domain specifier
  * @param clockDomain - Zero-based clock domain the stream descriptor belongs to
@@ -267,15 +259,17 @@ typedef struct {
 #define PACKETIZER_INSERT_TIMESTAMP \
   ((uint32_t) (PACKETIZER_OPCODE_INSERT_TIMESTAMP << PACKETIZER_OPCODE_SHIFT))
 
-/* Returns a parameter word properly formatted with the paramters required by an upcoming
+/* Returns a parameter word properly formatted with the parameters required by an upcoming
  * INSERT_PAYLOAD opcode.  This may be used with the PUSH_PARAM opcode.
  * @param dataBlockSize - Size of each data block (bytes per sample * number of channels)
  * @param overheadBytes - Number of bytes of overhead preceding the audio data (e.g. CIP 
  *                        header)
+ * @param slotBits      - Number of bits for packet slot count
+ * @param blockSizeMask - Mask appropriate for the dataBlockSize value
  */
-#define PACKETIZER_PAYLOAD_SIZE_PARAMS(dataBlockSize, overheadBytes) \
-  ((uint32_t) ((overheadBytes << PACKETIZER_DATA_BLOCK_SIZE_BITS) | \
-               (dataBlockSize & PACKETIZER_DATA_BLOCK_SIZE_MASK)))
+#define PACKETIZER_PAYLOAD_SIZE_PARAMS(dataBlockSize, overheadBytes, slotBits, blockSizeMask) \
+  ((uint32_t) ((overheadBytes << (PACKETIZER_SAMPLE_SIZE_BITS + slotBits)) | \
+               (dataBlockSize & blockSizeMask)))
 
 /* Returns an INSERT_PAYLOAD_SIZE instruction, which implicitly makes use of the present
  * number of samples captured within the packet's clock domain.  The data block size and 
@@ -308,9 +302,10 @@ typedef struct {
  * instruction.
  * @param numChannels - Number of channels in the stream
  * @param mapAddress  - Address of the audio channel map to be encoded
+ * @param slotBits    - Number of bits for packet slot count
  */
-#define PACKETIZER_AUDIO_PARAMS(numChannels, mapAddress)               \
-  ((uint32_t) (((numChannels - 1) << PACKETIZER_CHANNEL_COUNT_SHIFT) | \
+#define PACKETIZER_AUDIO_PARAMS(numChannels, mapAddress, slotBits)               \
+  ((uint32_t) (((numChannels - 1) << (PACKETIZER_PARAM_STACK_BITS - slotBits)) | \
                mapAddress))
                                     
 /* Returns an AUDIO_SAMPLES instruction, which implicitly makes use of the present 
@@ -385,6 +380,7 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t maxStreamSlots;
   uint32_t maxInstructions;
   uint32_t maxParameters;
   uint32_t maxClockDomains;
@@ -399,13 +395,8 @@ typedef struct {
 /* Type definitions and macros for depacketizer microcode */
 
 
-/* Parameter maxima
- * NOTE - The first constant is related to the DEPACKETIZER_MAX_STREAM_SLOTS
- *        constant within Audio_Depacketizer_Params.vhd.  
- *        Should the VHDL constant ever be changed, these must be revisited.
- */
-#define DEPACKETIZER_MAX_STREAM_SLOTS   (32)
-#define DEPACKETIZER_MAX_STREAMS       (128)
+/* Parameter maxima */
+#define DEPACKETIZER_MAX_STREAMS (128)
 
 /* Opcode definitions */
 #define DEPACKETIZER_OPCODE_NOP                (0x00)

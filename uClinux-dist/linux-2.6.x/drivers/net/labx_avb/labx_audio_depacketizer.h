@@ -85,7 +85,10 @@
 #define STREAM_STATUS_2_REG  (0x00E)
 #define STREAM_STATUS_3_REG  (0x00F)
 
-#define CAPABILITIES_REG     (0x0FE)
+#define CAPABILITIES_REG_A   (0x0FD)
+#  define MAX_STREAM_SLOTS_MASK  (0x7F)
+
+#define CAPABILITIES_REG_B   (0x0FE)
 #  define MATCH_ARCH_SHIFT          24
 #  define MATCH_ARCH_MASK           0x0FF
 #  define MAX_STREAMS_SHIFT         16

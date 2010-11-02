@@ -457,7 +457,14 @@ static void bcm54610_loopback(struct phy_device *phydev, u32 mode) {
     phy_write(phydev, MII_LBRERROR, 
 	      (BCM54610_LBR_EXT_LOOPBACK | BCM54610_LBR_TX_NORMAL_MODE));
     phydev->autoneg = AUTONEG_DISABLE;
-    printk("BCM54610 loopback configured; insert loopback jumper\n");
+    printk("BCM54610 external loopback configured; insert loopback jumper\n");
+    break;
+
+  case PHY_LOOPBACK_INTERNAL:
+    phy_write(phydev, MII_BMCR, 
+              (BMCR_LOOPBACK | BMCR_FULLDPLX | BMCR_SPEED1000));
+    phydev->autoneg = AUTONEG_DISABLE;
+    printk("BCM54610 internal loopback configured\n");
     break;
 
   default:
