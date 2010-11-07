@@ -43,6 +43,7 @@ struct labrinth_packetizer {
 #define SIGNAL_PSUEDORANDOM  (0x00)
 #define SIGNAL_MUTE          (0x01)
 #define SIGNAL_DC_PATTERN    (0x02)
+#define SIGNAL_RAMP          (0x03)
 
 typedef struct {
   uint32_t enable;

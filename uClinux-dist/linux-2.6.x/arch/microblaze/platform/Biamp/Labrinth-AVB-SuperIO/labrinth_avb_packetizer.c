@@ -50,6 +50,7 @@
 #  define GENERATOR_ENABLE      (0x80000000)
 #  define GENERATOR_MUTE        (0x40000000)
 #  define GENERATOR_DC_PATTERN  (0x20000000)
+#  define GENERATOR_RAMP        (0x10000000)
 #  define GENERATOR_SLOT_MASK   (0x01F)
 #  define GENERATOR_LANE_MASK   (0x1E0)
 #  define GENERATOR_LANE_SHIFT      (5)
@@ -82,21 +83,28 @@ static void configure_generator(struct labrinth_packetizer *packetizer,
      */
     switch(generatorConfig->signalControl) {
     case SIGNAL_PSUEDORANDOM:
+      controlRegister &= ~(GENERATOR_MUTE | GENERATOR_DC_PATTERN | GENERATOR_RAMP);
+      break;
+
+    case SIGNAL_RAMP:
       controlRegister &= ~(GENERATOR_MUTE | GENERATOR_DC_PATTERN);
+      controlRegister |= GENERATOR_RAMP;
       break;
 
     case SIGNAL_MUTE:
-      controlRegister &= ~GENERATOR_DC_PATTERN;
+      controlRegister &= ~(GENERATOR_DC_PATTERN | GENERATOR_RAMP);
       controlRegister |= GENERATOR_MUTE;
       break;
 
     default:
-      controlRegister &= ~GENERATOR_MUTE;
+      /* DC pattern */
+      controlRegister &= ~(GENERATOR_MUTE | GENERATOR_RAMP);
       controlRegister |= GENERATOR_DC_PATTERN;
     }
   } else {
     /* Just disable the generator */
-    controlRegister &= ~(GENERATOR_ENABLE | GENERATOR_MUTE | GENERATOR_DC_PATTERN);
+    controlRegister &= 
+      ~(GENERATOR_ENABLE | GENERATOR_MUTE | GENERATOR_DC_PATTERN | GENERATOR_RAMP);
   }
   XIo_Out32(TDM_MUX_ADDRESS(packetizer, TDM_CONTROL_REG), controlRegister);
 }
