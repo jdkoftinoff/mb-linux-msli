@@ -42,8 +42,13 @@ struct labrinth_tdm_output {
 /* I/O control commands defined by the driver */
 #define LFSR_ANALYZER_DISABLE  (0x00)
 #define LFSR_ANALYZER_ENABLE   (0x01)
+
+#define ANALYSIS_PSUEDORANDOM  (0x00)
+#define ANALYSIS_RAMP          (0x01)
+
 typedef struct {
   uint32_t enable;
+  uint32_t signalControl;
   uint32_t sportPort;
   uint32_t sportChannel;
 } AnalyzerConfig;

@@ -57,6 +57,8 @@
 /* Global control registers */
 #define TDM_CONTROL_REG        (0x000)
 #  define ANALYZER_ENABLE      (0x80000000)
+#  define TDM_DEBUG_PATTERN    (0x40000000)
+#  define ANALYZER_RAMP        (0x20000000)
 #  define ANALYZER_SLOT_MASK   (0x01F)
 #  define ANALYZER_LANE_MASK   (0x1E0)
 #  define ANALYZER_LANE_SHIFT      (5)
@@ -91,9 +93,14 @@ static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
     /* Enable the analyzer on the appropriate channel */
     controlRegister &= ~(ANALYZER_LANE_MASK | ANALYZER_SLOT_MASK);
     controlRegister |= ((analyzerConfig->sportPort << ANALYZER_LANE_SHIFT) &
-			ANALYZER_LANE_MASK);
+                        ANALYZER_LANE_MASK);
     controlRegister |= (analyzerConfig->sportChannel & ANALYZER_SLOT_MASK);
     controlRegister |= ANALYZER_ENABLE;
+
+    /* Set up the analyzer to predict either a psuedorandom or linear ramp */
+    if(analyzerConfig->signalControl == ANALYSIS_PSUEDORANDOM) {
+      controlRegister &= ~ANALYZER_RAMP;
+    } else controlRegister |= ANALYZER_RAMP;
 
     /* Enable the analysis error interrupt as a "one-shot" */
     irqMask |= ANALYSIS_ERROR_IRQ;
