@@ -29,6 +29,7 @@
 
 /* Define this to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
+/* #define DEBUG_INCREMENT */
 
 /* Timer tick period */
 #define TIMER_TICK_MS         (10)
@@ -41,6 +42,9 @@
 #define SYNC_INTERVAL              (100)
 #define DELAY_REQ_INTERVAL        (1000)
 #define PDELAY_REQ_INTERVAL       (1000)
+
+/* Maximum error, in nanoseconds, tolerated before the time is reset */
+#define RESET_THRESHOLD_NS  (10000000)
 
 /* Enumerated type identifying the results of a BMCA comparison */
 typedef enum {
@@ -65,13 +69,13 @@ static void timer_state_task(unsigned long data) {
         if(ptp->ports[i].announceCounter >= (ANNOUNCE_INTERVAL / TIMER_TICK_MS)) {
           ptp->ports[i].announceCounter = 0;
           transmit_announce(ptp, i);
-	}
+        }
 
         ptp->ports[i].syncCounter++;
         if(ptp->ports[i].syncCounter >= (SYNC_INTERVAL / TIMER_TICK_MS)) {
           ptp->ports[i].syncCounter = 0;
           transmit_sync(ptp, i);
-	}
+        }
       }
     }
     break;
@@ -103,29 +107,38 @@ static void timer_state_task(unsigned long data) {
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
 
+#ifdef DEBUG_INCREMENT
+      /* Periodically print out the increment we're using */
+      if(++ptp->slaveDebugCounter >= timeoutTicks) {
+        ptp->slaveDebugCounter = 0;
+        printk("PTP increment: 0x%08X\n",
+               (XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG)) & ~PTP_RTC_ENABLE));
+      }
+#endif
+
       /* Transmit an ANNOUNCE immediately to speed things along if we've switched our
        * port to the master state.
        */
       if(ptp->presentRole == PTP_MASTER) {
         printk("PTP master\n");
-	for (i=0; i<ptp->numPorts; i++) {
+        for (i=0; i<ptp->numPorts; i++) {
           ptp->ports[i].announceCounter    = 0;
           ptp->ports[i].announceSequenceId = 0x0000;
           transmit_announce(ptp, i);
-	}
+        }
       } else {
         /* Still a slave; determine whether we are using the end-to-end or peer-to-peer
          * delay mechanism
          */
         if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
-	  for (i=0; i<ptp->numPorts; i++) {
+          for (i=0; i<ptp->numPorts; i++) {
             /* Increment the delay request counter and see if it's time to
              * send one to the master.
              */
             if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / TIMER_TICK_MS)) {
               ptp->ports[i].delayReqCounter = 0;
               transmit_delay_request(ptp, i);
-	    }
+            }
           }
         }
       } /* if(still a slave) */
@@ -261,40 +274,45 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
   switch(bmca_comparison(&ptp->presentMaster, &ptp->presentMasterPort, &properties, &portProperties)) {
-  case IS_PRESENT_MASTER: {
-    //printk("BMCA: Is present master.\n");
-    /* A message from our fearless leader; reset its timeout counter */
-    ptp->announceTimeoutCounter = 0;
-  } break;
+  case IS_PRESENT_MASTER: 
+    {
+      //printk("BMCA: Is present master.\n");
+      /* A message from our fearless leader; reset its timeout counter */
+      ptp->announceTimeoutCounter = 0;
+    } 
+    break;
     
-  case REPLACE_PRESENT_MASTER: {
-    //printk("BMCA: Replace master.\n");
-    /* Replace the present master's properties, and ensure that we're a slave.
-     */
-    ptp->presentRole = PTP_SLAVE;
-    copy_ptp_properties(&ptp->presentMaster, &properties);
-    copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
-    ptp->announceTimeoutCounter = 0;
+  case REPLACE_PRESENT_MASTER: 
+    {
+      //printk("BMCA: Replace master.\n");
+      /* Replace the present master's properties, and ensure that we're a slave.
+       */
+      ptp->presentRole = PTP_SLAVE;
+      copy_ptp_properties(&ptp->presentMaster, &properties);
+      copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
+      ptp->announceTimeoutCounter = 0;
+      ptp->slaveDebugCounter = 0;
     
-    /* Invalidate all the slave flags */
-    ptp->ports[port].syncTimestampsValid       = 0;
-    ptp->ports[port].delayReqTimestampsValid   = 0;
-    ptp->ports[port].syncSequenceIdValid       = 0;
-    ptp->ports[port].delayReqCounter           = 0;
-    ptp->ports[port].delayReqSequenceId        = 0x0000;
+      /* Invalidate all the slave flags */
+      ptp->ports[port].syncTimestampsValid       = 0;
+      ptp->ports[port].delayReqTimestampsValid   = 0;
+      ptp->ports[port].syncSequenceIdValid       = 0;
+      ptp->ports[port].delayReqCounter           = 0;
+      ptp->ports[port].delayReqSequenceId        = 0x0000;
 
-    ptp->integral                  = 0;
-    ptp->derivative                = 0;
-    ptp->previousOffset            = 0;
+      ptp->integral                  = 0;
+      ptp->derivative                = 0;
+      ptp->previousOffset            = 0;
     
-    /* Announce the new slave */
-    printk("PTP slaved to ");
-    for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
-      printk("%02X", portProperties.sourceMacAddress[byteIndex]);
-      if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
-    }
-    printk("\n");
-  } break;
+      /* Announce the new slave */
+      printk("PTP slaved to ");
+      for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
+        printk("%02X", portProperties.sourceMacAddress[byteIndex]);
+        if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
+      }
+      printk("\n");
+    } 
+    break;
 
   default:
     //printk("BMCA: Keep present master.\n");
@@ -377,14 +395,15 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
     timestamp_sum(&syncTxTimestamp, &correctionField, &correctedTimestamp);
 
     /* Compare the timestamps; if the one-way offset plus delay is greater than
-     * one second, we need to reset our RTC before beginning to servo.  Regardless
+     * the reset threshold, we need to reset our RTC before beginning to servo.  Regardless
      * of what we do, we need to invalidate the sync sequence ID, it's been "used up."
      */
     ptp->ports[port].syncSequenceIdValid = 0;
     timestamp_difference(&ptp->ports[port].syncRxTimestampTemp, &correctedTimestamp, &difference);
     timestamp_abs(&difference, &absDifference);
-    if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0)) {
-      /* Reset the time using the uncorrected timestamp, and invalidate the SYNC */
+    if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0) ||
+       (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
+      /* Reset the time using the uncorrected timestamp */
       printk("Resetting time!\n");
       set_rtc_time(ptp, &syncTxTimestamp);
    } else {
