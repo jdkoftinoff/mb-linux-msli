@@ -305,11 +305,16 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
       ptp->previousOffset            = 0;
     
       /* Announce the new slave */
-      printk("PTP slaved to ");
+      printk("PTP slaved to peer ");
       for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
         printk("%02X", portProperties.sourceMacAddress[byteIndex]);
         if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
       }
+      printk(", GM ");
+      for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_CHARS; byteIndex++) {
+        printk("%02X", properties.grandmasterIdentity[byteIndex]);
+        if(byteIndex < (PTP_CLOCK_IDENTITY_CHARS - 1)) printk(":");
+  	  }
       printk("\n");
     } 
     break;
