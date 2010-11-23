@@ -27,6 +27,7 @@
 #define _LABX_DMA_COPROCESSOR_DEFS_H_
 
 #include <linux/types.h>
+#include <linux/labx_microengine_defs.h>
 
 /* Type definition for the instructions used by the coprocessor */
 #define DMA_INSTRUCTION_WIDTH  32
@@ -602,35 +603,41 @@ static inline DMAInstruction DMA_SET_BYTE_ORDER(DMAConfiguration config, uint32_
         return ((DMA_OPCODE_SET_BYTE_ORDER << DMA_OPCODE_SHIFT(config)) | byte_Order);
 }
 
-/* DMA ioctls */
-#define DMA_IOC_LOAD_DESCRIPTOR        (0x81)
-#define DMA_IOC_COPY_DESCRIPTOR        (0x82)
-#define DMA_MAX_CONFIG_WORDS 1024
-typedef struct {
-  uint32_t  offset;
-  uint32_t  numWords;
-  uint32_t *configWords;
-} DMAConfigWords;
+/* DMA-specific I/O control definitions */
 
-#define DMA_IOC_START_CHANNEL          (0x83)
-#define DMA_IOC_STOP_CHANNEL           (0x84)
+/* The common microengine I/O control operations are re-defined to accommodate
+ * the situation where a DMA microengine is wrapped within the same context as
+ * another microengine, whose driver dispatches any unrecognized ioctl()s.
+ */
 
-#define DMA_IOC_ALLOC_BUFFERS          (0x85)
-#define DMA_IOC_FREE_BUFFERS           (0x86)
+#define DMA_IOC_CHAR             ('d')
+#define DMA_IOC_START_ENGINE     _IO(DMA_IOC_CHAR,   0x01)
+#define DMA_IOC_STOP_ENGINE      _IO(DMA_IOC_CHAR,   0x02)
+#define DMA_IOC_LOAD_DESCRIPTOR  _IOW(DMA_IOC_CHAR,  0x03, ConfigWords)
+#define DMA_IOC_COPY_DESCRIPTOR  _IOWR(DMA_IOC_CHAR, 0x04, ConfigWords)
+
+/* DMA channel control */
+
+#define DMA_IOC_START_CHANNEL  _IOW(DMA_IOC_CHAR, 0x05, uint32_t)
+#define DMA_IOC_STOP_CHANNEL   _IOW(DMA_IOC_CHAR, 0x06, uint32_t)
+
+/* DMA buffer allocation */
+
 typedef struct {
   uint32_t nBufs;
   uint32_t size;
   void**   buffers;
 } DMAAlloc;
 
-#define DMA_IOC_START_DMA              (0x87)
-#define DMA_IOC_STOP_DMA               (0x88)
+#define DMA_IOC_ALLOC_BUFFERS  _IOR(DMA_IOC_CHAR, 0x07, DMAAlloc)
+#define DMA_IOC_FREE_BUFFERS   _IOW(DMA_IOC_CHAR, 0x08, DMAAlloc)
 
 typedef struct {
   uint32_t channel;
   uint32_t address;
 } DMAVector;
-#define DMA_IOC_SET_VECTOR             (0x89)
+
+#define DMA_IOC_SET_VECTOR     _IOW(DMA_IOC_CHAR, 0x09, uint32_t)
 
 typedef struct {
   uint32_t indexCounters;
@@ -639,7 +646,8 @@ typedef struct {
   uint32_t parameterAddressBits;
   uint32_t codeAddressBits;
 } DMACapabilities;
-#define DMA_IOC_GET_CAPS               (0x90)
+
+#define DMA_IOC_GET_CAPS      _IOR(DMA_IOC_CHAR, 0x0A, DMACapabilities)
 
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)

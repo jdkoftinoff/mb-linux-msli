@@ -36,6 +36,9 @@
 #define DRIVER_VERSION_MAX  0x11
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
+/* Number of milliseconds we will wait before bailing out of a synced write */
+#define SYNCED_WRITE_TIMEOUT_MSECS  (100)
+
 void labx_dma_probe(struct labx_dma *dma)
 {
   uint32_t capsWord;
@@ -80,35 +83,98 @@ void labx_dma_probe(struct labx_dma *dma)
 
   dma->regionShift = (dma->capabilities.codeAddressBits + 2);
 
+  /* Initialize the waitqueue used for synchronized writes */
+  init_waitqueue_head(&(dma->syncedWriteQueue));
+
+  /* TEMPORARY - Don't indicate an IRQ assignment just yet; this needs to be
+   *             added as a parameter to this function.
+   *             Make sure we disable the IRQ, request, then re-enable (is this
+   *             the appropriate place to enable?)
+   */
+  dma->irq = NO_IRQ_SUPPLIED;
+
   printk(KERN_INFO "Found DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
     dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
   printk(KERN_INFO "   %d param bits, %d code bits, %d shift\n",
     dma->capabilities.parameterAddressBits, dma->capabilities.codeAddressBits, dma->regionShift);
 }
 
+/* Waits for a synchronized write to commit, using either polling or
+ * an interrupt-driven waitqueue.
+ */
+static int32_t await_synced_write(struct labx_dma *dma) {
+  int32_t returnValue = 0;
+  uint32_t tempValue;
+
+  /* Determine whether to use an interrupt or polling */
+  if(dma->irq != NO_IRQ_SUPPLIED) {
+    int32_t waitResult;
+
+    /* Place ourselves onto a wait queue if the synced write is flagged as
+     * pending by the hardware, as this indicates that the microengine is active,
+     * and we need to wait for it to finish a pass through all the microcode 
+     * before the hardware will commit the write to its destination (a register
+     * or microcode RAM.)  If the engine is inactive or the write already 
+     * committed, we will not actually enter the wait queue.
+     */
+    waitResult =
+      wait_event_interruptible_timeout(dma->syncedWriteQueue,
+                                       ((XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_SYNC_REG)) & DMA_SYNC_PENDING) == 0),
+                                       msecs_to_jiffies(SYNCED_WRITE_TIMEOUT_MSECS));
+
+    /* If the wait returns zero, then the timeout elapsed; if negative, a signal
+     * interrupted the wait.
+     */
+    if(waitResult == 0) returnValue = -ETIMEDOUT;
+    else if(waitResult < 0) returnValue = -EAGAIN;
+  } else {
+    /* No interrupt was supplied during the device probe, simply poll for the bit. */
+    while(XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_SYNC_REG)) & DMA_SYNC_PENDING);
+  }
+
+  /* Return success or "timed out" */
+  return(returnValue);
+}
+
 /* Loads the passed microcode descriptor into the instance */
-static void load_descriptor(struct labx_dma *dma,
-                            DMAConfigWords *descriptor) {
+static int32_t load_descriptor(struct labx_dma *dma,
+                               ConfigWords *descriptor) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
+  uint32_t lastIndex;
+  int32_t returnValue = 0;
 
   if (dma->regionShift == 0)
   {
     printk(KERN_ERR "Trying to load a descriptor on invalid DMA hardware (vaddr = %p)\n", dma->virtualAddress);
-    return;
+    return(-1);
   }
+
+  /* Handle the last write specially for interlocks */
+  lastIndex = descriptor->numWords;
+  if(descriptor->interlockedLoad) lastIndex--;
 
   wordAddress = (DMA_MICROCODE_BASE(dma) + (descriptor->offset * sizeof(uint32_t)));
   /*  printk(KERN_INFO "DMA (%p) Descriptor load at %p (%p + %08X)\n", dma, (void*)wordAddress, dma->virtualAddress, descriptor->offset); */
-  for(wordIndex = 0; wordIndex < descriptor->numWords; wordIndex++) {
+  for(wordIndex = 0; wordIndex < lastIndex; wordIndex++) {
     XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
     wordAddress += sizeof(uint32_t);
   }
+
+  /* If an interlocked load is requested, issue a sync command on the last write */
+  if(descriptor->interlockedLoad) {
+    /* Request a synchronized write for the last word and wait for it */
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_SYNC_REG), DMA_SYNC_NEXT_WRITE);
+    XIo_Out32(wordAddress, descriptor->configWords[wordIndex]);
+    returnValue = await_synced_write(dma);
+  }
+
+  return(returnValue);
 }
 EXPORT_SYMBOL(labx_dma_probe);
 
 /* Buffer for storing configuration words */
-static uint32_t configWords[DMA_MAX_CONFIG_WORDS];
+static uint32_t configWords[MAX_CONFIG_WORDS];
 
 static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 {
@@ -157,7 +223,7 @@ static int free_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 }
 
 static void copy_descriptor(struct labx_dma *dma,
-                            DMAConfigWords *descriptor) {
+                            ConfigWords *descriptor) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
 
@@ -175,9 +241,17 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 
   /* Switch on the request */
   switch(command) {
+  case DMA_IOC_START_ENGINE:
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_ENABLE);
+    break;
+
+  case DMA_IOC_STOP_ENGINE:
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_DISABLE);
+    break;
+
   case DMA_IOC_LOAD_DESCRIPTOR:
     {
-      DMAConfigWords descriptor;
+      ConfigWords descriptor;
 
       if(copy_from_user(&descriptor, (void __user*)arg, sizeof(descriptor)) != 0) {
         return(-EFAULT);
@@ -193,8 +267,8 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 
   case DMA_IOC_COPY_DESCRIPTOR:
     {
-      DMAConfigWords userDescriptor;
-      DMAConfigWords localDescriptor;
+      ConfigWords userDescriptor;
+      ConfigWords localDescriptor;
 
       /* Copy into our local descriptor, then obtain buffer pointer from userland */
       if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
@@ -254,14 +328,6 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 
       if (free_buffers(dma, &alloc) < 0) return -EFAULT;
     }
-    break;
-
-  case DMA_IOC_START_DMA:
-    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_ENABLE);
-    break;
-
-  case DMA_IOC_STOP_DMA:
-    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_DISABLE);
     break;
 
   case DMA_IOC_SET_VECTOR:
