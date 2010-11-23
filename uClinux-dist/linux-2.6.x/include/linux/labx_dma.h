@@ -33,6 +33,7 @@
 #define NAME_MAX_SIZE  256
 
 /* DMA structure (for use inside other drivers that include DMA) */
+#define NO_IRQ_SUPPLIED   (-1)
 struct labx_dma {
   void __iomem  *virtualAddress;
 
@@ -42,6 +43,11 @@ struct labx_dma {
   /* Capabilites from the CAPS registers */
   DMACapabilities capabilities;
 
+  /* Wait queue for putting threads to sleep */
+  wait_queue_head_t syncedWriteQueue;
+
+  /* Interrupt request number */
+  int32_t irq;
 };
 
 /* DMA Platform device structure */
@@ -87,6 +93,10 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 #define DMA_CHANNEL_START_REG           0x02
 #define DMA_CHANNEL_IRQ_ENABLE_REG      0x03
 #define DMA_CHANNEL_IRQ_REG             0x04
+#define DMA_SYNC_REG                    0x05
+#  define DMA_CANCEL_SYNC      (0x00000000)
+#  define DMA_SYNC_NEXT_WRITE  (0x00000001)
+#  define DMA_SYNC_PENDING     (0x80000000)
 #define DMA_CAPABILITIES_REG            0x7E
 #  define DMA_CAPS_INDEX_SHIFT               12
 #  define DMA_CAPS_INDEX_MASK                0x0F
