@@ -31,6 +31,7 @@
 #include <linux/labx_dma_coprocessor_defs.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/sched.h>
 
 #define DRIVER_VERSION_MIN  0x10
 #define DRIVER_VERSION_MAX  0x11
