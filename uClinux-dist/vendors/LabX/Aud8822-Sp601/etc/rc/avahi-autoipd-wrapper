@@ -1,0 +1,4 @@
+#!/bin/sh
+/bin/ifconfig "$1" multicast
+sleep 5                                                                         
+exec /bin/avahi-autoipd --no-drop-root "$1"

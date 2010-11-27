@@ -1,0 +1,11 @@
+#!/bin/sh
+
+IP_ADDRESS_A=192.168.1.1
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+echo "Setting up interface lo: "
+ifconfig lo up 127.0.0.1
+
+echo "Setting up interface eth0: "
+ifconfig eth0 $IP_ADDRESS_A
