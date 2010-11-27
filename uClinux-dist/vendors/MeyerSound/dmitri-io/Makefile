@@ -2,6 +2,8 @@
 # Makefile -- Build instructions for Meyer Sound D-Mitri I/O MicroBlaze system
 #
 
+RELEASE_VERSION = "5.0.2"
+
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
@@ -139,20 +141,27 @@ endif
 
 # Add the AVB packet engine device nodes
 ifdef CONFIG_LABX_AUDIO_PACKETIZER
-DEVICES += packetizer0,c,250,0
-DEVICES += packetizer1,c,250,1
+DEVICES += packetizer0,c,230,0
+DEVICES += packetizer1,c,230,1
 endif
+
 ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
+DEVICES += depacketizer0,c,232,0
+DEVICES += depacketizer1,c,232,1
 endif
+
 ifdef CONFIG_LABX_PTP
-DEVICES += ptp0,c,253,0
+DEVICES += ptp0,c,233,0
 endif
 
 ifdef CONFIG_I2S_SWITCH
 DEVICES +=	\
-	i2s_switch0,c,254,0
+	i2s_switch0,c,253,0
+endif
+
+ifdef CONFIG_I2S_GNET
+DEVICES +=      \
+        i2s_gnet0,c,252,0
 endif
 
 I2C_MAJOR = 89
@@ -178,11 +187,21 @@ romfs:
 	done
 	for i in $(DIRS); do $(MAKE) -C $$i romfs || exit $? ; done
 
+	mkdir -p $(ROMFSDIR)/etc
+	echo "version = $(RELEASE_VERSION)" > $(ROMFSDIR)/etc/firmware_version
+	echo -n "date = " >> $(ROMFSDIR)/etc/firmware_version
+	date >> $(ROMFSDIR)/etc/firmware_version
+
 	mkdir -p $(ROMFSDIR)/etc/init.d
 	mkdir -p $(ROMFSDIR)/etc/rc.d
 	mkdir -p $(ROMFSDIR)/dev/pts
 	mkdir -p $(ROMFSDIR)/etc/avahi.orig
 	mkdir -p $(ROMFSDIR)/etc/dmitripaneld
+
+	mkdir -p $(ROMFSDIR)/dev/gpio
+	$(ROMFSINST) -s /var/devices/gpio/oled_in /dev/gpio/oled_in
+	$(ROMFSINST) -s /var/devices/gpio/oled_out /dev/gpio/oled_out
+	$(ROMFSINST) -s /var/devices/gpio/gnet_out /dev/gpio/gnet_out
 
 	$(ROMFSINST) -s /dev/ttyUL2 /dev/ttyMIDI
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
@@ -191,6 +210,7 @@ romfs:
 	$(ROMFSINST) -s /var/tmp/identity /etc/identity
 	$(ROMFSINST) -s /var/tmp/persist /etc/persist
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
+	$(ROMFSINST) $(COMMON)/etc/hosts /etc/hosts
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
