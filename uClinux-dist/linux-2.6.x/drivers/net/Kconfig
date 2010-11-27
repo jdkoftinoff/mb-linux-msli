@@ -2464,7 +2464,7 @@ config XILINX_LLTEMAC
 
 choice
 	prompt "Xilinx LLTEMAC PHY Support"
-	default XILINX_LLTEMAC_MARVELL_88E1111_GMII
+	default XILINX_LLTEMAC_MARVELL_88E1112_GMII
 	
 config XILINX_LLTEMAC_MARVELL_88E1111_RGMII
 	bool "MARVELL 88E1111 using RGMII"
@@ -2479,6 +2479,14 @@ config XILINX_LLTEMAC_MARVELL_88E1111_GMII
 	  code for enabling GMII over copper, and for setting the correct
 	  speed based on whatever the phy is able to autonegotiate.  This is
 	  usually the best option to use on ML40x and ML50x boards.
+
+config XILINX_LLTEMAC_MARVELL_88E1112_GMII
+	bool "MARVELL 88E1112 using GMII"
+   help
+	  This phy is used by many Xilinx boards.  This option includes
+	  code for enabling GMII over copper,  and for setting the correct
+	  speed based on whatever the phy is able to autonegotiate.  This
+	  option should be used for Meyer Sound D-Mitri devices.
 
 config XILINX_LLTEMAC_MARVELL_88E1111_MII
 	bool "MARVELL 88E1111 using MII or other PHY"
