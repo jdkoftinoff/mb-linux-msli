@@ -31,6 +31,7 @@ endif
 LINUXDIR = $(CONFIG_LINUXDIR)
 LIBCDIR  = $(CONFIG_LIBCDIR)
 ROOTDIR  = $(shell pwd)
+STAGEDIR = $(ROOTDIR)/staging
 PATH	 := $(PATH):$(ROOTDIR)/tools
 HOSTCC   = cc
 IMAGEDIR = $(ROOTDIR)/images
@@ -310,6 +311,7 @@ relink:
 clean: modules_clean
 	for dir in $(LINUXDIR) $(DIRS); do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
 	rm -rf $(ROMFSDIR)/*
+	rm -rf $(STAGEDIR)/*
 	rm -rf $(IMAGEDIR)/*
 	rm -f $(LINUXDIR)/linux
 	rm -f $(LINUXDIR)/include/asm
