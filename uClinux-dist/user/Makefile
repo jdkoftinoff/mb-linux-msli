@@ -33,10 +33,12 @@ dir_  =
 
 dir_$(CONFIG_JFFS_FS)                       += mtd-utils
 dir_$(CONFIG_JFFS2_FS)                      += mtd-utils
-
 dir_$(CONFIG_USER_LIBTC) 	            += libtc
+dir_$(CONFIG_USER_IO_OSC)                   += io-osc
 dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld
 dir_$(CONFIG_USER_GSBD)                     += gsbd
+dir_$(CONFIG_USER_SCPINSTALL)               += scpinstall
+dir_$(CONFIG_USER_NANO)                     += nano
 dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty
 dir_$(CONFIG_USER_APPWEB_APPWEB)            += appWeb
 dir_$(CONFIG_USER_ARJ_ARJ)                  += arj
