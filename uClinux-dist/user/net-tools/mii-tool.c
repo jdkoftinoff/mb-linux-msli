@@ -50,6 +50,7 @@ static char version[] =
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #endif
+#include <linux/sockios.h>
 #include "mii.h"
 
 #define MAX_ETH		8		/* Maximum # of interfaces */
