@@ -80,6 +80,8 @@ dir_3_$(CONFIG_LIB_LIBJUDY)      += libjudy
 dir_3_$(CONFIG_LIB_CLASSPATH)    += classpath
 dir_3_$(CONFIG_LIB_LIBFFI)       += libffi
 dir_3_$(CONFIG_LIB_BITVECTOR)    += bitvector
+dir_3_$(CONFIG_LIB_NCURSES_FORCE)+= ncurses
+dir_3_$(CONFIG_LIB_NCURSES)      += ncurses
 
 # See Kconfig for the dependencies
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
@@ -204,6 +206,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libjpeg/*.a \
 	$(ROOTDIR)/lib/libpng/*.a \
 	$(ROOTDIR)/lib/libm/*.a \
+	$(ROOTDIR)/lib/ncurses/*.a \
 	$(ROOTDIR)/lib/libatm/src/lib/.libs/*.a \
 	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.a \
 	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.so \
@@ -270,7 +273,8 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libffi/install/lib/*.a \
 	$(ROOTDIR)/lib/libffi/install/lib/*.la \
 	$(ROOTDIR)/lib/libffi/install/lib/pkgconfig/*.pc \
-	$(ROOTDIR)/prop/libtrustedsource/librep/librep.so*
+	$(ROOTDIR)/prop/libtrustedsource/librep/librep.so* \
+	$(STAGEDIR)/usr/lib/*.a
 
 # The dynamic linker library needs to be linked into lib via a different name
 LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
