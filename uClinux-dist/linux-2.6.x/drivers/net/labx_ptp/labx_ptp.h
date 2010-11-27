@@ -292,6 +292,7 @@ struct ptp_device {
   /* Packet Rx state space */
   struct tasklet_struct rxTasklet;
   uint32_t announceTimeoutCounter;
+  uint32_t slaveDebugCounter;
 
   /* Packet Tx state space */
   struct tasklet_struct txTasklet;
