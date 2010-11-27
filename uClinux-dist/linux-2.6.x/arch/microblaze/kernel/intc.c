@@ -42,6 +42,7 @@ unsigned int nr_irq;
 
 static void intc_enable_or_unmask(unsigned int irq)
 {
+
 	unsigned long mask = 1 << irq;
 	pr_debug("enable_or_unmask: %d\n", irq);
 	out_be32(INTC_BASE + SIE, mask);

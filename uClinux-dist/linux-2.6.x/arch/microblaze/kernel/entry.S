@@ -477,7 +477,7 @@ C_ENTRY(ret_from_fork):
 
 C_ENTRY(sys_vfork_wrapper):
 	la	r5, r1, PTO
-	brid	sys_vfork	/* Do real work (tail-call) */
+	brid	microblaze_vfork	/* Do real work (tail-call) */
 	nop
 
 C_ENTRY(sys_clone_wrapper):
@@ -492,7 +492,7 @@ C_ENTRY(sys_clone_wrapper):
 
 C_ENTRY(sys_execve_wrapper):
 	la	r8, r1, PTO;		/* add user context as 4th arg */
-	brid	sys_execve;	/* Do real work (tail-call).*/
+	brid	microblaze_execve;	/* Do real work (tail-call).*/
 	nop;
 
 C_ENTRY(sys_sigsuspend_wrapper):

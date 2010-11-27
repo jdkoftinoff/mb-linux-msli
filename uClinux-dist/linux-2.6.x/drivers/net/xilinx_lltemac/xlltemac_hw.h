@@ -346,7 +346,8 @@ extern "C" {
 #define XTE_MIIM_PHYAD_SHIFT    5	/**< MII Shift bits for PHYAD */
 /*@}*/
 
-#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII
+#if defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII) \
+  || defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII)
 
 /*
  * Those constants are specific to MARVELL 88E1111 PHY chip on
@@ -364,7 +365,11 @@ extern "C" {
 #define MARVELL_88E1111_LINK_RESOLVED                   0x1000
 #define MARVELL_88E1111_LINK_UP                         0x0400
 
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII
+
 #define MARVELL_88E1112_PAGE_REG                        22
+
+#endif
 #endif
 
 /*

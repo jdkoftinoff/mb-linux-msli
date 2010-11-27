@@ -6,7 +6,9 @@ mkdir /var/lib
 mkdir /var/tmp/avahi
 mkdir /var/tmp/avahi/services
 /bin/cp /etc/avahi.orig/avahi-daemon.conf /etc/avahi.orig/avahi-autoipd.action  /var/tmp/avahi
-/bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
+#/bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
+/bin/mv /var/boot-tmp/avahi-services/* /var/tmp/avahi/services/ > /dev/null 2>&1
+rmdir /var/boot-tmp/avahi-services >/dev/null 2>&1
 /bin/avahi-daemon >/dev/null 2>&1 &
 /bin/dhcpcd -t0 eth0 &
 /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &

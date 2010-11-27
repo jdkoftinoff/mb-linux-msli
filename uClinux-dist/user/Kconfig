@@ -8,6 +8,13 @@
 
 menu "Core Applications"
 
+config USER_IO_OSC
+    bool "io-oscd server - io-osc"
+    depends on USER_GSBD
+    depends on USER_LIBTC
+    help
+      Include the Open Sound Control server for Meyer Sound D-Mitri IO modules
+
 config USER_LIBTC
 	bool "midi time code server - libtc"
 	help
@@ -22,6 +29,16 @@ config USER_GSBD
 	bool "Galileo Serial Bus daemon - gsbd"
 	help
 	  Include Galileo Serial Bus daemon.
+
+config USER_SCPINSTALL
+	bool "scp installer"
+	help
+	  Include scp-based installer/updater program.
+
+config USER_NANO
+	bool "nano editor"
+	help
+	  Include nano text editor
 
 config USER_INIT_INIT
 	bool "init"

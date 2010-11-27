@@ -46,7 +46,7 @@ export CC
 export CFLAGS
 export RANLIB AR STRIP
 
-all: dropbear dropbearkey dropbearconvert
+all: dropbear dropbearkey dropbearconvert scp
 	@echo
 	@echo Run \"make strip\" if you want stripped binaries,
 	@echo or \"make install\" to install to ${prefix}
@@ -55,6 +55,7 @@ strip: all
 	-$(STRIP) dropbear
 	-$(STRIP) dropbearkey
 	-$(STRIP) dropbearconvert
+	-$(STRIP) scp
 
 install: all
 	$(INSTALL) -d -m 755 $(DESTDIR)$(sbindir)
@@ -62,6 +63,7 @@ install: all
 	$(INSTALL) -m 755 dropbear $(DESTDIR)$(sbindir)
 	$(INSTALL) -m 755 dropbearkey $(DESTDIR)$(bindir)
 	$(INSTALL) -m 755 dropbearconvert $(DESTDIR)$(bindir)
+	#$(INSTALL) -m 755 scp $(DESTDIR)$(bindir)
 	# chown might fail, so do it separately to the install
 	-chown root $(DESTDIR)$(sbindir)/dropbear
 	-chgrp 0 $(DESTDIR)$(sbindir)/dropbear
@@ -73,7 +75,6 @@ install: all
 strip-static: static
 	-$(STRIP) staticdropbear
 	-$(STRIP) staticdropbear
-	-$(STRIP) staticdropbear
 
 install-static: static
 	$(INSTALL) -d -m 755 $(DESTDIR)$(sbindir)
@@ -81,6 +82,7 @@ install-static: static
 	$(INSTALL) -m 755 staticdropbear $(DESTDIR)$(sbindir)/dropbear
 	$(INSTALL) -m 755 staticdropbearkey $(DESTDIR)$(bindir)/dropbearkey
 	$(INSTALL) -m 755 staticdropbearconvert $(DESTDIR)$(bindir)/dropbearconvert
+	#$(INSTALL) -m 755 staticscp $(DESTDIR)$(bindir)/scp
 	# chown might fail, so do it separately to the install
 	-chown root $(DESTDIR)$(sbindir)/dropbear
 	-chgrp 0 $(DESTDIR)$(sbindir)/dropbear
@@ -89,7 +91,7 @@ install-static: static
 	-chown root $(DESTDIR)$(bindir)/dropbearconvert
 	-chgrp 0 $(DESTDIR)$(bindir)/dropbearconvert
 
-static: dropbear-static dropbearkey-static dropbearconvert-static
+static: dropbear-static dropbearkey-static dropbearconvert-static scpstatic
 
 $(ALLOBJS): $(HEADERS) Makefile
 

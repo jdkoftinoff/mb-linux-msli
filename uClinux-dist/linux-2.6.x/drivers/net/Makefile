@@ -275,9 +275,6 @@ obj-$(CONFIG_WIMAX) += wimax/
 
 obj-$(CONFIG_XILINX_EMACLITE) += xilinx_emaclite.o
 obj-$(CONFIG_XILINX_LLTEMAC) += xilinx_lltemac/
-obj-$(CONFIG_XILINX_EMACLITE_LABX) += xilinx_emaclite_labx/
-obj-$(CONFIG_XILINX_LLTEMAC) += xilinx_lltemac/
-obj-$(CONFIG_XILINX_LLTEMAC_AVB_LABX) += xilinx_lltemac_avb_labx/
 obj-$(CONFIG_LABX_ETH_LOCALLINK) += labx_eth_locallink/
 obj-$(CONFIG_LABX_ETHERNET) += labx_ethernet/
 obj-$(CONFIG_LABX_PTP) += labx_ptp/

@@ -1124,5 +1124,11 @@ config I2S_SWITCH
 	help
 	  I2S switch, implemented on Xilinx FPGA.
 
+config I2S_GNET
+	tristate "I2S Interface for GNET audio support"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  I2S Interface for GNET audio support.
+
 endmenu
 

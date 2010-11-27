@@ -28,6 +28,12 @@ menuconfig SPI
 
 if SPI
 
+config SPI_MAILBOX
+	boolean "Biamp SPI mailbox device driver support"
+	help
+	If you say "yes" to this option, support will be included
+	for the Biamp SPI mailbox device driver
+
 config SPI_DEBUG
 	boolean "Debug support for SPI drivers"
 	depends on DEBUG_KERNEL

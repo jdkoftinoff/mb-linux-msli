@@ -1,0 +1,35 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+TZ=UTC
+
+echo "Mounting proc, sys, /dev/pts: "
+mount -t proc proc /proc
+mount -t sysfs none /sys
+mount -t devpts none /dev/pts
+
+echo "Configuring devices: "
+echo -e "254\n255" > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio255/direction
+echo out > /sys/class/gpio/gpio254/direction
+echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
+echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
+echo -en "\x27\x5e\x00\x0c\x00\x00\x2f" > /dev/spidev0
+
+echo "Mounting var: "
+mount -t ramfs none /var
+
+echo "Populating /var: "
+mkdir /var/run
+mkdir /var/tmp
+chmod 1777 /var/tmp
+
+echo "Running system startup scripts."
+for i in /etc/rc.d/S*
+do
+  if [ -x $i ]; then
+    /bin/sh $i
+  fi
+done
+
+

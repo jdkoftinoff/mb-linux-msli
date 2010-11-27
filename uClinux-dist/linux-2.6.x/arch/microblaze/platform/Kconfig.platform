@@ -15,6 +15,7 @@ config PLATFORM_GENERIC
 	bool "Generic"
 	help
 	  Choose this option for the Generic platform.
+
 endchoice
 
 config SELFMOD
@@ -61,4 +62,5 @@ config OPT_LIB_ASM
 if PLATFORM_GENERIC=y
 	source "arch/microblaze/platform/generic/Kconfig.auto"
 endif
+
 endmenu

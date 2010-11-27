@@ -14,6 +14,13 @@ if ! which awk > /dev/null 2>&1
  exit 1
 fi
 
+if [ ! -x /bin/tcsh ]
+ then
+ echo "This script requires /bin/tcsh to be present"
+ echo "(for Petalogix tools compilation procedure)"
+ exit 1
+fi
+
 if ! which makeinfo > /dev/null 2>&1
  then
  echo "This script requires texinfo to be present"
@@ -22,12 +29,6 @@ if ! which makeinfo > /dev/null 2>&1
 fi
 
 # Build xilinx toolchain
-if [ ! -d mb_gnu ]
-  then
-  echo "This script requires mb_gnu from mb-gcc4-msli to be"
-  echo "copied or linked under current directory"
-  exit 1
-fi
 
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
 (
@@ -36,6 +37,14 @@ cd mb_gnu \
 && bash build_elf2flt.sh && bash build_genromfs.sh
 )||(
 echo "Build failed, see mb_gnu/build directory for logs"
+exit 1
+)
+
+echo "Building boot image maker"
+(cd mbbl-mkbootimage \
+&& make
+) || (
+echo "Build failed"
 exit 1
 )
 
@@ -80,7 +89,6 @@ echo "${PATH}" | tr ':' '\n' | grep -v "${CURRDIR}"
 echo -n "${CURRDIR}/tools/gcc4/bin"
 ) | tr '\n' ':'`
 
-echo "PATH=${NEWPATH}:${CURRDIR}/dtc:${CURRDIR}/mcsbin" > prepare.sh
-echo "export MB_LINUX=$CURRDIR" >> prepare.sh
-
+echo "PATH=\"${NEWPATH}:${CURRDIR}/dtc:${CURRDIR}/mbbl-mkbootimage:${CURRDIR}/mcsbin\"" > prepare.sh
+echo "export MB_LINUX=\"$CURRDIR\"" >> prepare.sh
 echo "Run \". prepare.sh\" from this directory before cross-compiling for MicroBlaze"
