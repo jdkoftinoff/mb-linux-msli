@@ -1,0 +1,83 @@
+#!/bin/sh
+# Copyright 2008-2010 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+
+usage() {
+	cat <<-EOF
+	Usage: cross-fix-root <sysroot> <cross-bindir> <cross-prefix>
+	       cross-fix-root <cross-prefix>
+	       cross-fix-root # takes settings from env
+
+	Environment variables:
+	  CROSS_COMPILE=<cross-prefix>
+	  (SYSROOT|ROOT|STAGEDIR)=<sysroot>
+
+	Description:
+	  Fix library perms and mung paths in libtool linker scripts & random -config
+	  scripts to point to our SYSROOT directory.  Add symlinks for the -config
+	  with cross-compiler prefixes as autotool packages will search for them first
+	  when cross-compiling.
+	EOF
+	exit 1
+}
+
+LIBDIR="usr/lib"
+SYSROOT=${SYSROOT:-${ROOT:-${STAGEDIR}}}
+CROSS_BINDIR=""
+if [ -n "${ROOTDIR}" ] ; then
+	# uClinux-dist mojo
+	CROSS_BINDIR="${ROOTDIR}/tools"
+fi
+CROSS_PREFIX=${CROSS_COMPILE}
+case $# in
+	3)
+		SYSROOT="$1"
+		CROSS_BINDIR="$2"
+		CROSS_PREFIX="$3"
+		;;
+	1)
+		if [ -e "/usr/${1:-..........}" ] ; then
+			SYSROOT="/usr/$1"
+			CROSS_BINDIR="/usr/bin"
+			CROSS_PREFIX="$1-"
+		else
+			usage
+		fi
+		;;
+	0) [ -z "${SYSROOT}" ] && usage ;;
+	*) usage ;;
+esac
+
+cd "${SYSROOT}" || exit 0
+
+if [ -d "${LIBDIR}" ] ; then
+	find "./${LIBDIR}/" -name 'lib*.so*' -print0 | xargs -0 -r chmod 755
+	find "./${LIBDIR}/" -name 'lib*.la' -o -name 'lib*.a' -print0 | xargs -0 -r chmod 644
+	find "./${LIBDIR}/" -name 'lib*.la' -print0 | xargs -0 -r \
+		sed -i \
+			-e "/^libdir=/s:=.*:='${SYSROOT}/usr/lib':" \
+			-e "/^dependency_libs=/s: /usr/lib/: ${SYSROOT}/usr/lib/:g"
+fi
+
+# we don't touch .pc files anymore as we require pkg-config 0.23+ and PKG_CONFIG_SYSROOT_DIR
+
+if [ -d usr/bin ] ; then
+	find ./usr/bin/ -name '*-config' -print0 | xargs -0 -r \
+		sed -i "/^prefix=/s:=.*:='${SYSROOT}/usr':"
+
+	if [ -n "${CROSS_BINDIR}" ] && [ -d "${CROSS_BINDIR}" ] && [ -n "${CROSS_PREFIX}" ] ; then
+		cd usr/bin || exit 1
+		for config in *-config ; do
+			[ -x "${config}" ] || continue # avoid empty globs
+			# work around a possible race condition if multiple make jobs
+			# are generating the same symlink at the same time.  a `mv`
+			# is "atomic" (it uses rename())  while a `ln` is actually
+			# unlink() followed by a symlink().
+			ln -s "${SYSROOT}/usr/bin/${config}" "${CROSS_BINDIR}/${CROSS_PREFIX}${config}.$$"
+			mv "${CROSS_BINDIR}/${CROSS_PREFIX}${config}.$$" "${CROSS_BINDIR}/${CROSS_PREFIX}${config}"
+		done
+		cd ../..
+	fi
+fi
+
+exit 0
