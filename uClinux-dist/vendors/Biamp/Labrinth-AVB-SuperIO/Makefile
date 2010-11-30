@@ -139,20 +139,20 @@ endif
 
 # Add the AVB packet engine device nodes
 ifdef CONFIG_LABX_AUDIO_PACKETIZER
-DEVICES += packetizer0,c,250,0
-DEVICES += packetizer1,c,250,1
+DEVICES += packetizer0,c,230,0
+DEVICES += packetizer1,c,230,1
 endif
 ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
+DEVICES += depacketizer0,c,232,0
+DEVICES += depacketizer1,c,232,1
 endif
 ifdef CONFIG_LABX_PTP
-DEVICES += ptp0,c,253,0
+DEVICES += ptp0,c,233,0
 endif
 
 # Add the Biamp SPI mailbox peripheral device node
 ifdef CONFIG_SPI_MAILBOX
-DEVICES += mailbox0,c,255,0
+DEVICES += mailbox0,c,235,0
 endif
 
 # Add the Xilinx SPI Master peripheral device node

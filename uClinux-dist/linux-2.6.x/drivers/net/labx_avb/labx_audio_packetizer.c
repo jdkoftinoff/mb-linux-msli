@@ -51,7 +51,7 @@
 #define ASSUMED_MAX_STREAM_SLOTS  32
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 250
+#define DRIVER_MAJOR 230
 
 /* Maximum number of packetizers and instance count */
 #define MAX_INSTANCES 64
@@ -833,7 +833,7 @@ static int __init audio_packetizer_driver_init(void)
   /* Allocate a range of major / minor device numbers for use */
   instanceCount = 0;
   if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
-    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
+    printk(KERN_INFO DRIVER_NAME ": Failed to allocate character device range\n");
   }
   return(0);
 }

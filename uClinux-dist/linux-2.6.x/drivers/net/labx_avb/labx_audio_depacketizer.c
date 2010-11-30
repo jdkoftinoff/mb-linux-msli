@@ -51,7 +51,7 @@
 #define ASSUMED_MAX_STREAM_SLOTS  32
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 252
+#define DRIVER_MAJOR 232
 
 /* Interface type string prefix which indicates a Dma_Coprocessor is
  * in use for the instance.  This could be one of the following:
@@ -1150,7 +1150,7 @@ static int __init audio_depacketizer_driver_init(void)
   /* Allocate a range of major / minor device numbers for use */
   instanceCount = 0;
   if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
-    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
+    printk(KERN_INFO DRIVER_NAME ": Failed to allocate character device range\n");
     goto device_unregister;
   }
   return(0);
