@@ -152,8 +152,8 @@ extern "C" {
  * processor block. They are accessed indirectly through the registers, MSW,
  * LSW, and CTL.
  *
- * Access to these registers should go through macros XLlTemac_ReadIndirectReg()
- * and XLlTemac_WriteIndirectReg() to guarantee proper access.
+ * Access to these registers should go through macros labx_eth_ReadIndirectReg()
+ * and labx_eth_WriteIndirectReg() to guarantee proper access.
  * @{
  */
 #ifdef CONFIG_LABX_ETH_LOCALLINK_HARD_MAC
@@ -437,10 +437,10 @@ extern "C" {
 /***************** Macros (Inline Functions) Definitions *********************/
 xdbg_stmnt(extern int indent_on);
 
-#define XLlTemac_indent(RegOffset) \
+#define labx_eth_indent(RegOffset) \
  ((indent_on && ((RegOffset) >= XTE_RAF_OFFSET) && ((RegOffset) <= XTE_RDY_OFFSET)) ? "\t" : "")
 
-#define XLlTemac_reg_name(RegOffset) \
+#define labx_eth_reg_name(RegOffset) \
 	(((RegOffset) == XTE_RAF_OFFSET) ? "XTE_RAF_OFFSET": \
 	((RegOffset) == XTE_TPF_OFFSET) ? "XTE_TPF_OFFSET": \
 	((RegOffset) == XTE_IFGP_OFFSET) ? "XTE_IFGP_OFFSET": \
@@ -469,49 +469,49 @@ xdbg_stmnt(extern int indent_on);
 	((RegOffset) == XTE_MIIMAI_OFFSET) ? "XTE_MIIMAI_OFFSET": \
 	"unknown")
 
-#define XLlTemac_print_reg_o(BaseAddress, RegOffset, Value) \
+#define labx_eth_print_reg_o(BaseAddress, RegOffset, Value) \
 	xdbg_printf(XDBG_DEBUG_TEMAC_REG, "%s0x%0x -> %s(0x%0x)\n", \
-			XLlTemac_indent(RegOffset), (Value), \
-			XLlTemac_reg_name(RegOffset), (RegOffset)) \
+			labx_eth_indent(RegOffset), (Value), \
+			labx_eth_reg_name(RegOffset), (RegOffset)) \
 
-#define XLlTemac_print_reg_i(BaseAddress, RegOffset, Value) \
+#define labx_eth_print_reg_i(BaseAddress, RegOffset, Value) \
 	xdbg_printf(XDBG_DEBUG_TEMAC_REG, "%s%s(0x%0x) -> 0x%0x\n", \
-			XLlTemac_indent(RegOffset), XLlTemac_reg_name(RegOffset), \
+			labx_eth_indent(RegOffset), labx_eth_reg_name(RegOffset), \
 			(RegOffset), (Value)) \
 
 /****************************************************************************/
 /**
  *
- * XLlTemac_ReadReg returns the value read from the register specified by
+ * labx_eth_ReadReg returns the value read from the register specified by
  * <i>RegOffset</i>.
  *
  * @param    BaseAddress is the base address of the TEMAC channel.
  * @param    RegOffset is the offset of the register to be read.
  *
- * @return   XLlTemac_ReadReg returns the 32-bit value of the register.
+ * @return   labx_eth_ReadReg returns the 32-bit value of the register.
  *
  * @note
  * C-style signature:
- *    u32 XLlTemac_mReadReg(u32 BaseAddress, u32 RegOffset)
+ *    u32 labx_eth_mReadReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
 #ifdef DEBUG
-#define XLlTemac_ReadReg(BaseAddress, RegOffset) \
+#define labx_eth_ReadReg(BaseAddress, RegOffset) \
 ({ \
 	u32 value; \
 	value = XIo_In32(((BaseAddress) + (RegOffset))); \
-	XLlTemac_print_reg_i((BaseAddress), (RegOffset), value); \
+	labx_eth_print_reg_i((BaseAddress), (RegOffset), value); \
 	value; \
 })
 #else
-#define XLlTemac_ReadReg(BaseAddress, RegOffset) \
+#define labx_eth_ReadReg(BaseAddress, RegOffset) \
 	(XIo_In32(((BaseAddress) + (RegOffset))))
 #endif
 
 /****************************************************************************/
 /**
  *
- * XLlTemac_WriteReg, writes <i>Data</i> to the register specified by
+ * labx_eth_WriteReg, writes <i>Data</i> to the register specified by
  * <i>RegOffset</i>.
  *
  * @param    BaseAddress is the base address of the TEMAC channel.
@@ -522,58 +522,58 @@ xdbg_stmnt(extern int indent_on);
  *
  * @note
  * C-style signature:
- *    void XLlTemac_mWriteReg(u32 BaseAddress, u32 RegOffset, u32 Data)
+ *    void labx_eth_mWriteReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
 #ifdef DEBUG
-#define XLlTemac_WriteReg(BaseAddress, RegOffset, Data) \
+#define labx_eth_WriteReg(BaseAddress, RegOffset, Data) \
 ({ \
-	XLlTemac_print_reg_o((BaseAddress), (RegOffset), (Data)); \
+	labx_eth_print_reg_o((BaseAddress), (RegOffset), (Data)); \
 	XIo_Out32(((BaseAddress) + (RegOffset)), (Data)); \
 })
 #else
-#define XLlTemac_WriteReg(BaseAddress, RegOffset, Data) \
+#define labx_eth_WriteReg(BaseAddress, RegOffset, Data) \
 	XIo_Out32(((BaseAddress) + (RegOffset)), (Data))
 #endif
 
 /****************************************************************************/
 /**
  *
- * XLlTemac_ReadIndirectReg returns the value read from the hard TEMAC register
+ * labx_eth_ReadIndirectReg returns the value read from the hard TEMAC register
  * specified by <i>RegOffset</i>.
  *
  * @param    BaseAddress is the base address of the TEMAC channel.
  * @param    RegOffset is the offset of the hard TEMAC register to be read.
  *
- * @return   XLlTemac_ReadIndirectReg returns the 32-bit value of the register.
+ * @return   labx_eth_ReadIndirectReg returns the 32-bit value of the register.
  *
  * @note
  * C-style signature:
- *    u32 XLlTemac_mReadIndirectReg(u32 BaseAddress, u32 RegOffset)
+ *    u32 labx_eth_mReadIndirectReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
 #ifdef DEBUG
 extern u32 _xlltemac_rir_value;
 
-#define XLlTemac_ReadIndirectReg(BaseAddress, RegOffset) \
+#define labx_eth_ReadIndirectReg(BaseAddress, RegOffset) \
 ( \
 	indent_on = 1, \
-	_xlltemac_rir_value = XLlTemac_ReadReg((BaseAddress), (RegOffset)), \
-	XLlTemac_print_reg_i((BaseAddress), (RegOffset), _xlltemac_rir_value), \
+	_xlltemac_rir_value = labx_eth_ReadReg((BaseAddress), (RegOffset)), \
+	labx_eth_print_reg_i((BaseAddress), (RegOffset), _xlltemac_rir_value), \
 	indent_on = 0, \
 	_xlltemac_rir_value \
 )
 #else
-#define XLlTemac_ReadIndirectReg(BaseAddress, RegOffset) \
+#define labx_eth_ReadIndirectReg(BaseAddress, RegOffset) \
 ( \
-	XLlTemac_ReadReg((BaseAddress),(RegOffset)) \
+	labx_eth_ReadReg((BaseAddress),(RegOffset)) \
 )
 #endif
 
 /****************************************************************************/
 /**
  *
- * XLlTemac_WriteIndirectReg, writes <i>Data</i> to the hard TEMAC register
+ * labx_eth_WriteIndirectReg, writes <i>Data</i> to the hard TEMAC register
  * specified by <i>RegOffset</i>.
  *
  * @param    BaseAddress is the base address of the TEMAC channel.
@@ -584,20 +584,20 @@ extern u32 _xlltemac_rir_value;
  *
  * @note
  * C-style signature:
- *    void XLlTemac_WriteIndirectReg(u32 BaseAddress, u32 RegOffset, u32 Data)
+ *    void labx_eth_WriteIndirectReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
 #ifdef DEBUG
-#define XLlTemac_WriteIndirectReg(BaseAddress, RegOffset, Data) \
+#define labx_eth_WriteIndirectReg(BaseAddress, RegOffset, Data) \
 ( \
 	indent_on = 1, \
-	XLlTemac_print_reg_o((BaseAddress), (RegOffset), (Data)), \
-	XLlTemac_WriteReg((BaseAddress), (RegOffset), (Data)), \
+	labx_eth_print_reg_o((BaseAddress), (RegOffset), (Data)), \
+	labx_eth_WriteReg((BaseAddress), (RegOffset), (Data)), \
 	indent_on = 0 \
 )
 #else
-#define XLlTemac_WriteIndirectReg(BaseAddress, RegOffset, Data) \
-	XLlTemac_WriteReg((BaseAddress), (RegOffset), (Data))
+#define labx_eth_WriteIndirectReg(BaseAddress, RegOffset, Data) \
+	labx_eth_WriteReg((BaseAddress), (RegOffset), (Data))
 #endif
 
 #ifdef __cplusplus
