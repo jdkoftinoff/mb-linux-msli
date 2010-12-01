@@ -169,7 +169,7 @@ struct net_local {
 
   /* The underlying OS independent code needs space as well.  A
    * pointer to the following XLlTemac structure will be passed to
-   * any XLlTemac_ function that requires it.  However, we treat the
+   * any labx_eth_ function that requires it.  However, we treat the
    * data as an opaque object in this file (meaning that we never
    * reference any of the fields inside of the structure). */
   XLlTemac Emac;
@@ -221,12 +221,12 @@ static void fifo_int_disable(struct net_local *lp, u32 flags) {
   Write_Fifo32(lp->Emac, FIFO_IER_OFFSET, int_mask);
 }
 
-static void labx_eth_ll_mac_adjust_link(struct net_device *dev);
+static void labx_eth_mac_adjust_link(struct net_device *dev);
 
 /* for exclusion of all program flows (processes, ISRs and BHs) */
-spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
-spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
-spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
 /* Helper function to determine if a given XLlTemac error warrants a reset. */
 extern inline int status_requires_reset(int s)
@@ -267,180 +267,180 @@ static spinlock_t sentQueueSpin = SPIN_LOCK_UNLOCKED;
  * interface is accessed mutually exclusive for dual channel temac support.
  */
 
-static inline void _XLlTemac_Start(XLlTemac *InstancePtr)
+static inline void _labx_eth_Start(XLlTemac *InstancePtr)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_Start(InstancePtr);
+  labx_eth_Start(InstancePtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline void _XLlTemac_Stop(XLlTemac *InstancePtr)
+static inline void _labx_eth_Stop(XLlTemac *InstancePtr)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_Stop(InstancePtr);
+  labx_eth_Stop(InstancePtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline void _XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
+static inline void _labx_eth_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_Reset(InstancePtr, HardCoreAction);
+  labx_eth_Reset(InstancePtr, HardCoreAction);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline int _XLlTemac_SetMacAddress(XLlTemac *InstancePtr,
+static inline int _labx_eth_SetMacAddress(XLlTemac *InstancePtr,
 					  void *AddressPtr)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_SetMacAddress(InstancePtr, AddressPtr);
+  status = labx_eth_SetMacAddress(InstancePtr, AddressPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline void _XLlTemac_GetMacAddress(XLlTemac *InstancePtr,
+static inline void _labx_eth_GetMacAddress(XLlTemac *InstancePtr,
 					   void *AddressPtr)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_GetMacAddress(InstancePtr, AddressPtr);
+  labx_eth_GetMacAddress(InstancePtr, AddressPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline int _XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
+static inline int _labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_SetOptions(InstancePtr, Options);
+  status = labx_eth_SetOptions(InstancePtr, Options);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline int _XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
+static inline int _labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_ClearOptions(InstancePtr, Options);
+  status = labx_eth_ClearOptions(InstancePtr, Options);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline u16 _XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
+static inline u16 _labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
 {
   u16 speed;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  speed = XLlTemac_GetOperatingSpeed(InstancePtr);
+  speed = labx_eth_GetOperatingSpeed(InstancePtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return speed;
 }
 
-static inline void _XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
+static inline void _labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_SetOperatingSpeed(InstancePtr, Speed);
+  labx_eth_SetOperatingSpeed(InstancePtr, Speed);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   /* We need a delay after we set the speed. Otherwise the PHY will not be ready. */
   udelay(10000);
 }
 
-static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
+static inline void _labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_PhySetMdioDivisor(InstancePtr, Divisor);
+  labx_eth_PhySetMdioDivisor(InstancePtr, Divisor);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-inline void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 			      u32 RegisterNum, u16 *PhyDataPtr)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
+  labx_eth_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-inline void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+inline void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 			       u32 RegisterNum, u16 PhyData)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
+  labx_eth_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
 
-static inline int _XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry)
+static inline int _labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_MulticastClear(InstancePtr, Entry);
+  status = labx_eth_MulticastClear(InstancePtr, Entry);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline int _XLlTemac_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
+static inline int _labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_SetMacPauseAddress(InstancePtr, AddressPtr);
+  status = labx_eth_SetMacPauseAddress(InstancePtr, AddressPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline void _XLlTemac_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
+static inline void _labx_eth_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  XLlTemac_GetMacPauseAddress(InstancePtr, AddressPtr);
+  labx_eth_GetMacPauseAddress(InstancePtr, AddressPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 }
 
-static inline int _XLlTemac_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr)
+static inline int _labx_eth_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr)
 {
   int status;
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_GetSgmiiStatus(InstancePtr, SpeedPtr);
+  status = labx_eth_GetSgmiiStatus(InstancePtr, SpeedPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
 }
 
-static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
+static inline int _labx_eth_GetRgmiiStatus(XLlTemac *InstancePtr,
 					   u16 *SpeedPtr,
 					   int *IsFullDuplexPtr,
 					   int *IsLinkUpPtr)
@@ -449,7 +449,7 @@ static inline int _XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr,
   unsigned long flags;
 
   spin_lock_irqsave(&XTE_spinlock, flags);
-  status = XLlTemac_GetRgmiiStatus(InstancePtr, SpeedPtr, IsFullDuplexPtr, IsLinkUpPtr);
+  status = labx_eth_GetRgmiiStatus(InstancePtr, SpeedPtr, IsFullDuplexPtr, IsLinkUpPtr);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
 
   return status;
@@ -478,14 +478,14 @@ void reset(struct net_device *dev, u32 line_num)
   netif_stop_queue(dev);
 
   /* Stop device */
-  _XLlTemac_Stop(&lp->Emac);
+  _labx_eth_Stop(&lp->Emac);
 
   /*
-   * XLlTemac_Reset puts the device back to the default state.  We need
+   * labx_eth_Reset puts the device back to the default state.  We need
    * to save all the settings we don't already know, reset, restore
    * the settings, and then restart the TEMAC.
    */
-  Options = XLlTemac_GetOptions(&lp->Emac);
+  Options = labx_eth_GetOptions(&lp->Emac);
 
   /*
    * Reset the FIFO
@@ -496,7 +496,7 @@ void reset(struct net_device *dev, u32 line_num)
 #if 0
 
   /* now we can reset the device */
-  _XLlTemac_Reset(&lp->Emac, XTE_NORESET_HARD);
+  _labx_eth_Reset(&lp->Emac, XTE_NORESET_HARD);
 
   /* Reset on TEMAC also resets PHY. Give it some time to finish negotiation
    * before we move on */
@@ -523,12 +523,12 @@ void reset(struct net_device *dev, u32 line_num)
   /*
    * The following four functions will return an error if the
    * EMAC is already started.  We just stopped it by calling
-   * _XLlTemac_Reset() so we can safely ignore the return values.
+   * _labx_eth_Reset() so we can safely ignore the return values.
    */
-  (int) _XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr);
-  (int) _XLlTemac_SetOptions(&lp->Emac, Options);
-  (int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
-  Options = XLlTemac_GetOptions(&lp->Emac);
+  (int) _labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr);
+  (int) _labx_eth_SetOptions(&lp->Emac, Options);
+  (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
+  Options = labx_eth_GetOptions(&lp->Emac);
   printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
 
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
@@ -541,13 +541,13 @@ void reset(struct net_device *dev, u32 line_num)
   }
 
   /*
-   * XLlTemac_Start returns an error when: if configured for
+   * labx_eth_Start returns an error when: if configured for
    * scatter-gather DMA and a descriptor list has not yet been created
    * for the send or receive channel, or if no receive buffer descriptors
    * have been initialized. Those are not happening. so ignore the returned
    * result checking.
    */
-  _XLlTemac_Start(&lp->Emac);
+  _labx_eth_Start(&lp->Emac);
 
   /* We're all ready to go.  Start the queue in case it was stopped. */
   netif_wake_queue(dev);
@@ -556,7 +556,7 @@ void reset(struct net_device *dev, u32 line_num)
 static void FifoSendHandler(struct net_device *dev);
 static void FifoRecvHandler(unsigned long p /*struct net_device *dev*/);
 
-DECLARE_TASKLET(FifoRecvBH, FifoRecvHandler, 0);
+static DECLARE_TASKLET(FifoRecvBH, FifoRecvHandler, 0);
 
 static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 {
@@ -676,13 +676,13 @@ static int xenet_open(struct net_device *dev)
    */
   netif_stop_queue(dev);
   lp = netdev_priv(dev);
-  _XLlTemac_Stop(&lp->Emac);
+  _labx_eth_Stop(&lp->Emac);
 
   INIT_LIST_HEAD(&(lp->rcv));
   INIT_LIST_HEAD(&(lp->xmit));
 
   /* Set the MAC address each time opened. */
-  if (_XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
+  if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
     printk(KERN_ERR "%s: labx_ethernet: could not set MAC address.\n",
 	   dev->name);
     return -EIO;
@@ -694,7 +694,7 @@ static int xenet_open(struct net_device *dev)
    * isn't any code to set polled mode, so this check is probably
    * superfluous.
    */
-  Options = XLlTemac_GetOptions(&lp->Emac);
+  Options = labx_eth_GetOptions(&lp->Emac);
   Options |= XTE_FLOW_CONTROL_OPTION;
   Options |= XTE_JUMBO_OPTION;
   Options |= XTE_TRANSMITTER_ENABLE_OPTION;
@@ -703,9 +703,9 @@ static int xenet_open(struct net_device *dev)
   Options |= XTE_FCS_STRIP_OPTION;
 #endif
 
-  (int) _XLlTemac_SetOptions(&lp->Emac, Options);
-  (int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
-  Options = XLlTemac_GetOptions(&lp->Emac);
+  (int) _labx_eth_SetOptions(&lp->Emac, Options);
+  (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
+  Options = labx_eth_GetOptions(&lp->Emac);
   printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
 
   printk(KERN_INFO
@@ -730,7 +730,7 @@ static int xenet_open(struct net_device *dev)
   printk("%s: About to connect (if needed) to phy device\n",__func__);
   if (lp->phy_dev == NULL) {
     /* Lookup phy device */
-    lp->phy_dev = phy_connect(lp->ndev, lp->phy_name, &labx_eth_ll_mac_adjust_link,
+    lp->phy_dev = phy_connect(lp->ndev, lp->phy_name, &labx_eth_mac_adjust_link,
 			      0, PHY_INTERFACE_MODE_MII);
     if(!IS_ERR(lp->phy_dev)) {
       int ret;
@@ -760,7 +760,7 @@ static int xenet_open(struct net_device *dev)
 		       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
 
   /* Start TEMAC device */
-  _XLlTemac_Start(&lp->Emac);
+  _labx_eth_Start(&lp->Emac);
 
   /* We're ready to go. */
   netif_start_queue(dev);
@@ -778,7 +778,7 @@ static int xenet_close(struct net_device *dev)
   netif_stop_queue(dev);
 
   /* Now we could stop the device */
-  _XLlTemac_Stop(&lp->Emac);
+  _labx_eth_Stop(&lp->Emac);
 
   /*
    * Free the interrupt - not polled mode.
@@ -805,7 +805,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 {
   struct net_local *lp = netdev_priv(dev);
 
-  u32 Options = XLlTemac_GetOptions(&lp->Emac);
+  u32 Options = labx_eth_GetOptions(&lp->Emac);
 
   if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
     {
@@ -818,9 +818,9 @@ static void xenet_set_multicast_list(struct net_device *dev)
     }
 
   //printk("Options: %08X, dev->flags %08X\n", Options, dev->flags);
-  _XLlTemac_Stop(&lp->Emac);
-  (int) _XLlTemac_SetOptions(&lp->Emac, Options);
-  (int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
+  _labx_eth_Stop(&lp->Emac);
+  (int) _labx_eth_SetOptions(&lp->Emac, Options);
+  (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
 
   if (dev->mc_count > 0 && dev->mc_count <= 6)
     {
@@ -829,7 +829,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 
   if (dev->flags & IFF_UP)
     {
-      _XLlTemac_Start(&lp->Emac);
+      _labx_eth_Start(&lp->Emac);
     }
 }
 
@@ -844,16 +844,16 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
 
   memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
 
-  _XLlTemac_Stop(&lp->Emac);
+  _labx_eth_Stop(&lp->Emac);
 
-  if (_XLlTemac_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
+  if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
     printk(KERN_ERR "labx_ethernet: could not set MAC address.\n");
     err = -EIO;
   }
 
   if (dev->flags & IFF_UP)
     {
-      _XLlTemac_Start(&lp->Emac);
+      _labx_eth_Start(&lp->Emac);
     }
 
   return err;
@@ -1136,7 +1136,7 @@ labx_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
     return -ENODEV;
   }
 
-  mac_options = XLlTemac_GetOptions(&(lp->Emac));
+  mac_options = labx_eth_GetOptions(&(lp->Emac));
   gmii_cmd = phy_read(lp->phy_dev, MII_BMCR);
   gmii_status = phy_read(lp->phy_dev, MII_BMSR);
   gmii_advControl = phy_read(lp->phy_dev, MII_ADVERTISE);
@@ -1359,7 +1359,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
       return ret;
     epp.cmd = ecmd.cmd;
     epp.autoneg = ecmd.autoneg;
-    Options = XLlTemac_GetOptions(&lp->Emac);
+    Options = labx_eth_GetOptions(&lp->Emac);
     if (Options & XTE_FCS_INSERT_OPTION) {
       epp.rx_pause = 1;
       epp.tx_pause = 1;
@@ -1393,7 +1393,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
       return -EFAULT;
 
     if (edata.data) {
-      if (XLlTemac_IsRxCsum(&lp->Emac) == TRUE) {
+      if (labx_eth_IsRxCsum(&lp->Emac) == TRUE) {
 	lp->local_features |=
 	  LOCAL_FEATURE_RX_CSUM;
       }
@@ -1421,7 +1421,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
       return -EFAULT;
 
     if (edata.data) {
-      if (XLlTemac_IsTxCsum(&lp->Emac) == TRUE) {
+      if (labx_eth_IsTxCsum(&lp->Emac) == TRUE) {
 	dev->features |= NETIF_F_IP_CSUM;
       }
     }
@@ -1450,7 +1450,7 @@ static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
     if (edata.data) {
       /* Features for DMA, preserve for future */
       /*
-	if (XLlTemac_IsDma(&lp->Emac)) {
+	if (labx_eth_IsDma(&lp->Emac)) {
 	dev->features |=
 	NETIF_F_SG | NETIF_F_FRAGLIST;
 	}
@@ -1632,14 +1632,14 @@ static int xtenet_remove(struct device *dev)
   return 0;		/* success */
 }
 
-static void labx_eth_ll_mac_adjust_link(struct net_device *dev)
+static void labx_eth_mac_adjust_link(struct net_device *dev)
 {
   struct net_local *lp = netdev_priv(dev);
   if (lp->phy_dev->link != PHY_DOWN)
     {
       if (lp->cur_speed != lp->phy_dev->speed)
 	{
-	  XLlTemac_SetOperatingSpeed(&lp->Emac, lp->phy_dev->speed);
+	  labx_eth_SetOperatingSpeed(&lp->Emac, lp->phy_dev->speed);
 	  lp->cur_speed = lp->phy_dev->speed;
 	  printk("%s: Link up, %d Mb/s\n", lp->ndev->name, lp->cur_speed);
 	}
@@ -1662,9 +1662,9 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
   u32 maskedFlags;
 
   /* Read the interrupt flags and immediately clear them */
-  maskedFlags = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, INT_FLAGS_REG);
-  maskedFlags &= XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, INT_MASK_REG);
-  XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, INT_FLAGS_REG, maskedFlags);
+  maskedFlags = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, INT_FLAGS_REG);
+  maskedFlags &= labx_eth_ReadReg(InstancePtr->Config.BaseAddress, INT_MASK_REG);
+  labx_eth_WriteReg(InstancePtr->Config.BaseAddress, INT_FLAGS_REG, maskedFlags);
 
   /* Service the MDIO interrupt */
   if((maskedFlags & MDIO_IRQ_MASK) != 0) {
@@ -1684,7 +1684,7 @@ static int xtenet_setup(struct device *dev,
   u32 virt_baddr;		/* virtual base address of TEMAC */
   int i;
 
-  XLlTemac_Config Temac_Config;
+  labx_eth_Config Temac_Config;
 
   struct net_device *ndev = NULL;
   struct net_local *lp = NULL;
@@ -1716,7 +1716,7 @@ static int xtenet_setup(struct device *dev,
   lp->fifo_irq = pdata->fifo_irq;
   strncpy(lp->phy_name,pdata->phy_name,64);
 
-  /* Setup the Config structure for the XLlTemac_CfgInitialize() call. */
+  /* Setup the Config structure for the labx_eth_CfgInitialize() call. */
   Temac_Config.BaseAddress = r_mem->start;
   Temac_Config.TxCsum = pdata->tx_csum;
   Temac_Config.RxCsum = pdata->rx_csum;
@@ -1738,7 +1738,7 @@ static int xtenet_setup(struct device *dev,
     goto error;
   }
 
-  if (XLlTemac_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
+  if (labx_eth_CfgInitialize(&lp->Emac, &Temac_Config, virt_baddr) !=
       XST_SUCCESS) {
     dev_err(dev, "%s: Could not initialize device.\n", ndev->name);
 
@@ -1760,7 +1760,7 @@ static int xtenet_setup(struct device *dev,
     memcpy(ndev->dev_addr, pdata->mac_addr, 6);
   }
 
-  if (_XLlTemac_SetMacAddress(&lp->Emac, ndev->dev_addr) != XST_SUCCESS) {
+  if (_labx_eth_SetMacAddress(&lp->Emac, ndev->dev_addr) != XST_SUCCESS) {
     /* should not fail right after an initialize */
     dev_err(dev, "%s: could not set MAC address.\n", ndev->name);
     rc = -EIO;
@@ -1803,7 +1803,7 @@ static int xtenet_setup(struct device *dev,
 
 #if ! XTE_AUTOSTRIPPING
   lp->stripping =
-    (XLlTemac_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
+    (labx_eth_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
 #endif
 
   rc = register_netdev(ndev);
@@ -1830,9 +1830,9 @@ static int xtenet_setup(struct device *dev,
   }
   init_waitqueue_head(&lp->Emac.PhyWait);
   lp->Emac.MdioState = MDIO_STATE_READY;
-  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
-  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-  XLlTemac_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
@@ -1843,7 +1843,7 @@ static int xtenet_setup(struct device *dev,
 	 lp->gmii_addr);
 
   if (pdata->phy_mask != 0) {
-    return labx_eth_ll_mdio_bus_init(dev, pdata, &lp->Emac);
+    return labx_eth_mdio_bus_init(dev, pdata, &lp->Emac);
   } else {
     return 0;
   }

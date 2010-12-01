@@ -51,14 +51,14 @@
  *
  * <h2>Initialization & Configuration</h2>
  *
- * The XLlTemac_Config structure can be used by the driver to configure itself.
+ * The labx_eth_Config structure can be used by the driver to configure itself.
  * This configuration structure is typically created by the tool-chain based on
  * hardware build properties, although, other methods are allowed and currently
  * used in some systems.
  *
  * To support multiple runtime loading and initialization strategies employed
  * by various operating systems, the driver instance can be initialized using
- * the XLlTemac_CfgInitialze() routine.
+ * the labx_eth_CfgInitialze() routine.
  *
  * <h2>Interrupts and Asynchronous Callbacks</h2>
  *
@@ -74,13 +74,13 @@
  * performed, the calling code should also reconfigure and reapply the proper
  * settings in the TEMAC channel.
  *
- * When a TEMAC channel reset is required, XLlTemac_Reset() should be utilized.
+ * When a TEMAC channel reset is required, labx_eth_Reset() should be utilized.
  *
  * <h2>Virtual Memory</h2>
  *
  * This driver may be used in systems with virtual memory support by passing
  * the appropriate value for the <i>EffectiveAddress</i> parameter to the
- * XLlTemac_CfgInitialize() routine.
+ * labx_eth_CfgInitialize() routine.
  *
  * <h2>Transfering Data</h2>
  *
@@ -198,15 +198,15 @@
  * safe default that should work with PLB bus speeds of up to 150 MHz and keep
  * the MDIO clock below 2.5 MHz. If the user wishes faster access to the PHY
  * then the clock divisor can be set to a different value (see
- * XLlTemac_PhySetMdioDivisor()).
+ * labx_eth_PhySetMdioDivisor()).
  *
- * MII register access is performed through the functions XLlTemac_PhyRead() and
- * XLlTemac_PhyWrite().
+ * MII register access is performed through the functions labx_eth_PhyRead() and
+ * labx_eth_PhyWrite().
  *
  * <h2>Link Sync</h2>
  *
  * When the device is used in a multispeed environment, the link speed must be
- * explicitly set using XLlTemac_SetOperatingSpeed() and must match the speed the
+ * explicitly set using labx_eth_SetOperatingSpeed() and must match the speed the
  * PHY has negotiated. If the speeds are mismatched, then the MAC will not pass
  * traffic.
  *
@@ -224,7 +224,7 @@
  * <h2>Driver Errata</h2>
  *
  *   - A dropped receive frame indication may be reported by the driver after
- *     calling XLlTemac_Stop() followed by XLlTemac_Start(). This can occur if a
+ *     calling labx_eth_Stop() followed by labx_eth_Start(). This can occur if a
  *     frame is arriving when stop is called.
  *   - On Rx with checksum offloading enabled and FCS/PAD stripping disabled,
  *     FCS and PAD data will be included in the checksum result.
@@ -284,8 +284,8 @@ extern "C" {
 /** @name Configuration options
  *
  * The following are device configuration options. See the
- * <i>XLlTemac_SetOptions</i>, <i>XLlTemac_ClearOptions</i> and
- * <i>XLlTemac_GetOptions</i> routines for information on how to use options.
+ * <i>labx_eth_SetOptions</i>, <i>labx_eth_ClearOptions</i> and
+ * <i>labx_eth_GetOptions</i> routines for information on how to use options.
  *
  * The default state of the options are also noted below.
  *
@@ -357,14 +357,14 @@ extern "C" {
      XTE_LENTYPE_ERR_OPTION |                   \
      XTE_TRANSMITTER_ENABLE_OPTION |            \
      XTE_RECEIVER_ENABLE_OPTION)
-/**< XTE_DEFAULT_OPTIONS specify the options set in XLlTemac_Reset() and
- *   XLlTemac_CfgInitialize() */
+/**< XTE_DEFAULT_OPTIONS specify the options set in labx_eth_Reset() and
+ *   labx_eth_CfgInitialize() */
 
 /*@}*/
 
 /** @name Reset parameters
  *
- *  These are used by function XLlTemac_Reset().
+ *  These are used by function labx_eth_Reset().
  * @{
  */
 #define XTE_RESET_HARD    1
@@ -389,7 +389,7 @@ extern "C" {
 #define XTE_MAX_VLAN_FRAME_SIZE  (XTE_MTU + XTE_HDR_VLAN_SIZE + XTE_TRL_SIZE)
 #define XTE_MAX_JUMBO_FRAME_SIZE (XTE_JUMBO_MTU + XTE_HDR_SIZE + XTE_TRL_SIZE)
 
-/* Constant values returned by XLlTemac_mGetPhysicalInterface(). Note that these
+/* Constant values returned by labx_eth_mGetPhysicalInterface(). Note that these
  * values match design parameters from the PLB_TEMAC spec
  */
 #define XTE_PHY_TYPE_MII         0
@@ -428,7 +428,7 @@ typedef struct {
 
 	u8 LLFifoIntr;	/**< LL FIFO interrupt ID */
   u8 MacAddress[6];  /** TEMPORARY software cache of MAC address */
-} XLlTemac_Config;
+} labx_eth_Config;
 
 
 /* Macro definitions for MDIO state */
@@ -443,7 +443,7 @@ typedef struct {
  * type is then passed to the driver API functions.
  */
 typedef struct XLlTemac {
-  XLlTemac_Config Config;    /* Hardware configuration */
+  labx_eth_Config Config;    /* Hardware configuration */
   u32 IsStarted;             /* Device is currently started */
   u32 IsReady;               /* Device is initialized and ready */
   u32 Options;               /* Current options word */
@@ -459,149 +459,149 @@ typedef struct XLlTemac {
 /*****************************************************************************/
 /**
  *
- * XLlTemac_IsStarted reports if the device is in the started or stopped state. To
+ * labx_eth_IsStarted reports if the device is in the started or stopped state. To
  * be in the started state, the calling code must have made a successful call to
- * <i>XLlTemac_Start</i>. To be in the stopped state, <i>XLlTemac_Stop</i> or
- * <i>XLlTemac_CfgInitialize</i> function must have been called.
+ * <i>labx_eth_Start</i>. To be in the stopped state, <i>labx_eth_Stop</i> or
+ * <i>labx_eth_CfgInitialize</i> function must have been called.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_IsStarted returns TRUE if the device has been started.
- *         Otherwise, XLlTemac_IsStarted returns FALSE.
+ * @return labx_eth_IsStarted returns TRUE if the device has been started.
+ *         Otherwise, labx_eth_IsStarted returns FALSE.
  *
  * @note
  *
- * Signature: u32 XLlTemac_IsStarted(XLlTemac *InstancePtr)
+ * Signature: u32 labx_eth_IsStarted(XLlTemac *InstancePtr)
  *
  ******************************************************************************/
-#define XLlTemac_IsStarted(InstancePtr) \
+#define labx_eth_IsStarted(InstancePtr) \
 	(((InstancePtr)->IsStarted == XCOMPONENT_IS_STARTED) ? TRUE : FALSE)
 
 /*****************************************************************************/
 /**
 *
-* XLlTemac_LlDevBaseAddress reports the base address of the core connected to
+* labx_eth_LlDevBaseAddress reports the base address of the core connected to
 * the TEMAC's local link interface.
 *
 * @param InstancePtr references the TEMAC channel on which to operate.
 *
-* @return XLlTemac_IsFifo returns the base address of the core connected to
+* @return labx_eth_IsFifo returns the base address of the core connected to
 * the TEMAC's local link interface.
 *
 * @note
 *
-* Signature: u32 XLlTemac_LlDevBaseAddress(XLlTemac *InstancePtr)
+* Signature: u32 labx_eth_LlDevBaseAddress(XLlTemac *InstancePtr)
 *
 ******************************************************************************/
-#define XLlTemac_LlDevBaseAddress(InstancePtr) \
+#define labx_eth_LlDevBaseAddress(InstancePtr) \
 	((InstancePtr)->Config.LLDevBaseAddress)
 
 /*****************************************************************************/
 /**
  *
- * XLlTemac_IsRecvFrameDropped determines if the device thinks it has dropped a
+ * labx_eth_IsRecvFrameDropped determines if the device thinks it has dropped a
  * receive frame.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_IsRecvFrameDropped returns TRUE if the device interrupt
+ * @return labx_eth_IsRecvFrameDropped returns TRUE if the device interrupt
  * status register reports that a frame has been dropped. Otherwise,
- * XLlTemac_IsRecvFrameDropped returns FALSE.
+ * labx_eth_IsRecvFrameDropped returns FALSE.
  *
  * @note
  *
- * Signature: u32 XLlTemac_IsRecvFrameDropped(XLlTemac *InstancePtr)
+ * Signature: u32 labx_eth_IsRecvFrameDropped(XLlTemac *InstancePtr)
  *
  ******************************************************************************/
-#define XLlTemac_IsRecvFrameDropped(InstancePtr)                     \
-	((XLlTemac_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET) \
+#define labx_eth_IsRecvFrameDropped(InstancePtr)                     \
+	((labx_eth_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET) \
 	& XTE_INT_RXRJECT_MASK) ? TRUE : FALSE)
 
 /*****************************************************************************/
 /**
  *
- * XLlTemac_IsRxCsum determines if the device is configured with checksum
+ * labx_eth_IsRxCsum determines if the device is configured with checksum
  * offloading on the receive channel.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_IsRxCsum returns TRUE if the device is configured with
+ * @return labx_eth_IsRxCsum returns TRUE if the device is configured with
  *         checksum offloading on the receive channel. Otherwise,
- *         XLlTemac_IsRxCsum returns FALSE.
+ *         labx_eth_IsRxCsum returns FALSE.
  *
  * @note
  *
- * Signature: u32 XLlTemac_IsRxCsum(XLlTemac *InstancePtr)
+ * Signature: u32 labx_eth_IsRxCsum(XLlTemac *InstancePtr)
  *
  ******************************************************************************/
-#define XLlTemac_IsRxCsum(InstancePtr) (((InstancePtr)->Config.RxCsum) ?  \
+#define labx_eth_IsRxCsum(InstancePtr) (((InstancePtr)->Config.RxCsum) ?  \
                                        TRUE : FALSE)
 
 /*****************************************************************************/
 /**
  *
- * XLlTemac_IsTxCsum determines if the device is configured with checksum
+ * labx_eth_IsTxCsum determines if the device is configured with checksum
  * offloading on the transmit channel.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_IsTxCsum returns TRUE if the device is configured with
+ * @return labx_eth_IsTxCsum returns TRUE if the device is configured with
  *         checksum offloading on the transmit channel. Otherwise,
- *         XLlTemac_IsTxCsum returns FALSE.
+ *         labx_eth_IsTxCsum returns FALSE.
  *
  * @note
  *
- * Signature: u32 XLlTemac_IsTxCsum(XLlTemac *InstancePtr)
+ * Signature: u32 labx_eth_IsTxCsum(XLlTemac *InstancePtr)
  *
  ******************************************************************************/
-#define XLlTemac_IsTxCsum(InstancePtr) (((InstancePtr)->Config.TxCsum) ?  \
+#define labx_eth_IsTxCsum(InstancePtr) (((InstancePtr)->Config.TxCsum) ?  \
                                        TRUE : FALSE)
 
 /*****************************************************************************/
 /**
  *
- * XLlTemac_GetPhysicalInterface returns the type of PHY interface being used by
+ * labx_eth_GetPhysicalInterface returns the type of PHY interface being used by
  * the given instance, specified by <i>InstancePtr</i>.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_GetPhysicalInterface returns one of XTE_PHY_TYPE_<x> where
+ * @return labx_eth_GetPhysicalInterface returns one of XTE_PHY_TYPE_<x> where
  * <x> is MII, GMII, RGMII_1_3, RGMII_2_0, SGMII, or 1000BASE_X (defined in
  * xlltemac.h).
  *
  * @note
  *
- * Signature: int XLlTemac_GetPhysicalInterface(XLlTemac *InstancePtr)
+ * Signature: int labx_eth_GetPhysicalInterface(XLlTemac *InstancePtr)
  *
  ******************************************************************************/
-#define XLlTemac_GetPhysicalInterface(InstancePtr)       \
+#define labx_eth_GetPhysicalInterface(InstancePtr)       \
 	((InstancePtr)->Config.PhyType)
 
 /****************************************************************************/
 /**
 *
-* XLlTemac_Status returns a bit mask of the interrupt status register (ISR).
-* XLlTemac_Status can be used to query the status without having to have
+* labx_eth_Status returns a bit mask of the interrupt status register (ISR).
+* labx_eth_Status can be used to query the status without having to have
 * interrupts enabled.
 *
 * @param    InstancePtr references the TEMAC channel on which to operate.
 *
-* @return   XLlTemac_IntStatus returns a bit mask of the status conditions.
+* @return   labx_eth_IntStatus returns a bit mask of the status conditions.
 *           The mask will be a set of bitwise or'd values from the
 *           <code>XTE_INT_*_MASK</code> preprocessor symbols.
 *
 * @note
 * C-style signature:
-*    u32 XLlTemac_IntStatus(XLlTemac *InstancePtr)
+*    u32 labx_eth_IntStatus(XLlTemac *InstancePtr)
 *
 *****************************************************************************/
-#define XLlTemac_Status(InstancePtr) \
-	 XLlTemac_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET)
+#define labx_eth_Status(InstancePtr) \
+	 labx_eth_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET)
 
 /****************************************************************************/
 /**
 *
-* XLlTemac_IntEnable enables the interrupts specified in <i>Mask</i>. The
+* labx_eth_IntEnable enables the interrupts specified in <i>Mask</i>. The
 * corresponding interrupt for each bit set to 1 in <i>Mask</i>, will be
 * enabled.
 *
@@ -615,20 +615,20 @@ typedef struct XLlTemac {
 *
 * @note
 * C-style signature:
-*    void XLlTemac_IntEnable(XLlTemac *InstancePtr, u32 Mask)
+*    void labx_eth_IntEnable(XLlTemac *InstancePtr, u32 Mask)
 *
 *****************************************************************************/
-#define XLlTemac_IntEnable(InstancePtr, Mask) \
-	XLlTemac_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IE_OFFSET, \
-		XLlTemac_ReadReg((InstancePtr)->Config.BaseAddress, \
+#define labx_eth_IntEnable(InstancePtr, Mask) \
+	labx_eth_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IE_OFFSET, \
+		labx_eth_ReadReg((InstancePtr)->Config.BaseAddress, \
 				XTE_IE_OFFSET) | ((Mask) & XTE_INT_ALL_MASK)); \
 
 /****************************************************************************/
 /**
 *
-* XLlTemac_IntDisable disables the interrupts specified in <i>Mask</i>. The
+* labx_eth_IntDisable disables the interrupts specified in <i>Mask</i>. The
 * corresponding interrupt for each bit set to 1 in <i>Mask</i>, will be
-* disabled. In other words, XLlTemac_IntDisable uses the "set a bit to clear it"
+* disabled. In other words, labx_eth_IntDisable uses the "set a bit to clear it"
 * scheme.
 *
 * @param    InstancePtr references the TEMAC channel on which to operate.
@@ -641,40 +641,40 @@ typedef struct XLlTemac {
 *
 * @note
 * C-style signature:
-*    void XLlTemac_IntDisable(XLlTemac *InstancePtr, u32 Mask)
+*    void labx_eth_IntDisable(XLlTemac *InstancePtr, u32 Mask)
 *
 *****************************************************************************/
-#define XLlTemac_IntDisable(InstancePtr, Mask) \
-	XLlTemac_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IE_OFFSET, \
-		XLlTemac_ReadReg((InstancePtr)->Config.BaseAddress, \
+#define labx_eth_IntDisable(InstancePtr, Mask) \
+	labx_eth_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IE_OFFSET, \
+		labx_eth_ReadReg((InstancePtr)->Config.BaseAddress, \
 				XTE_IE_OFFSET) & ~((Mask) & XTE_INT_ALL_MASK)); \
 
 /****************************************************************************/
 /**
 *
-* XLlTemac_IntPending returns a bit mask of the pending interrupts. Each bit
+* labx_eth_IntPending returns a bit mask of the pending interrupts. Each bit
 * set to 1 in the return value represents a pending interrupt.
 *
 * @param    InstancePtr references the TEMAC channel on which to operate.
 *
-* @return   XLlTemac_IntPending returns a bit mask of the interrupts that are
+* @return   labx_eth_IntPending returns a bit mask of the interrupts that are
 *           pending. The mask will be a set of bitwise or'd values from the
 *           <code>XTE_INT_*_MASK</code> preprocessor symbols.
 *
 * @note
 * C-style signature:
-*    u32 XLlTemac_IntPending(XLlTemac *InstancePtr)
+*    u32 labx_eth_IntPending(XLlTemac *InstancePtr)
 *
 *****************************************************************************/
-#define XLlTemac_IntPending(InstancePtr) \
-	XLlTemac_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IP_OFFSET)
+#define labx_eth_IntPending(InstancePtr) \
+	labx_eth_ReadReg((InstancePtr)->Config.BaseAddress, XTE_IP_OFFSET)
 
 /****************************************************************************/
 /**
 *
-* XLlTemac_IntClear clears pending interrupts specified in <i>Mask</i>.
+* labx_eth_IntClear clears pending interrupts specified in <i>Mask</i>.
 * The corresponding pending interrupt for each bit set to 1 in <i>Mask</i>,
-* will be cleared. In other words, XLlTemac_IntClear uses the "set a bit to
+* will be cleared. In other words, labx_eth_IntClear uses the "set a bit to
 * clear it" scheme.
 *
 * @param    InstancePtr references the TEMAC channel on which to operate.
@@ -685,11 +685,11 @@ typedef struct XLlTemac {
 *
 * @note
 * C-style signature:
-*    void XLlTemac_IntClear(XLlTemac *InstancePtr, u32 Mask)
+*    void labx_eth_IntClear(XLlTemac *InstancePtr, u32 Mask)
 *
 *****************************************************************************/
-#define XLlTemac_IntClear(InstancePtr, Mask) \
-	XLlTemac_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET, \
+#define labx_eth_IntClear(InstancePtr, Mask) \
+	labx_eth_WriteReg((InstancePtr)->Config.BaseAddress, XTE_IS_OFFSET, \
 			((Mask) & XTE_INT_ALL_MASK))
 
 /************************** Function Prototypes ******************************/
@@ -697,47 +697,47 @@ typedef struct XLlTemac {
 /*
  * Initialization functions in xlltemac.c
  */
-int XLlTemac_CfgInitialize(XLlTemac *InstancePtr, XLlTemac_Config *CfgPtr,
+int labx_eth_CfgInitialize(XLlTemac *InstancePtr, labx_eth_Config *CfgPtr,
 			   u32 VirtualAddress);
-void XLlTemac_Start(XLlTemac *InstancePtr);
-void XLlTemac_Stop(XLlTemac *InstancePtr);
-void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction);
+void labx_eth_Start(XLlTemac *InstancePtr);
+void labx_eth_Stop(XLlTemac *InstancePtr);
+void labx_eth_Reset(XLlTemac *InstancePtr, int HardCoreAction);
 
 /*
  * Initialization functions in xlltemac_sinit.c
  */
-XLlTemac_Config *XLlTemac_LookupConfig(u16 DeviceId);
+labx_eth_Config *labx_eth_LookupConfig(u16 DeviceId);
 
 /*
  * MAC configuration/control functions in xlltemac_control.c
  */
-int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options);
-int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options);
-u32 XLlTemac_GetOptions(XLlTemac *InstancePtr);
+int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options);
+int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options);
+u32 labx_eth_GetOptions(XLlTemac *InstancePtr);
 
-int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
-void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
+int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
+void labx_eth_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr);
 
-int XLlTemac_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
-void XLlTemac_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
-int XLlTemac_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue);
+int labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
+void labx_eth_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr);
+int labx_eth_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue);
 
-int XLlTemac_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr);
-int XLlTemac_GetRgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr,
+int labx_eth_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr);
+int labx_eth_GetRgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr,
 			    int *IsFullDuplexPtr, int *IsLinkUpPtr);
-u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr);
-void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed);
+u16 labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr);
+void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed);
 
-void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor);
-void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
+void labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor);
+void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		      u16 *PhyDataPtr);
-void XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
+void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		       u16 PhyData);
-int XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-void XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-int XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);
+int labx_eth_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
+void labx_eth_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
+int labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry);
 
-extern int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
+extern int labx_eth_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus
 }
 #endif

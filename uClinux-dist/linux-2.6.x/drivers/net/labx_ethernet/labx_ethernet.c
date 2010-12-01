@@ -68,7 +68,7 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
 /*****************************************************************************/
 /**
  *
- * XLlTemac_CfgInitialize initializes a TEMAC channel along with the
+ * labx_eth_CfgInitialize initializes a TEMAC channel along with the
  * <i>InstancePtr</i> that references it. Each TEMAC channel is treated as a
  * separate device from the point of view of this driver.
  *
@@ -86,7 +86,7 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
  *         without an active MMU, <i>EffectiveAddress</i> should be set to the
  *         same value as <code>ConfigPtr->Config.BaseAddress</code>.
  *
- * @return XLlTemac_CfgInitialize returns XST_SUCCESS.
+ * @return labx_eth_CfgInitialize returns XST_SUCCESS.
  *
  * @note
  *
@@ -97,24 +97,24 @@ xdbg_stmnt(u32 _xlltemac_rir_value;
  *
  *
  ******************************************************************************/
-int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
-                           XLlTemac_Config *CfgPtr, u32 EffectiveAddress)
+int labx_eth_CfgInitialize(XLlTemac *InstancePtr,
+                           labx_eth_Config *CfgPtr, u32 EffectiveAddress)
 {
 	/* Verify arguments */
 	XASSERT_NONVOID(InstancePtr != NULL);
 
 	/* Clear instance memory and make copy of configuration */
 	memset(InstancePtr, 0, sizeof(XLlTemac));
-	memcpy(&InstancePtr->Config, CfgPtr, sizeof(XLlTemac_Config));
+	memcpy(&InstancePtr->Config, CfgPtr, sizeof(labx_eth_Config));
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_CfgInitialize\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_CfgInitialize\n");
 	/* Set device base address */
 	InstancePtr->Config.BaseAddress = EffectiveAddress;
 
 	/* Reset the hardware and set default options */
 	InstancePtr->IsReady = XCOMPONENT_IS_READY;
 
-	XLlTemac_Reset(InstancePtr, XTE_NORESET_HARD);
+	labx_eth_Reset(InstancePtr, XTE_NORESET_HARD);
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "Temac_CfgInitialize: returning SUCCESS\n");
@@ -124,7 +124,7 @@ int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
 
 /*****************************************************************************/
 /**
- * XLlTemac_Start starts the TEMAC channel as follows:
+ * labx_eth_Start starts the TEMAC channel as follows:
  *   - Enable transmitter if XTE_TRANSMIT_ENABLE_OPTION is set
  *   - Enable receiver if XTE_RECEIVER_ENABLE_OPTION is set
  *
@@ -140,7 +140,7 @@ int XLlTemac_CfgInitialize(XLlTemac *InstancePtr,
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Start(XLlTemac *InstancePtr)
+void labx_eth_Start(XLlTemac *InstancePtr)
 {
 	u32 Reg;
 
@@ -152,7 +152,7 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -161,16 +161,16 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 		return;
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Start\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Start\n");
 	/* Enable transmitter if not already enabled */
 	if (InstancePtr->Options & XTE_TRANSMITTER_ENABLE_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL, "enabling transmitter\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_TC_OFFSET);
 		if (!(Reg & XTE_TC_TX_MASK)) {
 			xdbg_printf(XDBG_DEBUG_GENERAL,
 				    "transmitter not enabled, enabling now\n");
-			XLlTemac_WriteIndirectReg(InstancePtr->Config.
+			labx_eth_WriteIndirectReg(InstancePtr->Config.
 						  BaseAddress, XTE_TC_OFFSET,
 						  Reg | XTE_TC_TX_MASK);
 		}
@@ -180,13 +180,13 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 	/* Enable receiver */
 	if (InstancePtr->Options & XTE_RECEIVER_ENABLE_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL, "enabling receiver\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_RCW1_OFFSET);
 		if (!(Reg & XTE_RCW1_RX_MASK)) {
 			xdbg_printf(XDBG_DEBUG_GENERAL,
 				    "receiver not enabled, enabling now\n");
 
-			XLlTemac_WriteIndirectReg(InstancePtr->Config.
+			labx_eth_WriteIndirectReg(InstancePtr->Config.
 						  BaseAddress, XTE_RCW1_OFFSET,
 						  Reg | XTE_RCW1_RX_MASK);
 		}
@@ -195,16 +195,16 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
 
 	/* Mark as started */
 	InstancePtr->IsStarted = XCOMPONENT_IS_STARTED;
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Start: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Start: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_Stop gracefully stops the TEMAC channel as follows:
+ * labx_eth_Stop gracefully stops the TEMAC channel as follows:
  *   - Disable all interrupts from this device
  *   - Disable the receiver
  *
- * XLlTemac_Stop does not modify any of the current device options.
+ * labx_eth_Stop does not modify any of the current device options.
  *
  * Since the transmitter is not disabled, frames currently in internal buffers
  * or in process by a DMA engine are allowed to be transmitted.
@@ -221,7 +221,7 @@ void XLlTemac_Start(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Stop(XLlTemac *InstancePtr)
+void labx_eth_Stop(XLlTemac *InstancePtr)
 {
 	u32 Reg;
 
@@ -232,7 +232,7 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -241,18 +241,18 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 		return;
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Stop\n");
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_Stop: disabling interrupts\n");
+		    "labx_eth_Stop: disabling interrupts\n");
 	/* Disable interrupts */
-	//XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, XTE_IE_OFFSET, 0);
+	//labx_eth_WriteReg(InstancePtr->Config.BaseAddress, XTE_IE_OFFSET, 0);
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop: disabling receiver\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Stop: disabling receiver\n");
 	/* Disable the receiver */
-	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 				       XTE_RCW1_OFFSET);
 	Reg &= ~XTE_RCW1_RX_MASK;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_RCW1_OFFSET, Reg);
 
 #if 0
@@ -260,41 +260,41 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
 	 * from HW. Clear it.
 	 */
 	/* get the interrupt pending register */
-	Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, XTE_IP_OFFSET);
+	Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, XTE_IP_OFFSET);
 	if (Reg & XTE_INT_RXRJECT_MASK) {
 		/* set the interrupt status register to clear the interrupt */
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_IS_OFFSET, XTE_INT_RXRJECT_MASK);
 	}
 #endif
 
 	/* Mark as stopped */
 	InstancePtr->IsStarted = 0;
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Stop: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Stop: done\n");
 }
 
 
 /*****************************************************************************/
 /**
- * XLlTemac_Reset performs a reset of the TEMAC channel, specified by
+ * labx_eth_Reset performs a reset of the TEMAC channel, specified by
  * <i>InstancePtr</i>, or both channels if <i>HardCoreAction</i> is set to
  * XTE_RESET_HARD.
  *
- * XLlTemac_Reset also resets the TEMAC channel's options to their default values.
+ * labx_eth_Reset also resets the TEMAC channel's options to their default values.
  *
  * The calling software is responsible for re-configuring the TEMAC channel
  * (if necessary) and restarting the MAC after the reset.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
- * @param HardCoreAction describes how XLlTemac_Reset should treat the hard core
+ * @param HardCoreAction describes how labx_eth_Reset should treat the hard core
  *        block of the TEMAC.<br><br>
  *
- *        If XTE_RESET_HARD is set to XTE_RESET_HARD, then XLlTemac_Reset asserts
+ *        If XTE_RESET_HARD is set to XTE_RESET_HARD, then labx_eth_Reset asserts
  *        the reset signal to the hard core block which will reset both channels
  *        of the TEMAC. This, of course, will bork any activity that may be
  *        occuring on the other channel. So, be careful here.<br><br>
  *
- *        Otherwise, XLlTemac_Reset resets just the transmitter and receiver of
+ *        Otherwise, labx_eth_Reset resets just the transmitter and receiver of
  *        this TEMAC channel.
  *
  * @note
@@ -305,7 +305,7 @@ void XLlTemac_Stop(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
+void labx_eth_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
 	u32 Reg;
 
@@ -316,37 +316,37 @@ void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_Reset\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_Reset\n");
 	/* Stop the device and reset HW */
-	XLlTemac_Stop(InstancePtr);
+	labx_eth_Stop(InstancePtr);
 	InstancePtr->Options = XTE_DEFAULT_OPTIONS;
 
 	/* Reset the receiver */
 	xdbg_printf(XDBG_DEBUG_GENERAL, "resetting the receiver\n");
-	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 				       XTE_RCW1_OFFSET);
 	Reg |= XTE_RCW1_RST_MASK;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_RCW1_OFFSET, Reg);
 
 	/* Reset the transmitter */
 	xdbg_printf(XDBG_DEBUG_GENERAL, "resetting the transmitter\n");
-	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 				       XTE_TC_OFFSET);
 	Reg |= XTE_TC_RST_MASK;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_TC_OFFSET, Reg);
 
 	xdbg_printf(XDBG_DEBUG_GENERAL, "waiting until reset is done\n");
 	/* Poll until the reset is done */
 	while (Reg & (XTE_RCW1_RST_MASK | XTE_TC_RST_MASK)) {
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_RCW1_OFFSET);
-		Reg |= XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg |= labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 						XTE_TC_OFFSET);
 	}
 
@@ -355,12 +355,12 @@ void XLlTemac_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 	/* Resetting hard core will cause both channels to reset :-( */
 	if (HardCoreAction == XTE_RESET_HARD) {
 		xdbg_printf(XDBG_DEBUG_GENERAL, "hard reset\n");
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_RAF_OFFSET, Reg | XTE_RAF_HTRST_MASK);
 		while (TimeoutCount &&
-		       (!(XLlTemac_ReadReg
+		       (!(labx_eth_ReadReg
 			  (InstancePtr->Config.BaseAddress,
 			   XTE_RDY_OFFSET) & XTE_RDY_HARD_ACS_RDY_MASK))) {
 			udelay(XTE_RESET_HARD_DELAY_US);
@@ -396,7 +396,7 @@ static void InitHw(XLlTemac *InstancePtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -405,10 +405,10 @@ static void InitHw(XLlTemac *InstancePtr)
 	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac InitHw\n");
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "XLlTemac InitHw: disabling receiver\n");
-	Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 				       XTE_RCW1_OFFSET);
 	Reg &= ~XTE_RCW1_RX_MASK;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_RCW1_OFFSET, Reg);
 #if 0
 	/*
@@ -416,43 +416,43 @@ static void InitHw(XLlTemac *InstancePtr)
 	 * indication from HW. Clear it.
 	 */
 	/* get the interrupt pending register */
-	Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, XTE_IP_OFFSET);
+	Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, XTE_IP_OFFSET);
 	if (Reg & XTE_INT_RXRJECT_MASK) {
 		/*
 		 * set the interrupt status register to clear the pending
 		 * interrupt
 		 */
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_IS_OFFSET, XTE_INT_RXRJECT_MASK);
 	}
 #endif
 	/* Sync default options with HW but leave receiver and transmitter
-	 * disabled. They get enabled with XLlTemac_Start() if
+	 * disabled. They get enabled with labx_eth_Start() if
 	 * XTE_TRANSMITTER_ENABLE_OPTION and XTE_RECEIVER_ENABLE_OPTION are set
 	 */
-	XLlTemac_SetOptions(InstancePtr, InstancePtr->Options &
+	labx_eth_SetOptions(InstancePtr, InstancePtr->Options &
 			    ~(XTE_TRANSMITTER_ENABLE_OPTION |
 			      XTE_RECEIVER_ENABLE_OPTION));
 
-	XLlTemac_ClearOptions(InstancePtr, ~InstancePtr->Options);
+	labx_eth_ClearOptions(InstancePtr, ~InstancePtr->Options);
 
 	/* Set default MDIO divisor */
-	XLlTemac_PhySetMdioDivisor(InstancePtr, XTE_MDIO_DIV_DFT);
+	labx_eth_PhySetMdioDivisor(InstancePtr, XTE_MDIO_DIV_DFT);
 	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac InitHw: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetMacAddress sets the MAC address for the TEMAC channel, specified
+ * labx_eth_SetMacAddress sets the MAC address for the TEMAC channel, specified
  * by <i>InstancePtr</i> to the MAC address specified by <i>AddressPtr</i>.
  * The TEMAC channel must be stopped before calling this function.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param AddressPtr is a reference to the 6-byte MAC address to set.
  *
- * @return On successful completion, XLlTemac_SetMacAddress returns XST_SUCCESS.
+ * @return On successful completion, labx_eth_SetMacAddress returns XST_SUCCESS.
  *         Otherwise, if the TEMAC channel has not stopped,
- *         XLlTemac_SetMacAddress returns XST_DEVICE_IS_STARTED.
+ *         labx_eth_SetMacAddress returns XST_DEVICE_IS_STARTED.
  *
  * @note
  *
@@ -462,7 +462,7 @@ static void InitHw(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
+int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   /*	u32 MacAddr; */
 	u8 *Aptr = (u8 *) AddressPtr;
@@ -476,7 +476,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_NONVOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 					 XTE_RDY_OFFSET) &
 			XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -486,7 +486,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetMacAddress: setting mac address to: 0x%08x%8x%8x%8x%8x%8x\n",
+		    "labx_eth_SetMacAddress: setting mac address to: 0x%08x%8x%8x%8x%8x%8x\n",
 		    Aptr[0], Aptr[1], Aptr[2], Aptr[3], Aptr[4], Aptr[5]);
 	/*
 	 * Set the MAC bits [31:0] in UAW0
@@ -504,37 +504,37 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	MacAddr |= Aptr[1] << 8;
 	MacAddr |= Aptr[2] << 16;
 	MacAddr |= Aptr[3] << 24;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_0_AW0, MacAddr);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_0_EN0, 0xFFFFFFFF);
 	/* Set MAC bits [47:32] in UAW1 */
 	MacAddr = Aptr[4];
 	MacAddr |= Aptr[5] << 8;
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_0_AW1, MacAddr);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_0_EN1, 0x0000FFFF);
 
 	/* Set a filter to allow broadcasts through */
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_1_AW0, 0xFFFFFFFF);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_1_EN0, 0xFFFFFFFF);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_1_AW1, 0x0000FFFF);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_1_EN1, 0x0000FFFF);
 
 /* LAB X Note (CP) : NOTE: FILTER_2 is specific to avahi multi cast messages for my mix, we really need to implement multicast filtering */
 	/* Multicast Filter */
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_2_AW0, 0x005E0001);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_2_EN0, 0xFFFFFFFF);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_2_AW1, 0x0000FB00);
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  FILTER_2_EN1, 0x0000FFFF);
 #endif
 
@@ -544,7 +544,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetMacAddress gets the MAC address for the TEMAC channel, specified
+ * labx_eth_GetMacAddress gets the MAC address for the TEMAC channel, specified
  * by <i>InstancePtr</i> into the memory buffer specified by <i>AddressPtr</i>.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
@@ -561,7 +561,7 @@ int XLlTemac_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
+void labx_eth_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   /*	u32 MacAddr;*/
 	u8 *Aptr = (u8 *) AddressPtr;
@@ -574,7 +574,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -588,7 +588,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
     }
 #if 0
 	/* Read MAC bits [31:0] in UAW0 */
-	MacAddr = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	MacAddr = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					   FILTER_0_AW0);
 	Aptr[0] = (u8) MacAddr;
 	Aptr[1] = (u8) (MacAddr >> 8);
@@ -596,7 +596,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 	Aptr[3] = (u8) (MacAddr >> 24);
 
 	/* Read MAC bits [47:32] in UAW1 */
-	MacAddr = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	MacAddr = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					   FILTER_0_AW1);
 	Aptr[4] = (u8) MacAddr;
 	Aptr[5] = (u8) (MacAddr >> 8);
@@ -605,16 +605,16 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetOptions enables the options, <i>Options</i> for the TEMAC channel,
+ * labx_eth_SetOptions enables the options, <i>Options</i> for the TEMAC channel,
  * specified by <i>InstancePtr</i>. The TEMAC channel should be stopped with
- * XLlTemac_Stop() before changing options.
+ * labx_eth_Stop() before changing options.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Options is a bitmask of OR'd XTE_*_OPTION values for options to
  *        set. Options not specified are not affected.
  *
- * @return On successful completion, XLlTemac_SetOptions returns XST_SUCCESS.
- *         Otherwise, if the device has not been stopped, XLlTemac_SetOptions
+ * @return On successful completion, labx_eth_SetOptions returns XST_SUCCESS.
+ *         Otherwise, if the device has not been stopped, labx_eth_SetOptions
  *         returns XST_DEVICE_IS_STARTED.
  *
  * @note
@@ -626,7 +626,7 @@ void XLlTemac_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
+int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 {
   /*	u32 Reg;*/		/* Generic register contents */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
@@ -641,7 +641,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_NONVOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 					 XTE_RDY_OFFSET) &
 			XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -650,16 +650,16 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 		return (XST_DEVICE_IS_STARTED);
 	}
 
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOptions\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOptions\n");
 	/* Many of these options will change the RCW1 or TC registers.
 	 * To reduce the amount of IO to the device, group these options here
 	 * and change them all at once.
 	 */
 
 	/* Grab current register contents */
-	RegRcw1 = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	RegRcw1 = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					   XTE_RCW1_OFFSET);
-	RegTc = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	RegTc = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					 XTE_TC_OFFSET);
 	RegNewRcw1 = RegRcw1;
 	RegNewTc = RegTc;
@@ -716,14 +716,14 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	if (RegTc != RegNewTc) {
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "setOptions: writting tc: 0x%0x\n", RegNewTc);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_TC_OFFSET, RegNewTc);
 	}
 
 	if (RegRcw1 != RegNewRcw1) {
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "setOptions: writting rcw1: 0x%0x\n", RegNewRcw1);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_RCW1_OFFSET, RegNewRcw1);
 	}
 
@@ -737,30 +737,30 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	if (Options & XTE_FLOW_CONTROL_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "setOptions: endabling flow control\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_FCC_OFFSET);
 		Reg |= XTE_FCC_FCRX_MASK;
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_FCC_OFFSET, Reg);
 	}
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (fcc): 0x%0x\n",
-		    XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 
 	/* Turn on promiscuous frame filtering (all frames are received ) */
 	if (Options & XTE_PROMISC_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "setOptions: endabling promiscuous mode\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_AFM_OFFSET);
 		Reg |= XTE_AFM_PM_MASK;
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_AFM_OFFSET, Reg);
 	}
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (afm): 0x%0x\n",
-		    XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 #endif
 
@@ -769,16 +769,16 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 #if 1
 		printk("labx_eth_llink: BROADCAST filter option not yet implemented\n");
 #else
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
 		Reg &= ~XTE_RAF_BCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_RAF_OFFSET, Reg);
 #endif
 	}
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (raf): 0x%0x\n",
-		    XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 
 	/* Allow multicast address filtering */
@@ -786,16 +786,16 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 #if 1
 		printk("labx_eth_llink: MULTICAST filter option not yet implemented\n");
 #else
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
 		Reg &= ~XTE_RAF_MCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_RAF_OFFSET, Reg);
 #endif
 	}
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (raf2): 0x%0x\n",
-		    XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 
 	/* The remaining options not handled here are managed elsewhere in the
@@ -808,7 +808,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (end): 0x%0x\n",
-		    XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 	xdbg_printf(XDBG_DEBUG_GENERAL, "setOptions: returning SUCCESS\n");
 	return (XST_SUCCESS);
@@ -816,16 +816,16 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
 
 /*****************************************************************************/
 /**
- * XLlTemac_ClearOptions clears the options, <i>Options</i> for the TEMAC channel,
+ * labx_eth_ClearOptions clears the options, <i>Options</i> for the TEMAC channel,
  * specified by <i>InstancePtr</i>. The TEMAC channel should be stopped with
- * XLlTemac_Stop() before changing options.
+ * labx_eth_Stop() before changing options.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Options is a bitmask of OR'd XTE_*_OPTION values for options to
  *        clear. Options not specified are not affected.
  *
- * @return On successful completion, XLlTemac_ClearOptions returns XST_SUCCESS.
- *         Otherwise, if the device has not been stopped, XLlTemac_ClearOptions
+ * @return On successful completion, labx_eth_ClearOptions returns XST_SUCCESS.
+ *         Otherwise, if the device has not been stopped, labx_eth_ClearOptions
  *         returns XST_DEVICE_IS_STARTED.
  *
  * @note
@@ -837,7 +837,7 @@ int XLlTemac_SetOptions(XLlTemac *InstancePtr, u32 Options)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
+int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
   /*	u32 Reg;*/		/* Generic */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
@@ -852,7 +852,7 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_NONVOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 					 XTE_RDY_OFFSET) &
 			XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
@@ -869,9 +869,9 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	 */
 
 	/* Grab current register contents */
-	RegRcw1 = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	RegRcw1 = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					   XTE_RCW1_OFFSET);
-	RegTc = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	RegTc = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					 XTE_TC_OFFSET);
 	RegNewRcw1 = RegRcw1;
 	RegNewTc = RegTc;
@@ -934,7 +934,7 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "Xtemac_ClearOptions: setting TC: 0x%0x\n",
 			    RegNewTc);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_TC_OFFSET, RegNewTc);
 	}
 
@@ -942,7 +942,7 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "Xtemac_ClearOptions: setting RCW1: 0x%0x\n",
 			    RegNewRcw1);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_RCW1_OFFSET, RegNewRcw1);
 	}
 
@@ -954,10 +954,10 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 #if 0
 	/* Turn off flow control */
 	if (Options & XTE_FLOW_CONTROL_OPTION) {
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_FCC_OFFSET);
 		Reg &= ~XTE_FCC_FCRX_MASK;
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_FCC_OFFSET, Reg);
 	}
 
@@ -965,12 +965,12 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	if (Options & XTE_PROMISC_OPTION) {
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "Xtemac_ClearOptions: disabling promiscuous mode\n");
-		Reg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					       XTE_AFM_OFFSET);
 		Reg &= ~XTE_AFM_PM_MASK;
 		xdbg_printf(XDBG_DEBUG_GENERAL,
 			    "Xtemac_ClearOptions: setting AFM: 0x%0x\n", Reg);
-		XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 					  XTE_AFM_OFFSET, Reg);
 	}
 #endif
@@ -980,10 +980,10 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 #if 1
 		printk("labx_eth_llink: BROADCAST option not yet implemented\n");
 #else
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
 		Reg |= XTE_RAF_BCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_RAF_OFFSET, Reg);
 #endif
 	}
@@ -993,10 +993,10 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 #if 1
 		printk("labx_eth_llink: MULTICAST option not yet implemented\n");
 #else
-		Reg = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
 		Reg |= XTE_RAF_MCSTREJ_MASK;
-		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress,
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
 				  XTE_RAF_OFFSET, Reg);
 #endif
 	}
@@ -1014,18 +1014,18 @@ int XLlTemac_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetOptions returns the current option settings.
+ * labx_eth_GetOptions returns the current option settings.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_GetOptions returns a bitmask of XTE_*_OPTION constants,
+ * @return labx_eth_GetOptions returns a bitmask of XTE_*_OPTION constants,
  *         each bit specifying an option that is currently active.
  *
  * @note
  * See xlltemac.h for a description of the available options.
  *
  ******************************************************************************/
-u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
+u32 labx_eth_GetOptions(XLlTemac *InstancePtr)
 {
 	XASSERT_NONVOID(InstancePtr != NULL);
 	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1035,12 +1035,12 @@ u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_GetOperatingSpeed gets the current operating link speed. This may be
- * the value set by XLlTemac_SetOperatingSpeed() or a hardware default.
+ * labx_eth_GetOperatingSpeed gets the current operating link speed. This may be
+ * the value set by labx_eth_SetOperatingSpeed() or a hardware default.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  *
- * @return XLlTemac_GetOperatingSpeed returns the link speed in units of megabits
+ * @return labx_eth_GetOperatingSpeed returns the link speed in units of megabits
  *         per second.
  *
  * @note
@@ -1051,7 +1051,7 @@ u32 XLlTemac_GetOptions(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
+u16 labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
 {
 	XASSERT_NONVOID(InstancePtr != NULL);
 	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1060,27 +1060,27 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_NONVOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_NONVOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 					 XTE_RDY_OFFSET) &
 			XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_GetOperatingSpeed\n");
-	switch (XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_GetOperatingSpeed\n");
+	switch (labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					 XTE_EMMC_OFFSET) &
 		XTE_EMMC_LINKSPEED_MASK) {
 	case XTE_EMMC_LINKSPD_1000:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 1000\n");
+			    "labx_eth_GetOperatingSpeed: returning 1000\n");
 		return (1000);
 
 	case XTE_EMMC_LINKSPD_100:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 100\n");
+			    "labx_eth_GetOperatingSpeed: returning 100\n");
 		return (100);
 
 	case XTE_EMMC_LINKSPD_10:
 		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "XLlTemac_GetOperatingSpeed: returning 10\n");
+			    "labx_eth_GetOperatingSpeed: returning 10\n");
 		return (10);
 
 	default:
@@ -1091,13 +1091,13 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 
 /*****************************************************************************/
 /**
- * XLlTemac_SetOperatingSpeed sets the current operating link speed. For any
+ * labx_eth_SetOperatingSpeed sets the current operating link speed. For any
  * traffic to be passed, this speed must match the current MII/GMII/SGMII/RGMII
  * link speed.
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param Speed is the speed to set in units of Mbps. Valid values are 10, 100,
- *        or 1000. XLlTemac_SetOperatingSpeed ignores invalid values.
+ *        or 1000. labx_eth_SetOperatingSpeed ignores invalid values.
  *
  * @note
  *
@@ -1107,7 +1107,7 @@ u16 XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
+void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 {
 	u32 EmmcReg;
 
@@ -1119,23 +1119,23 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOperatingSpeed\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOperatingSpeed\n");
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: setting speed to: %d (0x%0x)\n",
+		    "labx_eth_SetOperatingSpeed: setting speed to: %d (0x%0x)\n",
 		    Speed, Speed);
 	/* Get the current contents of the EMAC config register and zero out
 	 * speed bits
 	 */
-	EmmcReg = XLlTemac_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+	EmmcReg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					   XTE_EMMC_OFFSET) &
 		~XTE_EMMC_LINKSPEED_MASK;
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: current speed: 0x%0x\n",
+		    "labx_eth_SetOperatingSpeed: current speed: 0x%0x\n",
 		    EmmcReg);
 	switch (Speed) {
 	case 10:
@@ -1154,16 +1154,16 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "XLlTemac_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
+		    "labx_eth_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
 	/* Set register and return */
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_EMMC_OFFSET, EmmcReg);
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_SetOperatingSpeed: done\n");
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOperatingSpeed: done\n");
 }
 
 /*****************************************************************************/
 /**
- * XLlTemac_PhySetMdioDivisor sets the MDIO clock divisor in the TEMAC channel,
+ * labx_eth_PhySetMdioDivisor sets the MDIO clock divisor in the TEMAC channel,
  * specified by <i>InstancePtr</i> to the value, <i>Divisor</i>. This function
  * must be called once after each reset prior to accessing MII PHY registers.
  *
@@ -1193,7 +1193,7 @@ void XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
  * routines in this TEMAC driverr.
  *
  ******************************************************************************/
-void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
+void labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 {
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY)
@@ -1203,19 +1203,19 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 	 * If the mutual exclusion is enforced properly in the calling code, we
 	 * should never get into the following case.
 	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
+	XASSERT_VOID(labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				      XTE_RDY_OFFSET) &
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
-	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac_PhySetMdioDivisor\n");
-	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_PhySetMdioDivisor\n");
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_MC_OFFSET,
 				  (u32) Divisor | XTE_MC_MDIOEN_MASK);
 }
 
 /*****************************************************************************/
 /*
- * XLlTemac_PhyRead reads the specified PHY register, <i>RegiseterNum</i> on the
+ * labx_eth_PhyRead reads the specified PHY register, <i>RegiseterNum</i> on the
  * PHY specified by <i>PhyAddress</i> into <i>PhyDataPtr</i>. This Ethernet
  * driver does not require the device to be stopped before reading from the PHY.
  * It is the responsibility of the calling code to stop the device if it is
@@ -1226,7 +1226,7 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
  * standard.
  *
  * <b>It is important that calling code set up the MDIO clock with
- * XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
+ * labx_eth_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param PhyAddress is the address of the PHY to be written (multiple
@@ -1252,13 +1252,13 @@ void XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
  * suitable for recovery.
  *
  ******************************************************************************/
-void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
                       u32 RegisterNum, u16 *PhyDataPtr)
 {
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(PhyDataPtr != NULL);
 
-    if(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
+    if(labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
        PHY_MDIO_BUSY) {
       printk("Read issued while PHY busy!\n");
       return;
@@ -1268,7 +1268,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
      * transfer to complete, and then return the read value.
      */
     InstancePtr->MdioState = MDIO_STATE_BUSY;
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+    labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
                       (PHY_MDIO_READ | 
                        ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
                        (RegisterNum & PHY_REG_ADDR_MASK)));
@@ -1279,7 +1279,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
                                      MDIO_TIMEOUT_JIFFIES);
 
     if(InstancePtr->MdioState == MDIO_STATE_READY) {
-      *PhyDataPtr = (u16) XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, 
+      *PhyDataPtr = (u16) labx_eth_ReadReg(InstancePtr->Config.BaseAddress, 
                                            MDIO_DATA_REG);
     } else {
       printk("MDIO read timeout!\n");
@@ -1289,7 +1289,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 
 /*****************************************************************************/
 /*
- * XLlTemac_PhyWrite writes <i>PhyData</i> to the specified PHY register,
+ * labx_eth_PhyWrite writes <i>PhyData</i> to the specified PHY register,
  * <i>RegiseterNum</i> on the PHY specified by <i>PhyAddress</i>. This Ethernet
  * driver does not require the device to be stopped before writing to the PHY.
  * It is the responsibility of the calling code to stop the device if it is
@@ -1300,7 +1300,7 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
  * standard.
  *
  * <b>It is important that calling code set up the MDIO clock with
- * XLlTemac_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
+ * labx_eth_PhySetMdioDivisor() prior to accessing the PHY with this function.</b>
  *
  * @param InstancePtr references the TEMAC channel on which to operate.
  * @param PhyAddress is the address of the PHY to be written (multiple
@@ -1324,21 +1324,21 @@ void XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
  * suitable for recovery.
  *
  ******************************************************************************/
-void XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
                        u32 RegisterNum, u16 PhyData)
 {
 	XASSERT_VOID(InstancePtr != NULL);
 
-    if(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
+    if(labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
        PHY_MDIO_BUSY) {
       printk("Read issued while PHY busy!\n");
       return;
     }
 
     /* Write the data first, then the control register */
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
+    labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
     InstancePtr->MdioState = MDIO_STATE_BUSY;
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+    labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
                       (PHY_MDIO_WRITE | 
                        ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
                        (RegisterNum & PHY_REG_ADDR_MASK)));

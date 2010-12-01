@@ -23,13 +23,13 @@
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 
 
-extern void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, 
+extern void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, 
 		u32 RegisterNum, u16 *PhyDataPtr);
-extern void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
+extern void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
 		u32 RegisterNum, u16 PhyData);
 extern void reset(struct net_device *dev, u32 line_num);
 
-static void labx_eth_ll_free_mdio_bus(struct mii_bus *bus)
+static void labx_eth_free_mdio_bus(struct mii_bus *bus)
 {
 #if 0
 	struct mdiobb_ctrl *ctrl = bus->priv;
@@ -39,28 +39,28 @@ static void labx_eth_ll_free_mdio_bus(struct mii_bus *bus)
 #endif
 }
 
-int labx_eth_ll_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
+int labx_eth_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
 {
 	u16 val=0;
 	//printk("MR%d", phy_id);
-	_XLlTemac_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
+	_labx_eth_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
 	return val;
 }
 
-int labx_eth_ll_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
+int labx_eth_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
 {
   //  printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
-	_XLlTemac_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
+	_labx_eth_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
 	return 0;
 }
 
-int labx_eth_ll_mdio_reset(struct mii_bus *bus)
+int labx_eth_mdio_reset(struct mii_bus *bus)
 {
-	printk("labx_eth_ll_mdio_reset\n");
+	printk("labx_eth_mdio_reset\n");
 	return 0;
 }
 
-int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr)
+int labx_eth_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr)
 {
 	struct mii_bus *new_bus;
 	int ret = -ENOMEM;
@@ -73,9 +73,9 @@ int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data 
 	}
 
 	new_bus->priv = InstancePtr;
-	new_bus->read = labx_eth_ll_mdio_read;
-	new_bus->write = labx_eth_ll_mdio_write;
-	new_bus->reset = labx_eth_ll_mdio_reset;
+	new_bus->read = labx_eth_mdio_read;
+	new_bus->write = labx_eth_mdio_write;
+	new_bus->reset = labx_eth_mdio_reset;
 
 	new_bus->name = "LabX Locallink MDIO Bus";
 	ret = -ENODEV;
@@ -109,7 +109,7 @@ int labx_eth_ll_mdio_bus_init(struct device *dev, struct labx_eth_platform_data 
 out_free_bus:
 	printk("%s: Failed\n",__func__);
 	InstancePtr->mdio_bus = NULL;
-	labx_eth_ll_free_mdio_bus(new_bus);
+	labx_eth_free_mdio_bus(new_bus);
 
 	return ret;
 }
