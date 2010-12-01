@@ -38,8 +38,8 @@
 		reg = < 0x90000000 0x8000000 >;
 	} ;
 	aliases {
-		ethernet0 = &labx_eth_locallink_0;
-		ethernet1 = &labx_eth_locallink_1;
+		ethernet0 = &labx_ethernet_0;
+		ethernet1 = &labx_ethernet_1;
 		serial0 = &xps_uartlite_0;
 		serial1 = &RS232_Atmel;
 		serial2 = &MIDI;
@@ -240,7 +240,7 @@
 			current-speed = <31250>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 15 0 >;
+			interrupts = < 17 0 >;
 			port-number = <2>;
 			reg = < 0x84030000 0x10000 >;
 			xlnx,baudrate = <0x7a12>;
@@ -272,6 +272,7 @@
 			xlnx,cache-address-width = <0xb>;
 			xlnx,cache-data-width = <0x20>;
 			xlnx,cache-data-words = <0x300>;
+			xlnx,cache-read-latency = <0x2>;
 			xlnx,device = "5vlx50t";
 			xlnx,family = "virtex5";
 			xlnx,has-mcr = <0x1>;
@@ -297,6 +298,7 @@
 			xlnx,cache-address-width = <0xb>;
 			xlnx,cache-data-width = <0x20>;
 			xlnx,cache-data-words = <0x300>;
+			xlnx,cache-read-latency = <0x2>;
 			xlnx,device = "5vlx50t";
 			xlnx,family = "virtex5";
 			xlnx,has-mcr = <0x1>;
@@ -317,7 +319,7 @@
 		labx_audio_packetizer_0: labx-audio-packetizer@80010000 {
 			compatible = "xlnx,labx-audio-packetizer-1.00.a";
 			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 12 2 >;
+			interrupts = < 13 2 >;
 			reg = < 0x80010000 0x10000 >;
 			xlnx,cache-address-width = <0xa>;
 			xlnx,cache-data-width = <0x20>;
@@ -332,7 +334,7 @@
 		labx_audio_packetizer_1: labx-audio-packetizer@80090000 {
 			compatible = "xlnx,labx-audio-packetizer-1.00.a";
 			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 13 2 >;
+			interrupts = < 14 2 >;
 			reg = < 0x80090000 0x10000 >;
 			xlnx,cache-address-width = <0xa>;
 			xlnx,cache-data-width = <0x20>;
@@ -344,59 +346,50 @@
 			xlnx,num-clock-domains = <0x1>;
 			xlnx,package = "ff665";
 		} ;
-		labx_eth_locallink_0: labx-eth-locallink@80050000 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "xlnx,compound";
-			ethernet@80050000 {
-				compatible = "xlnx,labx-eth-locallink-1.00.a";
-				device_type = "network";
-				interrupt-parent = <&xps_intc_0>;
-				interrupts = < 9 2 14 2 >;
-				llink-connected = <&xps_ll_fifo_0>;
-				local-mac-address = [ 00 0a 35 f1 31 00 ];
-				phy-mdio-controller = <&labx_eth_locallink_0>;
-				reg = < 0x80050000 0x40 >;
-				xlnx,has-mdio = <0x1>;
-				xlnx,phy-addr = <0x1>;
-				xlnx,phy-mask = <0x6>;
-				xlnx,phy-type = <0x1>;
-				xlnx,rxcsum = <0x0>;
-				xlnx,txcsum = <0x0>;
-			} ;
+		labx_ethernet_0: ethernet@80050000 {
+			compatible = "xlnx,labx-ethernet-1.00.a";
+			device_type = "network";
+			interrupt-parent = <&xps_intc_0>;
+			interrupts = < 9 2 11 2 15 2 >;
+			local-mac-address = [ 00 0a 35 69 b4 00 ];
+			phy-mdio-controller = <&labx_ethernet_0>;
+			reg = < 0x80050000 0x10000 >;
+			xlnx,has-mdio = <0x1>;
+			xlnx,phy-addr = <0x1>;
+			xlnx,phy-mask = <0x6>;
+			xlnx,phy-type = <0x1>;
+			xlnx,rxcsum = <0x0>;
+			xlnx,txcsum = <0x0>;
 		} ;
-		labx_eth_locallink_1: labx-eth-locallink@80070000 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "xlnx,compound";
-			ethernet@80070000 {
-				compatible = "xlnx,labx-eth-locallink-1.00.a";
-				device_type = "network";
-				llink-connected = <&xps_ll_fifo_1>;
-				local-mac-address = [ 00 0a 35 f1 90 01 ];
-				phy-mdio-controller = <&labx_eth_locallink_0>;
-				reg = < 0x80070000 0x40 >;
-				xlnx,has-mdio = <0x0>;
-				xlnx,phy-addr = <0x2>;
-				xlnx,phy-mask = <0x0>;
-				xlnx,phy-type = <0x1>;
-				xlnx,rxcsum = <0x0>;
-				xlnx,txcsum = <0x0>;
-			} ;
+		labx_ethernet_1: ethernet@80070000 {
+			compatible = "xlnx,labx-ethernet-1.00.a";
+			device_type = "network";
+			interrupt-parent = <&xps_intc_0>;
+			interrupts = < 10 2 12 2 16 2 >;
+			local-mac-address = [ 00 0a 35 69 94 01 ];
+			phy-mdio-controller = <&labx_ethernet_0>;
+			reg = < 0x80070000 0x10000 >;
+			xlnx,has-mdio = <0x0>;
+			xlnx,phy-addr = <0x2>;
+			xlnx,phy-mask = <0x0>;
+			xlnx,phy-type = <0x1>;
+			xlnx,rxcsum = <0x0>;
+			xlnx,txcsum = <0x0>;
 		} ;
 		labx_local_audio_0: labx-local-audio@80060000 {
 			compatible = "xlnx,labx-local-audio-1.00.a";
 			reg = < 0x80060000 0x10000 >;
-			xlnx,audio-clock-factor = <0x100>;
 			xlnx,audio-format = "I2S";
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x0>;
+			xlnx,interface-type = "DMA_PLB";
 			xlnx,mplb-awidth = <0x20>;
 			xlnx,mplb-clk-period-ps = <0x1f40>;
 			xlnx,mplb-dwidth = <0x20>;
 			xlnx,mplb-native-dwidth = <0x20>;
 			xlnx,mplb-p2p = <0x0>;
 			xlnx,mplb-smallest-slave = <0x20>;
+			xlnx,npi-data-width = <0x20>;
 			xlnx,num-i2s-streams = <0xc>;
 			xlnx,param-address-width = <0xa>;
 		} ;
@@ -404,16 +397,17 @@
 			compatible = "xlnx,labx-ptp-1.00.a";
 			interrupt-parent = <&xps_intc_0>;
 			interrupts = < 2 2 >;
-			port-interface-0 = <&labx_eth_locallink_0>;
-			port-interface-1 = <&labx_eth_locallink_1>;
+			port-interface-0 = <&labx_ethernet_0>;
+			port-interface-1 = <&labx_ethernet_1>;
 			reg = < 0x80040000 0x10000 >;
+			xlnx,extra-dsp = <0x0>;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x0>;
 			xlnx,nominal-increment-fraction = <0x0>;
 			xlnx,nominal-increment-mantissa = <0x8>;
 			xlnx,num-ports = <0x2>;
-			xlnx,port-interface-0 = "labx_eth_locallink_0";
-			xlnx,port-interface-1 = "labx_eth_locallink_1";
+			xlnx,port-interface-0 = "labx_ethernet_0";
+			xlnx,port-interface-1 = "labx_ethernet_1";
 			xlnx,port-interface-2 = "Invalid";
 			xlnx,port-interface-3 = "Invalid";
 			xlnx,port-interface-4 = "Invalid";
@@ -477,22 +471,8 @@
 			compatible = "xlnx,xps-intc-2.00.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x81800000 0x10000 >;
-			xlnx,kind-of-intr = <0x8183>;
-			xlnx,num-intr-inputs = <0x10>;
-		} ;
-		xps_ll_fifo_0: xps-ll-fifo@800a0000 {
-			compatible = "xlnx,xps-ll-fifo-1.02.a";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 10 2 >;
-			reg = < 0x800a0000 0x10000 >;
-			xlnx,family = "virtex5";
-		} ;
-		xps_ll_fifo_1: xps-ll-fifo@800b0000 {
-			compatible = "xlnx,xps-ll-fifo-1.02.a";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 11 2 >;
-			reg = < 0x800b0000 0x10000 >;
-			xlnx,family = "virtex5";
+			xlnx,kind-of-intr = <0x20183>;
+			xlnx,num-intr-inputs = <0x12>;
 		} ;
 		xps_spi_0: xps-spi@83400000 {
 			compatible = "xlnx,xps-spi-2.01.b", "xlnx,xps-spi-2.00.a";
