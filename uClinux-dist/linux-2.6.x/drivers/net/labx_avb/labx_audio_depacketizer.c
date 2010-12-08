@@ -84,9 +84,6 @@ static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
 static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
   DBG("Enabling the depacketizer\n");
 
-  /* Initialize the local syntonized counter to start at a nominal rate */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, RTC_INCREMENT_REG), NOMINAL_RTC_INCREMENT);
-
   /* Enable the micro-engine, with the "last load" flag for match unit configuration
    * disabled (the loading methods should assert this as needed.)
    */

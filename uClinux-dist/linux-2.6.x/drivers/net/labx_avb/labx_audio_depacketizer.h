@@ -61,9 +61,6 @@
 
 #define ID_CONFIG_DATA_REG   (0x006)
 
-#define RTC_INCREMENT_REG    (0x007)
-#  define NOMINAL_RTC_INCREMENT  0x00800000
-
 #define IRQ_MASK_REG         (0x008)
 #define IRQ_FLAGS_REG        (0x009)
 #  define NO_IRQS   (0x00000000)
