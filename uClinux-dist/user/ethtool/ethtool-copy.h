@@ -230,8 +230,10 @@ struct ethtool_gstrings {
 };
 
 enum ethtool_test_flags {
-	ETH_TEST_FL_OFFLINE	= (1 << 0),	/* online / offline */
-	ETH_TEST_FL_FAILED	= (1 << 1),	/* test passed / failed */
+	ETH_TEST_FL_OFFLINE	 = (1 << 0),	/* online / offline */
+	ETH_TEST_FL_FAILED	 = (1 << 1),	/* test passed / failed */
+    ETH_TEST_FL_INT_LOOP = (1 << 2), /* internal loopback */
+    ETH_TEST_FL_EXT_LOOP = (1 << 3),
 };
 
 /* for requesting NIC test and getting results*/

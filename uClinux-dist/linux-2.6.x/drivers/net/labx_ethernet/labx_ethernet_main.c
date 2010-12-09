@@ -1289,16 +1289,16 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
 
   /* Clear the test results */
   memset(test_results, 0, (sizeof(uint64_t) * LABX_ETHERNET_TEST_LEN));
-  printk("Setting PHY mode: %s\n",
-	 ((test_info->flags & ETH_TEST_FL_OFFLINE) ? "loopback" : "normal"));
 
   /* We have co-opted this self-test ioctl for use as a means to put the
-   * PHY into local loopback mode, with "offline" meaning "local loopback"
-   * and "online" meaning "no loopback" (normal operation).
+   * PHY into local loopback mode, or into other PHY-supported test modes.
+   * TODO: Add other test modes...
    */
   if(lp->phy_dev->drv->loopback) {
-    if(test_info->flags & ETH_TEST_FL_OFFLINE) {
+    if(test_info->flags & ETH_TEST_FL_INT_LOOP) {
       loopback_mode = PHY_LOOPBACK_INTERNAL;
+    } else if(test_info->flags & ETH_TEST_FL_EXT_LOOP) {
+      loopback_mode = PHY_LOOPBACK_EXTERNAL;
     } else loopback_mode = PHY_LOOPBACK_NONE;
     lp->phy_dev->drv->loopback(lp->phy_dev, loopback_mode);
   } else printk("%s PHY driver does not support loopback\n",

@@ -473,7 +473,7 @@ static void bcm54610_loopback(struct phy_device *phydev, u32 mode) {
     phy_write(phydev, MII_CTRL1000, 
 	      (ADVERTISE_1000FULL | BCM54610_MST_SLV_AUTO));
     phydev->autoneg = AUTONEG_ENABLE;
-    printk("BCM54610 loopback disabled; remove loopback jumper\n");
+    printk("BCM54610 loopback disabled\n");
   }
 }
 

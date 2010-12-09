@@ -161,7 +161,7 @@ static struct option {
     { "-p", "--identify", MODE_PHYS_ID, "Show visible port identification (e.g. blinking)",
                 "               [ TIME-IN-SECONDS ]\n" },
     { "-t", "--test", MODE_TEST, "Execute adapter self test",
-                "               [ online | offline ]\n" },
+                "               [ online | offline | int-loop | ext-loop ]\n" },
     { "-S", "--statistics", MODE_GSTATS, "Show adapter statistics" },
     { "-h", "--help", MODE_HELP, "Show this help" },
     {}
@@ -260,6 +260,8 @@ static int seeprom_value = 0;
 static enum {
 	ONLINE=0,
 	OFFLINE,
+    INT_LOOP,
+    EXT_LOOP
 } test_type = OFFLINE;
 
 typedef enum {
@@ -421,7 +423,11 @@ static void parse_cmdline(int argc, char **argp)
 					test_type = ONLINE;
 				} else if (!strcmp(argp[i], "offline")) {
 					test_type = OFFLINE;
-				} else {
+				} else if (!strcmp(argp[i], "int-loop")) {
+                  test_type = INT_LOOP;
+				} else if (!strcmp(argp[i], "ext-loop")) {w
+                  test_type = EXT_LOOP;
+                } else {
 					show_usage(1);
 				}
 				break;
@@ -1864,10 +1870,19 @@ static int do_test(int fd, struct ifreq *ifr)
 	memset (test->data, 0, drvinfo.testinfo_len * sizeof(u64));
 	test->cmd = ETHTOOL_TEST;
 	test->len = drvinfo.testinfo_len;
-	if (test_type == OFFLINE)
-		test->flags = ETH_TEST_FL_OFFLINE;
-	else
-		test->flags = 0;
+	switch(test_type) {
+    case OFFLINE:
+      test->flags = ETH_TEST_FL_OFFLINE;
+      break;
+    case INT_LOOP:
+      test->flags = ETH_TEST_FL_INT_LOOP;
+      break;
+    case EXT_LOOP:
+      test->flags = ETH_TEST_FL_EXT_LOOP;
+      break;
+    default:
+      test->flags = 0;
+    }
 	ifr->ifr_data = (caddr_t)test;
 	err = ioctl(fd, SIOCETHTOOL, ifr);
 	if (err < 0) {
