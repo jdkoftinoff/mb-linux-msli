@@ -155,12 +155,12 @@ static const struct file_operations labx_local_audio_fops = {
  * @param newInstance  - Pointer to the new driver instance, NULL if unused
  */
 int labx_local_audio_probe(const char *name, 
-			   struct platform_device *pdev,
-			   struct resource *addressRange,
-			   u32 numChannels,
-			   struct file_operations *derivedFops,
-			   void *derivedData,
-			   struct labx_local_audio_pdev **newInstance) {
+                           struct platform_device *pdev,
+                           struct resource *addressRange,
+                           u32 numChannels,
+                           struct file_operations *derivedFops,
+                           void *derivedData,
+                           struct labx_local_audio_pdev **newInstance) {
   struct labx_local_audio_pdev *local_audio_pdev;
   int dmaIndex;
   int ret;
@@ -191,7 +191,7 @@ int labx_local_audio_probe(const char *name,
   //
   local_audio_pdev->numChannels = numChannels;
   printk("  Local Audio interface found with %d channels.\n", 
-	 local_audio_pdev->numChannels);
+         local_audio_pdev->numChannels);
   local_audio_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
   local_audio_pdev->miscdev.name = local_audio_pdev->name;
   local_audio_pdev->miscdev.fops = &labx_local_audio_fops;
@@ -262,7 +262,6 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
 
   /* Look up the number of channels in the device tree */
   numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2);
-  numChannels = 24;
 
   /* Dispatch to the generic function */
   return(labx_local_audio_probe(name, pdev, addressRange, numChannels, NULL, NULL, NULL));

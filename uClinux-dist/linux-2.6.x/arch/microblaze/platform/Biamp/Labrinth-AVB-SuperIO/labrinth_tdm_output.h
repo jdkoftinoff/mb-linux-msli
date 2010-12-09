@@ -65,4 +65,31 @@ typedef struct {
 
 #define IOC_ARM_ERROR_IRQS        _IO('l', 0x03)
 
+/* Special definition to indicate "no stream assigned" to a TDM output */
+#define AVB_STREAM_NONE  (0xFFFFFFFF)
+
+/* Structure mapping a single TDM channel to its AVB stream */
+typedef struct {
+  uint32_t tdmChannel;
+  uint32_t avbStream;
+} StreamMapEntry;
+
+#define AUTO_MUTE_DISABLE  (0x00)
+#define AUTO_MUTE_ENABLE   (0x01)
+
+/* Max number of map entries which can be configured in one ioctl() call */
+#define MAX_MAP_ENTRIES  (64)
+
+/* Master structure for configuring the auto-mute logic.  This is used
+ * for both global auto-mute enable / disable control as well as for loading
+ * TDM channel-to-AVB stream map assignments.
+ */
+typedef struct {
+  uint32_t        enable;
+  uint32_t        numMapEntries;
+  StreamMapEntry *mapEntries;
+} AutoMuteConfig;
+
+#define IOC_CONFIG_AUTO_MUTE      _IOR('l', 0x04, AutoMuteConfig)
+
 #endif
