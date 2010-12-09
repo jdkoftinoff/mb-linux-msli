@@ -52,13 +52,15 @@
 #  define NO_IRQS      		(0x00000000)
 #  define IRQ_S2H_MSG_RX     	(0x00000001)
 #  define IRQ_S2H_MSG_TX  	(0x00000002)
-#  define ALL_IRQS     		(0x00000003)
+#  define ALL_IRQS     		(0xFFFFFFFF)
 
 #define HOST_MSG_LEN_REG        (0x003)
 
 #define SPI_IRQ_FLAGS_REG    (0x004)
 
 #define MAX_MAILBOX_MSG_BYTES (1024)
+
+#define MESSAGE_READ_TIMEOUT_MSECS (1000)
 
 #define REGISTER_ADDRESS(device, offset) \
   ((uintptr_t)device->virtualAddress |                       \
@@ -95,7 +97,7 @@ struct spi_mailbox {
   uint32_t regionShift;
 
   /* Wait queue for putting threads to sleep */
-  wait_queue_head_t syncedWriteQueue;
+  wait_queue_head_t messageReadQueue;
 
   /* Mutex for the device instance */
   spinlock_t mutex;
