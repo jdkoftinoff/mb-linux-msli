@@ -57,7 +57,7 @@
 #  define ANALYZER_ENABLE      (0x80000000)
 #  define TDM_DEBUG_PATTERN    (0x40000000)
 #  define ANALYZER_RAMP        (0x20000000)
-#  define AUTO_MUTE_ENABLED    (0x10000000)
+#  define AUTO_MUTE_ACTIVE     (0x10000000)
 #  define ANALYZER_SLOT_MASK   (0x01F)
 #  define ANALYZER_LANE_MASK   (0x1E0)
 #  define ANALYZER_LANE_SHIFT      (5)
@@ -143,8 +143,8 @@ static void configure_auto_mute(struct labrinth_tdm_output *tdmOutput,
   /* First look at the enable setting and apply it */
   controlRegister = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG));
   if(autoMuteConfig->enable == AUTO_MUTE_ENABLE) {
-    controlRegister |= AUTO_MUTE_ENABLED;
-  } else controlRegister &= ~AUTO_MUTE_ENABLED;
+    controlRegister |= AUTO_MUTE_ACTIVE;
+  } else controlRegister &= ~AUTO_MUTE_ACTIVE;
   XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG), controlRegister);
 
   /* Set any new stream map entries in both banks */
@@ -153,7 +153,7 @@ static void configure_auto_mute(struct labrinth_tdm_output *tdmOutput,
       StreamMapEntry *entryPtr = &(autoMuteConfig->mapEntries[entryIndex]);
 
       /* Each entry consists of a map from a TDM channel to its stream */
-      entryWord = ((entryPtr->tdmChannel & MAP_CHANNEL_MASK) << MAP_CHANNEL_SHIFT);
+      entryWord = ((entryPtr->tdmChannel << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
       if(entryPtr->avbStream != AVB_STREAM_NONE) {
         entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
         entryWord |= MAP_STREAM_VALID;
