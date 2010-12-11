@@ -328,10 +328,14 @@ struct phy_device {
 };
 #define to_phy_device(d) container_of(d, struct phy_device, dev)
 
-/* Loopback modes */
-#define PHY_LOOPBACK_NONE      (0x00)
-#define PHY_LOOPBACK_EXTERNAL  (0x01)
-#define PHY_LOOPBACK_INTERNAL  (0x02)
+/* PHY test modes.  Some of these are defined by IEEE 802.3ab */
+#define PHY_TEST_NONE          (0x00)
+#define PHY_TEST_EXT_LOOP      (0x01)
+#define PHY_TEST_INT_LOOP      (0x02)
+#define PHY_TEST_TX_WAVEFORM   (0x03)
+#define PHY_TEST_MASTER_JITTER (0x04)
+#define PHY_TEST_SLAVE_JITTER  (0x05)
+#define PHY_TEST_TX_DISTORTION (0x06)
 
 /* struct phy_driver: Driver structure for a particular PHY type
  *
@@ -402,8 +406,8 @@ struct phy_driver {
 	/* Clears up any memory if needed */
 	void (*remove)(struct phy_device *phydev);
 
-	/* Places the PHY in or out of loopback mode */
-	void (*loopback)(struct phy_device *phydev, u32 mode);
+	/* Places the PHY in or out of a test mode */
+	void (*set_test_mode)(struct phy_device *phydev, u32 mode);
 
 	struct device_driver driver;
 };

@@ -1285,7 +1285,7 @@ static void
 labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info, 
 		       u64 *test_results) {
   struct net_local *lp = netdev_priv(dev);
-  u32 loopback_mode;
+  u32 phy_test_mode;
 
   /* Clear the test results */
   memset(test_results, 0, (sizeof(uint64_t) * LABX_ETHERNET_TEST_LEN));
@@ -1294,15 +1294,25 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
    * PHY into local loopback mode, or into other PHY-supported test modes.
    * TODO: Add other test modes...
    */
-  if(lp->phy_dev->drv->loopback) {
+  if(lp->phy_dev->drv->set_test_mode) {
     if(test_info->flags & ETH_TEST_FL_INT_LOOP) {
-      loopback_mode = PHY_LOOPBACK_INTERNAL;
+      phy_test_mode = PHY_TEST_INT_LOOP;
     } else if(test_info->flags & ETH_TEST_FL_EXT_LOOP) {
-      loopback_mode = PHY_LOOPBACK_EXTERNAL;
-    } else loopback_mode = PHY_LOOPBACK_NONE;
-    lp->phy_dev->drv->loopback(lp->phy_dev, loopback_mode);
-  } else printk("%s PHY driver does not support loopback\n",
-		lp->phy_dev->drv->name);
+      phy_test_mode = PHY_TEST_EXT_LOOP;
+    } else if(test_info->flags & ETH_TEST_FL_TX_WAVEFORM) {
+      phy_test_mode = PHY_TEST_TX_WAVEFORM;
+    } else if(test_info->flags & ETH_TEST_FL_MASTER_JITTER) {
+      phy_test_mode = PHY_TEST_MASTER_JITTER;
+    } else if(test_info->flags & ETH_TEST_FL_SLAVE_JITTER) {
+      phy_test_mode = PHY_TEST_SLAVE_JITTER;
+    } else if(test_info->flags & ETH_TEST_FL_TX_DISTORTION) {
+      phy_test_mode = PHY_TEST_TX_DISTORTION;
+    } else phy_test_mode = PHY_TEST_NONE;
+
+    /* Enter the selected test mode */
+    lp->phy_dev->drv->set_test_mode(lp->phy_dev, phy_test_mode);
+  } else printk("%s PHY driver does not support test modes\n",
+                lp->phy_dev->drv->name);
 }
 
 /* ethtool operations structure */
