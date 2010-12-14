@@ -380,7 +380,14 @@
 			compatible = "xlnx,labx-local-audio-1.00.a";
 			reg = < 0x80060000 0x10000 >;
 			xlnx,audio-format = "I2S";
+			xlnx,cache-address-width = <0xa>;
+			xlnx,cache-data-width = <0x20>;
+			xlnx,cache-enable-width = <0x4>;
 			xlnx,family = "virtex5";
+			xlnx,has-deserializer = <0x1>;
+			xlnx,has-pattern-inserter = <0x1>;
+			xlnx,has-pattern-tester = <0x1>;
+			xlnx,has-serializer = <0x1>;
 			xlnx,include-dphase-timer = <0x0>;
 			xlnx,interface-type = "DMA_PLB";
 			xlnx,mplb-awidth = <0x20>;
@@ -390,8 +397,11 @@
 			xlnx,mplb-p2p = <0x0>;
 			xlnx,mplb-smallest-slave = <0x20>;
 			xlnx,npi-data-width = <0x20>;
+			xlnx,num-clock-domains = <0x1>;
 			xlnx,num-i2s-streams = <0xc>;
+			xlnx,num-packetizers = <0x2>;
 			xlnx,param-address-width = <0xa>;
+			xlnx,ring-buffer-bytes = <0x80>;
 		} ;
 		labx_ptp_0: labx-ptp@80040000 {
 			compatible = "xlnx,labx-ptp-1.00.a";
