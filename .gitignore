@@ -36,3 +36,5 @@ uClinux-dist/uClibc/include/sys/ucontext.h
 uClinux-dist/uClibc/include/sys/user.h
 
 uClinux-dist/uClibc/lib/
+
+uClinux-dist/staging/
