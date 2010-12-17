@@ -92,7 +92,6 @@ static int marvell_ack_interrupt(struct phy_device *phydev)
 	int err;
 
 	/* Clear the interrupts by reading the reg */
-	printk("FOO: marvell_ack_interupt\n");
 	err = phy_read(phydev, MII_M1011_IEVENT);
 
 	if (err < 0)
@@ -105,7 +104,6 @@ static int marvell_config_intr(struct phy_device *phydev)
 {
 	int err;
 
-	printk("FOO: marvell_config_intr\n");
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED)
 		err = phy_write(phydev, MII_M1011_IMASK, MII_M1011_IMASK_INIT);
 	else
@@ -121,10 +119,6 @@ static int marvell_config_aneg(struct phy_device *phydev)
 	/* The Marvell PHY has an errata which requires
 	 * that certain registers get written in order
 	 * to restart autonegotiation */
-	printk("FOO: marvell_config_aneg\n");
-	printk("Bailing - something in here kills Rx!\n");
-	return(0);
-
 	err = phy_write(phydev, MII_BMCR, BMCR_RESET);
 
 	if (err < 0)
@@ -195,7 +189,6 @@ static int m88e1111_config_init(struct phy_device *phydev)
 	int temp;
 
 	/* Enable Fiber/Copper auto selection */
-	printk("FOO: m88e1111_config_init\n");
 	temp = phy_read(phydev, MII_M1111_PHY_EXT_SR);
 	temp &= ~MII_M1111_HWCFG_FIBER_COPPER_AUTO;
 	phy_write(phydev, MII_M1111_PHY_EXT_SR, temp);

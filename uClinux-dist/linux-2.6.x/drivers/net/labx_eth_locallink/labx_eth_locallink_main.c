@@ -18,7 +18,8 @@
  */
 
 /*
- * With the way the hardened Temac works, the driver needs to communicate
+ * With the way  
+the hardened Temac works, the driver needs to communicate
  * with the PHY controller. Since each board will have a different
  * type of PHY, the code that communicates with the MII type controller
  * is inside #ifdef XILINX_PLB_TEMAC_3_00A_ML403_PHY_SUPPORT conditional
@@ -1521,15 +1522,6 @@ static void FifoRecvHandler(unsigned long p)
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
 
-		printk("Got %d Rx:\n", len);
-		{
-		  int idx;
-		  for(idx = 0; idx < len; idx++) {
-		    printk("%02X ", skb->data[idx]);
-		    if((idx % 16) == 15) printk("\n");
-		  }
-		  printk("\n");
-		}
 		skb_put(skb, len);	/* Tell the skb how much data we got. */
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);
