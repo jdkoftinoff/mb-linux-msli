@@ -377,6 +377,7 @@ void XLlFifo_Initialize(XLlFifo *InstancePtr, u32 BaseAddress)
 
 	XLlFifo_TxReset(InstancePtr);
 	XLlFifo_RxReset(InstancePtr);
+    XLlFifo_Reset(InstancePtr);
 
 	XStrm_RxInitialize(&(InstancePtr->RxStreamer), FIFO_WIDTH_BYTES,
 			(void *)InstancePtr,

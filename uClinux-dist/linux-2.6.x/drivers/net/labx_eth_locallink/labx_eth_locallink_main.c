@@ -58,6 +58,11 @@ the hardened Temac works, the driver needs to communicate
 
 #define LOCAL_FEATURE_RX_CSUM   0x01
 
+/* MDIO divisor which should be "safe" for the hard TEMAC; we don't
+ * actually use this hardware but it does need to be configured.
+ */
+#define LABX_ETH_LOCALLINK_MDIO_DIV  (0x28)
+
 /*
  * Default SEND and RECV buffer descriptors (BD) numbers.
  * BD Space needed is (XTE_SEND_BD_CNT+XTE_RECV_BD_CNT)*Sizeof(XLlDma_Bd).
@@ -393,7 +398,7 @@ static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor
 }
 
 inline void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
-				     u32 RegisterNum, u16 *PhyDataPtr)
+                                   u32 RegisterNum, u16 *PhyDataPtr)
 {
 	unsigned long flags;
 
@@ -403,7 +408,7 @@ inline void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 }
 
 inline void _labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
-				      u32 RegisterNum, u16 PhyData)
+                                    u32 RegisterNum, u16 PhyData)
 {
 	unsigned long flags;
 
@@ -531,6 +536,13 @@ static void reset(struct net_device *dev, u32 line_num)
 	 * before we move on */
 #endif
 
+    /* Configure the MDIO divisor; if the hard TEMAC is being used, this
+     * is crucial to getting the hardware to run, even if its MDIO controller
+     * is not being used (which, typically it isn't - the soft Lab X MDIO
+     * controller is instead).
+     */
+    _XLlTemac_PhySetMdioDivisor(&lp->Emac, LABX_ETH_LOCALLINK_MDIO_DIV);
+
 	/* Perform PHY setup */
 	if (NULL != lp->phy_dev)
 	{
@@ -628,7 +640,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 			if (cur_lp != &(lp->rcv)) {
 				list_add_tail(&lp->rcv, &receivedQueue);
 				XLlFifo_IntDisable(&lp->Fifo, XLLF_INT_ALL_MASK);
-				tasklet_schedule(&FifoRecvBH);
+                tasklet_schedule(&FifoRecvBH);
 			}
 			spin_unlock_irqrestore(&receivedQueueSpin, flags);
 			irq_status &= ~XLLF_INT_RC_MASK;
@@ -1491,7 +1503,6 @@ static void FifoRecvHandler(unsigned long p)
 	dev = lp->ndev;
 
 	while (XLlFifo_RxOccupancy(&lp->Fifo) != 0) {
-
 		len = XLlFifo_RxGetLen(&lp->Fifo);
 
 		/*
@@ -1526,7 +1537,7 @@ static void FifoRecvHandler(unsigned long p)
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-		netif_rx(skb);		/* Send the packet upstream. */
+		netif_rx(skb);		/* Send the packet up the stack */
 	}
 	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK | XLLF_INT_RC_MASK |
 			XLLF_INT_RXERROR_MASK | XLLF_INT_TXERROR_MASK);
@@ -1781,17 +1792,6 @@ static void DmaRecvHandlerBH(unsigned long p)
 
 				lp->stats.rx_packets++;
 				lp->stats.rx_bytes += len;
-#if 0
-				{
-					int i;
-
-					for(i=0;i<len;++i)
-					{
-						printk("%02X ",skb->data[i]);
-					}
-					printk("\n");
-				}
-#endif
 
 				netif_rx(skb);	/* Send the packet upstream. */
 
