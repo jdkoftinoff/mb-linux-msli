@@ -94,7 +94,7 @@
  ******************************************************************************/
 int labx_eth_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry)
 {
-	printk("labx_eth_llink: Multicast Add not yet implemented\n");
+	printk("labx_ethernet: Multicast Add not yet implemented\n");
 	return (XST_NO_FEATURE);
 }
 
@@ -123,7 +123,7 @@ int labx_eth_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry)
  ******************************************************************************/
 void labx_eth_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry)
 {
-  printk("labx_eth_llink: Multicast Get not yet implemented\n");
+  printk("labx_ethernet: Multicast Get not yet implemented\n");
 }
 
 /*****************************************************************************/
@@ -153,7 +153,7 @@ void labx_eth_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry)
  ******************************************************************************/
 int labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry)
 {
-	printk("labx_eth_llink: Multicast Clear not yet implemented\n");
+	printk("labx_ethernet: Multicast Clear not yet implemented\n");
 	return (XST_NO_FEATURE);
 }
 
@@ -182,7 +182,7 @@ int labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry)
  ******************************************************************************/
 int labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
-	printk("labx_eth_llink: Set Mac Pause Address not yet implemented\n");
+	printk("labx_ethernet: Set Mac Pause Address not yet implemented\n");
 	return (XST_NO_FEATURE);
 }
 
@@ -208,7 +208,7 @@ int labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 void labx_eth_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 { 
-	printk("labx_eth_llink: Get Mac Pause Address not yet implemented\n");
+	printk("labx_ethernet: Get Mac Pause Address not yet implemented\n");
 }
 
 /*****************************************************************************/
@@ -233,7 +233,7 @@ void labx_eth_GetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 int labx_eth_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue)
 {
-	printk("labx_eth_llink: Send Pause Packet not yet implemented\n");
+	printk("labx_ethernet: Send Pause Packet not yet implemented\n");
 	return (XST_NO_FEATURE);
 }
 
@@ -261,7 +261,7 @@ int labx_eth_SendPausePacket(XLlTemac *InstancePtr, u16 PauseValue)
  ******************************************************************************/
 int labx_eth_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr)
 {
-	printk("labx_eth_llink: Get SGMII Status not yet implemented\n");
+	printk("labx_ethernet: Get SGMII Status not yet implemented\n");
 	return (XST_NO_FEATURE);
 }
 
@@ -299,6 +299,6 @@ int labx_eth_GetSgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr)
 int labx_eth_GetRgmiiStatus(XLlTemac *InstancePtr, u16 *SpeedPtr,
 			      int *IsFullDuplexPtr, int *IsLinkUpPtr)
 {
-	printk("labx_eth_llink: Get RGMII Status not yet implemented\n");
+	printk("labx_ethernet: Get RGMII Status not yet implemented\n");
 	return (XST_NO_FEATURE);
 }

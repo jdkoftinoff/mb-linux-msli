@@ -408,6 +408,7 @@ SUBDIRS = \
 	avahi-dnsconfd \
 	examples \
 	man \
+	tests \
 	service-type-database \
 	avahi-autoipd \
 	po

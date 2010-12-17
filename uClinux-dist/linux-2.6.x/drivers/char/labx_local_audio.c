@@ -121,48 +121,6 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
     }
     break;
 
-  case IOC_LA_SET_INSERT_MODE:
-    {
-      struct LocalAudioInsertConfig config;
-      uint32_t value = 0;
-
-      if(copy_from_user(&config, (void __user*)arg, sizeof(config)) != 0) {
-	return(-EFAULT);
-      }
-
-      switch(config.mode)
-      {
-        default:
-          return(-EINVAL);
-
-        case LA_INSERT_MODE_OFF:
-          break;
-
-        case LA_INSERT_MODE_ZERO:
-          value = LOCAL_AUDIO_INSERTER_ENABLE | LOCAL_AUDIO_INSERTER_ZERO;
-          break;
-
-        case LA_INSERT_MODE_DC:
-          value = LOCAL_AUDIO_INSERTER_ENABLE | LOCAL_AUDIO_INSERTER_DC;
-          break;
-
-        case LA_INSERT_MODE_RAMP:
-          value = LOCAL_AUDIO_INSERTER_ENABLE | LOCAL_AUDIO_INSERTER_RAMP;
-          break;
-
-        case LA_INSERT_MODE_LFSR:
-          value = LOCAL_AUDIO_INSERTER_ENABLE;
-          break;
-      }
-
-      value |= (config.stream << LOCAL_AUDIO_INSERTER_STREAM_SHIFT) & LOCAL_AUDIO_INSERTER_STREAM_MASK;
-      value |= (config.slot << LOCAL_AUDIO_INSERTER_SLOT_SHIFT) & LOCAL_AUDIO_INSERTER_SLOT_MASK;
-      
-      XIo_Out32(LOCAL_AUDIO_INSERTER_BASE(&local_audio_pdev->dma, LOCAL_AUDIO_INSERTER_TDM_CTRL_REG),
-        value);
-    }
-    break;
-
   default:
     /* We don't recognize this command; first let the encapsulated DMA controller
      * a crack at it, and then our derived driver, if one exists.

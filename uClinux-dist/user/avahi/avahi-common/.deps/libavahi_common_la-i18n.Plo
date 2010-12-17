@@ -1,1 +1,6 @@
-#dummy
+libavahi_common_a-i18n.o libavahi_common_a-i18n.o: i18n.c ../config.h \
+  i18n.h
+
+../config.h:
+
+i18n.h:

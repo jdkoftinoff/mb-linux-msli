@@ -8,6 +8,11 @@
 
 menu "Core Applications"
 
+config USER_MICROSUPPORT
+    bool "microsupport library - microsupport"
+    help
+      Include the microsupport C library for networks and osc/midi protocols
+
 config USER_IO_OSC
     bool "io-oscd server - io-osc"
     depends on USER_GSBD

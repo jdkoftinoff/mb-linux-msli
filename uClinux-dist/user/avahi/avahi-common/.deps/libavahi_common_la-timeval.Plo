@@ -1,1 +1,112 @@
-#dummy
+libavahi_common_a-timeval.o libavahi_common_a-timeval.o: timeval.c \
+  ../config.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/pthread.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/features.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_config.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/cdefs.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sched.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/types.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/wordsize.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stddef.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/kernel_types.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/typesizes.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sched.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/time.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/time.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/signal.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigset.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/initspin.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigthread.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdlib.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitflags.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitstatus.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/endian.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/endian.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/types.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/select.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/select.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/sysmacros.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/alloca.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdint.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/assert.h \
+  timeval.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/inttypes.h \
+  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/time.h \
+  ../avahi-common/cdecl.h
+
+../config.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/pthread.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/features.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_config.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/cdefs.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sched.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/types.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/wordsize.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stddef.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/kernel_types.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/typesizes.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sched.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/time.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/time.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/signal.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigset.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/initspin.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigthread.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdlib.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitflags.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitstatus.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/endian.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/endian.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/types.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/select.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/select.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/sysmacros.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/alloca.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdint.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/assert.h:
+
+timeval.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/inttypes.h:
+
+/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/time.h:
+
+../avahi-common/cdecl.h:

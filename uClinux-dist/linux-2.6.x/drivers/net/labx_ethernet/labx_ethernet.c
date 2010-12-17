@@ -767,7 +767,7 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	/* Allow broadcast address filtering */
 	if (Options & XTE_BROADCAST_OPTION) {
 #if 1
-		printk("labx_eth_llink: BROADCAST filter option not yet implemented\n");
+		printk("labx_ethernet: BROADCAST filter option not yet implemented\n");
 #else
 		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
@@ -784,7 +784,7 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 	/* Allow multicast address filtering */
 	if (Options & XTE_MULTICAST_OPTION) {
 #if 1
-		printk("labx_eth_llink: MULTICAST filter option not yet implemented\n");
+		printk("labx_ethernet: MULTICAST filter option not yet implemented\n");
 #else
 		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
@@ -978,7 +978,7 @@ int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	/* Disable broadcast address filtering */
 	if (Options & XTE_BROADCAST_OPTION) {
 #if 1
-		printk("labx_eth_llink: BROADCAST option not yet implemented\n");
+		printk("labx_ethernet: BROADCAST option not yet implemented\n");
 #else
 		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);
@@ -991,7 +991,7 @@ int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 	/* Disable multicast address filtering */
 	if (Options & XTE_MULTICAST_OPTION) {
 #if 1
-		printk("labx_eth_llink: MULTICAST option not yet implemented\n");
+		printk("labx_ethernet: MULTICAST option not yet implemented\n");
 #else
 		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
 				       XTE_RAF_OFFSET);

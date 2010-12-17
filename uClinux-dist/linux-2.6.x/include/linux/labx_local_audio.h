@@ -57,56 +57,14 @@ struct labx_local_audio_pdev {
 };
 
 /* Local audio registers come after the DMA microcode */
-#define LOCAL_AUDIO_REGISTER_RANGE 1
+#define LOCAL_AUDIO_REGISTER_RANGE 2
 
 #define LOCAL_AUDIO_REGISTER_BASE(dma, reg)                     \
   ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_REGISTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
+   ((LOCAL_AUDIO_REGISTER_RANGE << ((dma)->regionShift)) + ((reg)*4)))
 
 /* Register address and control field #defines */
 #define LOCAL_AUDIO_CHANNEL_REG 0x00
-
-
-/* Pattern inserter registers are after local audio registers */
-#define LOCAL_AUDIO_INSERTER_RANGE 2
-
-#define LOCAL_AUDIO_INSERTER_BASE(dma, reg)                     \
-  ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_INSERTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
-
-/* Inserter Registers */
-#define LOCAL_AUDIO_INSERTER_TDM_CTRL_REG 0x00
-#define   LOCAL_AUDIO_INSERTER_ENABLE       0x80000000
-#define   LOCAL_AUDIO_INSERTER_ZERO         0x40000000
-#define   LOCAL_AUDIO_INSERTER_DC           0x20000000
-#define   LOCAL_AUDIO_INSERTER_RAMP         0x10000000
-#define   LOCAL_AUDIO_INSERTER_STREAM_MASK  0x0000FF00
-#define   LOCAL_AUDIO_INSERTER_STREAM_SHIFT 8
-#define   LOCAL_AUDIO_INSERTER_SLOT_MASK    0x000000FF
-#define   LOCAL_AUDIO_INSERTER_SLOT_SHIFT   0
-
-
-/* Pattern tester registers are after pattern inserter registers */
-#define LOCAL_AUDIO_TESTER_RANGE 3
-
-#define LOCAL_AUDIO_TESTER_BASE(dma, reg)                     \
-  ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_TESTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
-
-/* Tester Registers */
-#define LOCAL_AUDIO_TESTER_TDM_CTRL_REG         0x00
-#define   LOCAL_AUDIO_TESTER_ENABLE         0x80000000
-#define   LOCAL_AUDIO_TESTER_DEBUG_PATTERN  0x40000000
-#define   LOCAL_AUDIO_TESTER_RAMP           0x20000000
-#define   LOCAL_AUDIO_TESTER_STREAM_MASK    0x0000FF00
-#define   LOCAL_AUDIO_TESTER_STREAM_SHIFT   8
-#define   LOCAL_AUDIO_TESTER_SLOT_MASK      0x000000FF
-#define   LOCAL_AUDIO_TESTER_SLOT_SHIFT     0
-#define LOCAL_AUDIO_TESTER_ANALYSIS_ERROR_REG   0x01
-#define LOCAL_AUDIO_TESTER_ANALYSIS_PREDICT_REG 0x02
-#define LOCAL_AUDIO_TESTER_ANALYSIS_ACTUAL_REG  0x03
-#define LOCAL_AUDIO_TESTER_TDM_IRQ_MASK_REG     0x04
-#define LOCAL_AUDIO_TESTER_TDM_IRQ_FLAGS_REG    0x05
 
 /* Function prototypes for use by derived drivers */
 int labx_local_audio_probe(const char *name, 

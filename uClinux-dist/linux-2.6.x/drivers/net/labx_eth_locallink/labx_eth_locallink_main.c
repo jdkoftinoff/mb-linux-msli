@@ -1520,7 +1520,7 @@ static void FifoRecvHandler(unsigned long p)
 		XLlFifo_Read(&lp->Fifo, skb->data, len);
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
-#if 0
+#ifdef DEBUG
 		printk("Got %d Rx:\n", len);
 		{
 		  int idx;

@@ -8,16 +8,27 @@ if ! which gcc > /dev/null 2>&1
  exit 1
 fi
 
+if [ ! -f /usr/include/zlib.h ]
+ then
+ echo "This script requires zlib development files to be present"
+ exit 1
+fi
+
 if ! which awk > /dev/null 2>&1
  then
  echo "This script requires awk to be present"
  exit 1
 fi
 
-if [ ! -x /bin/tcsh ]
+if ! which flex > /dev/null 2>&1
  then
- echo "This script requires /bin/tcsh to be present"
- echo "(for Petalogix tools compilation procedure)"
+ echo "This script requires flex to be present"
+ exit 1
+fi
+
+if ! which msgfmt > /dev/null 2>&1
+ then
+ echo "This script requires gettext to be present"
  exit 1
 fi
 
@@ -89,6 +100,6 @@ echo "${PATH}" | tr ':' '\n' | grep -v "${CURRDIR}"
 echo -n "${CURRDIR}/tools/gcc4/bin"
 ) | tr '\n' ':'`
 
-echo "PATH=\"${NEWPATH}:${CURRDIR}/dtc:${CURRDIR}/mbbl-mkbootimage:${CURRDIR}/mcsbin\"" > prepare.sh
-echo "export MB_LINUX=\"$CURRDIR\"" >> prepare.sh
+echo "PATH=${NEWPATH}:${CURRDIR}/dtc:${CURRDIR}/mbbl-mkbootimage:${CURRDIR}/mcsbin" > prepare.sh
+
 echo "Run \". prepare.sh\" from this directory before cross-compiling for MicroBlaze"

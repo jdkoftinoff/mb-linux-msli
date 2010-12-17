@@ -1071,25 +1071,44 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
 				{
 				  strcpy(identity_fdt_full_path,
 					 identity_fdt_path);
-				  /* 
-				     strcat() is valid here because space
-				     allocated matches the length of
-				     concatenated strings
-				  */
-				  strcat(identity_fdt_full_path,"/ethernet");
-				  strcat(identity_fdt_full_path,
-					 identity_fdt_ptr);
+				  /* first check if device has local-mac-address */
 				  identity_offset=
 				    fdt_path_offset(fdt_buf,
 						    identity_fdt_full_path);
+				  
 				  if(identity_offset>=0)
 				    {
 				      identity_property=
 					fdt_get_property(fdt_buf,
 							 identity_offset,
 							 "local-mac-address",
-						      &identity_fdt_value_len);
-				      if(identity_property>=0
+							 &identity_fdt_value_len);
+				      if(identity_fdt_value_len<0)
+					{
+					  /* 
+					     no local-mac-address here, look for
+					     "ethernet" under it
+
+					     strcat() is valid here because space
+					     allocated matches the length of
+					     concatenated strings
+					  */
+					  strcat(identity_fdt_full_path,"/ethernet");
+					  strcat(identity_fdt_full_path,
+						 identity_fdt_ptr);
+					  identity_offset=
+					    fdt_path_offset(fdt_buf,
+							    identity_fdt_full_path);
+					  if(identity_offset>=0)
+					    {
+					      identity_property=
+						fdt_get_property(fdt_buf,
+								 identity_offset,
+								 "local-mac-address",
+								 &identity_fdt_value_len);
+					    }
+					}
+				      if(identity_property
 					 &&identity_fdt_value_len==6)
 					/* 
 					   MAC address is always

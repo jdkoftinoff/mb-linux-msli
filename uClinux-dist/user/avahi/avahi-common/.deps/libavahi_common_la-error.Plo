@@ -1,1 +1,10 @@
-#dummy
+libavahi_common_a-error.o libavahi_common_a-error.o: error.c ../config.h \
+  error.h ../avahi-common/cdecl.h i18n.h
+
+../config.h:
+
+error.h:
+
+../avahi-common/cdecl.h:
+
+i18n.h:
