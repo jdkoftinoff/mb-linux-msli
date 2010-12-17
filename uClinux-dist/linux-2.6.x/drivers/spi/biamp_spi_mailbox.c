@@ -96,18 +96,15 @@ static int32_t await_message_ready(struct spi_mailbox *mailbox) {
     * enter the wait queue.
     */
     waitResult =
-      wait_event_interruptible_timeout(mailbox->messageReadQueue,
-                                       ((XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG)) &
-                                         IRQ_S2H_MSG_RX) == IRQ_S2H_MSG_RX),
-                                       msecs_to_jiffies(MESSAGE_READ_TIMEOUT_MSECS));
+      wait_event_interruptible(mailbox->messageReadQueue, (mailbox->messageReadyFlag == MESSAGE_READY));
 
-      /* If the wait returns zero, then the timeout elapsed; if negative, a signal
-       * interrupted the wait.
-       */
-       if(waitResult == 0) returnValue = -ETIMEDOUT;
-       else if(waitResult < 0) returnValue = -EAGAIN;
+      /* Reset message ready flag after exiting the wait queue */ 
+      mailbox->messageReadyFlag = MESSAGE_NOT_READY;
+
+      /* If negative, a signal interrupted the wait. */
+       if(waitResult < 0) returnValue = -EAGAIN;
 			    
-  /* Return success or "timed out" */
+  /* Return success */
   return(returnValue);
 }
 
@@ -120,11 +117,14 @@ static irqreturn_t biamp_spi_mailbox_interrupt(int irq, void *dev_id) {
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG));
+  
   maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), maskedFlags);
 
-  /* Detect the slave-to-host message received IRQ */
+  /* Detect the slave-to-host message wait_received IRQ */
   if((maskedFlags & IRQ_S2H_MSG_RX) != 0) {
+    /* Set message ready flag before waking up thread */
+    mailbox->messageReadyFlag = MESSAGE_READY;
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(mailbox->messageReadQueue));
   }
@@ -142,8 +142,12 @@ static int spi_mailbox_open(struct inode *inode, struct file *filp)
   unsigned long flags;
   int returnValue = 0;
 
+  /* Navigate to the driver object */
   mailbox = container_of(inode->i_cdev, struct spi_mailbox, cdev);
   filp->private_data = mailbox;
+
+  /* Clear the message ready flag for the first time */
+  mailbox->messageReadyFlag = MESSAGE_NOT_READY;
 
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
@@ -166,6 +170,7 @@ static int spi_mailbox_release(struct inode *inode, struct file *filp)
   unsigned long flags;
 
   preempt_disable();
+
   spin_lock_irqsave(&mailbox->mutex, flags);
   mailbox->opened = false;
   spin_unlock_irqrestore(&mailbox->mutex, flags);
@@ -177,14 +182,17 @@ static int spi_mailbox_release(struct inode *inode, struct file *filp)
  */
 static uint32_t read_mailbox_message(struct spi_mailbox *mailbox, uint8_t* mailboxMessage) {
   uint32_t messageLength;
+  uint32_t controlReg;
   int i;
 
   DBG("Read mailbox message \n");
   messageLength  = XIo_In32(REGISTER_ADDRESS(mailbox, HOST_MSG_LEN_REG));
-  
   for(i=0; i < ((messageLength + 3)/4); i++) { 
    ((uint32_t*)mailboxMessage)[i] = XIo_In32(MSG_RAM_BASE(mailbox)+(i*4));
   }
+  /* Toggle bit in control register to acknowledge message has been picked up */
+  controlReg = XIo_In32(REGISTER_ADDRESS(mailbox, CONTROL_REG));
+  XIo_Out32(REGISTER_ADDRESS(mailbox, CONTROL_REG), (controlReg | HOST_MESSAGE_CONSUMED));
   return(messageLength);
 }
 
@@ -203,10 +211,12 @@ static void send_message_response(struct spi_mailbox *mailbox,
 
 /* Set IRQ flags
  */
-static void set_irq_flags(struct spi_mailbox *mailbox, uint32_t flagValue) {
+static void set_irq_flags(struct spi_mailbox *mailbox, uint8_t flagValue) {
+  uint8_t irqFlags;
 	
   DBG("Setting mailbox flags \n");
-  XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), flagValue);
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_REG), flagValue);
+  irqFlags = XIo_In32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_REG));
 }
 
 /* Buffer for storing configuration words */
@@ -234,41 +244,27 @@ static int spi_mailbox_ioctl(struct inode *inode, struct file *flip,
       MessageData userMessage;
       MessageData localMessage;
     
-     printk("Now attempting to read the mailbox\n");
-
      /* Copy into our local descriptor, then obtain buffer pointer from userland */
      if(copy_from_user(&userMessage, (void __user*)arg, sizeof(userMessage)) != 0) {
        return(-EFAULT);
      }
 
-     printk("Copied structure from user into kernel space\n");
-     
      returnValue = await_message_ready(mailbox);
      
-     printk("Returned the await_message_ready function\n");
-
      if(returnValue < 0) {
        return(returnValue);
      }
 
-     printk("Checked the return value\n");
-
      localMessage.length = read_mailbox_message(mailbox, messageBuffer);
-
-     printk("Finished setting the length the value the read message function\n");
-
+     
      if(copy_to_user((void __user*)userMessage.messageContent, messageBuffer,
                      (min(userMessage.length, localMessage.length))) != 0) {
        return(-EFAULT);
      }
 
-     printk("Copied the message content to the user\n");
-
      if(copy_to_user((void __user*)arg, &localMessage.length, sizeof(localMessage.length)) != 0 ) {
        return(-EFAULT);
      }
-
-     printk("Copied the length to the user\n");
    }  
    break;
   
@@ -294,11 +290,7 @@ static int spi_mailbox_ioctl(struct inode *inode, struct file *flip,
   
   case IOC_SET_IRQ_FLAGS:
    {
-     uint32_t irqFlags;
-     if(copy_from_user(&irqFlags, (void __user*)arg, sizeof(irqFlags)) != 0) {
-       return(-EFAULT);
-     }   
-     set_irq_flags(mailbox, irqFlags);
+     set_irq_flags(mailbox, ((uint8_t)arg));
    }
    break;
 
@@ -329,9 +321,9 @@ static struct file_operations spi_mailbox_fops = {
  * @param irq          - Resource describing the hardware's IRQ
  */
 static int spi_mailbox_probe(const char *name, 
-                                  struct platform_device *pdev,
-                                  struct resource *addressRange,
-				  struct resource *irq) {
+			     struct platform_device *pdev,
+			     struct resource *addressRange,
+			     struct resource *irq) {
   struct spi_mailbox *mailbox;
   int returnValue;
 
@@ -357,7 +349,7 @@ static int spi_mailbox_probe(const char *name,
     goto release;
   }
 
-  /* Ensure that the engine and its interrupts are disabled */
+  /* Ensure that the mailbox and its interrupts are disabled */
   disable_mailbox(mailbox);
   XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG), NO_IRQS);
 
