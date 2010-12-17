@@ -77,7 +77,7 @@ int labx_eth_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pd
 	new_bus->write = labx_eth_mdio_write;
 	new_bus->reset = labx_eth_mdio_reset;
 
-	new_bus->name = "LabX Ethernet MDIO Bus";
+	new_bus->name = "LabX Locallink MDIO Bus";
 	ret = -ENODEV;
 
 	new_bus->phy_mask = ~pdata->phy_mask;
