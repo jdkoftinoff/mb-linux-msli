@@ -2926,7 +2926,11 @@ static int xtenet_setup(
 	lp->Emac.MdioState = MDIO_STATE_READY;
 	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
 	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+
+    /* TODO - Add a configuration option; for now this presumes an active-
+     *        low interrupt from the PHY (which is most common)
+     */
+    XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
 	lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
@@ -3112,7 +3116,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 
 	if (NULL != r_irq_phy) {
 		for (i=0; i<PHY_MAX_ADDR; i++) {
-			pdata_struct.mdio_phy_irqs[i] = r_irq_phy->start;
+          pdata_struct.mdio_phy_irqs[i] = r_irq_phy->start;
 		}
 	}
 
