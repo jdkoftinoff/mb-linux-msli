@@ -37,5 +37,20 @@ struct LocalAudioChannelMapping {
 #define IOC_LA_SET_CHANNEL_MAPPING _IOW('L', 0x01, struct LocalAudioChannelMapping)
 #define IOC_LA_GET_CHANNEL_MAPPING _IOWR('L', 0x02, struct LocalAudioChannelMapping)
 
+
+/* Data insertion control */
+#define LA_INSERT_MODE_OFF  0
+#define LA_INSERT_MODE_ZERO 1
+#define LA_INSERT_MODE_DC   2
+#define LA_INSERT_MODE_RAMP 3
+#define LA_INSERT_MODE_LFSR 4
+
+struct LocalAudioInsertConfig {
+	uint32_t mode;
+	uint32_t stream;
+	uint32_t slot;
+};
+#define IOC_LA_SET_INSERT_MODE _IOW('L', 0x03, struct LocalAudioInsertConfig)
+
 #endif /* _LOCAL_AUDIO_DEFS_H_ */
 
