@@ -8,22 +8,13 @@
 
 menu "Core Applications"
 
-config USER_MICROSUPPORT
-    bool "microsupport library - microsupport"
-    help
-      Include the microsupport C library for networks and osc/midi protocols
-
 config USER_IO_OSC
     bool "io-oscd server - io-osc"
     depends on USER_GSBD
-    depends on USER_LIBTC
+    depends on LIB_LIBTC
+    depends on LIB_MICROSUPPORT
     help
       Include the Open Sound Control server for Meyer Sound D-Mitri IO modules
-
-config USER_LIBTC
-	bool "midi time code server - libtc"
-	help
-	  Include the midi server executable for DGPIO.
 
 config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"

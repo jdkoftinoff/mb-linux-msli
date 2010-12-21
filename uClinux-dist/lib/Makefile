@@ -95,6 +95,10 @@ dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
+dir_5_$(CONFIG_LIB_LIBTC) += libtc
+dir_5_$(CONFIG_LIB_MICROSUPPORT) += microsupport
+dir_5_$(CONFIG_LIB_IEEE1722_1)   += ieee1722_1
+
 #
 # dir 6, 7 and 8 reserved for Makefile.local
 #
@@ -202,6 +206,9 @@ clean: clean_links
 #
 #
 LINKLIBS=\
+    $(ROOTDIR)/lib/libtc/tmp-target/build/lib/libtc.a \
+    $(ROOTDIR)/lib/microsupport/tmp-target/build/lib/libmicrosupport.a \
+    $(ROOTDIR)/lib/ieee1722_1/tmp-target/build/lib/ieee1722_1.a \
 	$(ROOTDIR)/lib/libxml2/build/.libs/libxml2.so \
 	$(ROOTDIR)/lib/libjpeg/*.a \
 	$(ROOTDIR)/lib/libpng/*.a \

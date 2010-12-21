@@ -10,6 +10,26 @@ menu "Library Configuration"
 
 comment "Force build (normally built when required)"
 
+config LIB_LIBTC
+    bool "timecode library - libtc"
+    default n
+    help
+      Include the Meyer Sound timecode C library for SMPTE and MIDI Time Code
+
+config LIB_MICROSUPPORT
+    bool "microsupport library - microsupport"
+    default n
+    help
+      Include the microsupport C library for allocator, network, osc/midi protocols
+      see http://github.com/jdkoftinoff/microsupport for more information
+
+config LIB_IEEE1722_1
+    bool "ieee1722.1 library"
+    default n
+    help
+      Include the draft ieee1722.1 C library
+      see http://github.com/jdkoftinoff/ieee1722_1 for more information
+
 config LIB_BITVECTOR
 	bool "Build bit vector"
 	default n

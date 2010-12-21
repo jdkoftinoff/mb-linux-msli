@@ -1,231 +1,231 @@
 libavahi_core_a-iface.o: iface.c ../config.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/string.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/features.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_config.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/cdefs.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stddef.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/errno.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/errno.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/errno.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/errno.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/errno.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/errno-base.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdio.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/wordsize.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/kernel_types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/typesizes.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sched.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_stdio.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_mutex.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/pthread.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sched.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/time.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/time.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/signal.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigset.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/initspin.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigthread.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_pthread.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stdarg.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/stdio_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdlib.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitflags.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitstatus.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/endian.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/endian.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/select.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/select.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/sysmacros.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/alloca.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdint.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/socket.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/uio.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uio.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/socket.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/limits.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/limits.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/posix1_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/local_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/limits.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/posix2_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/xopen_lim.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sockaddr.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/socket.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/sockios.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/ioctl.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/ioctl.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/ioctl.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/netinet/in.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/in.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/byteswap.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdio.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_stdio.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_mutex.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/pthread.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sched.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/signal.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/initspin.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigthread.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_pthread.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdlib.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/waitflags.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/waitstatus.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/alloca.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h \
   ../avahi-common/error.h ../avahi-common/cdecl.h \
   ../avahi-common/malloc.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/assert.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h \
   ../avahi-common/gccmacro.h ../avahi-common/domain.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/inttypes.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h \
   iface.h ../avahi-common/llist.h ../avahi-common/address.h internal.h \
   ../avahi-common/watch.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/poll.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/poll.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/time.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/poll.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/poll.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/time.h \
   core.h ../avahi-common/defs.h ../avahi-core/rr.h \
   ../avahi-common/strlst.h prioq.h timeeventq.h announce.h publish.h \
   ../avahi-core/core.h browse.h dns.h rr.h hashmap.h lookup.h rrlist.h \
   wide-area.h multicast-lookup.h dns-srv-rr.h ../avahi-core/publish.h \
   cache.h response-sched.h query-sched.h probe-sched.h querier.h \
   iface-linux.h netlink.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/int-ll64.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/netlink.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/socket.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/posix_types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/stddef.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/compiler.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/posix_types.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/rtnetlink.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/if_link.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/if_addr.h \
-  /home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/neighbour.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h \
+  /home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h \
   socket.h util.h log.h
 
 ../config.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/string.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/features.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_config.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/cdefs.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stddef.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/errno.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/errno.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/errno.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/errno.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/errno.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/errno-base.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdio.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdio.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/wordsize.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/kernel_types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/typesizes.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sched.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_stdio.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_stdio.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_mutex.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_mutex.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/pthread.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/pthread.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sched.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sched.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/time.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/time.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_clk_tck.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/signal.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/signal.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigset.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/initspin.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/initspin.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sigthread.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigthread.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_pthread.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_pthread.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/stdarg.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/stdio_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdlib.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdlib.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitflags.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/waitflags.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/waitstatus.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/waitstatus.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/endian.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/endian.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/select.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/select.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/sysmacros.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/alloca.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/alloca.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/stdint.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/socket.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/uio.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uio.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/socket.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/limits.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/gcc/limits.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/posix1_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/local_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/limits.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/posix2_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/xopen_lim.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/sockaddr.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/socket.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/sockios.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/ioctl.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/ioctl.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/ioctl.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/netinet/in.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/in.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/byteswap.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h:
 
 ../avahi-common/error.h:
 
@@ -233,13 +233,13 @@ libavahi_core_a-iface.o: iface.c ../config.h \
 
 ../avahi-common/malloc.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/assert.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h:
 
 ../avahi-common/gccmacro.h:
 
 ../avahi-common/domain.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/inttypes.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h:
 
 iface.h:
 
@@ -251,11 +251,11 @@ internal.h:
 
 ../avahi-common/watch.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/poll.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/poll.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/bits/poll.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/poll.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/uClibc/include/sys/time.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/time.h:
 
 core.h:
 
@@ -309,31 +309,31 @@ iface-linux.h:
 
 netlink.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm-generic/int-ll64.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/netlink.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/socket.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/posix_types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/stddef.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/compiler.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/asm/posix_types.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/rtnetlink.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/if_link.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/if_addr.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h:
 
-/home/jeffk/src/msli/firmware/mb-linux/uClinux-dist/include/include-linux/linux/neighbour.h:
+/home/jeffk/src/msli/git/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h:
 
 socket.h:
 
