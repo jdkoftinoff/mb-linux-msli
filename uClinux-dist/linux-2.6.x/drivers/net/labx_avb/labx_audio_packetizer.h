@@ -57,10 +57,11 @@
 
 #define IRQ_MASK_REG      (0x003)
 #define IRQ_FLAGS_REG     (0x004)
-#  define NO_IRQS      (0x00000000)
-#  define SYNC_IRQ     (0x00000001)
-#  define OVERRUN_IRQ  (0x00000002)
-#  define ALL_IRQS     (0x00000003)
+#  define NO_IRQS          (0x00000000)
+#  define SYNC_IRQ         (0x00000001)
+#  define OVERRUN_IRQ      (0x00000002)
+#  define ENGINE_LATE_IRQ  (0x00000004)
+#  define ALL_IRQS         (0x00000007)
 
 #define SYNC_REG          (0x005)
 #  define CANCEL_SYNC      (0x00000000)

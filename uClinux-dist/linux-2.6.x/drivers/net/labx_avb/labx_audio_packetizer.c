@@ -106,9 +106,10 @@ static void configure_shaper(struct audio_packetizer *packetizer,
      * problems arising from misconfiguration of the shaper, but not get slammed
      * with ongoing interrupts.
      */
-    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), OVERRUN_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), 
+              (ENGINE_LATE_IRQ | OVERRUN_IRQ));
     irqMask = XIo_In32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG));
-    irqMask |= OVERRUN_IRQ;
+    irqMask |= (ENGINE_LATE_IRQ | OVERRUN_IRQ);
     XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), irqMask);
 
     /* The client is responsible for ensuring that the slopes are properly-scaled
@@ -300,18 +301,28 @@ static irqreturn_t labx_audio_packetizer_interrupt(int irq, void *dev_id) {
     wake_up_interruptible(&(packetizer->syncedWriteQueue));
   }
 
-  /* Detect the shaper overrun IRQ */
-  if((maskedFlags & OVERRUN_IRQ) != 0) {  
+  /* Detect the engine late IRQ */
+  if((maskedFlags & ENGINE_LATE_IRQ) != 0) {  
     /* TODO - We need to create an AVB event mechanism using kernel events, so
      *        that they can be propagated up to the user API!!!
      */
-    printk("%s: Packet overrun at output stage!\n", packetizer->name);
+    printk("%s: Engine not idle at beginning of shaping interval!\n", 
+           packetizer->name);
 
     /* Disable the interrupt source to prevent ongoing interrupts; this indicates
      * a systemic problem.  Either the bandwidth credit has been misconfigured, or
      * something at the system level is taking strict priority over this credit-based
      * shaping stage, which is not permitted.
      */
+    irqMask &= ~ENGINE_LATE_IRQ;
+    XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), irqMask);
+  }
+
+  /* Detect the shaper overrun IRQ; the comments for the "engine late" IRQ
+   * are equally applicable to this as well.
+   */
+  if((maskedFlags & OVERRUN_IRQ) != 0) {  
+    printk("%s: Packet overrun at output stage!\n", packetizer->name);
     irqMask &= ~OVERRUN_IRQ;
     XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_MASK_REG), irqMask);
   }

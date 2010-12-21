@@ -576,9 +576,9 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    * stream ID, so a descriptor must be configured to receive a stream on this
    * index.
    */
-  recoveryIndex = (clockRecoverySettings->matchUnit & STREAM_INDEX_MASK);
+  recoveryIndex = (clockRecoverySettings->matchUnit & STREAM_INDEX_MASK(depacketizer));
   if(clockDomainSettings->enabled == DOMAIN_ENABLED) {
-    recoveryIndex |= RECOVERY_ENABLED;
+    recoveryIndex |= RECOVERY_ENABLED(depacketizer);
   }
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, RECOVERY_INDEX_REG),
             recoveryIndex);
@@ -835,6 +835,7 @@ static int audio_depacketizer_probe(const char *name,
   uint32_t versionMajor;
   uint32_t versionMinor;
   uint32_t versionCompare;
+  uint32_t maxStreamShifter;
   int returnValue;
   
   /* Create and populate a device structure */
@@ -922,6 +923,16 @@ static int audio_depacketizer_probe(const char *name,
                                                          PARAM_ADDRESS_BITS_MASK));
   depacketizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
   depacketizer->capabilities.maxStreams      = ((capsWord >> MAX_STREAMS_SHIFT) & MAX_STREAMS_MASK);
+
+  /* Calculate an appropriate mask for stream indices, given the maximum
+   * number of streams supported by the instance.
+   */
+  depacketizer->streamIndexMask = 0;
+  maxStreamShifter = (depacketizer->capabilities.maxStreams - 1);
+  while(maxStreamShifter != 0) {
+    depacketizer->streamIndexMask = ((depacketizer->streamIndexMask << 1) | 0x01);
+    maxStreamShifter >>= 1;
+  }
 
   /* Instances below a particular version lack the 'A' capabilities register */
   if(versionCompare < EXTENDED_CAPS_VERSION_MIN) {

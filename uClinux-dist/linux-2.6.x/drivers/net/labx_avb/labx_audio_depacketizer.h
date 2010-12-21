@@ -100,12 +100,15 @@
 #  define REVISION_FIELD_BITS  4
 #  define REVISION_FIELD_MASK  0x0F
 
-/* Per-clock-domain registers */
+/* Per-clock-domain registers
+ * Some of the recovery fields are based upon the maximum number of
+ * streams supported by the instance, so macros are provided for them.
+ */
 #define REGS_PER_CLOCK_DOMAIN  16
 #define RECOVERY_INDEX_REG  0x000
-#  define STREAM_INDEX_MASK  0x0000007F
+#  define STREAM_INDEX_MASK(device) (device->streamIndexMask)
 #  define RECOVERY_DISABLED  0x00000000
-#  define RECOVERY_ENABLED   0x00000080
+#  define RECOVERY_ENABLED(device)  (device->streamIndexMask + 1)
 
 #define TS_INTERVAL_REG     0x001
 
@@ -197,6 +200,9 @@ struct audio_depacketizer {
 
   /* Architecture employed for stream matching */
   StreamMatchArchitecture matchArchitecture;
+
+  /* Stream index mask appropriate for the instance */
+  uint32_t streamIndexMask;
 
   /* Capabilities of the depacketizer hardware */
   DepacketizerCaps capabilities;
