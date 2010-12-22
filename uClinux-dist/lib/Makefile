@@ -95,8 +95,8 @@ dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
+dir_4_$(CONFIG_LIB_MICROSUPPORT) += microsupport
 dir_5_$(CONFIG_LIB_LIBTC) += libtc
-dir_5_$(CONFIG_LIB_MICROSUPPORT) += microsupport
 dir_5_$(CONFIG_LIB_IEEE1722_1)   += ieee1722_1
 
 #
