@@ -2,7 +2,7 @@
 # Makefile -- Build instructions for Meyer Sound D-Mitri I/O MicroBlaze system
 #
 
-RELEASE_VERSION = "5.0.2"
+RELEASE_VERSION = "5.2.0"
 
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
@@ -171,7 +171,7 @@ CONFIG_SYSTEM_ROOT_PASSWD := "root"
 endif
 CRYPT_PASSWD       := $(shell perl $(ROOTDIR)/tools/crypt.pl $(CONFIG_SYSTEM_ROOT_PASSWD))
 
-all:
+all: 
 	dirs=$(DIRS) ; \
 	for i in $$dirs ; do  $(MAKE) -C $$i || exit $? ; done
 
