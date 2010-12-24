@@ -1,12 +1,12 @@
-#! /bin/bash -e -x
+#! /bin/bash
 
-ln -sf "$PWD"/scripts/libtc.mk mb-linux-msli/uClinux-dist/user/libtc/Makefile
+ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/libtc.mk user/libtc/Makefile
 
-ln -sf "$PWD"/scripts/microsupport.mk mb-linux-msli/uClinux-dist/lib/microsupport/Makefile
+ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/microsupport.mk lib/microsupport/Makefile
 
-ln -sf "$PWD"/scripts/ieee1722_1.mk mb-linux-msli/uClinux-dist/lib/ieee1722_1/Makefile
+ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/ieee1722_1.mk lib/ieee1722_1/Makefile
 
-ln -sf "$PWD"/scripts/io-osc.mk mb-linux-msli/uClinux-dist/user/io-osc/Makefile
+ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/io-osc.mk user/io-osc/Makefile
 
 
 

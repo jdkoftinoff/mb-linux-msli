@@ -13,6 +13,7 @@ ifndef ROOTDIR
 ROOTDIR=$(PWD)/..
 endif
 
+HOST_NCPU?=1
 UCLINUX_BUILD_USER=1
 -include $(LINUX_CONFIG)
 -include $(CONFIG_CONFIG)
@@ -33,7 +34,6 @@ dir_  =
 
 dir_$(CONFIG_JFFS_FS)                       += mtd-utils
 dir_$(CONFIG_JFFS2_FS)                      += mtd-utils
-dir_$(CONFIG_USER_MICROSUPPORT)             += microsupport
 dir_$(CONFIG_USER_LIBTC) 	                += libtc
 dir_$(CONFIG_USER_IO_OSC)                   += io-osc
 dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld

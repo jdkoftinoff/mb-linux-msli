@@ -15,6 +15,7 @@ ROOTDIR=$(PWD)/..
 endif
 
 UCLINUX_BUILD_LIB=1
+HOST_NCPU?=1
 -include $(LINUX_CONFIG)
 -include $(CONFIG_CONFIG)
 -include $(ARCH_CONFIG)
@@ -205,7 +206,6 @@ clean: clean_links
 #
 #
 LINKLIBS=\
-    $(ROOTDIR)/lib/libtc/tmp-target/build/lib/libtc.a \
     $(ROOTDIR)/lib/microsupport/tmp-target/build/lib/libmicrosupport.a \
     $(ROOTDIR)/lib/ieee1722_1/tmp-target/build/lib/ieee1722_1.a \
 	$(ROOTDIR)/lib/libxml2/build/.libs/libxml2.so \

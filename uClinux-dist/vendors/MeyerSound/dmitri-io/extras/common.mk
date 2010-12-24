@@ -3,7 +3,7 @@ UCLIBC_DIR:=$(shell cd ../.. && pwd)
 include $(UCLIBC_DIR)/.config
 endif
 ifndef LABX_DIR
-LABX_DIR:=$(shell cd ../../../lax-ip/IO_Link/Applications && pwd)
+LABX_DIR:=$(shell cd $(UCLIBC_DIR)/../../labx-ip/IO_Link/Applications && pwd)
 endif
 UCLIBC_LIB_DIR:=$(UCLIBC_DIR)/lib
 UCLIBC_USER_DIR:=$(UCLIBC_DIR)/user
@@ -34,5 +34,4 @@ NATIVE_BUILD_DIR=$(PWD)/tmp-native
 
 first_target : all
 
-include $(PROJECT_TOP_DIR)/project.mk
-include $(PROJECT_TOP_DIR)/magic.mk
+
