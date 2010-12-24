@@ -10,12 +10,6 @@ menu "Library Configuration"
 
 comment "Force build (normally built when required)"
 
-config LIB_LIBTC
-    bool "timecode library - libtc"
-    default n
-    help
-      Include the Meyer Sound timecode C library for SMPTE and MIDI Time Code
-
 config LIB_MICROSUPPORT
     bool "microsupport library - microsupport"
     default n

@@ -43,6 +43,7 @@ LIBTOOL  = jlibtool
 SCRIPTSDIR = $(ROOTDIR)/config/kconfig
 TFTPDIR    = /tftpboot
 BUILD_START_STRING ?= $(shell date "+%a, %d %b %Y %T %z")
+NON_SMP_BUILD := 1
 ifndef NON_SMP_BUILD
 HOST_NCPU ?= $(shell if [ -f /proc/cpuinfo ]; then n=`grep -c processor /proc/cpuinfo`; if [ $$n -gt 1 ];then expr $$n \* 2; else echo $$n; fi; else echo 1; fi)
 # currently a lot of packages cannot be "parallel" built. Uncomment the
@@ -106,6 +107,7 @@ export HOST_NCPU LIBTOOL SUBDIR_SMP_BUILD
 .PHONY: tools
 tools: ucfront cksum
 	chmod +x tools/romfs-inst.sh tools/modules-alias.sh tools/build-udev-perms.sh
+	if [ -x $(PRODUCTDIR)/extras/prepare-extras.sh ]; then $(PRODUCTDIR)/extras/prepare-extras.sh; done
 
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c

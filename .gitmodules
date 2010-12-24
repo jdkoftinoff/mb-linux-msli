@@ -1,0 +1,15 @@
+[submodule "uClinux-dist/lib/ieee1722_1"]
+	path = uClinux-dist/lib/ieee1722_1
+	url = ../ieee1722_1-jkp
+[submodule "uClinux-dist/user/libtc"]
+	path = uClinux-dist/user/libtc
+	url = ../libtc
+[submodule "uClinux-dist/lib/microsupport"]
+	path = uClinux-dist/lib/microsupport
+	url = ../microsupport
+[submodule "uClinux-dist/user/io-osc"]
+	path = uClinux-dist/user/io-osc
+	url = ../io-osc
+[submodule "uClinux-dist/user/gsbd"]
+	path = uClinux-dist/user/gsbd
+	url = ../gsbd
