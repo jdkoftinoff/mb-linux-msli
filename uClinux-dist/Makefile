@@ -107,7 +107,7 @@ export HOST_NCPU LIBTOOL SUBDIR_SMP_BUILD
 .PHONY: tools
 tools: ucfront cksum
 	chmod +x tools/romfs-inst.sh tools/modules-alias.sh tools/build-udev-perms.sh
-	if [ -x $(PRODUCTDIR)/extras/prepare-extras.sh ]; then $(PRODUCTDIR)/extras/prepare-extras.sh; done
+	if [ -x $(PRODUCTDIR)/extras/prepare-extras.sh ]; then $(PRODUCTDIR)/extras/prepare-extras.sh; fi
 
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
