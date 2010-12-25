@@ -21,7 +21,6 @@ LINK_FLAGS+=-Wl,-elf2flt
 VARIANT?=dmitri-io
 STRIP=true
 FLTFLAGS += -s 32768
-ALL_TARGETS+=romfs 
 export ROMFSDIR?=$(UCLIBC_DIR)/romfs
 export IMAGEDIR?=$(UCLIBC_DIR)/images
 PROJECT_TOP_DIR=$(PWD)
