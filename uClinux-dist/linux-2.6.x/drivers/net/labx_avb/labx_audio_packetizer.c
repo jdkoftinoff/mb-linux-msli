@@ -40,7 +40,7 @@
  */
 #define DRIVER_NAME "labx_audio_packetizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x12
+#define DRIVER_VERSION_MAX  0x13
 
 /* "Breakpoint" revision numbers for certain features */
 #define EXTENDED_CAPS_VERSION_MIN  0x12
@@ -212,32 +212,61 @@ static void copy_descriptor(struct audio_packetizer *packetizer,
 }
 
 /* Loads the passed packet template into the instance */
-static void load_packet_template(struct audio_packetizer *packetizer, ConfigWords *template) {
+static int load_packet_template(struct audio_packetizer *packetizer, ConfigWords *template) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
+  uint32_t controlRegister;
+  int returnValue = 0;
+  
+  /* Sanity-check the load flag, which contains the output to load for */
+  if(template->loadFlags <= packetizer->capabilities.numOutputs) {
+    /* Select the appropriate template RAM for the output */
+    controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+    if(template->loadFlags == TEMPLATE_OUTPUT_0) {
+      controlRegister &= ~TEMPLATE_RAM_ONE;
+    } else controlRegister |= TEMPLATE_RAM_ONE;
+    XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 
-  wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
-  DBG("Loading template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
-  for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
-    XIo_Out32(wordAddress, template->configWords[wordIndex]);
-    wordAddress += sizeof(uint32_t);
-  }
+    /* Locate the address of the word within the selected template RAM */
+    wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
+    DBG("Loading template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
+    for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
+      XIo_Out32(wordAddress, template->configWords[wordIndex]);
+      wordAddress += sizeof(uint32_t);
+    }
+  } else returnValue = -EFAULT;
+
+  return(returnValue);
 }
 
 /* Reads back and copies a packet template from the packetizer into the passed 
  * structure, using the address and size it specifies.
  */
-static void copy_packet_template(struct audio_packetizer *packetizer, 
-                                 ConfigWords *template) {
+static int copy_packet_template(struct audio_packetizer *packetizer, 
+                                ConfigWords *template) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
+  uint32_t controlRegister;
+  int returnValue = 0;
 
-  wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
-  DBG("Copying template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
-  for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
-    template->configWords[wordIndex] = XIo_In32(wordAddress);
-    wordAddress += sizeof(uint32_t);
-  }
+  /* Sanity-check the load flag, which contains the output to load for */
+  if(template->loadFlags <= packetizer->capabilities.numOutputs) {
+    /* Select the appropriate template RAM for the output */
+    controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+    if(template->loadFlags == TEMPLATE_OUTPUT_0) {
+      controlRegister &= ~TEMPLATE_RAM_ONE;
+    } else controlRegister |= TEMPLATE_RAM_ONE;
+    XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+
+    wordAddress = (TEMPLATE_RAM_BASE(packetizer) + (template->offset * sizeof(uint32_t)));
+    DBG("Copying template @ %p (%d), numWords %d\n", (void*)wordAddress, template->offset, template->numWords);
+    for(wordIndex = 0; wordIndex < template->numWords; wordIndex++) {
+      template->configWords[wordIndex] = XIo_In32(wordAddress);
+      wordAddress += sizeof(uint32_t);
+    }
+  } else returnValue = -EFAULT;
+
+  return(returnValue);
 }
 
 /* Sets the start vector the packetizer jumps to at the beginning of each 
@@ -452,7 +481,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
         return(-EFAULT);
       }
       template.configWords = configWords;
-      load_packet_template(packetizer, &template);
+      returnValue = load_packet_template(packetizer, &template);
     }
     break;
 
@@ -468,7 +497,8 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       localTemplate.offset = userTemplate.offset;
       localTemplate.numWords = userTemplate.numWords;
       localTemplate.configWords = configWords;
-      copy_packet_template(packetizer, &localTemplate);
+      localTemplate.loadFlags = userTemplate.loadFlags;
+      returnValue = copy_packet_template(packetizer, &localTemplate);
       if(copy_to_user((void __user*)userTemplate.configWords, configWords, 
                       (userTemplate.numWords * sizeof(uint32_t))) != 0) {
         return(-EFAULT);
@@ -647,11 +677,17 @@ int audio_packetizer_probe(const char *name,
 
   /* Instances below a particular version lack the 'A' capabilities register */
   if(versionCompare < EXTENDED_CAPS_VERSION_MIN) {
-    /* Use an assumed value for the maximum stream slots */
+    /* Use an assumed value for the maximum stream slots, and a single output */
     packetizer->capabilities.maxStreamSlots = ASSUMED_MAX_STREAM_SLOTS;
+    packetizer->capabilities.numOutputs = 1;
   } else {
-    /* Fetch this capability from the 'A' capabilities register */
+    /* Fetch the 'A' capabilities register and determine whether this is a
+     * single- or dual-output instance
+     */
     capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG_A));
+    packetizer->capabilities.numOutputs = ((capsWord & DUAL_OUTPUT_INSTANCE) ? 2 : 1);
+
+    /* Assign the max audio channel slots per stream */
     packetizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
   }
 

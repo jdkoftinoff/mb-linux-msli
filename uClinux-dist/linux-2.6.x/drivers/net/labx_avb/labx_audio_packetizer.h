@@ -46,6 +46,10 @@
 
 /* Global control registers */
 #define CONTROL_REG       (0x000)
+#  define TEMPLATE_RAM_ZERO   (0x00)
+#  define TEMPLATE_RAM_ONE    (0x08)
+#  define SAMPLE_FALLING_EDGE (0x00)
+#  define SAMPLE_RISING_EDGE  (0x04)
 #  define SHAPER_DISABLE      (0x00)
 #  define SHAPER_ENABLE       (0x02)
 #  define PACKETIZER_DISABLE  (0x00)
@@ -72,6 +76,8 @@
 #define IDLE_SLOPE_REG    (0x007)
 
 #define CAPABILITIES_REG_A  (0x0FD)
+#  define SINGLE_OUTPUT_INSTANCE (0x00)
+#  define DUAL_OUTPUT_INSTANCE   (0x80)
 #  define MAX_STREAM_SLOTS_MASK  (0x7F)
 
 #define CAPABILITIES_REG_B  (0x0FE)

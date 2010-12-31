@@ -50,6 +50,7 @@ typedef struct {
   uint32_t  numWords;
   uint32_t *configWords;
   uint32_t  interlockedLoad;
+  uint32_t  loadFlags;
 } ConfigWords;
 
 #define IOC_LOAD_DESCRIPTOR        _IOW(ENGINE_IOC_CHAR,  0x03, ConfigWords)

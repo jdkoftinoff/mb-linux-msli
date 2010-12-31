@@ -81,6 +81,11 @@
 #define IOC_COPY_PACKET_TEMPLATE     _IOWR(ENGINE_IOC_CHAR,               \
                                            (ENGINE_IOC_CLIENT_START + 1), \
                                            ConfigWords)
+
+/* Load flags for template data indicating which output the data is for */
+#  define TEMPLATE_OUTPUT_0  (0)
+#  define TEMPLATE_OUTPUT_1  (1)
+
 #define IOC_SET_START_VECTOR         _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 2), \
                                           uint32_t)
@@ -100,6 +105,7 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t numOutputs;
   uint32_t maxStreamSlots;
   uint32_t maxInstructions;
   uint32_t maxTemplateBytes;
