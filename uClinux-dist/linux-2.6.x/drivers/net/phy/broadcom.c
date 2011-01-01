@@ -437,6 +437,11 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 }
 
 /* MII_CTRL1000 register bits */
+#define BCM54610_NORMAL_MASK     (0x1FFF)
+#define BCM54610_TEST_TX_DIST    (0x8000)
+#define BCM54610_TEST_SLV_JITTER (0x6000)
+#define BCM54610_TEST_MST_JITTER (0x4000)
+#define BCM54610_TEST_TX_WAVE    (0x2000)
 #define BCM54610_MST_SLV_AUTO    (0x0000)
 #define BCM54610_MST_SLV_MANUAL  (0x1000)
 #define BCM54610_MANUAL_MASTER   (0x0800)
@@ -447,10 +452,10 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 #define BCM54610_LBR_TX_TEST_MODE    (0x0000)
 #define BCM54610_LBR_TX_NORMAL_MODE  (0x0400)
 
-static void bcm54610_loopback(struct phy_device *phydev, u32 mode) {
-  /* Only external loopback mode with a loopback plug is supported */
+static void bcm54610_set_test_mode(struct phy_device *phydev, u32 mode) {
+  /* Configure the PHY for the selected test mode */
   switch(mode) {
-  case PHY_LOOPBACK_EXTERNAL:
+  case PHY_TEST_EXT_LOOP:
     phy_write(phydev, MII_CTRL1000, 
 	      (BCM54610_MST_SLV_MANUAL | BCM54610_MANUAL_MASTER));
     phy_write(phydev, MII_BMCR, (BMCR_FULLDPLX | BMCR_SPEED1000));
@@ -460,20 +465,41 @@ static void bcm54610_loopback(struct phy_device *phydev, u32 mode) {
     printk("BCM54610 external loopback configured; insert loopback jumper\n");
     break;
 
-  case PHY_LOOPBACK_INTERNAL:
+  case PHY_TEST_INT_LOOP:
     phy_write(phydev, MII_BMCR, 
               (BMCR_LOOPBACK | BMCR_FULLDPLX | BMCR_SPEED1000));
     phydev->autoneg = AUTONEG_DISABLE;
     printk("BCM54610 internal loopback configured\n");
     break;
 
+  case PHY_TEST_TX_WAVEFORM:
+    printk("IEEE 802.3ba Transmit Waveform Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_TX_WAVE);
+    break;
+
+  case PHY_TEST_MASTER_JITTER:
+    printk("IEEE 802.3ba Master Jitter Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_MST_JITTER);
+    break;
+
+  case PHY_TEST_SLAVE_JITTER:
+    printk("IEEE 802.3ba Slave Jitter Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_SLV_JITTER);
+    break;
+
+  case PHY_TEST_TX_DISTORTION:
+    printk("IEEE 802.3ba Transmit Distortion Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_TX_DIST);
+    break;
+
   default:
+    /* No test mode, normal operation */
     phy_write(phydev, MII_LBRERROR, BCM54610_LBR_TX_NORMAL_MODE);
     phy_write(phydev, MII_BMCR, (BMCR_ANENABLE | BMCR_FULLDPLX | BMCR_SPEED1000));
     phy_write(phydev, MII_CTRL1000, 
-	      (ADVERTISE_1000FULL | BCM54610_MST_SLV_AUTO));
+              (ADVERTISE_1000FULL | BCM54610_MST_SLV_AUTO));
     phydev->autoneg = AUTONEG_ENABLE;
-    printk("BCM54610 loopback disabled; remove loopback jumper\n");
+    printk("BCM54610 set for normal operation\n");
   }
 }
 
@@ -594,7 +620,7 @@ static struct phy_driver bcm54610_driver = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm54xx_ack_interrupt,
 	.config_intr	= bcm54xx_config_intr,
-	.loopback       = bcm54610_loopback,
+	.set_test_mode  = bcm54610_set_test_mode,
 	.driver 	= { .owner = THIS_MODULE },
 };
 

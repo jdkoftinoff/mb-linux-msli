@@ -46,11 +46,9 @@
 
 /* Number of audio channels emitted from memory by this peripheral;
  * this represents the maximum which can be extracted from AVB
- * streams over Gigabit Ethernet; 60 streams of four channels each.
+ * streams over Gigabit Ethernet; 7 streams of 60 channels each.
  */
-/* #define LABRINTH_TDM_NUM_CHANNELS  (420) */
-/* TEMPORARY lower channel count */
-#define LABRINTH_TDM_NUM_CHANNELS  (24)
+#define LABRINTH_TDM_NUM_CHANNELS  (420)
 
 /* Private register constants and macros */
 
@@ -59,6 +57,7 @@
 #  define ANALYZER_ENABLE      (0x80000000)
 #  define TDM_DEBUG_PATTERN    (0x40000000)
 #  define ANALYZER_RAMP        (0x20000000)
+#  define AUTO_MUTE_ACTIVE     (0x10000000)
 #  define ANALYZER_SLOT_MASK   (0x01F)
 #  define ANALYZER_LANE_MASK   (0x1E0)
 #  define ANALYZER_LANE_SHIFT      (5)
@@ -72,6 +71,15 @@
 #  define DMA_ERROR_IRQ       (0x001)
 #  define ANALYSIS_ERROR_IRQ  (0x002)
 
+#define TDM_STREAM_MAP_REG     (0x006)
+#  define MAP_SWAP_BANK      (0x80000000)
+#  define MAP_CHANNEL_MASK   (0x0001FF00)
+#  define MAP_CHANNEL_SHIFT  (8)
+#  define MAP_STREAM_VALID   (0x00000080)
+#  define MAP_STREAM_MASK    (0x0000003F)
+
+#define STREAM_MAP_BANKS  (2)
+
 /* Locates a register within the TDM demultiplexer logic, using the
  * hardware-configured region shift detected by the audio packetizer
  * driver.
@@ -80,6 +88,9 @@
 #define TDM_DEMUX_ADDRESS(device, offset)                    \
   ((uintptr_t)device->labxLocalAudio->dma.virtualAddress |  \
    (TDM_DEMUX_RANGE << device->labxLocalAudio->dma.regionShift) | (offset << 2))
+
+/* Buffer for storing stream map entries */
+static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
 
 /* Configures the psuedorandom analyzer */
 static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
@@ -122,12 +133,60 @@ static void get_analyzer_results(struct labrinth_tdm_output *tdmOutput,
   analyzerResults->actualSample = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_ERROR_ACTUAL_REG));
 }
 
+static void configure_auto_mute(struct labrinth_tdm_output *tdmOutput,
+                                AutoMuteConfig *autoMuteConfig) {
+  uint32_t controlRegister;
+  uint32_t bankIndex;
+  uint32_t entryIndex;
+  uint32_t entryWord;
+
+  /* First look at the enable setting and apply it */
+  controlRegister = XIo_In32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG));
+  if(autoMuteConfig->enable == AUTO_MUTE_ENABLE) {
+    controlRegister |= AUTO_MUTE_ACTIVE;
+  } else controlRegister &= ~AUTO_MUTE_ACTIVE;
+  XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_CONTROL_REG), controlRegister);
+
+  /* Set any new stream map entries in both banks */
+  for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
+    for(entryIndex = 0; entryIndex < autoMuteConfig->numMapEntries; entryIndex++) {
+      StreamMapEntry *entryPtr = &(autoMuteConfig->mapEntries[entryIndex]);
+
+      /* Each entry consists of a map from a TDM channel to its stream */
+      entryWord = ((entryPtr->tdmChannel << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
+      if(entryPtr->avbStream != AVB_STREAM_NONE) {
+        entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+        entryWord |= MAP_STREAM_VALID;
+      }
+      XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_STREAM_MAP_REG), entryWord);
+    }
+
+    /* The same register address is overloaded for the bank swap operation;
+     * simply hit the appropriate control bit and the map load function is suppressed
+     */
+    XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_STREAM_MAP_REG), MAP_SWAP_BANK);
+  }
+}
+
 static void reset_labrinth_tdm(struct labrinth_tdm_output *tdmOutput) {
   AnalyzerConfig analyzerConfig;
+  uint32_t bankIndex;
+  uint32_t channelIndex;
 
   /* Disable the psuedorandom analyzer */
   analyzerConfig.enable = LFSR_ANALYZER_DISABLE;
   configure_analyzer(tdmOutput, &analyzerConfig);
+
+  /* Clear any old assignments from the auto-mute stream map; all channels
+   * are presumed to have no valid stream assignment.
+   */
+  for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
+    for(channelIndex = 0; channelIndex < LABRINTH_TDM_NUM_CHANNELS; channelIndex++) {
+      XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_STREAM_MAP_REG),
+                (channelIndex << MAP_CHANNEL_SHIFT));
+    }
+    XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_STREAM_MAP_REG), MAP_SWAP_BANK);
+  }
 }
 
 /*
@@ -142,6 +201,9 @@ static int labrinth_tdm_open(struct inode *inode, struct file *filp)
 
   labxLocalAudio = (struct labx_local_audio_pdev *) filp->private_data;
   tdmOutput = (struct labrinth_tdm_output *) labxLocalAudio->derivedData;
+
+  /* Ensure the hardware is reset */
+  reset_labrinth_tdm(tdmOutput);
 
   return(returnValue);
 }
@@ -186,6 +248,29 @@ static int labrinth_tdm_ioctl(struct inode *inode, struct file *filp,
       irqMask |= DMA_ERROR_IRQ;
       XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG), DMA_ERROR_IRQ);
       XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_MASK_REG), irqMask);
+    }
+    break;
+
+  case IOC_CONFIG_AUTO_MUTE:
+    {
+      AutoMuteConfig autoMuteConfig;
+
+      /* First copy the main configuration structure */
+      if(copy_from_user(&autoMuteConfig, (void __user*)arg, sizeof(autoMuteConfig)) != 0) {
+        return(-EFAULT);
+      }
+
+      /* Sanity-check the number of map entries user space is attempting to
+       * configure in this single call, then copy them to the statically-
+       * allocated buffer for this purpose.
+       */
+      if(autoMuteConfig.numMapEntries > MAX_MAP_ENTRIES) return(-EFAULT);
+      if(copy_from_user(mapEntryBuffer, (void __user*)autoMuteConfig.mapEntries,
+                        (autoMuteConfig.numMapEntries * sizeof(StreamMapEntry))) != 0) {
+        return(-EFAULT);
+      }
+      autoMuteConfig.mapEntries = mapEntryBuffer;
+      configure_auto_mute(tdmOutput, &autoMuteConfig);
     }
     break;
 

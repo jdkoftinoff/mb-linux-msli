@@ -52,7 +52,7 @@
 #  define NO_IRQS      		(0x00000000)
 #  define IRQ_S2H_MSG_RX     	(0x00000001)
 #  define IRQ_S2H_MSG_TX  	(0x00000002)
-#  define ALL_IRQS     		(0x00000003)
+#  define ALL_IRQS     		(0xFFFFFFFF)
 
 #define HOST_MSG_LEN_REG        (0x003)
 
@@ -60,13 +60,16 @@
 
 #define MAX_MAILBOX_MSG_BYTES (1024)
 
+#define MESSAGE_NOT_READY (0)
+#define MESSAGE_READY (1)
+
 #define REGISTER_ADDRESS(device, offset) \
   ((uintptr_t)device->virtualAddress |                       \
-   (REGISTER_RANGE << device->regionShift) | (offset << 2))
+   (REGISTER_RANGE) | (offset << 2))
 
 #define MSG_RAM_BASE(device)              \
   ((uintptr_t)device->virtualAddress |           \
-   (MSG_RAM_RANGE << device->regionShift))
+   (MSG_RAM_RANGE))
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE    (256)
@@ -91,11 +94,9 @@ struct spi_mailbox {
   /* Interrupt request number */
   int32_t irq;
 
-  /* Bit shift for the address sub-range */
-  uint32_t regionShift;
-
   /* Wait queue for putting threads to sleep */
-  wait_queue_head_t syncedWriteQueue;
+  wait_queue_head_t messageReadQueue;
+  uint32_t messageReadyFlag;
 
   /* Mutex for the device instance */
   spinlock_t mutex;

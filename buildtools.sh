@@ -8,12 +8,6 @@ if ! which gcc > /dev/null 2>&1
  exit 1
 fi
 
-if [ ! -f /usr/include/zlib.h ]
- then
- echo "This script requires zlib development files to be present"
- exit 1
-fi
-
 if ! which awk > /dev/null 2>&1
  then
  echo "This script requires awk to be present"
@@ -23,6 +17,30 @@ fi
 if ! which flex > /dev/null 2>&1
  then
  echo "This script requires flex to be present"
+ exit 1
+fi
+
+if ! which bison > /dev/null 2>&1
+ then
+ echo "This script requires bison to be present"
+ exit 1
+fi
+
+if ! which gmake > /dev/null 2>&1
+ then
+ echo "This script requires gmake to be present (if make is gnu make make a symlink for gmake)"
+ exit 1
+fi
+
+if ! which genromfs > /dev/null 2>&1
+ then
+ echo "This script requires genromfs to be present"
+ exit 1
+fi
+
+if [ ! -f /usr/include/zlib.h ]
+ then
+ echo "This script requires zlib development package to be present"
  exit 1
 fi
 
@@ -39,11 +57,18 @@ if ! which makeinfo > /dev/null 2>&1
  exit 1
 fi
 
+GCC4_DIR="mb_gnu"
+
+if [ ! -d "$GCC4_DIR" ]; then
+ echo "$GCC4_DIR should link to the gcc 4 toolchain source"
+ exit 1;
+fi
+
 # Build xilinx toolchain
 
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
 (
-cd mb_gnu \
+cd "$GCC4_DIR" \
 && bash build_binutils.sh && bash build_gcc.sh && bash build_gdb.sh \
 && bash build_elf2flt.sh && bash build_genromfs.sh
 )||(
@@ -90,6 +115,10 @@ if [ "`uname -m`" = "x86_64" ]
 fi
 
 mv "mb_gnu/release/${LOCALPLATFORM}" tools/gcc4
+(
+cd tools/gcc4/bin \
+&& ls mb-* | awk -F- '{print "ln -s " $1 "-" $2 " " $1 "-xilinx-elf-" $2 }' | /bin/sh
+)
 
 # Preparing new PATH
 

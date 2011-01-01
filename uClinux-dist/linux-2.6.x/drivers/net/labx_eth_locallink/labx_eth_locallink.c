@@ -1199,15 +1199,7 @@ void labx_XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY)
 		XASSERT_VOID(Divisor <= XTE_MC_CLOCK_DIVIDE_MAX);
-#if 0
-	/*
-	 * If the mutual exclusion is enforced properly in the calling code, we
-	 * should never get into the following case.
-	 */
-	XASSERT_VOID(XLlTemac_ReadReg(InstancePtr->Config.BaseAddress,
-				      XTE_RDY_OFFSET) &
-		     XTE_RDY_HARD_ACS_RDY_MASK);
-#endif
+
 	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_XLlTemac_PhySetMdioDivisor\n");
 	XLlTemac_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_MC_OFFSET,

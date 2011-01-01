@@ -18,7 +18,8 @@
  */
 
 /*
- * With the way the hardened Temac works, the driver needs to communicate
+ * With the way  
+the hardened Temac works, the driver needs to communicate
  * with the PHY controller. Since each board will have a different
  * type of PHY, the code that communicates with the MII type controller
  * is inside #ifdef XILINX_PLB_TEMAC_3_00A_ML403_PHY_SUPPORT conditional
@@ -56,6 +57,11 @@
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 
 #define LOCAL_FEATURE_RX_CSUM   0x01
+
+/* MDIO divisor which should be "safe" for the hard TEMAC; we don't
+ * actually use this hardware but it does need to be configured.
+ */
+#define LABX_ETH_LOCALLINK_MDIO_DIV  (0x28)
 
 /*
  * Default SEND and RECV buffer descriptors (BD) numbers.
@@ -392,7 +398,7 @@ static inline void _XLlTemac_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor
 }
 
 inline void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
-				     u32 RegisterNum, u16 *PhyDataPtr)
+                                   u32 RegisterNum, u16 *PhyDataPtr)
 {
 	unsigned long flags;
 
@@ -402,7 +408,7 @@ inline void _labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 }
 
 inline void _labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
-				      u32 RegisterNum, u16 PhyData)
+                                    u32 RegisterNum, u16 PhyData)
 {
 	unsigned long flags;
 
@@ -530,6 +536,13 @@ static void reset(struct net_device *dev, u32 line_num)
 	 * before we move on */
 #endif
 
+    /* Configure the MDIO divisor; if the hard TEMAC is being used, this
+     * is crucial to getting the hardware to run, even if its MDIO controller
+     * is not being used (which, typically it isn't - the soft Lab X MDIO
+     * controller is instead).
+     */
+    _XLlTemac_PhySetMdioDivisor(&lp->Emac, LABX_ETH_LOCALLINK_MDIO_DIV);
+
 	/* Perform PHY setup */
 	if (NULL != lp->phy_dev)
 	{
@@ -627,7 +640,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
 			if (cur_lp != &(lp->rcv)) {
 				list_add_tail(&lp->rcv, &receivedQueue);
 				XLlFifo_IntDisable(&lp->Fifo, XLLF_INT_ALL_MASK);
-				tasklet_schedule(&FifoRecvBH);
+                tasklet_schedule(&FifoRecvBH);
 			}
 			spin_unlock_irqrestore(&receivedQueueSpin, flags);
 			irq_status &= ~XLLF_INT_RC_MASK;
@@ -1490,7 +1503,6 @@ static void FifoRecvHandler(unsigned long p)
 	dev = lp->ndev;
 
 	while (XLlFifo_RxOccupancy(&lp->Fifo) != 0) {
-
 		len = XLlFifo_RxGetLen(&lp->Fifo);
 
 		/*
@@ -1535,7 +1547,7 @@ static void FifoRecvHandler(unsigned long p)
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-		netif_rx(skb);		/* Send the packet upstream. */
+		netif_rx(skb);		/* Send the packet up the stack */
 	}
 	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK | XLLF_INT_RC_MASK |
 			XLLF_INT_RXERROR_MASK | XLLF_INT_TXERROR_MASK);
@@ -1790,17 +1802,6 @@ static void DmaRecvHandlerBH(unsigned long p)
 
 				lp->stats.rx_packets++;
 				lp->stats.rx_bytes += len;
-#if 0
-				{
-					int i;
-
-					for(i=0;i<len;++i)
-					{
-						printk("%02X ",skb->data[i]);
-					}
-					printk("\n");
-				}
-#endif
 
 				netif_rx(skb);	/* Send the packet upstream. */
 
@@ -2935,7 +2936,11 @@ static int xtenet_setup(
 	lp->Emac.MdioState = MDIO_STATE_READY;
 	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, NO_IRQS);
 	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
-	XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+
+    /* TODO - Add a configuration option; for now this presumes an active-
+     *        low interrupt from the PHY (which is most common)
+     */
+    XLlTemac_WriteReg(Temac_Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
 	lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
@@ -3121,7 +3126,7 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 
 	if (NULL != r_irq_phy) {
 		for (i=0; i<PHY_MAX_ADDR; i++) {
-			pdata_struct.mdio_phy_irqs[i] = r_irq_phy->start;
+          pdata_struct.mdio_phy_irqs[i] = r_irq_phy->start;
 		}
 	}
 

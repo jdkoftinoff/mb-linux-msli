@@ -1091,7 +1091,10 @@ ntohl(*(unsigned int *)DhcpOptions.val[dhcpT2value]));
     ledman_cmd(LEDMAN_CMD_ALT_OFF, ledman_led);
 #endif
   if ( Cfilename )
-#ifndef __uClinux__
+
+	  /* Never use fork() */
+/* #ifndef __uClinux__ */
+#if 0
     if ( fork() == 0 )
 #else
     if ( vfork() == 0 )
@@ -1132,7 +1135,9 @@ ntohl(*(unsigned int *)DhcpOptions.val[dhcpT2value]));
       else
 	argc[2]=NULL;
       argc[3]=NULL;
-#ifndef __uClinux__
+	  /* Never use fork() */
+#if 0
+/* #ifndef __uClinux__ */
       if ( fork() == 0 )
 #else
       if ( vfork() == 0 )

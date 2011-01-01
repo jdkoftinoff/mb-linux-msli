@@ -249,8 +249,14 @@ struct ethtool_gstrings {
 };
 
 enum ethtool_test_flags {
-	ETH_TEST_FL_OFFLINE	= (1 << 0),	/* online / offline */
-	ETH_TEST_FL_FAILED	= (1 << 1),	/* test passed / failed */
+	ETH_TEST_FL_OFFLINE	      = (1 << 0), /* online / offline              */
+	ETH_TEST_FL_FAILED	      = (1 << 1), /* test passed / failed          */
+    ETH_TEST_FL_INT_LOOP      = (1 << 2), /* Internal loopback             */
+    ETH_TEST_FL_EXT_LOOP      = (1 << 3), /* External loopback             */
+    ETH_TEST_FL_TX_WAVEFORM   = (1 << 4), /* 802.3ab Tx waveform test      */
+    ETH_TEST_FL_MASTER_JITTER = (1 << 5), /* 802.3ab master Tx jitter test */
+    ETH_TEST_FL_SLAVE_JITTER  = (1 << 6), /* 802.3ab slave Tx jitter test  */
+    ETH_TEST_FL_TX_DISTORTION = (1 << 7), /* 802.3ab Tx distortion test    */
 };
 
 /* for requesting NIC test and getting results*/
