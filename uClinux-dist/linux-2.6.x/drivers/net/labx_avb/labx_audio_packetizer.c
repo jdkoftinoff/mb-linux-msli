@@ -39,11 +39,8 @@
  * This driver will work with revision 1.1 only.
  */
 #define DRIVER_NAME "labx_audio_packetizer"
-#define DRIVER_VERSION_MIN  0x11
+#define DRIVER_VERSION_MIN  0x13
 #define DRIVER_VERSION_MAX  0x13
-
-/* "Breakpoint" revision numbers for certain features */
-#define EXTENDED_CAPS_VERSION_MIN  0x12
 
 /* Instances before the extended capabilities version typically had
  * 32 stream slots maximum
@@ -82,7 +79,14 @@ static void enable_packetizer(struct audio_packetizer *packetizer) {
 
   DBG("Enabling the packetizer\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
-  controlRegister |= PACKETIZER_ENABLE;
+
+  /* TEMPORARY - Also hit both port bits!  We need to flesh out the
+   *             set_output_enabled() method and begin using that ioctl()
+   *             for link change events instead!
+   */
+  /* controlRegister |= PACKETIZER_ENABLE; */
+  printk("<<< labx_audio_packetizer: Temporarily enabling both port bits >>>\n");
+  controlRegister |= (PACKETIZER_ENABLE | OUTPUT_A_ENABLE | OUTPUT_B_ENABLE);
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
@@ -125,6 +129,12 @@ static void configure_shaper(struct audio_packetizer *packetizer,
     controlRegister &= ~SHAPER_ENABLE;
   }
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+}
+
+static void set_output_enabled(struct audio_packetizer *packetizer,
+                               uint32_t whichOutput, 
+                               uint32_t enable) {
+  printk("set_output_enabled()!\n");
 }
 
 /* Waits for a synchronized write to commit, using either polling or
@@ -556,6 +566,16 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_SET_OUTPUT_ENABLED:
+    {
+      OutputEnableSettings enableSettings;
+      if(copy_from_user(&enableSettings, (void __user*)arg, sizeof(enableSettings)) != 0) {
+        return(-EFAULT);
+      }
+      set_output_enabled(packetizer, enableSettings.whichOutput, enableSettings.enable);
+    }
+    break;
+
   default:
     /* We don't recognize this command; give our derived driver's ioctl()
      * a crack at it, if one exists.
@@ -675,21 +695,14 @@ int audio_packetizer_probe(const char *name,
   packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
   packetizer->capabilities.shaperFractionBits = ((capsWord >> SHAPER_FRACT_BITS_SHIFT) & SHAPER_FRACT_BITS_MASK);
 
-  /* Instances below a particular version lack the 'A' capabilities register */
-  if(versionCompare < EXTENDED_CAPS_VERSION_MIN) {
-    /* Use an assumed value for the maximum stream slots, and a single output */
-    packetizer->capabilities.maxStreamSlots = ASSUMED_MAX_STREAM_SLOTS;
-    packetizer->capabilities.numOutputs = 1;
-  } else {
-    /* Fetch the 'A' capabilities register and determine whether this is a
-     * single- or dual-output instance
-     */
-    capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG_A));
-    packetizer->capabilities.numOutputs = ((capsWord & DUAL_OUTPUT_INSTANCE) ? 2 : 1);
+  /* Fetch the 'A' capabilities register and determine whether this is a
+   * single- or dual-output instance
+   */
+  capsWord = XIo_In32(REGISTER_ADDRESS(packetizer, CAPABILITIES_REG_A));
+  packetizer->capabilities.numOutputs = ((capsWord & DUAL_OUTPUT_INSTANCE) ? 2 : 1);
 
-    /* Assign the max audio channel slots per stream */
-    packetizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
-  }
+  /* Assign the max audio channel slots per stream */
+  packetizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X packetizer %d.%d at 0x%08X, ",
