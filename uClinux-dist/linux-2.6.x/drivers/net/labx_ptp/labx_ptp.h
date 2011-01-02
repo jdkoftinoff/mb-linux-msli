@@ -89,6 +89,11 @@
 #  define PTP_DIVIDER_MASK    (0x000003FF)
 #  define PTP_DIVIDER_SHIFT   (12)
 
+#define PTP_LOCAL_SECONDS_HIGH_REG  (0x009)
+#  define PTP_RTC_LOCAL_CAPTURE_FLAG  (0x80000000)
+#define PTP_LOCAL_SECONDS_LOW_REG   (0x00A)
+#define PTP_LOCAL_NANOSECONDS_REG   (0x00B)
+
 #define PTP_REVISION_REG   (0x0FF)
 #  define REVISION_FIELD_BITS  4
 #  define REVISION_FIELD_MASK  (0x0F)
@@ -361,6 +366,7 @@ void LinkDelaySyncIntervalSetting_StateMachine(struct ptp_device *ptp, uint32_t 
 void disable_rtc(struct ptp_device *ptp);
 void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
+void get_local_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port);
 

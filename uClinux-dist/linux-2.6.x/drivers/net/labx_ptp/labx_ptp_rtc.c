@@ -76,6 +76,33 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   preempt_enable();
 }
 
+void get_local_time(struct ptp_device *ptp, PtpTime *time) {
+  uint32_t timeWord;
+  uint32_t flags;
+
+  /* Write to the capture flag in the upper seconds word to initiate a capture,
+   * then poll the same bit to determine when it has completed.  The capture only
+   * takes a few RTC clocks, so this busy wait can only consume tens of nanoseconds.
+   *
+   * This will *not* modify the time, since we don't write the nanoseconds register.
+   */
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG), PTP_RTC_LOCAL_CAPTURE_FLAG);
+  do {
+    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG));
+  } while((timeWord & PTP_RTC_LOCAL_CAPTURE_FLAG) != 0);
+
+  /* Now read the entire captured time and pack it into the structure.  The last
+   * value read during polling is perfectly valid.
+   */
+  time->secondsUpper = (uint16_t) timeWord;
+  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_LOW_REG));
+  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_NANOSECONDS_REG));
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
+}
+
 /* Sets a new RTC time from the passed structure */
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   unsigned long flags;
