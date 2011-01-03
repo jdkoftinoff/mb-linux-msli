@@ -43,8 +43,13 @@ then
   mcsbin -m -o 8388608 -y firmware1.bin firmware1.mcs 
   
   echo "tar file..." 
+  if [ -d update ]
+  then
+    rm -rf update
+  fi
   mkdir -p update
-  cp "${DMITRI_IO_DOWNLOAD_BIT}" linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz dt.dtb identity.txt update
+  cp "${DMITRI_IO_DOWNLOAD_BIT}" update/download.bit
+  cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz dt.dtb identity.txt update
   tar czf firmware.tar.gz update 
   
   echo "done: Output file at $PWD/firmware.tar.gz"
