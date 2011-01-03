@@ -68,6 +68,10 @@ static void disable_packetizer(struct audio_packetizer *packetizer) {
   uint32_t controlRegister;
 
   DBG("Disabling the packetizer\n");
+
+  /* Only disable the microengine globally - individual outputs' enable status
+   * is managed by a different method.
+   */
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
   controlRegister &= ~PACKETIZER_ENABLE;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
@@ -78,15 +82,12 @@ static void enable_packetizer(struct audio_packetizer *packetizer) {
   uint32_t controlRegister;
 
   DBG("Enabling the packetizer\n");
-  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
 
-  /* TEMPORARY - Also hit both port bits!  We need to flesh out the
-   *             set_output_enabled() method and begin using that ioctl()
-   *             for link change events instead!
+  /* Only enable the microengine globally - individual outputs' enable status
+   * is managed by a different method.
    */
-  /* controlRegister |= PACKETIZER_ENABLE; */
-  printk("<<< labx_audio_packetizer: Temporarily enabling both port bits >>>\n");
-  controlRegister |= (PACKETIZER_ENABLE | OUTPUT_A_ENABLE | OUTPUT_B_ENABLE);
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  controlRegister |= PACKETIZER_ENABLE;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
@@ -131,10 +132,27 @@ static void configure_shaper(struct audio_packetizer *packetizer,
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
-static void set_output_enabled(struct audio_packetizer *packetizer,
-                               uint32_t whichOutput, 
-                               uint32_t enable) {
-  printk("set_output_enabled()!\n");
+static int32_t set_output_enabled(struct audio_packetizer *packetizer,
+                                  uint32_t whichOutput, 
+                                  uint32_t enable) {
+  uint32_t outputMask;
+  uint32_t controlRegister;
+
+  /* Sanity-check the whichOutput parameter */
+  if(whichOutput >= packetizer->capabilities.numOutputs) {
+    return(-EINVAL);
+  }
+
+  printk("set_output_enabled(%d, %s)!\n",
+         whichOutput, ((enable == OUTPUT_ENABLE) ? "enable" : "disable"));
+
+  /* Enable or disable the requested output in the control register */
+  outputMask = (OUTPUT_A_ENABLE << whichOutput);
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  if(enable == OUTPUT_ENABLE) {
+    controlRegister |= outputMask;
+  } else controlRegister &= ~outputMask;
+  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
 }
 
 /* Waits for a synchronized write to commit, using either polling or
