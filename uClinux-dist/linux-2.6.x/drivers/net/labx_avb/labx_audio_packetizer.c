@@ -143,9 +143,6 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
     return(-EINVAL);
   }
 
-  printk("set_output_enabled(%d, %s)!\n",
-         whichOutput, ((enable == OUTPUT_ENABLE) ? "enable" : "disable"));
-
   /* Enable or disable the requested output in the control register */
   outputMask = (OUTPUT_A_ENABLE << whichOutput);
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
