@@ -134,6 +134,21 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 6), \
                                           CreditShaperSettings)
 
+typedef struct {
+  uint32_t whichOutput;
+  uint32_t enable;
+} OutputEnableSettings;
+
+#define IOC_SET_OUTPUT_ENABLED       _IOW(ENGINE_IOC_CHAR,               \
+                                          (ENGINE_IOC_CLIENT_START + 7), \
+                                          uint32_t)
+
+#  define OUTPUT_A  0
+#  define OUTPUT_B  1
+
+#  define OUTPUT_DISABLE  0
+#  define OUTPUT_ENABLE   1
+
 /* Type definitions and macros for packetizer microcode */
 
 /* Opcode definitions */

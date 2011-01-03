@@ -46,6 +46,8 @@
 
 /* Global control registers */
 #define CONTROL_REG       (0x000)
+#  define OUTPUT_B_ENABLE     (0x20)
+#  define OUTPUT_A_ENABLE     (0x10)
 #  define TEMPLATE_RAM_ZERO   (0x00)
 #  define TEMPLATE_RAM_ONE    (0x08)
 #  define SAMPLE_FALLING_EDGE (0x00)
