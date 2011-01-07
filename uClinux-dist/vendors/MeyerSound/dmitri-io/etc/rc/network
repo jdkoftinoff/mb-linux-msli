@@ -13,3 +13,20 @@ rmdir /var/boot-tmp/avahi-services >/dev/null 2>&1
 /bin/dhcpcd -t0 eth0 &
 /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
 /bin/inetd &
+
+# Make sure interfaces have multicast enabled
+ifconfig eth0 up multicast
+ifconfig eth1 up multicast
+
+# Setup VLAN 2 interfaces (dummy addresses useful for routing outbound packets)
+vconfig add eth0 2
+ifconfig eth0.2 up 128.0.0.1
+vconfig add eth1 2
+ifconfig eth1.2 up 129.0.0.1
+
+# Set up IGMP Version 2
+echo "2" > /proc/sys/net/ipv4/conf/eth0/force_igmp_version
+echo "2" > /proc/sys/net/ipv4/conf/eth0.2/force_igmp_version
+echo "2" > /proc/sys/net/ipv4/conf/eth1/force_igmp_version
+echo "2" > /proc/sys/net/ipv4/conf/eth1.2/force_igmp_version
+
