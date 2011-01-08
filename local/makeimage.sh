@@ -1,70 +1,116 @@
-#! /bin/bash -e
+#!/bin/bash -e
 
-if [ -z "${DMITRI_IO_DOWNLOAD_BIT}" ]; then
-  DMITRI_IO_DOWNLOAD_BIT="${HOME}/dmitri_io_0/implementation/download.bit"
+if [ -z "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" ]; then
+  DMITRI_IO_MAINT_DOWNLOAD_BIT="${HOME}/dmitri_io_0/implementation/download.bit"
 fi
 
-if [ -z "${DMITRI_IO_DTS}" ]; then
-  DMITRI_IO_DTS="xilinx.dts"
+if [ -z "${DMITRI_IO_GNET_DOWNLOAD_BIT}" ]; then
+  DMITRI_IO_GNET_DOWNLOAD_BIT="${HOME}/dmitri_io_1_GNET/mblaze/implementation/download.bit"
 fi
 
-echo installing extra scripts
-cp -pv io-firmware-update.sh ../uClinux-dist/romfs/bin/
+if [ -z "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]; then
+  DMITRI_IO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA/Synthesis/IO_Link_top_download.bit"
+fi
 
-echo "device tree... (${DMITRI_IO_DTS})" 
-../dtc/dtc -o dt.dtb -O dtb "${DMITRI_IO_DTS}" 2>/dev/null 
+if [ -z "${DMITRI_IO_MAINT_DTS}" ]; then
+  DMITRI_IO_MAINT_DTS="xilinx.dts"
+fi
 
-echo "kernel..." 
-gzip -9c ../uClinux-dist/linux-2.6.x/arch/microblaze/boot/linux.bin  > linux.bin.gz 
+if [ -z "${DMITRI_IO_GNET_DTS}" ]; then
+  DMITRI_IO_GNET_DTS="xilinx-gnet.dts"
+fi
 
-echo "ramdisk..." 
+if [ -z "${DMITRI_IO_AVB_DTS}" ]; then
+  DMITRI_IO_AVB_DTS="xilinx-avb.dts"
+fi
+
+if [ -z "${MBBL_ELF}" ]; then
+  MBBL_ELF="${HOME}/dmitri_io_1_GNET/mblaze/SDK/SDK_Workspace/mbbl/Release/mbbl.elf"
+fi
+
+echo "Maintenance device tree (${DMITRI_IO_MAINT_DTS})..."
+../dtc/dtc -f -o dt-maint.dtb -O dtb "${DMITRI_IO_MAINT_DTS}" 2>/dev/null
+echo "GNET device tree (${DMITRI_IO_GNET_DTS})..."
+../dtc/dtc -f -o dt-gnet.dtb -O dtb "${DMITRI_IO_GNET_DTS}" 2>/dev/null
+echo "AVB device tree (${DMITRI_IO_AVB_DTS})..."
+../dtc/dtc -f -o dt-avb.dtb -O dtb "${DMITRI_IO_AVB_DTS}" 2>/dev/null
+
+echo "Kernel..."
+gzip -9c ../uClinux-dist/linux-2.6.x/arch/microblaze/boot/linux.bin  > linux.bin.gz
+
+echo "Ramdisk..."
 genromfs -f romfs.bin -d ../uClinux-dist/romfs
 rm -f romfs.bin.gz
-gzip -9 romfs.bin 
+gzip -9 romfs.bin
 
-echo "final binary image..." 
-mkbootimage -o bootimage.bin -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb 
-
-echo "final MCS image..." 
-mcsbin -m -o 3145728 -y bootimage.bin bootimage.mcs 
-
-if [ -f "${DMITRI_IO_DOWNLOAD_BIT}" ]
-then 
-  echo "extended final binary image 0..." 
-  mbbl-imagetool -o firmware0.bin -b "${DMITRI_IO_DOWNLOAD_BIT}" -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb -i identity.txt 
-
-  echo "extended final binary image 1..." 
-  mbbl-imagetool -o firmware1.bin -s 0x800000 -b "${DMITRI_IO_DOWNLOAD_BIT}" -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt.dtb -i identity.txt 
-
-  echo "extended final MCS image 0..." 
-  mcsbin -m -o 0 -y firmware0.bin firmware0.mcs 
-
-  echo "extended final MCS image 1..." 
-  mcsbin -m -o 8388608 -y firmware1.bin firmware1.mcs 
-  
-  echo "tar file..." 
-  if [ -d update ]
-  then
-    rm -rf update
-  fi
-  mkdir -p update
-  cp "${DMITRI_IO_DOWNLOAD_BIT}" update/download.bit
-  cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz dt.dtb identity.txt update
-  tar czf firmware.tar.gz update 
-  
-  echo "done: Output file at $PWD/firmware.tar.gz"
-
+if [ -f "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" ]
+    then 
+    echo "Maintenance mode binary image..."
+    ../../mbbl/mbbl-mkbootimage/mbbl-imagetool -o firmware0.bin -s 0 -b "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt-maint.dtb -i identity.txt
+    echo "Maintenance mode MCS image..." 
+    ../mcsbin/mcsbin -m -o 0 -y firmware0.bin firmware0.mcs 
+ 
+    echo "Maintenance mode and DGPIO tar file..."
+    if [ -d update ]
+	then
+	rm -rf update
+    fi
+    mkdir -p update
+    cp "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" update/download.bit
+    cp dt-maint.dtb update/dt.dtb
+    cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
+    tar czf firmware-maint.tar.gz update
+    echo "done: Output file at $PWD/firmware-maint.tar.gz"
 else
-  
-  echo -e "done"
-  echo "***********************************************************************"
-  echo " Boot image bootimage.bin and bootimage.mcs build succeeded, however"
-  echo " FPGA bitstream file"
-  echo " ${DMITRI_IO_DOWNLOAD_BIT} is not found."
-  echo " To build firmware0.bin, firmware0.mcs, firmware1.bin, firmware1.mcs"
-  echo " and firmware.tar.gz, please generate this file from XPS and re-run"
-  echo " $0"
-  echo "***********************************************************************"
-
+    echo "***********************************************************************"
+    echo " FPGA bitstream file"
+    echo " ${DMITRI_IO_MAINT_DOWNLOAD_BIT} is not found."
+    echo " To build firmware-maint.tar.gz, please generate this file from XPS"
+    echo " and re-run $0"
+    echo "***********************************************************************"
 fi
 
+if [ -f "${DMITRI_IO_GNET_DOWNLOAD_BIT}" -a -f "${MBBL_ELF}" ]
+    then 
+    echo "GNET tar file..."
+    if [ -d update ]
+	then
+	rm -rf update
+    fi
+    mkdir -p update
+    cp "${DMITRI_IO_GNET_DOWNLOAD_BIT}" update/download.bit
+    cp "${MBBL_ELF}" update/mbbl.elf
+    cp dt-gnet.dtb update/dt.dtb
+    cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
+    tar czf firmware-gnet.tar.gz update
+    echo "done: Output file at $PWD/firmware-gnet.tar.gz"
+else
+    echo "***********************************************************************"
+    echo " FPGA bitstream file"
+    echo " ${DMITRI_IO_GNET_DOWNLOAD_BIT} or ${MBBL_ELF} is not found."
+    echo " To build firmware-gnet.tar.gz, please generate file(s) from XPS"
+    echo " and re-run $0"
+    echo "***********************************************************************"
+fi
+
+if [ -f "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]
+    then 
+    echo "AVB tar file..."
+    if [ -d update ]
+	then
+	rm -rf update
+    fi
+    mkdir -p update
+    cp "${DMITRI_IO_AVB_DOWNLOAD_BIT}" update/download.bit
+    cp dt-avb.dtb update/dt.dtb
+    cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
+    tar czf firmware-avb.tar.gz update
+    echo "done: Output file at $PWD/firmware-avb.tar.gz"
+else
+    echo "***********************************************************************"
+    echo " FPGA bitstream file"
+    echo " ${DMITRI_IO_AVB_DOWNLOAD_BIT} is not found."
+    echo " To build firmware-avb.tar.gz, please generate this file from XPS"
+    echo " and re-run $0"
+    echo "***********************************************************************"
+fi
