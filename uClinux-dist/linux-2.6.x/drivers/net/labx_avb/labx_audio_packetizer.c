@@ -625,12 +625,12 @@ static struct file_operations audio_packetizer_fops = {
  * @param newInstance  - Pointer to the new driver instance, NULL if unused
  */
 int audio_packetizer_probe(const char *name, 
-			   struct platform_device *pdev,
-			   struct resource *addressRange,
-			   struct resource *irq,
-			   struct file_operations *derivedFops,
-			   void *derivedData,
-			   struct audio_packetizer **newInstance) {
+                           struct platform_device *pdev,
+                           struct resource *addressRange,
+                           struct resource *irq,
+                           struct file_operations *derivedFops,
+                           void *derivedData,
+                           struct audio_packetizer **newInstance) {
   struct audio_packetizer *packetizer;
   uint32_t capsWord;
   uint32_t versionWord;

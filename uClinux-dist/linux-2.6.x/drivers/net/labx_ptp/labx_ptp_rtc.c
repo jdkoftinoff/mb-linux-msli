@@ -78,7 +78,7 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
 
 void get_local_time(struct ptp_device *ptp, PtpTime *time) {
   uint32_t timeWord;
-  uint32_t flags;
+  unsigned long flags;
 
   /* Write to the capture flag in the upper seconds word to initiate a capture,
    * then poll the same bit to determine when it has completed.  The capture only

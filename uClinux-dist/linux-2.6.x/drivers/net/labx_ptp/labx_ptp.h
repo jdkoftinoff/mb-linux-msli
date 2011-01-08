@@ -272,6 +272,9 @@ struct ptp_device {
   /* Number of ports attached to this instance */
   uint32_t numPorts;
 
+  /* Width, in bits, of the instance's ports */
+  uint32_t portWidth;
+
   /* Properties for the instance */
   PtpProperties properties;
 

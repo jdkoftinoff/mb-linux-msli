@@ -135,6 +135,9 @@ typedef struct {
   /* Number of PTP ports attached to this instance */
   uint32_t numPorts;
 
+  /* Width, in bits, of each of the PTP ports */
+  uint32_t portWidth;
+
   /* Net interface associated with each PTP port */
   const char** interfaceName;
 

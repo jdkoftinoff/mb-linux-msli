@@ -46,8 +46,8 @@
 
 /* Driver name and the revision of hardware expected. */
 #define DRIVER_NAME "labx_ptp"
-#define HARDWARE_VERSION_MAJOR  1
-#define HARDWARE_VERSION_MINOR  1
+#define DRIVER_VERSION_MIN  0x11
+#define DRIVER_VERSION_MAX  0x12
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 253
@@ -512,6 +512,7 @@ static int ptp_probe(const char *name,
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t versionCompare;
   int returnValue;
   int byteIndex;
   PtpClockQuality *quality;
@@ -529,7 +530,9 @@ static int ptp_probe(const char *name,
   }
   memset(ptp->ports, 0, sizeof(struct ptp_port)*platformData->numPorts);
 
-  ptp->numPorts = platformData->numPorts;
+  /* Assign basic port configuration information */
+  ptp->numPorts  = platformData->numPorts;
+  ptp->portWidth = platformData->portWidth;
 
   /* Request and map the device's I/O memory region into uncacheable space */
   ptp->physicalAddress = addressRange->start;
@@ -553,8 +556,9 @@ static int ptp_probe(const char *name,
   versionWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_REVISION_REG));
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != HARDWARE_VERSION_MINOR)) {
+  versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
+  if((versionCompare < DRIVER_VERSION_MIN) | 
+     (versionCompare > DRIVER_VERSION_MAX)) {
     printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
            ptp->name, versionMajor, versionMinor, (uint32_t)ptp->physicalAddress);
     returnValue = -ENXIO;
@@ -576,14 +580,24 @@ static int ptp_probe(const char *name,
     goto unmap;
   }
 
+  /* Older versions may not provide a port width, as they pre-date support
+   * for 10G Ethernet
+   */
+  if((ptp->portWidth != 8) & (ptp->portWidth != 64)) {
+    printk(KERN_INFO "%s: No port width specified by platform, assuming 8-bit\n",
+           ptp->name);
+    ptp->portWidth = 8;
+  }
+
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d\n", 
+  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d, Width %d bits\n", 
          ptp->name,
-         HARDWARE_VERSION_MAJOR,
-         HARDWARE_VERSION_MINOR,
+         versionMajor,
+         versionMinor,
          (uint32_t)ptp->physicalAddress,
          ptp->irq,
-	 ptp->numPorts);
+         ptp->numPorts,
+         ptp->portWidth);
 
   /* Initialize other resources */
   spin_lock_init(&ptp->mutex);
@@ -735,6 +749,7 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
 
   /* Consult the device tree for other required parameters */
   platformData.numPorts                  = get_u32(ofdev,"xlnx,num-ports");
+  platformData.portWidth                 = get_u32(ofdev,"xlnx,port-width");
   platformData.timerPrescaler            = get_u32(ofdev,"xlnx,timer-prescaler");
   platformData.timerDivider              = get_u32(ofdev,"xlnx,timer-divider");
   platformData.nominalIncrement.mantissa = get_u32(ofdev,"xlnx,nominal-increment-mantissa");
@@ -749,6 +764,7 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   platformData.txPhyMacDelay.secondsUpper = 0;
   platformData.txPhyMacDelay.secondsLower = 0;
   platformData.txPhyMacDelay.nanoseconds = get_u32(ofdev,"xlnx,phy-mac-tx-delay");
+
 
   /* Get the attached ethernet device nodes */
   platformData.interfaceNode = kmalloc(sizeof(void*)*platformData.numPorts, GFP_KERNEL);
@@ -783,6 +799,7 @@ static int __devexit ptp_of_remove(struct of_device *dev)
 
 static struct of_device_id ptp_of_match[] = {
 	{ .compatible = "xlnx,labx-ptp-1.00.a", },
+	{ .compatible = "xlnx,labx-ptp-1.01.a", },
 	{ /* end of list */ },
 };
 
@@ -875,8 +892,7 @@ EXPORT_SYMBOL(remove_syntonize_callback);
 static int __init ptp_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": PTP hardware %d.%d driver\n",
-         HARDWARE_VERSION_MAJOR, HARDWARE_VERSION_MINOR);
+  printk(KERN_INFO DRIVER_NAME ": PTP hardware driver\n");
   printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
