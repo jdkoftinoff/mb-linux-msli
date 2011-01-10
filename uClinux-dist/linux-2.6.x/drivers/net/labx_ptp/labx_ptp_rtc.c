@@ -28,7 +28,16 @@
 #include <xio.h>
 
 /* Uncomment to print debug messages for the slave offset */
-/* #define SLAVE_OFFSET_DEBUG */
+#define SLAVE_OFFSET_DEBUG
+
+/* Threshold and purely-proportional coefficient to use when in phase
+ * acquisition mode
+ */
+#define ACQUIRE_THRESHOLD (100000)
+#define ACQUIRE_COEFF_P   (0xF0000000)
+
+/* Saturation range limit for the integrator */
+#define INTEGRAL_MAX_ABS  (1000000LL)
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
@@ -120,8 +129,16 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
 }
 
 /* RTC increment constants */
-#define INCREMENT_ONE            ((int32_t) 0x08000000)
-#define INCREMENT_NEG_ONE        ((int32_t) 0xF8000000)
+#define INCREMENT_ONE         ((int32_t) 0x08000000)
+#define INCREMENT_NEG_ONE     ((int32_t) 0xF8000000)
+#define INCREMENT_HALF        ((int32_t) 0x04000000)
+#define INCREMENT_NEG_HALF    ((int32_t) 0xFC000000)
+#define INCREMENT_QUARTER     ((int32_t) 0x02000000)
+#define INCREMENT_NEG_QUARTER ((int32_t) 0xFE000000)
+#define INCREMENT_EIGHTH      ((int32_t) 0x01000000)
+#define INCREMENT_NEG_EIGHTH  ((int32_t) 0xFF000000)
+#define INCREMENT_DELTA_MAX   (INCREMENT_EIGHTH)
+#define INCREMENT_DELTA_MIN   (INCREMENT_NEG_EIGHTH)
 
 /* Bits to shift to convert a coefficient product */
 #define COEFF_PRODUCT_SHIFT  (28)
@@ -189,46 +206,73 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     int64_t accumulator;
     int32_t adjustment;
 
-    /* Update the servo with the present value */
+    /* Update the servo with the present value; begin with the nominal increment */
     newRtcIncrement = (ptp->nominalIncrement.mantissa & RTC_MANTISSA_MASK);
     newRtcIncrement <<= RTC_MANTISSA_SHIFT;
     newRtcIncrement |= (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
     
-    /* Accumulate the proportional coefficient's contribution */
-    coefficient = (int64_t) ptp->coefficients.P;
-    slaveOffsetExtended = (int64_t) slaveOffset;
-    accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
+    /* Operate in two distinct modes; a high-gain, purely-proportional control loop
+     * when we're far from the master, and a more complete set of controls once we've
+     * narrowed in
+     */
+    if((slaveOffset > ACQUIRE_THRESHOLD) | (slaveOffset < -ACQUIRE_THRESHOLD)) {
+      /* Accumulate the proportional coefficient's contribution */
+      coefficient = (int64_t) ACQUIRE_COEFF_P;
+      slaveOffsetExtended = (int64_t) slaveOffset;
+      accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
 
-    /* Accumulate the integral coefficient's contribution */
-    coefficient = (int64_t) ptp->coefficients.I;
-    ptp->integral += slaveOffsetExtended; /* TODO: Scale based on the time between syncs? */
-    accumulator += ((coefficient * ptp->integral) >> COEFF_PRODUCT_SHIFT);
+      /* Also dump the integrator for the integral term */
+      ptp->integral = 0;
+    } else {
+      /* Accumulate the proportional coefficient's contribution */
+      coefficient = (int64_t) ptp->coefficients.P;
+      slaveOffsetExtended = (int64_t) slaveOffset;
+      accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
 
-    /* Accumulate the derivitave coefficient's contribution */
-    coefficient = (int64_t) ptp->coefficients.D;
-    ptp->derivative += (slaveOffset - ptp->previousOffset); /* TODO: Scale based on the time between syncs? */
-    accumulator += ((coefficient * (int64_t)ptp->derivative) >> COEFF_PRODUCT_SHIFT);
-    ptp->previousOffset = slaveOffset;
+      /* Accumulate the integral coefficient's contribution, clamping the integrated
+       * error to its bounds
+       */
+      coefficient = (int64_t) ptp->coefficients.I;
+      ptp->integral += slaveOffsetExtended; /* TODO: Scale based on the time between syncs? */
+      if(ptp->integral > INTEGRAL_MAX_ABS) {
+        ptp->integral = INTEGRAL_MAX_ABS;
+      } else if(ptp->integral < -INTEGRAL_MAX_ABS) {
+        ptp->integral = -INTEGRAL_MAX_ABS;
+      }
+      accumulator += ((coefficient * ptp->integral) >> COEFF_PRODUCT_SHIFT);
 
-    adjustment = (int32_t) accumulator;
+      /* Accumulate the derivitave coefficient's contribution */
+      coefficient = (int64_t) ptp->coefficients.D;
+      ptp->derivative += (slaveOffset - ptp->previousOffset); /* TODO: Scale based on the time between syncs? */
+      accumulator += ((coefficient * (int64_t)ptp->derivative) >> COEFF_PRODUCT_SHIFT);
+      ptp->previousOffset = slaveOffset;
+    }
     
     /* Clamp the new increment to within +/- one nanosecond of nominal */
-    if(adjustment > INCREMENT_ONE) {
-      adjustment = INCREMENT_ONE;
-    } else if(adjustment < INCREMENT_NEG_ONE) {
-      adjustment = INCREMENT_NEG_ONE;
+    adjustment = (int32_t) accumulator;
+    if(adjustment > INCREMENT_DELTA_MAX) {
+      adjustment = INCREMENT_DELTA_MAX;
+    } else if(adjustment < INCREMENT_DELTA_MIN) {
+      adjustment = INCREMENT_DELTA_MIN;
     }
     newRtcIncrement += adjustment;
     
     /* Write the new increment out to the hardware, incorporating the enable bit */
     newRtcIncrement |= PTP_RTC_ENABLE;
-    XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement);
+    XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement); 
 
 #ifdef SLAVE_OFFSET_DEBUG
     if(++servoCount >= 10) {
       printk("Slave offset %d, Increment 0x%08X\n", slaveOffset, newRtcIncrement);
       printk("  syncRxNS %d, syncTxNS %d (%d), MeanPathNS %d\n", (int)ptp->ports[port].syncRxTimestamp.nanoseconds,
         (int)ptp->ports[port].syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->ports[port].neighborPropDelay);
+      printk("RTC increment 0x%08X", newRtcIncrement);
+      if(adjustment == INCREMENT_DELTA_MIN) {
+        printk(" (MIN CLAMP)");
+      } else if(adjustment == INCREMENT_DELTA_MAX) {
+        printk(" (MAX CLAMP)");
+      }
+      printk("\n");
       servoCount = 0;
     }
 #endif

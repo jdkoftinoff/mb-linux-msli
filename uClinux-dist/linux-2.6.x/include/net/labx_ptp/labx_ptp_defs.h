@@ -114,9 +114,14 @@ typedef struct {
 #define IOC_PTP_GET_RTC_COEF _IOR('p', 0x18, PtpCoefficients)
 #define IOC_PTP_SET_RTC_COEF _IOW('p', 0x19, PtpCoefficients)
 
-/* Type used to represent RTC increments */
+/* Type used to represent RTC increments as well as permissible bounds to the
+ * nominal increment.  This limits the RTC clock range to [100, 250] MHz, which
+ * is a reasonable limitation for good performance without excessive precision.
+ */
 #define LABX_PTP_RTC_MANTISSA_BITS   (4)
-#define LABX_PTP_RTC_FRACTION_BITS  (20)
+#  define LABX_PTP_RTC_INC_MIN ( 4)
+#  define LABX_PTP_RTC_INC_MAX (10)
+#define LABX_PTP_RTC_FRACTION_BITS  (27)
 typedef struct {
   uint32_t mantissa;
   uint32_t fraction;

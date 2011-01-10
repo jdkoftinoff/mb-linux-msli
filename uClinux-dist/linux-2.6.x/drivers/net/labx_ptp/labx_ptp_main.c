@@ -75,6 +75,15 @@ static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
 #define DEFAULT_TIME_SOURCE            (PTP_SOURCE_OTHER)
 #define DEFAULT_DELAY_MECHANISM        (PTP_DELAY_MECHANISM_E2E)
 
+/* Default coefficient sets for the two distinct delay mechanisms */
+#define DEFAULT_P2P_COEFF_P  (0xFFF00000)
+#define DEFAULT_P2P_COEFF_I  (0x80000000)
+#define DEFAULT_P2P_COEFF_D  (0x80000000)
+
+#define DEFAULT_E2E_COEFF_P  (0xFF000000)
+#define DEFAULT_E2E_COEFF_I  (0xFF000000)
+#define DEFAULT_E2E_COEFF_D  (0x00000000)
+
 #if 0
 #define DBG(f, x...) pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
@@ -342,6 +351,23 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       copyResult = copy_from_user(&ptp->properties, (void __user*)arg, sizeof(PtpProperties));
+
+      /* Having set the properties, load a set of default coefficients in depending
+       * upon the selected delay mechanism
+       */
+      if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
+        /* Apply coefficients for the peer-to-peer delay mechanism */
+        ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+        ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+        ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+      } else {
+        /* Apply coefficients for the end-to-end delay mechanism */
+        printk("Using E2E coefficients\n");
+        ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+        ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+        ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+      }
+
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
@@ -650,18 +676,39 @@ static int ptp_probe(const char *name,
   ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
 
   ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
+
   for(i=0; i<ptp->numPorts; i++) {
     init_tx_templates(ptp, i);
   }
 
   /* Configure the instance's RTC control loop based on data provided by
-   * the platform when it defines the device.
+   * the platform when it defines the device.  The default coefficients will
+   * likely be reconfigured by userspace at run-time; however the nominal
+   * increment is directly tied to the period of the RTC clock supplied to
+   * the Ptp_Hardware module by the platform - therefore this *must* have a
+   * sane value!
    */
+  if((platformData->nominalIncrement.mantissa < LABX_PTP_RTC_INC_MIN) |
+     (platformData->nominalIncrement.mantissa > LABX_PTP_RTC_INC_MAX)) {
+    returnValue = -EINVAL;
+    printk(KERN_ERR "%s: Nominal RTC increment mantissa (%d) is out of range [%d, %d]\n",
+           ptp->name, platformData->nominalIncrement.mantissa,
+           LABX_PTP_RTC_INC_MIN, LABX_PTP_RTC_INC_MAX);
+    goto unmap;
+  }    
+  if((platformData->nominalIncrement.fraction & ~RTC_FRACTION_MASK) != 0) {
+    returnValue = -EINVAL;
+    printk(KERN_ERR "%s: Nominal RTC increment fraction (0x%08X) has > %d significant bits\n",
+           ptp->name, platformData->nominalIncrement.fraction, LABX_PTP_RTC_FRACTION_BITS);
+    goto unmap;
+  }    
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
-  ptp->coefficients.P = platformData->coefficients.P;
-  ptp->coefficients.I = platformData->coefficients.I;
-  ptp->coefficients.D = platformData->coefficients.D;
+
+  /* Zero the coefficients initially; they will be inferred from the port mode */
+  ptp->coefficients.P = 0x00000000;
+  ptp->coefficients.I = 0x00000000;
+  ptp->coefficients.D = 0x00000000;
 
   /* Assign the MAC transmit and receive latency */
   for(i=0; i<ptp->numPorts; i++) {
@@ -685,10 +732,6 @@ static int ptp_probe(const char *name,
 
   /* Register for network device events */
   ptp->notifier.notifier_call = ptp_device_event;
-
-  printk("PTP P=%08X, I=%08X, D=%08X, rxLat=%08x, txLat=%08X\n",
-    ptp->coefficients.P, ptp->coefficients.I, ptp->coefficients.D,
-    ptp->ports[0].rxPhyMacDelay.nanoseconds, ptp->ports[0].txPhyMacDelay.nanoseconds);
 
   if (register_netdevice_notifier(&ptp->notifier) != 0)
   {
@@ -766,7 +809,8 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   platformData.txPhyMacDelay.nanoseconds = get_u32(ofdev,"xlnx,phy-mac-tx-delay");
 
 
-  /* Get the attached ethernet device nodes */
+  /* Get the attached ethernet device nodes; NULL the string pointer */
+  platformData.interfaceName = NULL;
   platformData.interfaceNode = kmalloc(sizeof(void*)*platformData.numPorts, GFP_KERNEL);
   for (i=0; i<platformData.numPorts; i++) {
     char propName[64];
