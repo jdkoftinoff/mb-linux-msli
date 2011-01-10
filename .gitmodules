@@ -13,9 +13,6 @@
 [submodule "uClinux-dist/user/gsbd"]
 	path = uClinux-dist/user/gsbd
 	url = ../gsbd
-[submodule "uClinux-dist/user/avbd"]
-	path = uClinux-dist/user/avbd
-	url = ../avbd.git
 [submodule "uClinux-dist/user/avbweb"]
 	path = uClinux-dist/user/avbweb
 	url = ../avbweb.git

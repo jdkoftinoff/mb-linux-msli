@@ -2,6 +2,9 @@ PWD:=$(shell pwd)
 include $(PWD)/../../vendors/MeyerSound/dmitri-io/extras/common.mk
 
 US_CONFIG=$(UCLIBC_LIB_DIR)/microsupport/microsupport-config
+IEEE1722_1_CONFIG=$(UCLIBC_LIB_DIR)/ieee1722_1/ieee1722-1-jkp-config
+LABX_DIR=$(realpath $(PWD)/../../../../labx-ip/IO_Link/Applications)
+
 include $(PROJECT_TOP_DIR)/project.mk
 
 romfs : tools
