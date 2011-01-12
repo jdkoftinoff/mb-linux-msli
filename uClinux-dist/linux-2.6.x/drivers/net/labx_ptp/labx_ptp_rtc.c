@@ -28,7 +28,7 @@
 #include <xio.h>
 
 /* Uncomment to print debug messages for the slave offset */
-#define SLAVE_OFFSET_DEBUG
+/* #define SLAVE_OFFSET_DEBUG */
 
 /* Threshold and purely-proportional coefficient to use when in phase
  * acquisition mode
