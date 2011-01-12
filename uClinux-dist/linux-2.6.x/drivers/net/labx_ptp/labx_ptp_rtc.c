@@ -33,11 +33,11 @@
 /* Threshold and purely-proportional coefficient to use when in phase
  * acquisition mode
  */
-#define ACQUIRE_THRESHOLD (100000)
+#define ACQUIRE_THRESHOLD (10000)
 #define ACQUIRE_COEFF_P   (0xF0000000)
 
 /* Saturation range limit for the integrator */
-#define INTEGRAL_MAX_ABS  (1000000LL)
+#define INTEGRAL_MAX_ABS  (1000LL)
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
@@ -225,15 +225,15 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       ptp->integral = 0;
     } else {
       /* Accumulate the proportional coefficient's contribution */
-      coefficient = (int64_t) ptp->coefficients.P;
       slaveOffsetExtended = (int64_t) slaveOffset;
+      coefficient = (int64_t) ptp->coefficients.P;
       accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
 
       /* Accumulate the integral coefficient's contribution, clamping the integrated
-       * error to its bounds
+       * error to its bounds.
        */
       coefficient = (int64_t) ptp->coefficients.I;
-      ptp->integral += slaveOffsetExtended; /* TODO: Scale based on the time between syncs? */
+      ptp->integral += slaveOffsetExtended;
       if(ptp->integral > INTEGRAL_MAX_ABS) {
         ptp->integral = INTEGRAL_MAX_ABS;
       } else if(ptp->integral < -INTEGRAL_MAX_ABS) {
