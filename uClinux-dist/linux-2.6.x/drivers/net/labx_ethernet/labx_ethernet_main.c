@@ -1688,9 +1688,9 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
 
 /** Shared device initialization code */
 static int xtenet_setup(struct device *dev,
-			struct resource *r_mem,
-			struct resource *r_irq,
-			struct labx_eth_platform_data *pdata) {
+                        struct resource *r_mem,
+                        struct resource *r_irq,
+                        struct labx_eth_platform_data *pdata) {
   u32 virt_baddr;		/* virtual base address of TEMAC */
   int i;
 

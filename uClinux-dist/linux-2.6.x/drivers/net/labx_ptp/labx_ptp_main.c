@@ -46,8 +46,8 @@
 
 /* Driver name and the revision of hardware expected. */
 #define DRIVER_NAME "labx_ptp"
-#define HARDWARE_VERSION_MAJOR  1
-#define HARDWARE_VERSION_MINOR  1
+#define DRIVER_VERSION_MIN  0x11
+#define DRIVER_VERSION_MAX  0x12
 
 /* Major device number for the driver */
 #define DRIVER_MAJOR 233
@@ -74,6 +74,15 @@ static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
 #define DEFAULT_SCALED_LOG_VARIANCE    (0x4100)
 #define DEFAULT_TIME_SOURCE            (PTP_SOURCE_OTHER)
 #define DEFAULT_DELAY_MECHANISM        (PTP_DELAY_MECHANISM_E2E)
+
+/* Default coefficient sets for the two distinct delay mechanisms */
+#define DEFAULT_P2P_COEFF_P  (0xFFF00000)
+#define DEFAULT_P2P_COEFF_I  (0x80000000)
+#define DEFAULT_P2P_COEFF_D  (0x80000000)
+
+#define DEFAULT_E2E_COEFF_P  (0xF8000000)
+#define DEFAULT_E2E_COEFF_I  (0xFC000000)
+#define DEFAULT_E2E_COEFF_D  (0x00000000)
 
 #if 0
 #define DBG(f, x...) pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
@@ -342,6 +351,23 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       copyResult = copy_from_user(&ptp->properties, (void __user*)arg, sizeof(PtpProperties));
+
+      /* Having set the properties, load a set of default coefficients in depending
+       * upon the selected delay mechanism
+       */
+      if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
+        /* Apply coefficients for the peer-to-peer delay mechanism */
+        ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+        ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+        ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+      } else {
+        /* Apply coefficients for the end-to-end delay mechanism */
+        printk("Using E2E coefficients\n");
+        ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+        ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+        ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+      }
+
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
@@ -512,6 +538,7 @@ static int ptp_probe(const char *name,
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t versionCompare;
   int returnValue;
   int byteIndex;
   PtpClockQuality *quality;
@@ -529,7 +556,9 @@ static int ptp_probe(const char *name,
   }
   memset(ptp->ports, 0, sizeof(struct ptp_port)*platformData->numPorts);
 
-  ptp->numPorts = platformData->numPorts;
+  /* Assign basic port configuration information */
+  ptp->numPorts  = platformData->numPorts;
+  ptp->portWidth = platformData->portWidth;
 
   /* Request and map the device's I/O memory region into uncacheable space */
   ptp->physicalAddress = addressRange->start;
@@ -553,8 +582,9 @@ static int ptp_probe(const char *name,
   versionWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_REVISION_REG));
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
-  if((versionMajor != HARDWARE_VERSION_MAJOR) | 
-     (versionMinor != HARDWARE_VERSION_MINOR)) {
+  versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
+  if((versionCompare < DRIVER_VERSION_MIN) | 
+     (versionCompare > DRIVER_VERSION_MAX)) {
     printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
            ptp->name, versionMajor, versionMinor, (uint32_t)ptp->physicalAddress);
     returnValue = -ENXIO;
@@ -576,14 +606,24 @@ static int ptp_probe(const char *name,
     goto unmap;
   }
 
+  /* Older versions may not provide a port width, as they pre-date support
+   * for 10G Ethernet
+   */
+  if((ptp->portWidth != 8) & (ptp->portWidth != 64)) {
+    printk(KERN_INFO "%s: No port width specified by platform, assuming 8-bit\n",
+           ptp->name);
+    ptp->portWidth = 8;
+  }
+
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d\n", 
+  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d, Width %d bits\n", 
          ptp->name,
-         HARDWARE_VERSION_MAJOR,
-         HARDWARE_VERSION_MINOR,
+         versionMajor,
+         versionMinor,
          (uint32_t)ptp->physicalAddress,
          ptp->irq,
-	 ptp->numPorts);
+         ptp->numPorts,
+         ptp->portWidth);
 
   /* Initialize other resources */
   spin_lock_init(&ptp->mutex);
@@ -636,18 +676,39 @@ static int ptp_probe(const char *name,
   ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
 
   ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
+
   for(i=0; i<ptp->numPorts; i++) {
     init_tx_templates(ptp, i);
   }
 
   /* Configure the instance's RTC control loop based on data provided by
-   * the platform when it defines the device.
+   * the platform when it defines the device.  The default coefficients will
+   * likely be reconfigured by userspace at run-time; however the nominal
+   * increment is directly tied to the period of the RTC clock supplied to
+   * the Ptp_Hardware module by the platform - therefore this *must* have a
+   * sane value!
    */
+  if((platformData->nominalIncrement.mantissa < LABX_PTP_RTC_INC_MIN) |
+     (platformData->nominalIncrement.mantissa > LABX_PTP_RTC_INC_MAX)) {
+    returnValue = -EINVAL;
+    printk(KERN_ERR "%s: Nominal RTC increment mantissa (%d) is out of range [%d, %d]\n",
+           ptp->name, platformData->nominalIncrement.mantissa,
+           LABX_PTP_RTC_INC_MIN, LABX_PTP_RTC_INC_MAX);
+    goto unmap;
+  }    
+  if((platformData->nominalIncrement.fraction & ~RTC_FRACTION_MASK) != 0) {
+    returnValue = -EINVAL;
+    printk(KERN_ERR "%s: Nominal RTC increment fraction (0x%08X) has > %d significant bits\n",
+           ptp->name, platformData->nominalIncrement.fraction, LABX_PTP_RTC_FRACTION_BITS);
+    goto unmap;
+  }    
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
-  ptp->coefficients.P = platformData->coefficients.P;
-  ptp->coefficients.I = platformData->coefficients.I;
-  ptp->coefficients.D = platformData->coefficients.D;
+
+  /* Zero the coefficients initially; they will be inferred from the port mode */
+  ptp->coefficients.P = 0x00000000;
+  ptp->coefficients.I = 0x00000000;
+  ptp->coefficients.D = 0x00000000;
 
   /* Assign the MAC transmit and receive latency */
   for(i=0; i<ptp->numPorts; i++) {
@@ -671,10 +732,6 @@ static int ptp_probe(const char *name,
 
   /* Register for network device events */
   ptp->notifier.notifier_call = ptp_device_event;
-
-  printk("PTP P=%08X, I=%08X, D=%08X, rxLat=%08x, txLat=%08X\n",
-    ptp->coefficients.P, ptp->coefficients.I, ptp->coefficients.D,
-    ptp->ports[0].rxPhyMacDelay.nanoseconds, ptp->ports[0].txPhyMacDelay.nanoseconds);
 
   if (register_netdevice_notifier(&ptp->notifier) != 0)
   {
@@ -735,6 +792,7 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
 
   /* Consult the device tree for other required parameters */
   platformData.numPorts                  = get_u32(ofdev,"xlnx,num-ports");
+  platformData.portWidth                 = get_u32(ofdev,"xlnx,port-width");
   platformData.timerPrescaler            = get_u32(ofdev,"xlnx,timer-prescaler");
   platformData.timerDivider              = get_u32(ofdev,"xlnx,timer-divider");
   platformData.nominalIncrement.mantissa = get_u32(ofdev,"xlnx,nominal-increment-mantissa");
@@ -750,7 +808,9 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   platformData.txPhyMacDelay.secondsLower = 0;
   platformData.txPhyMacDelay.nanoseconds = get_u32(ofdev,"xlnx,phy-mac-tx-delay");
 
-  /* Get the attached ethernet device nodes */
+
+  /* Get the attached ethernet device nodes; NULL the string pointer */
+  platformData.interfaceName = NULL;
   platformData.interfaceNode = kmalloc(sizeof(void*)*platformData.numPorts, GFP_KERNEL);
   for (i=0; i<platformData.numPorts; i++) {
     char propName[64];
@@ -783,6 +843,7 @@ static int __devexit ptp_of_remove(struct of_device *dev)
 
 static struct of_device_id ptp_of_match[] = {
 	{ .compatible = "xlnx,labx-ptp-1.00.a", },
+	{ .compatible = "xlnx,labx-ptp-1.01.a", },
 	{ /* end of list */ },
 };
 
@@ -875,8 +936,7 @@ EXPORT_SYMBOL(remove_syntonize_callback);
 static int __init ptp_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": PTP hardware %d.%d driver\n",
-         HARDWARE_VERSION_MAJOR, HARDWARE_VERSION_MINOR);
+  printk(KERN_INFO DRIVER_NAME ": PTP hardware driver\n");
   printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF

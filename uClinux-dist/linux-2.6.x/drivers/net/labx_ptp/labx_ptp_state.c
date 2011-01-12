@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 #include <xio.h>
 
-/* Define this to get some extra debug on sync/follow-up messages */
+/* Define these to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
 /* #define DEBUG_INCREMENT */
 
@@ -408,8 +408,12 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
     timestamp_abs(&difference, &absDifference);
     if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0) ||
        (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
-      /* Reset the time using the uncorrected timestamp */
-      printk("Resetting time!\n");
+      /* Reset the time using the uncorrected timestamp; also re-load the nominal
+       * RTC increment in advance in order to always have a known starting point
+       * for convergence.
+       */
+      printk("Resetting RTC!\n");
+      set_rtc_increment(ptp, &ptp->nominalIncrement);
       set_rtc_time(ptp, &syncTxTimestamp);
    } else {
       /* Less than a second, leave these timestamps and update the servo */

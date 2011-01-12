@@ -425,6 +425,7 @@ static int __devexit labrinth_tdm_of_remove(struct of_device *dev)
 /* Define the devices from the tree we are compatible with */
 static struct of_device_id labrinth_tdm_of_match[] = {
   { .compatible = "xlnx,labrinth-tdm-output-1.00.a", },
+  { .compatible = "xlnx,labrinth-tdm-output-1.01.a", },
   { /* end of list */ },
 };
 

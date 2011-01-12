@@ -15,7 +15,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU Geneal Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
@@ -153,7 +153,6 @@ typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSe
   LinkDelaySyncIntervalSetting_SET_INTERVALS
 } LinkDelaySyncIntervalSetting_State_t;
 
-
 struct ptp_port {
 
   /* Net interface name associated with this port */
@@ -271,6 +270,9 @@ struct ptp_device {
 
   /* Number of ports attached to this instance */
   uint32_t numPorts;
+
+  /* Width, in bits, of the instance's ports */
+  uint32_t portWidth;
 
   /* Properties for the instance */
   PtpProperties properties;

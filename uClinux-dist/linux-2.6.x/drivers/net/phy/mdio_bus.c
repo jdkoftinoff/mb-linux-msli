@@ -124,10 +124,10 @@ int mdiobus_register(struct mii_bus *bus)
 			}
 			if (phydev)
 			{
-				printk("%s: Found Phy !, id:%d, bus_addr:%d\n", __func__, phydev->phy_id, phydev->addr);
+              printk("%s: Found PHY - ID: 0x%08X, Address: 0x%02X, IRQ: %d\n", __func__, phydev->phy_id, phydev->addr, phydev->irq);
 				if (phydev->drv)
 				{
-					printk("  phydev->drv->name:%s, phydev->drv->phy_id:%d\n", phydev->drv->name, phydev->drv->phy_id);
+					printk("  Driver name: %s\n", phydev->drv->name);
 				}
 			}
 		}
