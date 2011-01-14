@@ -75,15 +75,6 @@ static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
 #define DEFAULT_TIME_SOURCE            (PTP_SOURCE_OTHER)
 #define DEFAULT_DELAY_MECHANISM        (PTP_DELAY_MECHANISM_E2E)
 
-/* Default coefficient sets for the two distinct delay mechanisms */
-#define DEFAULT_P2P_COEFF_P  (0xFFF00000)
-#define DEFAULT_P2P_COEFF_I  (0x80000000)
-#define DEFAULT_P2P_COEFF_D  (0x80000000)
-
-#define DEFAULT_E2E_COEFF_P  (0xF8000000)
-#define DEFAULT_E2E_COEFF_I  (0xFC000000)
-#define DEFAULT_E2E_COEFF_D  (0x00000000)
-
 #if 0
 #define DBG(f, x...) pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
