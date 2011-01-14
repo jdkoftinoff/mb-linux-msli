@@ -21,6 +21,13 @@ config USER_IO_OSC
     help
       Include the Open Sound Control server for Meyer Sound D-Mitri IO modules
 
+config USER_AVBWEB
+    bool "avbweb server"
+    depends on LIB_MICROSUPPORT
+    depends on LIB_IEEE1722_1
+    help
+      Include the avb controller web app server
+
 config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"
 	help
