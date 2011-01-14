@@ -165,6 +165,15 @@ typedef struct {
 
 } PtpPlatformData;
 
+/* Default coefficient sets for the two distinct delay mechanisms */
+#define DEFAULT_P2P_COEFF_P  (0xFFF00000)
+#define DEFAULT_P2P_COEFF_I  (0x80000000)
+#define DEFAULT_P2P_COEFF_D  (0x80000000)
+
+#define DEFAULT_E2E_COEFF_P  (0xF8000000)
+#define DEFAULT_E2E_COEFF_I  (0xFC000000)
+#define DEFAULT_E2E_COEFF_D  (0x00000000)
+
 /*
  * The following structures expose information for MIBs in 802.1AS (draft 7.2)
  */

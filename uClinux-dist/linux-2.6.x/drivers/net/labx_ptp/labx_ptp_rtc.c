@@ -34,7 +34,7 @@
  * acquisition mode
  */
 #define ACQUIRE_THRESHOLD (1000)
-#define ACQUIRE_COEFF_P   (0xE0000000)
+#define ACQUIRE_COEFF_P   ((int32_t)0xE0000000)
 
 /* Saturation range limit for the integrator */
 #define INTEGRAL_MAX_ABS  (1000LL)
