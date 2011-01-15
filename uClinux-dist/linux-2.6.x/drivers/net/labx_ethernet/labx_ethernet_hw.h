@@ -103,6 +103,7 @@ extern "C" {
 #  define NO_IRQS             (0x00000000)
 #  define MDIO_IRQ_MASK       (0x00000001)
 #  define PHY_IRQ_MASK        (0x00000002)
+#define VLAN_MASK_REG         (0x00000010)
 
 /* The MAC registers are located in the second quarter of the address space */
 #define LABX_MAC_REGS_BASE    (0x00001000)

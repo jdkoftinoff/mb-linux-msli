@@ -153,8 +153,11 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
     write_packet(bufferBase, wordOffset, packetWord);
   } else {
     /* End-to-end (legacy PTP 2.0) */
-    write_packet(bufferBase, wordOffset, 0x011B1900);
-    packetWord = 0x00000000;
+    //write_packet(bufferBase, wordOffset, 0x011B1900);
+    //packetWord = 0x00000000;
+    /* Temporarily set IGMP address corresponding to 224.0.1.129 */
+    write_packet(bufferBase, wordOffset, 0x01005E00);
+    packetWord = 0x01810000;
     packetWord |= (portProperties->sourceMacAddress[0] << 8);
     packetWord |= portProperties->sourceMacAddress[1];
     write_packet(bufferBase, wordOffset, packetWord);
