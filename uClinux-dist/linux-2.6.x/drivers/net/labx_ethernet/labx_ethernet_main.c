@@ -1844,6 +1844,9 @@ static int xtenet_setup(struct device *dev,
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
+  /* Allow VLAN traffic that is not prioritized */
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, VLAN_MASK_REG, 0x01);
+
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
   printk("%s: Lab X Tri-mode MAC at 0x%08X, IRQ %d using PHY at MDIO 0x%02X\n",
