@@ -2,7 +2,7 @@
 # Makefile -- Build instructions for Meyer Sound D-Mitri I/O MicroBlaze system
 #
 
-RELEASE_VERSION = "5.2.0"
+RELEASE_VERSION = "5.1.1"
 
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
