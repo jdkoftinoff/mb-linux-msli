@@ -45,7 +45,6 @@
 #endif // CONFIG_OF
 
 /* Driver name and the revision of hardware expected. */
-#define DRIVER_NAME "labx_ptp"
 #define DRIVER_VERSION_MIN  0x11
 #define DRIVER_VERSION_MAX  0x12
 
@@ -944,11 +943,18 @@ static int __init ptp_driver_init(void)
   if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
     printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
   }
+
+  /* Initialize the Netlink layer for the driver */
+  register_ptp_netlink();
+
   return(0);
 }
 
 static void __exit ptp_driver_exit(void)
 {
+  /* Unregister Generic Netlink family */
+  unregister_ptp_netlink();
+
   /* Unregister as a platform device driver */
   platform_driver_unregister(&ptp_driver);
 }

@@ -234,5 +234,10 @@ typedef struct {
 } PtpAsPortStatistics;
 #define IOC_PTP_GET_AS_PORT_STATISTICS _IOWR('p', 0x1b, PtpAsPortStatistics)
 
+/* PTP events Generic Netlink family name, version, and multicast groups */
+#define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
+#define PTP_EVENTS_FAMILY_VERSION  1
+#define PTP_EVENTS_RTC_GROUP       "RtcGroup"
+
 #endif /* _LABX_PTP_DEFS_H_ */
 

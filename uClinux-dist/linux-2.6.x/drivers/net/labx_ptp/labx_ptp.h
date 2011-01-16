@@ -34,6 +34,9 @@
 #include <linux/types.h>
 #include <net/labx_ptp/labx_ptp_defs.h>
 
+/* Name of the driver for use by all the modules */
+#define DRIVER_NAME "labx_ptp"
+
 /* Macros for determining sub-addresses for address ranges and individual registers.
  */
 #define REGISTER_RANGE      (0x0)
@@ -295,6 +298,8 @@ struct ptp_device {
 
   /* Timer state space */
   struct tasklet_struct timerTasklet;
+  uint32_t heartbeatCounter;
+  uint32_t netlinkSequence;
 
   /* Packet Rx state space */
   struct tasklet_struct rxTasklet;
@@ -377,6 +382,11 @@ void timestamp_sum(PtpTime *addend, PtpTime *augend, PtpTime *sum);
 void timestamp_difference(PtpTime *minuend, PtpTime *subtrahend, PtpTime *difference);
 void timestamp_abs(PtpTime *operand, PtpTime *result);
 void timestamp_copy(PtpTime *destination, PtpTime *source);
+
+/* From labx_ptp_netlink.c */
+int register_ptp_netlink(void);
+void unregister_ptp_netlink(void);
+int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 
 #endif /* _LABX_PTP_H_ */
 

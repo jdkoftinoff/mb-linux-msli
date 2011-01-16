@@ -34,9 +34,8 @@
 /* Timer tick period */
 #define TIMER_TICK_MS         (10)
 
-/* Parameters governing message rates, etc.
- * TODO: Make these ioctl()-configurable!  This will help us tune the control loop.
- */
+/* Parameters governing message rates, etc. measuring time in msec. */
+#define HEARTBEAT_INTERVAL        (5000)
 #define ANNOUNCE_INTERVAL         (1000)
 #define ANNOUNCE_RECEIPT_TIMEOUT     (3)
 #define SYNC_INTERVAL              (100)
@@ -159,6 +158,16 @@ static void timer_state_task(unsigned long data) {
      */
     ptp->ports[i].pdelayIntervalTimer++;
     MDPdelayReq_StateMachine(ptp, i);
+  }
+
+  /* Also regardless of mode, send a Generic Netlink message periodically to
+   * serve as a "heartbeat" for other interested drivers and userspace daemons
+   * to monitor.
+   */
+  if(++ptp->heartbeatCounter >= (HEARTBEAT_INTERVAL / TIMER_TICK_MS)) {
+    /* Reset the counter and send a Netlink event */
+    ptp->heartbeatCounter = 0;
+    ptp_events_tx_heartbeat(ptp);
   }
 }
 
@@ -678,6 +687,8 @@ void init_state_machines(struct ptp_device *ptp) {
 
   /* Initialize the timer state machine */
   tasklet_init(&ptp->timerTasklet, &timer_state_task, (unsigned long) ptp);
+  ptp->heartbeatCounter = 0;
+  ptp->netlinkSequence  = 0;
 
   for(i=0; i<ptp->numPorts; i++) {
     ptp->ports[i].announceCounter     = 0;
