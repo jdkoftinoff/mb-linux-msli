@@ -24,6 +24,7 @@
  *
  */
 
+/* System headers */
 #include <net/genetlink.h>
 #include <net/netlink.h>
 
@@ -66,7 +67,6 @@ enum {
 
 /* "Heartbeat" command - this is only sent by the driver */
 static int ptp_events_rx_heartbeat(struct sk_buff *skb, struct genl_info *info) {
-  printk("Rx heartbeat!\n");
   return(0);
 }
 
@@ -75,7 +75,6 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   void *msgHead;
   int returnValue = 0;
 
-  printk("Transmitting heartbeat event...\n");
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
   if(skb == NULL) return(-ENOMEM);
 
@@ -93,8 +92,16 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
-  if(returnValue != 0) {
-    printk(KERN_INFO DRIVER_NAME ": Failure multicasting Netlink message\n");
+  switch(returnValue) {
+  case 0:
+  case -ESRCH:
+    // Success or no process was listening, simply break
+    break;
+
+  default:
+    // This is an actual error, print the return code
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+           returnValue);
     goto heartbeat_fail;
   }
 
