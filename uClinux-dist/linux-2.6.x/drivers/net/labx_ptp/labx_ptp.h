@@ -285,9 +285,10 @@ struct ptp_device {
   PtpCoefficients coefficients;
 
   /* RTC control loop persistent values */
-  int64_t integral;
-  int32_t derivative;
-  int32_t previousOffset;
+  int64_t  integral;
+  int32_t  derivative;
+  int32_t  previousOffset;
+  uint32_t rtcChangesAllowed;
 
   /* Present role and delay mechanism for the endpoint */
   PtpRole presentRole;
@@ -364,6 +365,7 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, PtpTime *correctionField);
 
 /* From labx_ptp_state.c */
+void ack_grandmaster_change(struct ptp_device *ptp);
 void init_state_machines(struct ptp_device *ptp);
 
 /* From labx_ptp_pdelay_state.c */

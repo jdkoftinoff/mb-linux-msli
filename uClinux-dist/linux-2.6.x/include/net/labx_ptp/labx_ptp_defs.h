@@ -234,6 +234,9 @@ typedef struct {
 } PtpAsPortStatistics;
 #define IOC_PTP_GET_AS_PORT_STATISTICS _IOWR('p', 0x1b, PtpAsPortStatistics)
 
+/* I/O control operation to acknowledge Grandmaster changes */
+#define IOC_PTP_ACK_GM_CHANGE _IO('p', 0x1c)
+
 /* PTP events Generic Netlink family name, version, and multicast groups */
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
 #define PTP_EVENTS_FAMILY_VERSION  1

@@ -500,6 +500,11 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_PTP_ACK_GM_CHANGE:
+    /* Simply acknowledge the Grandmaster change for the instance */
+    ack_grandmaster_change(ptp);
+    break;
+
   default:
     return(-EINVAL);
   }

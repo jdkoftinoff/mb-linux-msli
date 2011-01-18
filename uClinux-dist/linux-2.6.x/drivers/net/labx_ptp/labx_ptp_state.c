@@ -96,6 +96,7 @@ static void timer_state_task(unsigned long data) {
         copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
         ptp->announceTimeoutCounter = 0;
         ptp->newMaster = TRUE;
+        ptp->rtcChangesAllowed = FALSE;
 
         /* Set the RTC back to its nominal increment */
         /* TODO - Don't do this!  Wait for an ioctl() which says it's okay! */
@@ -315,19 +316,20 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
       copy_ptp_properties(&ptp->presentMaster, &properties);
       copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
       ptp->announceTimeoutCounter = 0;
-      ptp->slaveDebugCounter = 0;
-      ptp->newMaster = TRUE;
+      ptp->slaveDebugCounter      = 0;
+      ptp->newMaster              = TRUE;
+      ptp->rtcChangesAllowed      = FALSE;
     
       /* Invalidate all the slave flags */
-      ptp->ports[port].syncTimestampsValid       = 0;
-      ptp->ports[port].delayReqTimestampsValid   = 0;
-      ptp->ports[port].syncSequenceIdValid       = 0;
-      ptp->ports[port].delayReqCounter           = 0;
-      ptp->ports[port].delayReqSequenceId        = 0x0000;
+      ptp->ports[port].syncTimestampsValid     = 0;
+      ptp->ports[port].delayReqTimestampsValid = 0;
+      ptp->ports[port].syncSequenceIdValid     = 0;
+      ptp->ports[port].delayReqCounter         = 0;
+      ptp->ports[port].delayReqSequenceId      = 0x0000;
 
-      ptp->integral                  = 0;
-      ptp->derivative                = 0;
-      ptp->previousOffset            = 0;
+      ptp->integral       = 0;
+      ptp->derivative     = 0;
+      ptp->previousOffset = 0;
     
       /* Announce the new slave */
       printk("PTP slaved to peer ");
@@ -435,11 +437,14 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
        (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
       /* Reset the time using the uncorrected timestamp; also re-load the nominal
        * RTC increment in advance in order to always have a known starting point
-       * for convergence.
+       * for convergence.  Suppress this if the userspace controller hasn't acknowledged
+       * a Grandmaster change yet.
        */
-      printk("Resetting RTC!\n");
-      set_rtc_increment(ptp, &ptp->nominalIncrement);
-      set_rtc_time(ptp, &syncTxTimestamp);
+      if(ptp->rtcChangesAllowed) {
+        printk("Resetting RTC!\n");
+        set_rtc_increment(ptp, &ptp->nominalIncrement);
+        set_rtc_time(ptp, &syncTxTimestamp);
+      }
    } else {
       /* Less than a second, leave these timestamps and update the servo */
 #ifdef SYNC_DEBUG
@@ -697,6 +702,25 @@ static void tx_state_task(unsigned long data) {
   } /* for(all ports) */
 }
 
+/* Acknowledges a Grandmaster change, freeing the instance to begin slewing
+ * (or hard-setting) its RTC increment again.
+ */
+void ack_grandmaster_change(struct ptp_device *ptp) {
+  unsigned long flags;
+  
+  /* Re-enable the changing of RTC parameters */
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  ptp->rtcChangesAllowed = TRUE;
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
+
+  /* Set the RTC back to its nominal increment; even if we're going to
+   * operate as a slave, this is the point we wish to start at.
+   */
+  set_rtc_increment(ptp, &ptp->nominalIncrement);
+}
+
 /* Initializes all of the state machines */
 void init_state_machines(struct ptp_device *ptp) {
   int i;
@@ -732,20 +756,21 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->presentRole = PTP_MASTER;
   copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
   copy_ptp_port_properties(&ptp->presentMasterPort, &ptp->ports[0].portProperties);
-  ptp->newMaster = TRUE;
+  ptp->newMaster              = TRUE;
+  ptp->rtcChangesAllowed      = TRUE;
   ptp->announceTimeoutCounter = 0;
   tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
 
   for(i=0; i<ptp->numPorts; i++) {
     ptp->ports[i].lastRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
-    ptp->ports[i].syncTimestampsValid       = 0;
-    ptp->ports[i].delayReqTimestampsValid   = 0;
-    ptp->ports[i].neighborPropDelay         = 0;
+    ptp->ports[i].syncTimestampsValid     = 0;
+    ptp->ports[i].delayReqTimestampsValid = 0;
+    ptp->ports[i].neighborPropDelay       = 0;
   }
 
-  ptp->integral                  = 0;
-  ptp->derivative                = 0;
-  ptp->previousOffset            = 0;
+  ptp->integral       = 0;
+  ptp->derivative     = 0;
+  ptp->previousOffset = 0;
   set_rtc_increment(ptp, &ptp->nominalIncrement);
 
   printk("PTP master\n");
