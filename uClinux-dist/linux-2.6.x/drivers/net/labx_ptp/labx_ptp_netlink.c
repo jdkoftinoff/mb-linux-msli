@@ -30,17 +30,10 @@
 
 #include "labx_ptp.h"
 
-/* Family attributes */
-enum {
-  PTP_EVENTS_A_UNSPEC,
-  PTP_EVENTS_A_MSG,
-  __PTP_EVENTS_A_MAX,
-};
-#define PTP_EVENTS_A_MAX (__PTP_EVENTS_A_MAX - 1)
-
-/* Per-attribute policy list */
+/* Per-attribute policy list for events we can *receive* */
 static struct nla_policy ptp_events_genl_policy[PTP_EVENTS_A_MAX + 1] = {
-  [PTP_EVENTS_A_MSG] = { .type = NLA_NUL_STRING },
+  [PTP_EVENTS_A_DOMAIN]   = { .type = NLA_U32 },
+  [PTP_EVENTS_A_VALUEMAP] = { .type = NLA_NESTED },
 };
 
 /* Family definition */
@@ -57,15 +50,9 @@ static struct genl_multicast_group rtc_mcast = {
   .name = PTP_EVENTS_RTC_GROUP,
 };
 
-/* Family commands */
-enum {
-  PTP_EVENTS_C_UNSPEC,
-  PTP_EVENTS_C_HEARTBEAT,
-  __PTP_EVENTS_C_MAX,
-};
-#define PTP_EVENTS_C_MAX (__PTP_EVENTS_C_MAX - 1)
-
-/* "Heartbeat" command - this is only sent by the driver */
+/* "Heartbeat" command - this is only sent by the driver; I have this in here
+ * along with its policy to serve as a temporary example
+ */
 static int ptp_events_rx_heartbeat(struct sk_buff *skb, struct genl_info *info) {
   return(0);
 }
@@ -79,14 +66,19 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   if(skb == NULL) return(-ENOMEM);
 
   /* Create the message headers */
-  msgHead = genlmsg_put(skb, 0, ptp->netlinkSequence++, &ptp_events_genl_family, 0, PTP_EVENTS_C_HEARTBEAT);
+  msgHead = genlmsg_put(skb, 
+                        0, 
+                        ptp->netlinkSequence++, 
+                        &ptp_events_genl_family, 
+                        0, 
+                        PTP_EVENTS_C_HEARTBEAT);
   if(msgHead == NULL) {
     returnValue = -ENOMEM;
     goto heartbeat_fail;
   }
 
-  /* Add a "message" attribute */
-  returnValue = nla_put_string(skb, PTP_EVENTS_A_MSG, "<<< PTP Heartbeat! >>>");
+  /* Write the PTP domain identifier to the message */
+  returnValue = nla_put_u8(skb, PTP_EVENTS_A_DOMAIN, ptp->properties.domainNumber);
   if(returnValue != 0) goto heartbeat_fail;
 
   /* Finalize the message and multicast it */
@@ -106,6 +98,86 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   }
 
  heartbeat_fail: 
+  return(returnValue);
+}
+
+/* Size of a character string buffer, in bytes; this allocates enough
+ * bytes to format each ID byte as a hexadecimal pair, put a delimiter
+ * between each, and have a NULL terminator.
+ */
+#define CLOCK_ID_STRING_SIZE (PTP_CLOCK_IDENTITY_BYTES * 3)
+#define NEW_GM_KEY_STRING    ("NewGrandmaster")
+#define NEW_GM_BUF_SIZE      (strlen(NEW_GM_KEY_STRING) + CLOCK_ID_STRING_SIZE + 1)
+
+int ptp_events_tx_gm_change(struct ptp_device *ptp) {
+  struct sk_buff *skb;
+  struct nlattr *valueMap;
+  int32_t pairIndex;
+  uint8_t *gmIdentity;
+  char gmIdentityString[NEW_GM_BUF_SIZE];
+  void *msgHead;
+  int returnValue = 0;
+  unsigned long flags;
+
+  skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+  if(skb == NULL) return(-ENOMEM);
+
+  /* Create the message headers */
+  msgHead = genlmsg_put(skb, 
+                        0, 
+                        ptp->netlinkSequence++, 
+                        &ptp_events_genl_family, 
+                        0, 
+                        PTP_EVENTS_C_GM_CHANGE);
+  if(msgHead == NULL) {
+    returnValue = -ENOMEM;
+    goto gm_change_fail;
+  }
+
+  /* Write the PTP domain identifier to the message */
+  returnValue = nla_put_u8(skb, PTP_EVENTS_A_DOMAIN, ptp->properties.domainNumber);
+  if(returnValue != 0) goto gm_change_fail;
+
+  /* Put a single entry into a key / value map to communicate the new Grandmaster */
+  valueMap = nla_nest_start(skb, PTP_EVENTS_A_VALUEMAP);
+  if(valueMap == NULL) goto gm_change_fail;
+
+  /* Place the length of the map, then the key / value strings */
+  nla_put_u32(skb, PTP_VALUEMAP_A_LENGTH, 1);
+  pairIndex = PTP_VALUEMAP_A_PAIRS;
+
+  /* Atomically capture the Grandmaster identity as a string value */
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  gmIdentity = ptp->presentMaster.grandmasterIdentity;
+  sprintf(gmIdentityString, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+          NEW_GM_KEY_STRING,
+          gmIdentity[0], gmIdentity[1], gmIdentity[2], gmIdentity[3], 
+          gmIdentity[4], gmIdentity[5], gmIdentity[6], gmIdentity[7]);
+  nla_put_string(skb, pairIndex++, gmIdentityString);
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
+
+  /* End the value map nesting */
+  nla_nest_end(skb, valueMap);
+
+  /* Finalize the message and multicast it */
+  genlmsg_end(skb, msgHead);
+  returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  switch(returnValue) {
+  case 0:
+  case -ESRCH:
+    // Success or no process was listening, simply break
+    break;
+
+  default:
+    // This is an actual error, print the return code
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+           returnValue);
+    goto gm_change_fail;
+  }
+
+ gm_change_fail: 
   return(returnValue);
 }
 
@@ -145,9 +217,6 @@ int register_ptp_netlink(void) {
     genl_unregister_family(&ptp_events_genl_family);
     goto register_failure;
   }
-
-  printk(KERN_INFO DRIVER_NAME ": PTP Generic Netlink family ID %d\n",
-         ptp_events_genl_family.id);
 
  register_failure:
   return(returnValue);

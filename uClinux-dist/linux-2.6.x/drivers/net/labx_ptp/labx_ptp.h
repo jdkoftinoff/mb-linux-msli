@@ -295,6 +295,7 @@ struct ptp_device {
   /* Properties for the present grandmaster */
   PtpProperties presentMaster;
   PtpPortProperties presentMasterPort;
+  uint32_t newMaster;
 
   /* Timer state space */
   struct tasklet_struct timerTasklet;
@@ -387,6 +388,7 @@ void timestamp_copy(PtpTime *destination, PtpTime *source);
 int register_ptp_netlink(void);
 void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
+int ptp_events_tx_gm_change(struct ptp_device *ptp);
 
 #endif /* _LABX_PTP_H_ */
 

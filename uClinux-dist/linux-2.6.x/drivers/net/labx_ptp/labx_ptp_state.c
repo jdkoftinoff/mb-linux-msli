@@ -56,6 +56,7 @@ typedef enum {
 static void timer_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device*) data;
   unsigned long flags;
+  uint32_t newMaster;
   int i;
 
   /* We behave differently as a master than as a slave */
@@ -94,8 +95,10 @@ static void timer_state_task(unsigned long data) {
         ptp->presentRole = PTP_MASTER;
         copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
         ptp->announceTimeoutCounter = 0;
+        ptp->newMaster = TRUE;
 
         /* Set the RTC back to its nominal increment */
+        /* TODO - Don't do this!  Wait for an ioctl() which says it's okay! */
         set_rtc_increment(ptp, &ptp->nominalIncrement);
 
         /* Update stats */
@@ -159,6 +162,18 @@ static void timer_state_task(unsigned long data) {
     ptp->ports[i].pdelayIntervalTimer++;
     MDPdelayReq_StateMachine(ptp, i);
   }
+
+  /* Test to see if the master is new from the last time we checked; if so,
+   * propagate a Netlink message reporting the new Grandmaster
+   */
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  newMaster = ptp->newMaster;
+  ptp->newMaster = FALSE;
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
+
+  if(newMaster) ptp_events_tx_gm_change(ptp);
 
   /* Also regardless of mode, send a Generic Netlink message periodically to
    * serve as a "heartbeat" for other interested drivers and userspace daemons
@@ -301,6 +316,7 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
       copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
       ptp->announceTimeoutCounter = 0;
       ptp->slaveDebugCounter = 0;
+      ptp->newMaster = TRUE;
     
       /* Invalidate all the slave flags */
       ptp->ports[port].syncTimestampsValid       = 0;
@@ -320,9 +336,9 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
         if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
       }
       printk(", GM ");
-      for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_CHARS; byteIndex++) {
+      for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_BYTES; byteIndex++) {
         printk("%02X", properties.grandmasterIdentity[byteIndex]);
-        if(byteIndex < (PTP_CLOCK_IDENTITY_CHARS - 1)) printk(":");
+        if(byteIndex < (PTP_CLOCK_IDENTITY_BYTES - 1)) printk(":");
   	  }
       printk("\n");
     } 
@@ -716,6 +732,7 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->presentRole = PTP_MASTER;
   copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
   copy_ptp_port_properties(&ptp->presentMasterPort, &ptp->ports[0].portProperties);
+  ptp->newMaster = TRUE;
   ptp->announceTimeoutCounter = 0;
   tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
 

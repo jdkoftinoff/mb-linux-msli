@@ -47,7 +47,7 @@ typedef enum {
     
 } PtpRole;
 
-#define PTP_CLOCK_IDENTITY_CHARS  (8)
+#define PTP_CLOCK_IDENTITY_BYTES  (8)
 
 /* timeSource enumeration */
 #define PTP_SOURCE_ATOMIC_CLOCK         (0x10)
@@ -68,7 +68,7 @@ typedef enum {
 #define IOC_PTP_STOP_SERVICE    _IO('p', 0x10)
 #define IOC_PTP_START_SERVICE   _IO('p', 0x11)
 
-typedef uint8_t PtpClockIdentity[PTP_CLOCK_IDENTITY_CHARS];
+typedef uint8_t PtpClockIdentity[PTP_CLOCK_IDENTITY_BYTES];
 
 typedef struct {
   /* Various PTP-defined properties */
@@ -238,6 +238,37 @@ typedef struct {
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
 #define PTP_EVENTS_FAMILY_VERSION  1
 #define PTP_EVENTS_RTC_GROUP       "RtcGroup"
+
+/* Netlink family attributes */
+enum {
+  PTP_EVENTS_A_UNSPEC,
+  PTP_EVENTS_A_DOMAIN,
+  PTP_EVENTS_A_VALUEMAP,
+  __PTP_EVENTS_A_MAX,
+};
+#define PTP_EVENTS_A_MAX (__PTP_EVENTS_A_MAX - 1)
+
+/* Constant enumeration for Netlink event commands from the PTP driver */
+enum {
+  PTP_EVENTS_C_UNSPEC,
+  PTP_EVENTS_C_HEARTBEAT,
+  PTP_EVENTS_C_GM_CHANGE,
+  PTP_EVENTS_C_RTC_LOCK,
+  PTP_EVENTS_C_RTC_UNLOCK,
+  __PTP_EVENTS_C_MAX,
+};
+#define PTP_EVENTS_C_MAX (__PTP_EVENTS_C_MAX - 1)
+
+/* Constant enumeration defining the structure of a key / value map */
+enum {
+  PTP_VALUEMAP_A_LENGTH,
+  PTP_VALUEMAP_A_PAIRS,
+  __PTP_VALUEMAP_A_MAX
+};
+#define PTP_VALUEMAP_A_MAX (__PTP_VALUEMAP_A_MAX - 1)
+
+/* Maximum number of key / value pair strings that can occur in a value map */
+#define PTP_VALUEMAP_MAX_PAIRS (16)
 
 #endif /* _LABX_PTP_DEFS_H_ */
 
