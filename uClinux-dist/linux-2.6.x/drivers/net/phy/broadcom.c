@@ -59,16 +59,18 @@
 /*
  * AUXILIARY CONTROL SHADOW ACCESS REGISTERS.  (PHY REG 0x18)
  */
-#define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0x0000
+#define MII_BCM54XX_AUX_VAL(x)	(((x & 0x07) << 12) | (x & 0x07))
+#define MII_BCM54XX_AUX_DATA(x)	(x & 0x0ff8)
+
 #define MII_BCM54XX_AUXCTL_ACTL_TX_6DB		0x0400
 #define MII_BCM54XX_AUXCTL_ACTL_SMDSP_ENA	0x0800
 
 #define MII_BCM54XX_AUXCTL_MISC_WREN	0x8000
 #define MII_BCM54XX_AUXCTL_MISC_FORCE_AMDIX	0x0200
 #define MII_BCM54XX_AUXCTL_MISC_RDSEL_MISC	0x7000
-#define MII_BCM54XX_AUXCTL_SHDWSEL_MISC	0x0007
 
-#define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0x0000
+#define MII_BCM54XX_AUXCTL_SHDWSEL_MISC 	7
+#define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0
 
 
 /*
@@ -88,6 +90,15 @@
 #define BCM_LED_SRC_OPENSHORT	0xb
 #define BCM_LED_SRC_OFF		0xe	/* Tied high */
 #define BCM_LED_SRC_ON		0xf	/* Tied low */
+
+/*
+ * BCM5481: Shadow registers
+ * Shadow values go into bits [14:10] of register 0x1c to select a shadow
+ * register to access.
+ */
+#define BCM5481_SHD_CLKALIGN 0x03	/* 00011: Clock Alignment Control register */
+#define BCM5481_SHD_DELAY_ENA (1 << 9)	/* RGMII Transmit Clock Delay enable */
+#define BCM5481_AUX_SKEW_ENA (1 << 8)	/* RGMII RXD to RXC Skew enable */
 
 /*
  * BCM5482: Shadow registers
@@ -197,9 +208,18 @@ static int bcm54xx_exp_write(struct phy_device *phydev, u16 regnum, u16 val)
 	return ret;
 }
 
-static int bcm54xx_auxctl_write(struct phy_device *phydev, u16 regnum, u16 val)
+static int bcm54xx_auxctl_read(struct phy_device *phydev, u16 shadow)
 {
-	return phy_write(phydev, MII_BCM54XX_AUX_CTL, regnum | val);
+	phy_write(phydev, MII_BCM54XX_AUX_CTL, MII_BCM54XX_AUX_VAL(shadow));
+	return MII_BCM54XX_AUX_DATA(phy_read(phydev, MII_BCM54XX_AUX_CTL));
+}
+
+static int bcm54xx_auxctl_write(struct phy_device *phydev, u16 shadow, u16 val)
+{
+	return phy_write(phydev, MII_BCM54XX_AUX_CTL,
+			 MII_BCM54XX_SHD_WRITE |
+			 MII_BCM54XX_AUX_VAL(shadow) |
+			 MII_BCM54XX_AUX_DATA(val));
 }
 
 static int bcm50610_a0_workaround(struct phy_device *phydev)
@@ -404,11 +424,22 @@ static int bcm54xx_config_intr(struct phy_device *phydev)
 static int bcm5481_config_aneg(struct phy_device *phydev)
 {
 	int ret;
+	int clkalign;
 
 	/* Aneg firsly. */
 	ret = genphy_config_aneg(phydev);
 
 	/* Then we can set up the delay. */
+	clkalign = bcm54xx_shadow_read(phydev, BCM5481_SHD_CLKALIGN);
+	if ((clkalign & BCM5481_SHD_DELAY_ENA) == 0) {
+		/* Turn on the BCM5481 RGMII Transmit Clock Delay */
+		bcm54xx_shadow_write(phydev, BCM5481_SHD_CLKALIGN,
+				BCM5481_SHD_DELAY_ENA);
+		printk("Set BCM5481 shadow delay for phy %d from 0x%x to 0x%x\n",
+				phydev->addr, clkalign,
+				bcm54xx_shadow_read(phydev, BCM5481_SHD_CLKALIGN));
+	}
+
 	if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID) {
 		u16 reg;
 
@@ -419,18 +450,15 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 		 * on MPC8360E-RDK board. Peter Barada <peterb@logicpd.com>
 		 * says: "This sets delay between the RXD and RXC signals
 		 * instead of using trace lengths to achieve timing".
+		 * Reimplemented to use the (slightly) clearer aux control
+		 * shadow register read-write functions.
 		 */
 
 		/* Set RDX clk delay. */
-		reg = 0x7 | (0x7 << 12);
-		phy_write(phydev, 0x18, reg);
-
-		reg = phy_read(phydev, 0x18);
+		reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC);
 		/* Set RDX-RXC skew. */
-		reg |= (1 << 8);
-		/* Write bits 14:0. */
-		reg |= (1 << 15);
-		phy_write(phydev, 0x18, reg);
+		reg |= BCM5481_AUX_SKEW_ENA;
+		bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC, reg);
 	}
 
 	return ret;
