@@ -1010,7 +1010,7 @@ void copy_ptp_properties(PtpProperties *to, PtpProperties *from) {
   to->grandmasterClockQuality.clockAccuracy = from->grandmasterClockQuality.clockAccuracy;
   to->grandmasterClockQuality.offsetScaledLogVariance = from->grandmasterClockQuality.offsetScaledLogVariance;
   to->grandmasterPriority2 = from->grandmasterPriority2;
-  for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_CHARS; byteIndex++) {
+  for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_BYTES; byteIndex++) {
     to->grandmasterIdentity[byteIndex] = from->grandmasterIdentity[byteIndex];
   }
   to->timeSource = from->timeSource;
@@ -1033,7 +1033,7 @@ int32_t compare_clock_identity(const uint8_t *clockIdentityA, const uint8_t *clo
   uint32_t byteIndex;
   int32_t comparisonResult = 0;
 
-  for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_CHARS; byteIndex++) {
+  for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_BYTES; byteIndex++) {
     if(clockIdentityA[byteIndex] < clockIdentityB[byteIndex]) {
       comparisonResult = -1;
       break;

@@ -257,9 +257,14 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     }
     newRtcIncrement += adjustment;
     
-    /* Write the new increment out to the hardware, incorporating the enable bit */
+    /* Write the new increment out to the hardware, incorporating the enable bit.
+     * Suppress the actual write to the RTC increment register if the userspace
+     * control has not acknowledged a Grandmaster change.
+     */
     newRtcIncrement |= PTP_RTC_ENABLE;
-    XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement); 
+    if(ptp->rtcChangesAllowed) {
+      XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement); 
+    }
 
 #ifdef SLAVE_OFFSET_DEBUG
     if(++servoCount >= 10) {
