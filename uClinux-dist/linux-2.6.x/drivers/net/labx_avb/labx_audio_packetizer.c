@@ -150,6 +150,8 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
     controlRegister |= outputMask;
   } else controlRegister &= ~outputMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+
+  return 0;
 }
 
 /* Waits for a synchronized write to commit, using either polling or
@@ -587,7 +589,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&enableSettings, (void __user*)arg, sizeof(enableSettings)) != 0) {
         return(-EFAULT);
       }
-      set_output_enabled(packetizer, enableSettings.whichOutput, enableSettings.enable);
+      returnValue = set_output_enabled(packetizer, enableSettings.whichOutput, enableSettings.enable);
     }
     break;
 
