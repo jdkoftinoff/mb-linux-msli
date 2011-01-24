@@ -424,12 +424,20 @@ static int bcm54xx_config_intr(struct phy_device *phydev)
 static int bcm5481_config_aneg(struct phy_device *phydev)
 {
 	int ret;
-	int clkalign;
+	u16 clkalign;
 
-	/* Aneg firsly. */
+	/* Do generic Aneg firsly. */
 	ret = genphy_config_aneg(phydev);
 
 	/* Then we can set up the delay. */
+	#ifdef CONFIG_BCM8451_TX_CLOCKALIGN
+	/* RGMII Transmit Clock Delay: The RGMII transmit timing can be adjusted
+			 * by software control. TXD-to-GTXCLK clock delay time can be increased
+			 * by approximately 1.9 ns for 1000BASE-T mode, and between 2 ns to 6 ns
+			 * when in 10BASE-T or 100BASE-T mode by setting Register 1ch, SV 00011,
+			 * bit 9 = 1. Enabling this timing adjustment eliminates the need for
+			 * board trace delays as required by the RGMII specification.
+	    	 */
 	clkalign = bcm54xx_shadow_read(phydev, BCM5481_SHD_CLKALIGN);
 	if ((clkalign & BCM5481_SHD_DELAY_ENA) == 0) {
 		/* Turn on the BCM5481 RGMII Transmit Clock Delay */
@@ -439,28 +447,32 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 				phydev->addr, clkalign,
 				bcm54xx_shadow_read(phydev, BCM5481_SHD_CLKALIGN));
 	}
-
-	if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID) {
-		u16 reg;
-
-		/*
-		 * There is no BCM5481 specification available, so down
-		 * here is everything we know about "register 0x18". This
-		 * at least helps BCM5481 to successfuly receive packets
-		 * on MPC8360E-RDK board. Peter Barada <peterb@logicpd.com>
-		 * says: "This sets delay between the RXD and RXC signals
-		 * instead of using trace lengths to achieve timing".
-		 * Reimplemented to use the (slightly) clearer aux control
-		 * shadow register read-write functions.
-		 */
-
-		/* Set RDX clk delay. */
-		reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC);
+	#endif
+	#ifdef CONFIG_BCM8451_RX_CLOCKSKEW
+	/*
+	 * Skew time can be increased by approximately 1.9ns for
+	 * 1000BASE-T mode, 4 ns for 100BASE-T mode, and 50 ns for
+	 * 10BASE-T mode by setting Register 18h, SV 111, bit 8 = 1.
+	 * Enabling this timing adjustment eliminates the need for board
+	 * trace delays, as required by the RGMII specification.  This
+	 * at least helps BCM5481 to successfuly receive packets
+	 * on MPC8360E-RDK board. Peter Barada <peterb@logicpd.com>
+	 * says: "This sets delay between the RXD and RXC signals
+	 * instead of using trace lengths to achieve timing".
+	 * Reimplemented to use the (slightly) clearer aux control
+	 * shadow register read-write functions.
+	 */
+	/* Set RDX-to-RXC clk delay. */
+	clkalign = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC);
+	if ((clkalign & BCM5481_AUX_SKEW_ENA) == 0) {
 		/* Set RDX-RXC skew. */
-		reg |= BCM5481_AUX_SKEW_ENA;
-		bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC, reg);
+		bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC,
+				clkalign | BCM5481_AUX_SKEW_ENA);
+		printk("Set BCM5481 shadow RXD-to-RXC clock skew for phy %d from 0x%x to 0x%x\n",
+				phydev->addr, clkalign,
+				bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC));
 	}
-
+	#endif
 	return ret;
 }
 
