@@ -94,9 +94,12 @@ typedef struct {
   uint32_t clockDomain;
   uint32_t sytInterval;
   uint32_t enabled;
+  uint32_t sampleEdge;
 } ClockDomainSettings;
-#  define DOMAIN_DISABLED  (0x00)
-#  define DOMAIN_ENABLED   (0x01)
+#  define DOMAIN_DISABLED            (0x00)
+#  define DOMAIN_ENABLED             (0x01)
+#  define DOMAIN_SAMPLE_EDGE_FALLING (0x00)
+#  define DOMAIN_SAMPLE_EDGE_RISING  (0x01)
 
 #define IOC_CONFIG_CLOCK_DOMAIN      _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 3), \
