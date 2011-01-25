@@ -150,6 +150,8 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
     controlRegister |= outputMask;
   } else controlRegister &= ~outputMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+
+  return 0;
 }
 
 /* Waits for a synchronized write to commit, using either polling or
@@ -309,7 +311,10 @@ static int32_t set_start_vector(struct audio_packetizer *packetizer, uint32_t st
 static void configure_clock_domain(struct audio_packetizer *packetizer, 
                                    ClockDomainSettings *clockDomainSettings) {
 
+  uint32_t controlRegister;
+
   DBG("Configure clock domain: sytInterval %d, enabled %d\n", clockDomainSettings->sytInterval, (int)clockDomainSettings->enabled);
+
   /* Set the timestamp interval, then enable or disable since we need to enable
    * last (it doesn't really matter if we disable last or not.)
    *
@@ -319,6 +324,19 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain, 
                                           TS_INTERVAL_REG),
             (clockDomainSettings->sytInterval - 1));
+
+  /* Set the timestamp capture edge for audio samples. TODO: This should really
+   * be a per-clock-domain setting, but isn't currently...
+   */
+  controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
+  if (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) {
+    controlRegister |= SAMPLE_RISING_EDGE;
+  } else {
+    controlRegister &= ~SAMPLE_RISING_EDGE;
+  }
+  XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+
+  /* Enable the clock domain */
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain,
                                           DOMAIN_ENABLE_REG),
             ((clockDomainSettings->enabled != 0) ? DOMAIN_ENABLED : DOMAIN_DISABLED));
@@ -587,7 +605,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&enableSettings, (void __user*)arg, sizeof(enableSettings)) != 0) {
         return(-EFAULT);
       }
-      set_output_enabled(packetizer, enableSettings.whichOutput, enableSettings.enable);
+      returnValue = set_output_enabled(packetizer, enableSettings.whichOutput, enableSettings.enable);
     }
     break;
 

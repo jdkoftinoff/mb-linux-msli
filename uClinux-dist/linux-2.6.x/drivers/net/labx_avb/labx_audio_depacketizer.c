@@ -568,8 +568,16 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    */
   clockDomainSettings = &clockRecoverySettings->clockDomainSettings;
   clockDomain = clockDomainSettings->clockDomain;
-  XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, TS_INTERVAL_REG),
+  XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_SYT_INTERVAL_REG),
             clockDomainSettings->sytInterval);
+
+  /* Configure the generated clock edge for the clock domain that corresponds to a
+   * sample. This should match the gateware that is providing the "current" time
+   * reference to the depacketizer.
+   */
+  XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
+            (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) ?
+             MC_CONTROL_SAMPLE_EDGE_RISING : MC_CONTROL_SAMPLE_EDGE_FALLING);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP
