@@ -153,8 +153,6 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
           /* Achieved lock! Change state and send a Netlink message. */
           ptp->rtcLockState   = PTP_RTC_LOCKED;
           ptp->rtcLockCounter = 0;
-          // TODO: Netlink here!
-          printk("RTC locked!\n");
         }
       } else ptp->rtcLockCounter = 0;
     } else ptp->rtcLockCounter = 0;
@@ -176,16 +174,12 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
           /* Way out of range, unlock immediately and send a Netlink message */
           ptp->rtcLockState   = PTP_RTC_UNLOCKED;
           ptp->rtcLockCounter = 0;
-          // TODO: Netlink here!
-          printk("RTC thresh unlock!\n");
-        } else {
+       } else {
           /* Out of the lock range, but not severely; check the counter */
           if(++ptp->rtcLockCounter >= ptp->rtcUnlockTicks) {
             /* We've become unlocked.  Change state and send a Netlink message. */
             ptp->rtcLockState   = PTP_RTC_UNLOCKED;
             ptp->rtcLockCounter = 0;
-            // TODO: Netlink here!
-            printk("RTC drift unlock!\n");
           }
         }
       } else ptp->rtcLockCounter = 0;

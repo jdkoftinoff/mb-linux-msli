@@ -199,14 +199,12 @@ static void timer_state_task(unsigned long data) {
     ptp_events_tx_heartbeat(ptp);
   }
 
-  /* Update the RTC lock detection state, which may send a Netlink message if
+  /* Update the RTC lock detection state, and send a Netlink message if
    * there is a change in state.
    */
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
   update_rtc_lock_detect(ptp);
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
+  if(ptp->rtcLastLockState != ptp->rtcLockState) ptp_events_tx_rtc_change(ptp);
+  ptp->rtcLastLockState = ptp->rtcLockState;
 }
 
 /* Runs the Best Master Clock Algorithm (BMCA) between the passed master and challenger.
@@ -806,6 +804,7 @@ void init_state_machines(struct ptp_device *ptp) {
    * in so that it will lock shortly after the lock detection state machine
    * has run for a little bit.
    */
+  ptp->rtcLastLockState   = PTP_RTC_UNLOCKED;
   ptp->rtcLockState       = PTP_RTC_UNLOCKED;
   ptp->rtcLockCounter     = 0;
   ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;

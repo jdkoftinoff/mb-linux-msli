@@ -302,6 +302,7 @@ struct ptp_device {
   uint32_t rtcChangesAllowed;
   int32_t  rtcLastOffset;
   uint32_t rtcLastOffsetValid;
+  uint32_t rtcLastLockState;
   uint32_t rtcLockState;
   uint32_t rtcLockCounter;
   uint32_t rtcLockTicks;
@@ -409,6 +410,7 @@ int register_ptp_netlink(void);
 void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
+int ptp_events_tx_rtc_change(struct ptp_device *ptp);
 
 #endif /* _LABX_PTP_H_ */
 
