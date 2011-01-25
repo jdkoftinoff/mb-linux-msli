@@ -68,6 +68,37 @@ typedef enum {
 #define IOC_PTP_STOP_SERVICE    _IO('p', 0x10)
 #define IOC_PTP_START_SERVICE   _IO('p', 0x11)
 
+/* Constants defining range and recommended values for RTC lock & unlock
+ * detection.  Lock range is specified in nanoseconds and lock time in 
+ * milliseconds.
+ *
+ * PTP_LOCK_RANGE_MAX        - Maximum permissible value for a lock range
+ *
+ * PTP_DEFAULT_LOCK_RANGE    - Default for lock range.  Slave offsets within
+ *                             [-lockRangeNsec, lockRangeNsec] are declared
+ *                             as "within lock range" by the RTC control loop.
+ *
+ * PTP_DEFAULT_LOCK_TIME     - Default for lock time.  The RTC control loop looks
+ *                             for the slave offset to remain within the lock range
+ *                             for the lock time before making the transition from
+ *                             the unlocked to locked state.
+ *
+ * PTP_DEFAULT_UNLOCK_TIME   - Default for unlock time.  If the slave offset drifts
+ *                             outside of the lock range for this amount of time,
+ *                             the RTC control loop transitions from a locked to an
+ *                             unlocked state.
+ *
+ * PTP_DEFAULT_UNLOCK_THRESH - Default unlock threshold.  If the slave offset hits
+ *                             any value outside the range:
+ *                             (-unlockThreshNsec, unlockThreshNsec), the RTC will
+ *                             unlock instantly.
+ */
+#define PTP_LOCK_RANGE_MAX        (250000)
+#define PTP_DEFAULT_LOCK_RANGE      (2000)
+#define PTP_DEFAULT_LOCK_TIME       (2000)
+#define PTP_DEFAULT_UNLOCK_TIME     ( 100)
+#define PTP_DEFAULT_UNLOCK_THRESH   (2500)
+
 typedef uint8_t PtpClockIdentity[PTP_CLOCK_IDENTITY_BYTES];
 
 typedef struct {
@@ -80,6 +111,10 @@ typedef struct {
   PtpClockIdentity grandmasterIdentity;
   uint8_t          timeSource;
   uint8_t          delayMechanism;
+  uint32_t         lockRangeNsec;
+  uint32_t         lockTimeMsec;
+  uint32_t         unlockThreshNsec;
+  uint32_t         unlockTimeMsec;
 } PtpProperties;
 #define IOC_PTP_GET_PROPERTIES  _IOR('p', 0x12, PtpProperties)
 #define IOC_PTP_SET_PROPERTIES  _IOW('p', 0x13, PtpProperties)

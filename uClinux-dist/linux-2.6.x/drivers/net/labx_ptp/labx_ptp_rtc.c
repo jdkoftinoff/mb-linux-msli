@@ -112,6 +112,7 @@ void get_local_time(struct ptp_device *ptp, PtpTime *time) {
   preempt_enable();
 }
 
+
 /* Sets a new RTC time from the passed structure */
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   unsigned long flags;
@@ -126,6 +127,70 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG), time->nanoseconds);
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
+}
+
+/* Updates lock detection metrics */
+void update_rtc_lock_detect(struct ptp_device *ptp) {
+  int32_t lockRangeSigned    = (int32_t) ptp->properties.lockRangeNsec;
+  int32_t unlockThreshSigned = (int32_t) ptp->properties.unlockThreshNsec;
+
+  /* Determine whether we are looking for transition to lock or unlock.
+   * In either case, we use valid slave offsets to determine whether we're
+   * satisfying our heuristics for lock or unlock.
+   */
+  if(ptp->rtcLockState == PTP_RTC_UNLOCKED) {
+    /* RTC is unlocked, try to acquire lock.  If we don't have a valid RTC
+     * offset, we can't move forward in attempting to lock, and should reset.
+     */
+    if(ptp->rtcLastOffsetValid == PTP_RTC_OFFSET_VALID) {
+
+      /* See if the offset lies within our lock range and, if so, whether it has
+       * been so for long enough.
+       */
+      if((ptp->rtcLastOffset > -lockRangeSigned) & (ptp->rtcLastOffset < lockRangeSigned)) {
+        /* Within lock range, check counter */
+        if(++ptp->rtcLockCounter >= ptp->rtcLockTicks) {
+          /* Achieved lock! Change state and send a Netlink message. */
+          ptp->rtcLockState   = PTP_RTC_LOCKED;
+          ptp->rtcLockCounter = 0;
+          // TODO: Netlink here!
+          printk("RTC locked!\n");
+        }
+      } else ptp->rtcLockCounter = 0;
+    } else ptp->rtcLockCounter = 0;
+  } else {
+    /* RTC is already locked, see if we need to become unlocked.  If the last
+     * offset is valid, we can proceed to examining its value.
+     * TODO: Should we check to make sure we aren't getting an ongoing burst of
+     *       invalid offsets?  This would indicate that the basic low-level message
+     *       handshaking between master / slave or peer / peer is malfunctioning!
+     */
+    if(ptp->rtcLastOffsetValid == PTP_RTC_OFFSET_VALID) {
+      /* The lock detection is hysteretic; once locked, it takes more than just
+       * one out-of-range sample to cause us to declare loss of lock, as long as
+       * it is not beyond a configurable threshold of sanity.
+       */
+      if((ptp->rtcLastOffset < -lockRangeSigned) | (ptp->rtcLastOffset > lockRangeSigned)) {
+        /* Out of the lock range, see if it's past the "immediately unlock" threshold */
+        if((ptp->rtcLastOffset < -unlockThreshSigned) | (ptp->rtcLastOffset > unlockThreshSigned)) {
+          /* Way out of range, unlock immediately and send a Netlink message */
+          ptp->rtcLockState   = PTP_RTC_UNLOCKED;
+          ptp->rtcLockCounter = 0;
+          // TODO: Netlink here!
+          printk("RTC thresh unlock!\n");
+        } else {
+          /* Out of the lock range, but not severely; check the counter */
+          if(++ptp->rtcLockCounter >= ptp->rtcUnlockTicks) {
+            /* We've become unlocked.  Change state and send a Netlink message. */
+            ptp->rtcLockState   = PTP_RTC_UNLOCKED;
+            ptp->rtcLockCounter = 0;
+            // TODO: Netlink here!
+            printk("RTC drift unlock!\n");
+          }
+        }
+      } else ptp->rtcLockCounter = 0;
+    } else ptp->rtcLockCounter = 0;
+  }
 }
 
 /* RTC increment constants */
@@ -149,8 +214,8 @@ static uint32_t servoCount = 0;
 #endif
 
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
-  int32_t slaveOffset;
-  uint32_t slaveOffsetValid = 0;
+  int32_t slaveOffset       = 0;
+  uint32_t slaveOffsetValid = PTP_RTC_OFFSET_INVALID;
   PtpTime difference;
 
   /* Update the servo using the appropriate delay mechanism */
@@ -180,7 +245,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
        */
       slaveOffset = (((int32_t) difference.nanoseconds) + ((int32_t) difference2.nanoseconds));
       slaveOffset >>= 1;
-      slaveOffsetValid = 1;
+      slaveOffsetValid = PTP_RTC_OFFSET_VALID;
     }
   } else {
     /* The peer delay mechanism uses the SYNC->FUP messages, but relies upon the
@@ -195,11 +260,11 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      * strictly with nanoseconds now that the seconds have been normalized.
      */
     slaveOffset = (((int32_t) difference.nanoseconds) - ptp->ports[port].neighborPropDelay);
-    slaveOffsetValid = 1;
+    slaveOffsetValid = PTP_RTC_OFFSET_VALID;
   }
 
   /* Perform the actual servo update if the slave offset is valid */
-  if(slaveOffsetValid) {
+  if(slaveOffsetValid == PTP_RTC_OFFSET_VALID) {
     uint32_t newRtcIncrement;
     int64_t coefficient;
     int64_t slaveOffsetExtended;
@@ -282,5 +347,10 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     }
 #endif
   } /* if(slaveOffsetValid) */
-}
 
+  /* Store the offset and its validity to the device structure for use by
+   * the lock detection state machine
+   */
+  ptp->rtcLastOffsetValid = slaveOffsetValid;
+  ptp->rtcLastOffset      = slaveOffset;
+}
