@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/phy.h>
+#include <linux/broadcom_leds.h>
 
 #define PHY_ID_BCM50610		0x0143bd60
 #define PHY_ID_BCM54610		0x0143bd63
@@ -99,9 +100,16 @@
 #define BCM5481_SHD_CLKALIGN 0x03	/* 00011: Clock Alignment Control register */
 #define BCM5481_SHD_DELAY_ENA (1 << 9)	/* RGMII Transmit Clock Delay enable */
 #define BCM5481_AUX_SKEW_ENA (1 << 8)	/* RGMII RXD to RXC Skew enable */
-#define BCM5481_SHD_LEDS12	0x0d	/* 01101: LED & 2 Selector */
-#define BCM5481_SHD_LEDS12_LED2(src)	((src & 0xf) << 4)
-#define BCM5481_SHD_LEDS12_LED1(src)	((src & 0xf) << 0)
+
+/*
+ * BCM54XX: Shadow registers
+ * Shadow values go into bits [14:10] of register 0x1c to select a shadow
+ * register to access.
+ */
+#define BCM54XX_SHD_LEDS12	0x0d	/* 01101: LED 1 & 2 Selector */
+#define BCM54XX_SHD_LEDS34	0x0e	/* 01110: LED 3 & 4 Selector */
+#define BCM54XX_SHD_LEDS_LEDH(src)	((src & 0xf) << 4)
+#define BCM54XX_SHD_LEDS_LEDL(src)	((src & 0xf) << 0)
 
 /*
  * BCM5482: Shadow registers
@@ -159,6 +167,9 @@
 MODULE_DESCRIPTION("Broadcom PHY driver");
 MODULE_AUTHOR("Maciej W. Rozycki");
 MODULE_LICENSE("GPL");
+
+#define MAX_LED_PHYS 8
+static struct phy_device *aPhys[MAX_LED_PHYS];
 
 /*
  * Indirect register access functions for the 1000BASE-T/100BASE-TX/10BASE-T
@@ -274,35 +285,59 @@ error:
 	return err;
 }
 
-#define MAX_LED_PHYS 8
-static struct phy_device *aPhys[MAX_LED_PHYS];
-
-void bc_phy_led_set(int phyno, int isStatLed, int val)
+void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL val)
 {
 	u16 reg;
 	struct phy_device *phy;
 	if (phyno >= MAX_LED_PHYS || (phy = aPhys[phyno]) == 0) {
 		return;
 	}
-	reg = bcm54xx_shadow_read(phy, BCM5481_SHD_LEDS12);
-	if (isStatLed) {
-		if (val == 0) {
-			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_ON);
-		} else if (val >= 1) {
-			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_OFF);
-		} else {
-			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_LINKSPD1);
-		}
+	if (val == BC_PHY_LED_OFF) {
+		val = BCM_LED_SRC_ON; /* Yes, I know - it's inverted.  Go figure. */
+	} else if (val == BC_PHY_LED_ON) {
+		val = BCM_LED_SRC_OFF;
+	} else if (val >= BC_PHY_LED_LINKSPD1 && val <= BC_PHY_LED_SRC_ON) {
+		val &= 0xf;
 	} else {
-		if (val == 0) {
-			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_ON);
-		} else if (val >= 1) {
-			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_OFF);
-		} else {
-			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_LINKSPD1);
+		switch(whichLed) {
+		case BC_PHY_LED1:
+			val = BCM_LED_SRC_LINKSPD1;
+			break;
+		case BC_PHY_LED2:
+			val = BCM_LED_SRC_LINKSPD2;
+			break;
+		case BC_PHY_LED3:
+			val = BCM_LED_SRC_ACTIVITYLED;
+			break;
+		case BC_PHY_LED4:
+			val = BCM_LED_SRC_INTR;
+			break;
+		default:
+			val = BCM_LED_SRC_OFF;
 		}
 	}
-	bcm54xx_shadow_write(phy, BCM5481_SHD_LEDS12, reg);
+	switch (whichLed) {
+	case BC_PHY_LED1:
+		reg = bcm54xx_shadow_read(phy, BCM54XX_SHD_LEDS12);
+		reg = (reg & 0xf0) | BCM54XX_SHD_LEDS_LEDL(val);
+		bcm54xx_shadow_write(phy, BCM54XX_SHD_LEDS12, reg);
+		break;
+	case BC_PHY_LED2:
+		reg = bcm54xx_shadow_read(phy, BCM54XX_SHD_LEDS12);
+		reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
+		bcm54xx_shadow_write(phy, BCM54XX_SHD_LEDS12, reg);
+		break;
+	case BC_PHY_LED3:
+		reg = bcm54xx_shadow_read(phy, BCM54XX_SHD_LEDS34);
+		reg = (reg & 0xf0) | BCM54XX_SHD_LEDS_LEDL(val);
+		bcm54xx_shadow_write(phy, BCM54XX_SHD_LEDS34, reg);
+		break;
+	case BC_PHY_LED4:
+		reg = bcm54xx_shadow_read(phy, BCM54XX_SHD_LEDS34);
+		reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
+		bcm54xx_shadow_write(phy, BCM54XX_SHD_LEDS34, reg);
+		break;
+	}
 }
 EXPORT_SYMBOL(bc_phy_led_set);
 

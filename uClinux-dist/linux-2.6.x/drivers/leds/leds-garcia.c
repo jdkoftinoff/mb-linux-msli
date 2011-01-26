@@ -17,15 +17,14 @@
 #include <linux/leds.h>
 #include <linux/err.h>
 #include <linux/garcia_fpga.h>
+#include <linux/broadcom_leds.h>
 
 #define DRVNAME "garcia-led"
-
-void bc_phy_led_set(int phyno, int isStatLed, int val);
 
 static void garcia_eth0_act_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(0, 0, value);
+	bc_phy_led_set(0, BC_PHY_LED1, value);
 }
 
 static struct led_classdev garcia_eth0_act_led = {
@@ -37,7 +36,7 @@ static struct led_classdev garcia_eth0_act_led = {
 static void garcia_eth0_stat_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(0, 1, value);
+	bc_phy_led_set(0, BC_PHY_LED2, value);
 }
 
 static struct led_classdev garcia_eth0_stat_led = {
@@ -49,7 +48,7 @@ static struct led_classdev garcia_eth0_stat_led = {
 static void garcia_eth1_act_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(1, 0, value);
+	bc_phy_led_set(1, BC_PHY_LED1, value);
 }
 
 static struct led_classdev garcia_eth1_act_led = {
@@ -61,7 +60,7 @@ static struct led_classdev garcia_eth1_act_led = {
 static void garcia_eth1_stat_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(1, 1, value);
+	bc_phy_led_set(1, BC_PHY_LED2, value);
 }
 
 static struct led_classdev garcia_eth1_stat_led = {
@@ -73,7 +72,7 @@ static struct led_classdev garcia_eth1_stat_led = {
 static void garcia_eth2_act_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(2, 0, value);
+	bc_phy_led_set(2, BC_PHY_LED1, value);
 }
 
 static struct led_classdev garcia_eth2_act_led = {
@@ -85,7 +84,7 @@ static struct led_classdev garcia_eth2_act_led = {
 static void garcia_eth2_stat_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(2, 1, value);
+	bc_phy_led_set(2, BC_PHY_LED2, value);
 }
 
 static struct led_classdev garcia_eth2_stat_led = {
@@ -97,7 +96,7 @@ static struct led_classdev garcia_eth2_stat_led = {
 static void garcia_eth3_act_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(3, 0, value);
+	bc_phy_led_set(3, BC_PHY_LED1, value);
 }
 
 static struct led_classdev garcia_eth3_act_led = {
@@ -109,7 +108,7 @@ static struct led_classdev garcia_eth3_act_led = {
 static void garcia_eth3_stat_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
-	bc_phy_led_set(3, 1, value);
+	bc_phy_led_set(3, BC_PHY_LED2, value);
 }
 
 static struct led_classdev garcia_eth3_stat_led = {
