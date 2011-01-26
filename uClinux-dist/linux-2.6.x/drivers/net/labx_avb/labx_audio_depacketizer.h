@@ -45,10 +45,12 @@
 
 /* Global control registers */
 #define CONTROL_STATUS_REG   (0x000)
-#  define DEPACKETIZER_DISABLE  0x000
-#  define DEPACKETIZER_ENABLE   0x001
 #  define ID_LOAD_ACTIVE        0x100
 #  define ID_LOAD_LAST_WORD     0x200
+#  define RTC_STABLE            0x000
+#  define RTC_UNSTABLE          0x002
+#  define DEPACKETIZER_DISABLE  0x000
+#  define DEPACKETIZER_ENABLE   0x001
 
 #define VECTOR_BAR_REG       (0x001)
 
