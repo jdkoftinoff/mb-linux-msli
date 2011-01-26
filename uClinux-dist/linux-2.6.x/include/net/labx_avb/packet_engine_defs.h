@@ -427,6 +427,14 @@ typedef struct {
                                         uint32_t*)
 #  define STREAM_STATUS_WORDS  4
 
+/* Declarative controls for setting the RTC associated with the depacketizer as
+ * being either stable or unstable.  When unstable, media clock recovery "coasts",
+ * ignoring increment updates from the RTC.
+ */
+#define IOC_SET_RTC_STABLE         _IO(ENGINE_IOC_CHAR, (ENGINE_IOC_CLIENT_START + 7))
+
+#define IOC_SET_RTC_UNSTABLE       _IO(ENGINE_IOC_CHAR, (ENGINE_IOC_CLIENT_START + 8))
+
 /* Type definitions and macros for depacketizer microcode */
 
 
