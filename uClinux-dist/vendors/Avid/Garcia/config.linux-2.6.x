@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
+# Tue Jan 25 16:01:33 2011
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -284,6 +285,7 @@ CONFIG_EXTRA_FIRMWARE=""
 # CONFIG_DEBUG_DRIVER is not set
 # CONFIG_DEBUG_DEVRES is not set
 # CONFIG_SYS_HYPERVISOR is not set
+CONFIG_GARCIA_FPGA=y
 # CONFIG_CONNECTOR is not set
 CONFIG_MTD=y
 # CONFIG_MTD_DEBUG is not set
@@ -654,7 +656,31 @@ CONFIG_DUMMY_CONSOLE=y
 CONFIG_USB_ARCH_HAS_EHCI=y
 # CONFIG_MMC is not set
 # CONFIG_MEMSTICK is not set
-# CONFIG_NEW_LEDS is not set
+CONFIG_NEW_LEDS=y
+CONFIG_LEDS_CLASS=y
+
+#
+# LED drivers
+#
+CONFIG_LEDS_GPIO=y
+CONFIG_LEDS_GPIO_PLATFORM=y
+CONFIG_LEDS_GPIO_OF=y
+# CONFIG_LEDS_DAC124S085 is not set
+CONFIG_LEDS_GARCIA=y
+
+#
+# LED Triggers
+#
+CONFIG_LEDS_TRIGGERS=y
+CONFIG_LEDS_TRIGGER_TIMER=y
+# CONFIG_LEDS_TRIGGER_HEARTBEAT is not set
+# CONFIG_LEDS_TRIGGER_BACKLIGHT is not set
+# CONFIG_LEDS_TRIGGER_GPIO is not set
+# CONFIG_LEDS_TRIGGER_DEFAULT_ON is not set
+
+#
+# iptables trigger is under Netfilter config (LED target)
+#
 # CONFIG_ACCESSIBILITY is not set
 CONFIG_RTC_LIB=y
 CONFIG_RTC_CLASS=y

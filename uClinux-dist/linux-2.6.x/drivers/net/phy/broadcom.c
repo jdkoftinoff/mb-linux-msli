@@ -99,6 +99,9 @@
 #define BCM5481_SHD_CLKALIGN 0x03	/* 00011: Clock Alignment Control register */
 #define BCM5481_SHD_DELAY_ENA (1 << 9)	/* RGMII Transmit Clock Delay enable */
 #define BCM5481_AUX_SKEW_ENA (1 << 8)	/* RGMII RXD to RXC Skew enable */
+#define BCM5481_SHD_LEDS12	0x0d	/* 01101: LED & 2 Selector */
+#define BCM5481_SHD_LEDS12_LED2(src)	((src & 0xf) << 4)
+#define BCM5481_SHD_LEDS12_LED1(src)	((src & 0xf) << 0)
 
 /*
  * BCM5482: Shadow registers
@@ -271,9 +274,42 @@ error:
 	return err;
 }
 
+#define MAX_LED_PHYS 8
+static struct phy_device *aPhys[MAX_LED_PHYS];
+
+void bc_phy_led_set(int phyno, int isStatLed, int val)
+{
+	u16 reg;
+	struct phy_device *phy;
+	if (phyno >= MAX_LED_PHYS || (phy = aPhys[phyno]) == 0) {
+		return;
+	}
+	reg = bcm54xx_shadow_read(phy, BCM5481_SHD_LEDS12);
+	if (isStatLed) {
+		if (val == 0) {
+			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_ON);
+		} else if (val >= 1) {
+			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_OFF);
+		} else {
+			reg = (reg & 0xf) | BCM5481_SHD_LEDS12_LED2(BCM_LED_SRC_LINKSPD1);
+		}
+	} else {
+		if (val == 0) {
+			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_ON);
+		} else if (val >= 1) {
+			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_OFF);
+		} else {
+			reg = (reg & 0xf0) | BCM5481_SHD_LEDS12_LED1(BCM_LED_SRC_LINKSPD1);
+		}
+	}
+	bcm54xx_shadow_write(phy, BCM5481_SHD_LEDS12, reg);
+}
+EXPORT_SYMBOL(bc_phy_led_set);
+
 static int bcm54xx_config_init(struct phy_device *phydev)
 {
-	int reg, err;
+	int reg, err, i;
+	u32 phyaddr;
 
 	reg = phy_read(phydev, MII_BCM54XX_ECR);
 	if (reg < 0)
@@ -297,6 +333,12 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		err = bcm50610_a0_workaround(phydev);
 		if (err < 0)
 			return err;
+	}
+
+	for (phyaddr = phydev->addr, i = -1; phyaddr != 0; phyaddr >>= 1)
+		++i;
+	if (i >= 0 && i < MAX_LED_PHYS) {
+		aPhys[i] = phydev;
 	}
 
 	return 0;
