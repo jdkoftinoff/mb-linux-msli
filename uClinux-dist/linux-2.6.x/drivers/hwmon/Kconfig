@@ -1005,6 +1005,16 @@ config SENSORS_APPLESMC
 	  Say Y here if you have an applicable laptop and want to experience
 	  the awesome power of applesmc.
 
+config SENSORS_AMC6821
+	tristate "Texas Instruments AMC6821"
+	depends on I2C  && EXPERIMENTAL
+	help
+	  If you say yes here you get support for the Texas Instruments
+	  AMC6821 hardware monitoring chips.
+
+	  This driver can also be build as a module.  If so, the module
+	  will be called amc6821.
+
 config HWMON_DEBUG_CHIP
 	bool "Hardware Monitoring Chip debugging messages"
 	default n
