@@ -134,7 +134,11 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev0,c,153,0
+	spidev0,c,153,0 \
+	spidev1,c,153,1 \
+	spidev2,c,153,2 \
+	spidev3,c,153,3 \
+	spidev4,c,153,4
 endif
 
 # Add the AVB packet engine device nodes
@@ -152,7 +156,11 @@ endif
 
 # Add the Xilinx SPI Master peripheral device node
 ifdef CONFIG_XILINX_SPI
-DEVICES += spidev0,c,153,0
+DEVICES += spidev0,c,153,0 \
+	spidev1,c,153,1 \
+	spidev2,c,153,2 \
+	spidev3,c,153,3 \
+	spidev4,c,153,4
 endif
 
 I2C_MAJOR = 89
