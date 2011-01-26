@@ -117,7 +117,6 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   char gmIdentityString[NEW_GM_BUF_SIZE];
   void *msgHead;
   int returnValue = 0;
-  unsigned long flags;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
   if(skb == NULL) return(-ENOMEM);
@@ -146,17 +145,13 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   nla_put_u32(skb, PTP_VALUEMAP_A_LENGTH, 1);
   pairIndex = PTP_VALUEMAP_A_PAIRS;
 
-  /* Atomically capture the Grandmaster identity as a string value */
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
+  /* Capture the Grandmaster identity as a string value */
   gmIdentity = ptp->presentMaster.grandmasterIdentity;
   sprintf(gmIdentityString, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
           NEW_GM_KEY_STRING,
           gmIdentity[0], gmIdentity[1], gmIdentity[2], gmIdentity[3], 
           gmIdentity[4], gmIdentity[5], gmIdentity[6], gmIdentity[7]);
   nla_put_string(skb, pairIndex++, gmIdentityString);
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
 
   /* End the value map nesting */
   nla_nest_end(skb, valueMap);
@@ -180,6 +175,61 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
  gm_change_fail: 
   return(returnValue);
 }
+
+/* Transmits a Netlink packet indicating a change in the RTC status */
+int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
+  struct sk_buff *skb;
+  uint8_t commandByte;
+  void *msgHead;
+  int returnValue = 0;
+
+  skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+  if(skb == NULL) return(-ENOMEM);
+
+  /* Decide which command byte to send with the message based upon the lock state */
+  if(ptp->rtcLockState == PTP_RTC_LOCKED) {
+    commandByte = PTP_EVENTS_C_RTC_LOCK;
+  } else {
+    commandByte = PTP_EVENTS_C_RTC_UNLOCK;
+  }
+
+  /* Create the message headers */
+  msgHead = genlmsg_put(skb, 
+                        0, 
+                        ptp->netlinkSequence++, 
+                        &ptp_events_genl_family, 
+                        0, 
+                        commandByte);
+  if(msgHead == NULL) {
+    returnValue = -ENOMEM;
+    goto rtc_change_fail;
+  }
+
+  /* Write the PTP domain identifier to the message */
+  returnValue = nla_put_u8(skb, PTP_EVENTS_A_DOMAIN, ptp->properties.domainNumber);
+  if(returnValue != 0) goto rtc_change_fail;
+
+  /* Finalize the message and multicast it */
+  genlmsg_end(skb, msgHead);
+  returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  switch(returnValue) {
+  case 0:
+  case -ESRCH:
+    // Success or no process was listening, simply break
+    break;
+
+  default:
+    // This is an actual error, print the return code
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+           returnValue);
+    goto rtc_change_fail;
+  }
+
+ rtc_change_fail: 
+  return(returnValue);
+}
+
+/* foo */
 
 static struct genl_ops ptp_events_gnl_ops_heartbeat = {
   .cmd    = PTP_EVENTS_C_HEARTBEAT,

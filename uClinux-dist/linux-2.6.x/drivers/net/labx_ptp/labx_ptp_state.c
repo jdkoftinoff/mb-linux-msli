@@ -31,9 +31,6 @@
 /* #define SYNC_DEBUG */
 /* #define DEBUG_INCREMENT */
 
-/* Timer tick period */
-#define TIMER_TICK_MS         (10)
-
 /* Parameters governing message rates, etc. measuring time in msec. */
 #define HEARTBEAT_INTERVAL        (5000)
 #define ANNOUNCE_INTERVAL         (1000)
@@ -66,17 +63,25 @@ static void timer_state_task(unsigned long data) {
       for (i=0; i<ptp->numPorts; i++) {
         /* Send ANNOUNCE and SYNC messages at their rate if we're a master */
         ptp->ports[i].announceCounter++;
-        if(ptp->ports[i].announceCounter >= (ANNOUNCE_INTERVAL / TIMER_TICK_MS)) {
+        if(ptp->ports[i].announceCounter >= (ANNOUNCE_INTERVAL / PTP_TIMER_TICK_MS)) {
           ptp->ports[i].announceCounter = 0;
           transmit_announce(ptp, i);
         }
 
         ptp->ports[i].syncCounter++;
-        if(ptp->ports[i].syncCounter >= (SYNC_INTERVAL / TIMER_TICK_MS)) {
+        if(ptp->ports[i].syncCounter >= (SYNC_INTERVAL / PTP_TIMER_TICK_MS)) {
           ptp->ports[i].syncCounter = 0;
           transmit_sync(ptp, i);
         }
       }
+
+      /* Always flag the RTC offset as valid, and zero since we're the master */
+      preempt_disable();
+      spin_lock_irqsave(&ptp->mutex, flags);
+      ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+      ptp->rtcLastOffset      = 0;
+      spin_unlock_irqrestore(&ptp->mutex, flags);
+      preempt_enable();
     }
     break;
 
@@ -87,7 +92,7 @@ static void timer_state_task(unsigned long data) {
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      timeoutTicks = ((ANNOUNCE_INTERVAL * ANNOUNCE_RECEIPT_TIMEOUT) / TIMER_TICK_MS);
+      timeoutTicks = ((ANNOUNCE_INTERVAL * ANNOUNCE_RECEIPT_TIMEOUT) / PTP_TIMER_TICK_MS);
       if(++ptp->announceTimeoutCounter >= timeoutTicks) {
         /* We haven't received an ANNOUNCE message from our master in too long, presume
          * we've become a master so we participate in BMCA again.
@@ -95,8 +100,16 @@ static void timer_state_task(unsigned long data) {
         ptp->presentRole = PTP_MASTER;
         copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
         ptp->announceTimeoutCounter = 0;
-        ptp->newMaster = TRUE;
-        ptp->rtcChangesAllowed = FALSE;
+        ptp->newMaster              = TRUE;
+
+        /* Do not permit the RTC to change until userspace permits it, and also
+         * reset the lock state
+         */
+        ptp->rtcLockState       = PTP_RTC_UNLOCKED;
+        ptp->rtcLockCounter     = 0;
+        ptp->rtcChangesAllowed  = FALSE;
+        ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+        ptp->rtcLastOffset      = 0;
 
         /* Set the RTC back to its nominal increment */
         /* TODO - Don't do this!  Wait for an ioctl() which says it's okay! */
@@ -138,7 +151,7 @@ static void timer_state_task(unsigned long data) {
             /* Increment the delay request counter and see if it's time to
              * send one to the master.
              */
-            if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / TIMER_TICK_MS)) {
+            if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS)) {
               ptp->ports[i].delayReqCounter = 0;
               transmit_delay_request(ptp, i);
             }
@@ -169,7 +182,7 @@ static void timer_state_task(unsigned long data) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  newMaster = ptp->newMaster;
+  newMaster      = ptp->newMaster;
   ptp->newMaster = FALSE;
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
@@ -180,11 +193,18 @@ static void timer_state_task(unsigned long data) {
    * serve as a "heartbeat" for other interested drivers and userspace daemons
    * to monitor.
    */
-  if(++ptp->heartbeatCounter >= (HEARTBEAT_INTERVAL / TIMER_TICK_MS)) {
+  if(++ptp->heartbeatCounter >= (HEARTBEAT_INTERVAL / PTP_TIMER_TICK_MS)) {
     /* Reset the counter and send a Netlink event */
     ptp->heartbeatCounter = 0;
     ptp_events_tx_heartbeat(ptp);
   }
+
+  /* Update the RTC lock detection state, and send a Netlink message if
+   * there is a change in state.
+   */
+  update_rtc_lock_detect(ptp);
+  if(ptp->rtcLastLockState != ptp->rtcLockState) ptp_events_tx_rtc_change(ptp);
+  ptp->rtcLastLockState = ptp->rtcLockState;
 }
 
 /* Runs the Best Master Clock Algorithm (BMCA) between the passed master and challenger.
@@ -317,8 +337,16 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
       copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
       ptp->announceTimeoutCounter = 0;
       ptp->slaveDebugCounter      = 0;
-      ptp->newMaster              = TRUE;
-      ptp->rtcChangesAllowed      = FALSE;
+
+      /* Do not permit the RTC to change until userspace permits it, and also
+       * reset the lock state
+       */
+      ptp->newMaster          = TRUE;
+      ptp->rtcChangesAllowed  = FALSE;
+      ptp->rtcLockState       = PTP_RTC_UNLOCKED;
+      ptp->rtcLockCounter     = 0;
+      ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+      ptp->rtcLastOffset      = 0;
     
       /* Invalidate all the slave flags */
       ptp->ports[port].syncTimestampsValid     = 0;
@@ -603,7 +631,6 @@ static void rx_state_task(unsigned long data) {
       case MSG_DELAY_REQ:
         process_rx_delay_req(ptp, i, ptp->ports[i].lastRxBuffer);
         break;
-
       case MSG_DELAY_RESP:
         process_rx_delay_resp(ptp, i, ptp->ports[i].lastRxBuffer);
         break;
@@ -745,7 +772,7 @@ void init_state_machines(struct ptp_device *ptp) {
 
     /* peer delay request state machine initialization */
     ptp->ports[i].mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
-    ptp->ports[i].pdelayReqInterval    = (PDELAY_REQ_INTERVAL / TIMER_TICK_MS);
+    ptp->ports[i].pdelayReqInterval    = (PDELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS);
     ptp->ports[i].allowedLostResponses = 3;
     ptp->ports[i].neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
   }
@@ -772,6 +799,16 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->derivative     = 0;
   ptp->previousOffset = 0;
   set_rtc_increment(ptp, &ptp->nominalIncrement);
+
+  /* Declare the RTC as initially unlocked, but put a valid, zero, offset
+   * in so that it will lock shortly after the lock detection state machine
+   * has run for a little bit.
+   */
+  ptp->rtcLastLockState   = PTP_RTC_UNLOCKED;
+  ptp->rtcLockState       = PTP_RTC_UNLOCKED;
+  ptp->rtcLockCounter     = 0;
+  ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+  ptp->rtcLastOffset      = 0;
 
   printk("PTP master\n");
 

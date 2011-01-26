@@ -56,6 +56,27 @@ config BROADCOM_PHY
 	  Currently supports the BCM5411, BCM5421, BCM5461, BCM5464, BCM5481
 	  and BCM5482 PHYs.
 
+config BCM8451_TX_CLOCKALIGN
+	bool "RGMII Transmit Clock Delay"
+	depends on BROADCOM_PHY=y
+	---help---
+	  The RGMII transmit timing can be adjusted by software control.
+	  TXD-to-GTXCLK clock delay time can be increased by approximately
+	  1.9 ns for 1000BASE-T mode, and between 2 ns to 6 ns when in
+	  10BASE-T or 100BASE-T mode by setting Register 1ch, SV 00011,
+	  bit 9 = 1. Enabling this timing adjustment eliminates the need for
+	  board trace delays as required by the RGMII specification.
+
+config BCM8451_RX_CLOCKSKEW
+	bool "RGMII RXD-to-RXC Clock Skew"
+	depends on BROADCOM_PHY=y
+	---help---
+	  Skew time can be increased by approximately 1.9ns for
+	  1000BASE-T mode, 4 ns for 100BASE-T mode, and 50 ns for
+	  10BASE-T mode by setting Register 18h, SV 111, bit 8 = 1.
+	  Enabling this timing adjustment eliminates the need for board
+	  trace delays, as required by the RGMII specification.
+
 config ICPLUS_PHY
 	tristate "Drivers for ICPlus PHYs"
 	---help---

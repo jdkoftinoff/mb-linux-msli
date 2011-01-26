@@ -145,6 +145,17 @@
 /* Number of fractional nanosecond bits for correction field */
 #define CORRECTION_FRACTION_BITS  (16)
 
+/* Enumeration for RTC lock state */
+#define PTP_RTC_UNLOCKED (0)
+#define PTP_RTC_LOCKED   (1)
+
+/* Enumeration for flagging valid RTC offsets */
+#define PTP_RTC_OFFSET_INVALID (0)
+#define PTP_RTC_OFFSET_VALID   (1)
+
+/* Period, in msec., of the hardware timer tick governing the PTP state machines */
+#define PTP_TIMER_TICK_MS (10)
+
 /* 802.1AS MDPdelayReq state machine states */
 typedef enum { MDPdelayReq_NOT_ENABLED, MDPdelayReq_INITIAL_SEND_PDELAY_REQ,
   MDPdelayReq_RESET, MDPdelayReq_SEND_PDELAY_REQ, MDPdelayReq_WAITING_FOR_PDELAY_RESP,
@@ -289,6 +300,13 @@ struct ptp_device {
   int32_t  derivative;
   int32_t  previousOffset;
   uint32_t rtcChangesAllowed;
+  int32_t  rtcLastOffset;
+  uint32_t rtcLastOffsetValid;
+  uint32_t rtcLastLockState;
+  uint32_t rtcLockState;
+  uint32_t rtcLockCounter;
+  uint32_t rtcLockTicks;
+  uint32_t rtcUnlockTicks;
 
   /* Present role and delay mechanism for the endpoint */
   PtpRole presentRole;
@@ -379,6 +397,7 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void get_local_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port);
+void update_rtc_lock_detect(struct ptp_device *ptp);
 
 /* From labx_ptp_arithmetic.c */
 void timestamp_sum(PtpTime *addend, PtpTime *augend, PtpTime *sum);
@@ -391,6 +410,7 @@ int register_ptp_netlink(void);
 void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
+int ptp_events_tx_rtc_change(struct ptp_device *ptp);
 
 #endif /* _LABX_PTP_H_ */
 

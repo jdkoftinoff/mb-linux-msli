@@ -358,6 +358,12 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
         ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
       }
 
+      /* Convert the millisecond values for RTC lock settings into timer ticks.
+       * Pre-calculating this avoids several divisions in the real-time code.
+       */
+      ptp->rtcLockTicks   = (ptp->properties.lockTimeMsec / PTP_TIMER_TICK_MS);
+      ptp->rtcUnlockTicks = (ptp->properties.unlockTimeMsec / PTP_TIMER_TICK_MS);
+
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
