@@ -74,20 +74,51 @@ static uint32_t instanceCount;
 
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
+  uint32_t ctrlStatusReg;
   DBG("Disbling the depacketizer\n");
 
   /* Disable the micro-engine */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_DISABLE);
+  ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  ctrlStatusReg &= ~DEPACKETIZER_ENABLE;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), ctrlStatusReg);
 }
 
 /* Enables the passed instance */
 static void enable_depacketizer(struct audio_depacketizer *depacketizer) {
+  uint32_t ctrlStatusReg;
+
   DBG("Enabling the depacketizer\n");
 
   /* Enable the micro-engine, with the "last load" flag for match unit configuration
    * disabled (the loading methods should assert this as needed.)
    */
-  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), DEPACKETIZER_ENABLE);
+  ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  ctrlStatusReg |= DEPACKETIZER_ENABLE;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), ctrlStatusReg);
+}
+
+/* Flags the RTC as stable for the passed instance */
+static void set_rtc_stable(struct audio_depacketizer *depacketizer) {
+  uint32_t ctrlStatusReg;
+
+  DBG("Declaring RTC stable\n");
+
+  /* Set the "RTC unstable" bit, which will coast any recovered media clock domains */
+  ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  ctrlStatusReg &= ~RTC_UNSTABLE;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), ctrlStatusReg);
+}
+
+/* Flags the RTC as stable for the passed instance */
+static void set_rtc_unstable(struct audio_depacketizer *depacketizer) {
+  uint32_t ctrlStatusReg;
+
+  DBG("Declaring RTC unstable\n");
+
+  /* Set the "RTC unstable" bit, which will coast any recovered media clock domains */
+  ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
+  ctrlStatusReg |= RTC_UNSTABLE;
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG), ctrlStatusReg);
 }
 
 /* Waits for a synchronized write to commit, using either polling or
@@ -629,6 +660,7 @@ static void get_stream_status(struct audio_depacketizer *depacketizer,
 static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
   /* Disable the instance and all of its match units */
   disable_depacketizer(depacketizer);
+  set_rtc_unstable(depacketizer);
   clear_all_matchers(depacketizer);
   set_vector_base_address(depacketizer, 0x00000000);
 }
@@ -810,6 +842,14 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
     }
     break;
       
+  case IOC_SET_RTC_STABLE:
+    set_rtc_stable(depacketizer);
+    break;
+
+  case IOC_SET_RTC_UNSTABLE:
+    set_rtc_unstable(depacketizer);
+    break;
+
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     return labx_dma_ioctl(&depacketizer->dma, command, arg);
@@ -1072,6 +1112,7 @@ static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
 
 static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.00.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.01.a", },
 	{ /* end of list */ },
 };
 
