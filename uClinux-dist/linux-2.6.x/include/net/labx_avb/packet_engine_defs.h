@@ -574,4 +574,13 @@ typedef struct {
 #define DEPACKETIZER_RING_OFFSET_WORD(ringOffset, sytInterval) \
   (((sytInterval - 1) << DEPACKETIZER_SYT_MASK_SHIFT) | ((uint32_t) ringOffset))
 
+/* I/O control commands and structures specific to the redundancy switch
+ * hardware which may be used with two depacketizers
+ */
+#define RED_SWITCH_IOC_CHAR          ('r')
+
+/* I/O control commands and structures common to all packet engines */
+#define IOC_DISABLE_RED_SWITCH           _IO(RED_SWITCH_IOC_CHAR, 0x01)
+#define IOC_ENABLE_RED_SWITCH            _IO(RED_SWITCH_IOC_CHAR, 0x02)
+
 #endif
