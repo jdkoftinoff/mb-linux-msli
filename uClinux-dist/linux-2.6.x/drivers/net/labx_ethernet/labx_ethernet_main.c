@@ -465,7 +465,7 @@ typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
  * when we get into such deep trouble that we don't know how to handle
  * otherwise.
  */
-void reset(struct net_device *dev, u32 line_num)
+static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
 {
   struct net_local *lp = netdev_priv(dev);
   u32 Options;
@@ -748,6 +748,7 @@ static int xenet_open(struct net_device *dev)
       }
     } else {
       printk("Not able to find Phy");
+      lp->phy_dev = NULL;
     }
   }
 
@@ -1049,7 +1050,7 @@ static void xenet_tx_timeout(struct net_device *dev)
 	 dev->name, TX_TIMEOUT * 1000UL / HZ);
   lp->ndev->stats.tx_errors++;
 
-  reset(dev, __LINE__);
+  labx_ethernet_reset(dev, __LINE__);
 
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 }

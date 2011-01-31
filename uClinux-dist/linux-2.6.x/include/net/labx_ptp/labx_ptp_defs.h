@@ -94,10 +94,10 @@ typedef enum {
  *                             unlock instantly.
  */
 #define PTP_LOCK_RANGE_MAX        (250000)
-#define PTP_DEFAULT_LOCK_RANGE      (2000)
+#define PTP_DEFAULT_LOCK_RANGE      (5000)
 #define PTP_DEFAULT_LOCK_TIME       (2000)
 #define PTP_DEFAULT_UNLOCK_TIME     ( 100)
-#define PTP_DEFAULT_UNLOCK_THRESH   (2500)
+#define PTP_DEFAULT_UNLOCK_THRESH   (8000)
 
 typedef uint8_t PtpClockIdentity[PTP_CLOCK_IDENTITY_BYTES];
 

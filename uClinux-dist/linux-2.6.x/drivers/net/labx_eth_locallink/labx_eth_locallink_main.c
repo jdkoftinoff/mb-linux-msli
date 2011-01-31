@@ -901,6 +901,7 @@ static int xenet_open(struct net_device *dev)
 			}
 		} else {
 			printk("Not able to find Phy");
+			lp->phy_dev = NULL;
 		}
 	}
 
@@ -2115,7 +2116,7 @@ static void disp_bd_ring(XLlDma_BdRing *bd_ring)
  * 8	20h	sw app data (0) [id]
  */
 	printk("Idx   NextBD BuffAddr   Length  CTL/CSE CSUM B/I CSUMSeed Raw CSUM  RecvLen       ID\n");
-	printk("--- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/--------\n");
+	printk("---------------------------------------------------------------------------\n");
 
 	for (idx = 0; idx < num_bds; idx++) {
 		printk("%3d %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
@@ -2133,7 +2134,7 @@ static void disp_bd_ring(XLlDma_BdRing *bd_ring)
 
 		cur_bd_ptr += bd_ring->Separation / sizeof(int);
 	}
-	printk("--------------------------------------- software/linux-2.6.x-petalogix/Done ---------------------------------------\n");
+	printk("------------------------------------------------------------------------------\n");
 }
 
 static int

@@ -27,7 +27,6 @@ extern void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 		u32 RegisterNum, u16 *PhyDataPtr);
 extern void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
 		u32 RegisterNum, u16 PhyData);
-extern void reset(struct net_device *dev, u32 line_num);
 
 static void labx_eth_free_mdio_bus(struct mii_bus *bus)
 {

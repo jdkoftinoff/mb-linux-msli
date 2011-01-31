@@ -7,6 +7,7 @@ EXTRA_CFLAGS += -I$(TOPDIR)/drivers/xilinx_common
 
 obj-$(CONFIG_LABX_AUDIO_PACKETIZER)       += labx_audio_packetizer.o
 obj-$(CONFIG_LABX_AUDIO_DEPACKETIZER)     += labx_audio_depacketizer.o
+obj-$(CONFIG_LABX_AUDIO_DEPACKETIZER)     += labx_redundancy_switch.o
 
 # Use this if we need any AVB routines which are common to both drivers; the
 # labx_avb-objs target further down implicitly defines a composite object file
