@@ -246,7 +246,7 @@
  * MODIFICATION HISTORY:
  *
  * Ver   Who  Date     Changes
- * ----- software/linux-2.6.x-petalogix/---- software/linux-2.6.x-petalogix/-------- software/linux-2.6.x-petalogix/-------------------------------------------------------
+ * ------------------------------------------------------------------------
  * 1.00a jvb  11/10/06 First release
  * 1.00a rpm  06/08/07 Added interrupt IDs to config structure for convenience
  * </pre>
