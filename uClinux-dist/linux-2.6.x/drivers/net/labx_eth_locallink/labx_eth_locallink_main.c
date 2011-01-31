@@ -901,6 +901,7 @@ static int xenet_open(struct net_device *dev)
 			}
 		} else {
 			printk("Not able to find Phy");
+			lp->phy_dev = NULL;
 		}
 	}
 
