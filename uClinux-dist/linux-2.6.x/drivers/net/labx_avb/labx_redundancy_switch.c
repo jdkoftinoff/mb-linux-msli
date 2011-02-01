@@ -357,10 +357,6 @@ int redundancy_switch_probe(const char *name,
   redundancy_switch->derivedFops = derivedFops;
   redundancy_switch->derivedData = derivedData;
 
-  /* TEMPORARY - Auto-enable the hardware! */
-  printk("TEMPORARY - Enabling switch!\n");
-  enable_redundancy_switch(redundancy_switch);
-
   /* Return success, setting the return pointer if valid */
   if(newInstance != NULL) *newInstance = redundancy_switch;
   return(0);

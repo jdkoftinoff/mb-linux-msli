@@ -98,7 +98,7 @@ DEVICES +=    \
 	xsysacea12,b,254,12     xsysacea12,b,254,13     xsysacea14,b,254,14 \
 	xsysacea15,b,254,15 
 endif 
-      
+
 # sd? dev nodes if SCSI is enabled
 ifdef CONFIG_SCSI
 DEVICES +=	sda,b,8,0	\
@@ -141,6 +141,7 @@ endif
 DEVICES += packetizer0,c,250,0
 DEVICES += depacketizer0,c,252,0
 DEVICES += depacketizer1,c,252,1
+DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
 
 # Add the Biamp SPI mailbox peripheral device node
