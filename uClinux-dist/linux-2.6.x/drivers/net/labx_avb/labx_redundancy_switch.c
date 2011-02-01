@@ -318,7 +318,7 @@ int redundancy_switch_probe(const char *name,
   redundancy_switch->versionMinor = versionMinor;
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X redundancy_switch %d.%d at 0x%08X, ",
+  printk(KERN_INFO "%s: Found Lab X AVB Redundancy Switch %d.%d at 0x%08X, ",
          redundancy_switch->name, versionMajor, versionMinor, 
          (uint32_t)redundancy_switch->physicalAddress);
   if(redundancy_switch->irq == NO_IRQ_SUPPLIED) {
@@ -356,6 +356,10 @@ int redundancy_switch_probe(const char *name,
   /* Retain any derived file operations & data to dispatch to */
   redundancy_switch->derivedFops = derivedFops;
   redundancy_switch->derivedData = derivedData;
+
+  /* TEMPORARY - Auto-enable the hardware! */
+  printk("TEMPORARY - Enabling switch!\n");
+  enable_redundancy_switch(redundancy_switch);
 
   /* Return success, setting the return pointer if valid */
   if(newInstance != NULL) *newInstance = redundancy_switch;
@@ -420,7 +424,7 @@ static int __devexit redundancy_switch_of_remove(struct of_device *dev)
  * hooks with this driver.
  */
 static struct of_device_id redundancy_switch_of_match[] = {
-  { .compatible = "xlnx,labx-redundancy_switch-1.00.a", },
+  { .compatible = "xlnx,labx-redundancy-switch-1.00.a", },
   { /* end of list */ },
 };
 

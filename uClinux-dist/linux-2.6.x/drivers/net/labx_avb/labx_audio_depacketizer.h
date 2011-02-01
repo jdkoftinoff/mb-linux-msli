@@ -177,6 +177,9 @@ typedef enum {
 #define MATCH_VECTOR_ODD_SHIFT   16
 #define MATCH_VECTOR_MASK        0x0FFFF
 
+#define INSTANCE_NO_DMA  0
+#define INSTANCE_HAS_DMA 1
+
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  256
 #define NO_IRQ_SUPPLIED   (-1)
@@ -214,6 +217,7 @@ struct audio_depacketizer {
 
   /* DMA instance (if supported) */
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
+  uint32_t hasDma;
   struct labx_dma dma;
 #endif
 
