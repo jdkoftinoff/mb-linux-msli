@@ -49,6 +49,7 @@
 /* The stream configuration register has no readback */
 #define STREAM_CONFIG_REG    (0x004)
 
+/* Stream status registers */
 #define STREAM_STATUS_0_REG  (0x004)
 #define STREAM_STATUS_1_REG  (0x005)
 #define STREAM_STATUS_2_REG  (0x006)
