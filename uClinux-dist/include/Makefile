@@ -20,7 +20,7 @@ ALTARCH=$(subst i386,x86,$(subst nommu,,$(ARCH)))
 LINKHDRS = \
 	$(ROOTDIR)/lib/libtc/include/*.h,. \
 	$(ROOTDIR)/lib/microsupport/include/*.h,. \
-	$(ROOTDIR)/lib/ieee1722_1/include/ieee1722_1/*.h,ieee1722_1 \
+	$(ROOTDIR)/lib/avtp/include/*.h,. \
 	$(ROOTDIR)/lib/libxml2/include/libxml/*.h,libxml \
 	$(ROOTDIR)/lib/libxml2/build/include/libxml/*.h,libxml \
 	$(ROOTDIR)/lib/STLport/stlport/*,STLport \

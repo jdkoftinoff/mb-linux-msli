@@ -16,3 +16,6 @@
 [submodule "uClinux-dist/user/avbweb"]
 	path = uClinux-dist/user/avbweb
 	url = ../avbweb.git
+[submodule "uClinux-dist/lib/avtp"]
+	path = uClinux-dist/lib/avtp
+	url = ../avtp.git
