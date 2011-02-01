@@ -1,6 +1,3 @@
-[submodule "uClinux-dist/lib/ieee1722_1"]
-	path = uClinux-dist/lib/ieee1722_1
-	url = ../ieee1722_1-jkp
 [submodule "uClinux-dist/user/libtc"]
 	path = uClinux-dist/user/libtc
 	url = ../libtc
