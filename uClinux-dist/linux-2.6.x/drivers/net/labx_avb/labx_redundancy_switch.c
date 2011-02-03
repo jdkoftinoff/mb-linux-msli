@@ -80,6 +80,15 @@ static void enable_redundancy_switch(struct redundancy_switch *redundancy_switch
   XIo_Out32(REGISTER_ADDRESS(redundancy_switch, CONTROL_REG), controlRegister);
 }
 
+/* Collects the stream status from the hardware */
+static void get_stream_status(struct redundancy_switch *redundancy_switch,
+                              uint32_t *statusWords) {
+  statusWords[0] = XIo_In32(REGISTER_ADDRESS(redundancy_switch, STREAM_STATUS_0_REG));
+  statusWords[1] = XIo_In32(REGISTER_ADDRESS(redundancy_switch, STREAM_STATUS_1_REG));
+  statusWords[2] = XIo_In32(REGISTER_ADDRESS(redundancy_switch, STREAM_STATUS_2_REG));
+  statusWords[3] = XIo_In32(REGISTER_ADDRESS(redundancy_switch, STREAM_STATUS_3_REG));
+}
+
 /* TODO: Implement the stream "bump" command */
 #if 0
 /* Waits for a bump command to complete, using either polling or
@@ -199,9 +208,10 @@ static int redundancy_switch_release(struct inode *inode, struct file *filp)
 }
 
 /* I/O control operations for the driver */
-static int redundancy_switch_ioctl(struct inode *inode, struct file *filp,
-                                  unsigned int command, unsigned long arg)
-{
+static int redundancy_switch_ioctl(struct inode *inode, 
+                                   struct file *filp,
+                                   unsigned int command, 
+                                   unsigned long arg) {
   // Switch on the request
   int returnValue = 0;
   struct redundancy_switch *redundancy_switch = (struct redundancy_switch*)filp->private_data;
@@ -213,6 +223,19 @@ static int redundancy_switch_ioctl(struct inode *inode, struct file *filp,
     
   case IOC_ENABLE_RED_SWITCH:
     enable_redundancy_switch(redundancy_switch);
+    break;
+
+  case IOC_GET_RED_SWITCH_STATUS:
+    {
+      uint32_t statusWords[STREAM_STATUS_WORDS];
+
+      /* Get the stream status, then copy into the userspace pointer */
+      get_stream_status(redundancy_switch, statusWords);
+      if(copy_to_user((void __user*)arg, statusWords, 
+                      (STREAM_STATUS_WORDS * sizeof(uint32_t))) != 0) {
+        return(-EFAULT);
+      }
+    }
     break;
     
   default:
@@ -318,7 +341,7 @@ int redundancy_switch_probe(const char *name,
   redundancy_switch->versionMinor = versionMinor;
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X redundancy_switch %d.%d at 0x%08X, ",
+  printk(KERN_INFO "%s: Found Lab X AVB Redundancy Switch %d.%d at 0x%08X, ",
          redundancy_switch->name, versionMajor, versionMinor, 
          (uint32_t)redundancy_switch->physicalAddress);
   if(redundancy_switch->irq == NO_IRQ_SUPPLIED) {
@@ -420,7 +443,7 @@ static int __devexit redundancy_switch_of_remove(struct of_device *dev)
  * hooks with this driver.
  */
 static struct of_device_id redundancy_switch_of_match[] = {
-  { .compatible = "xlnx,labx-redundancy_switch-1.00.a", },
+  { .compatible = "xlnx,labx-redundancy-switch-1.00.a", },
   { /* end of list */ },
 };
 

@@ -81,8 +81,7 @@
 #define STREAM_MAP_BANKS  (2)
 
 /* Locates a register within the TDM demultiplexer logic, using the
- * hardware-configured region shift detected by the audio packetizer
- * driver.
+ * hardware-configured region shift detected by the DMA driver.
  */
 #define TDM_DEMUX_RANGE  (0x03)
 #define TDM_DEMUX_ADDRESS(device, offset)                    \

@@ -579,8 +579,19 @@ typedef struct {
  */
 #define RED_SWITCH_IOC_CHAR          ('r')
 
-/* I/O control commands and structures common to all packet engines */
+/* Commands to disable or enable the redundancy switch as a whole */
 #define IOC_DISABLE_RED_SWITCH           _IO(RED_SWITCH_IOC_CHAR, 0x01)
 #define IOC_ENABLE_RED_SWITCH            _IO(RED_SWITCH_IOC_CHAR, 0x02)
+
+/* Structure definition and command to return the active links of all streams.
+ * Client code must be cognizant of which of the 128 stream bits are actually
+ * relevant (i.e. the stream is within the max supported by hardware, and is
+ * actively being received on at least one of the links).
+ *
+ * The STREAM_STATUS_WORDS constant is used to bound the number of words
+ * returned for each call.
+ */
+
+#define IOC_GET_RED_SWITCH_STATUS        _IOR(RED_SWITCH_IOC_CHAR, 0x03, uint32_t*)
 
 #endif

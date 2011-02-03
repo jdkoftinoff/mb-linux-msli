@@ -98,7 +98,7 @@ DEVICES +=    \
 	xsysacea12,b,254,12     xsysacea12,b,254,13     xsysacea14,b,254,14 \
 	xsysacea15,b,254,15 
 endif 
-      
+
 # sd? dev nodes if SCSI is enabled
 ifdef CONFIG_SCSI
 DEVICES +=	sda,b,8,0	\
@@ -138,17 +138,11 @@ DEVICES +=	\
 endif
 
 # Add the AVB packet engine device nodes
-ifdef CONFIG_LABX_AUDIO_PACKETIZER
 DEVICES += packetizer0,c,230,0
-DEVICES += packetizer1,c,230,1
-endif
-ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
 DEVICES += depacketizer0,c,232,0
 DEVICES += depacketizer1,c,232,1
-endif
-ifdef CONFIG_LABX_PTP
+DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,233,0
-endif
 
 # Add the Biamp SPI mailbox peripheral device node
 ifdef CONFIG_SPI_MAILBOX

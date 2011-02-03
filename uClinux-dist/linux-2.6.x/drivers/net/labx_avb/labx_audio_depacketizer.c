@@ -852,7 +852,9 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
 
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
-    return labx_dma_ioctl(&depacketizer->dma, command, arg);
+    if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+      return labx_dma_ioctl(&depacketizer->dma, command, arg);
+    } else return(-EINVAL);
 #else
     return(-EINVAL);
 #endif
@@ -1016,6 +1018,7 @@ static int audio_depacketizer_probe(const char *name,
      * as the instruction RAM (which is 4 bytes wide).
      * DMA is selected with the next bit up in the address
      */
+    depacketizer->hasDma = INSTANCE_HAS_DMA;
     depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
     labx_dma_probe(&depacketizer->dma); 
 #else
@@ -1023,9 +1026,10 @@ static int audio_depacketizer_probe(const char *name,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the
      * build configuration!
      */
+    depacketizer->hasDma = INSTANCE_NO_DMA;
     printk("%s\n has a Dma_Coprocessor, but DMA driver is not built\n", depacketizer->name);
 #endif
-  }
+  } else depacketizer->hasDma = INSTANCE_NO_DMA;
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, depacketizer);

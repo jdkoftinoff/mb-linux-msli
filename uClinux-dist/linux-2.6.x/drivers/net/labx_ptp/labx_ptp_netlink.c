@@ -242,7 +242,7 @@ static struct genl_ops ptp_events_gnl_ops_heartbeat = {
 int register_ptp_netlink(void) {
   int returnValue;
 
-  printk(KERN_INFO DRIVER_NAME "Registering PTP Generic Netlink family\n");
+  printk(KERN_INFO DRIVER_NAME ": Registering PTP Generic Netlink family\n");
   
   /* Register the Generic Netlink family for use */
   returnValue = genl_register_family(&ptp_events_genl_family);
