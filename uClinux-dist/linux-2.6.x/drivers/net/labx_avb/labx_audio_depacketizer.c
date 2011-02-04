@@ -39,7 +39,7 @@
 /* Driver name and the revision of hardware expected (1.1 - 1.2) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x15
+#define DRIVER_VERSION_MAX  0x16
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
@@ -592,6 +592,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   ClockDomainSettings *clockDomainSettings;
   uint32_t clockDomain;
   uint32_t recoveryIndex;
+  uint32_t controlValue = 0;
 
   /* Configure the timestamp interval for the domain first.  This informs the basic
    * reference clock recovery hardware of how many samples are being averaged each
@@ -602,13 +603,25 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_SYT_INTERVAL_REG),
             clockDomainSettings->sytInterval);
 
+  /* Set an initial half-period for depacketizer >= 1.6 */
+  if ((depacketizer->capabilities.versionMajor > 1) ||
+      (depacketizer->capabilities.versionMinor >= 6)) {
+
+    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG),
+              clockDomainSettings->halfPeriod);
+    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG),
+              clockDomainSettings->remainder);
+    controlValue |= MC_CONTROL_LOAD_HALF_PERIOD;
+  }
+
   /* Configure the generated clock edge for the clock domain that corresponds to a
    * sample. This should match the gateware that is providing the "current" time
    * reference to the depacketizer.
    */
+  controlValue |= (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) ?
+                   MC_CONTROL_SAMPLE_EDGE_RISING : MC_CONTROL_SAMPLE_EDGE_FALLING;
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
-            (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) ?
-             MC_CONTROL_SAMPLE_EDGE_RISING : MC_CONTROL_SAMPLE_EDGE_FALLING);
+            controlValue);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP

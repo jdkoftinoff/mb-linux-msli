@@ -95,6 +95,8 @@ typedef struct {
   uint32_t sytInterval;
   uint32_t enabled;
   uint32_t sampleEdge;
+  uint32_t halfPeriod;
+  uint32_t remainder;
 } ClockDomainSettings;
 #  define DOMAIN_DISABLED            (0x00)
 #  define DOMAIN_ENABLED             (0x01)
