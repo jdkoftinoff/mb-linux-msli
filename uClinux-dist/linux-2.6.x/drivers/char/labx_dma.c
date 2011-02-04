@@ -357,3 +357,6 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
   return(returnValue);
 }
 EXPORT_SYMBOL(labx_dma_ioctl);
+
+MODULE_AUTHOR("Chris Wulff");
+MODULE_LICENSE("GPL");
