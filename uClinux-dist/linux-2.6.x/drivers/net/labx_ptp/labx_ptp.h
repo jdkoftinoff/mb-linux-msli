@@ -102,16 +102,16 @@
 #  define REVISION_FIELD_MASK  (0x0F)
 
 #define REGISTER_ADDRESS(device, port, offset) \
-  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
+  ((uintptr_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (REGISTER_RANGE << ADDRESS_RANGE_SHIFT) | (offset << 2))
 
 #define PTP_TX_PACKET_BUFFER(device, port, whichBuffer)                 \
-  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
+  ((uintptr_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (TX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & (PTP_TX_BUFFER_COUNT-1)) << PTP_PACKET_BUFFER_SHIFT))
 
 #define PTP_RX_PACKET_BUFFER(device, port, whichBuffer)                 \
-  ((uint32_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
+  ((uintptr_t)device->virtualAddress | (port << PORT_RANGE_SHIFT) |      \
    (RX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & PTP_RX_BUFFER_MASK) << PTP_PACKET_BUFFER_SHIFT))
 
