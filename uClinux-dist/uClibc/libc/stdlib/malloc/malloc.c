@@ -187,6 +187,9 @@ __malloc_from_heap (size_t size, struct heap_free_area **heap
 
       MALLOC_DEBUG (-1, "malloc: returning 0x%lx (base:0x%lx, total_size:%ld)",
 		    (long)mem, (long)MALLOC_BASE(mem), (long)MALLOC_SIZE(mem));
+#ifdef MALLOC_DEBUG_FILL
+      memset(mem, 0xcc, size - MALLOC_HEADER_SIZE);
+#endif
     }
   else
     MALLOC_DEBUG (-1, "malloc: returning 0");

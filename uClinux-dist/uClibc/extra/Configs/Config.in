@@ -2032,6 +2032,13 @@ config UCLIBC_MALLOC_DEBUGGING
 	  Because this increases the size of malloc appreciably (due to strings
 	  etc), you should say N unless you need to debug a malloc problem.
 
+config UCLIBC_MALLOC_DEBUG_FILL
+	bool "Build malloc with debug pattern fill"
+	depends on MALLOC
+	default n
+	help
+	  Answer Y here to have malloc/free fill the memory with CC/DD.
+
 config WARNINGS
 	string "Compiler Warnings"
 	default "-Wall"
