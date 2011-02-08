@@ -46,6 +46,7 @@ static const unsigned short normal_i2c[] = {0x18, 0x19, 0x1a, 0x2c, 0x2d, 0x2e,
 /*
  * Insmod parameters
  */
+I2C_CLIENT_INSMOD_1(amc6821);
 
 static int pwminv = 0;	/*Inverted PWM output. */
 module_param(pwminv, int, S_IRUGO);
@@ -53,8 +54,6 @@ module_param(pwminv, int, S_IRUGO);
 static int init = 1; /*Power-on initialization.*/
 module_param(init, int, S_IRUGO);
 
-
-enum chips { amc6821 };
 
 #define AMC6821_REG_DEV_ID 0x3D
 #define AMC6821_REG_COMP_ID 0x3E
@@ -157,6 +156,7 @@ static int amc6821_probe(
 		const struct i2c_device_id *id);
 static int amc6821_detect(
 		struct i2c_client *client,
+		int kind,
 		struct i2c_board_info *info);
 static int amc6821_init_client(struct i2c_client *client);
 static int amc6821_remove(struct i2c_client *client);
@@ -182,7 +182,7 @@ static struct i2c_driver amc6821_driver = {
 	.remove = amc6821_remove,
 	.id_table = amc6821_id,
 	.detect = amc6821_detect,
-	.address_list = normal_i2c,
+	.address_data = &addr_data,
 };
 
 
@@ -808,10 +808,10 @@ static struct attribute_group amc6821_attr_grp = {
 };
 
 
-
 /* Return 0 if detection is successful, -ENODEV otherwise */
 static int amc6821_detect(
 		struct i2c_client *client,
+		int kind,
 		struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
