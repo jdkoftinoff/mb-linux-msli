@@ -540,7 +540,7 @@ static int __devinit xilinx_iic_setup(
 		}
 	}
 	
-//	of_i2c_register_devices(&dev->adap);
+	of_register_i2c_devices(&dev->adap, node);
 
 	error = device_create_file(device, &dev_attr_scan);
       out:
