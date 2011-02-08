@@ -1846,7 +1846,7 @@ static int xtenet_setup(struct device *dev,
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
 
   /* Allow VLAN traffic that is not on the AVB class A priority*/
-  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, VLAN_MASK_REG, ~(1<<5));
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, VLAN_MASK_REG, ~(5<<3));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
