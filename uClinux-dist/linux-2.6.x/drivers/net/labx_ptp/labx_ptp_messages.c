@@ -91,6 +91,15 @@
 #define PTP_PDELAY_RESP_LENGTH      (54)
 #define PTP_PDELAY_RESP_FUP_LENGTH  (54)
 
+/* TLV Types */
+#define ORGANIZATION_EXTENSION_TLV_TYPE 0x0003
+#define PATH_TRACE_TLV_TYPE             0x0008
+
+/* TLV Sizes */
+#define TLV_HEADER_LENGTH                4
+#define PATH_TRACE_TLV_LENGTH(n)         (8*(n))
+#define FOLLOW_UP_INFORMATION_TLV_LENGTH 0x28
+
 /**
  * Common helper methods
  */
@@ -245,7 +254,8 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
    */
   wordOffset = 0;
   init_ptp_header(ptp, port, PTP_TX_ANNOUNCE_BUFFER, &wordOffset, MSG_ANNOUNCE, 
-                  PTP_ANNOUNCE_LENGTH, (uint16_t) (FLAG_TWO_STEP|FLAG_PTP_TIMESCALE));
+                  PTP_ANNOUNCE_LENGTH + TLV_HEADER_LENGTH + PATH_TRACE_TLV_LENGTH(1),
+                  (uint16_t) (FLAG_TWO_STEP|FLAG_PTP_TIMESCALE));
   bufferBase = PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
 
   /* Clear originTimestamp and set currentUtcOffset */
@@ -275,7 +285,23 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
                 (ptp->properties.grandmasterIdentity[6] << 16) | 
                 (ptp->properties.grandmasterIdentity[7] << 8));
   write_packet(bufferBase, &wordOffset, packetWord);
-  packetWord = (ptp->properties.timeSource << 16);
+  packetWord = (ptp->properties.timeSource << 16) | PATH_TRACE_TLV_TYPE;
+  write_packet(bufferBase, &wordOffset, packetWord);
+
+  /* Add the path trace TLV info. TODO: If we are ever forwarding
+     announce packets then this needs to be modified to include
+     incoming path entries. As a master we just need to have ours. */
+  packetWord = ((1/*entries*/*8) << 16) |
+               (ptp->properties.grandmasterIdentity[0] << 8) |
+               ptp->properties.grandmasterIdentity[1];
+  write_packet(bufferBase, &wordOffset, packetWord);
+  packetWord = (ptp->properties.grandmasterIdentity[2] << 24) |
+               (ptp->properties.grandmasterIdentity[3] << 16) |
+               (ptp->properties.grandmasterIdentity[4] << 8) |
+               ptp->properties.grandmasterIdentity[5];
+  write_packet(bufferBase, &wordOffset, packetWord);
+  packetWord = (ptp->properties.grandmasterIdentity[6] << 24) |
+               (ptp->properties.grandmasterIdentity[7] << 16);
   write_packet(bufferBase, &wordOffset, packetWord);
 }
 
@@ -298,15 +324,29 @@ static void init_sync_template(struct ptp_device *ptp, uint32_t port) {
 static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
   uint32_t bufferBase;
   uint32_t wordOffset;
+  uint32_t packetWord;
 
   /* Initialize the header, and clear the preciseOriginTimestamp for good measure */
   wordOffset = 0;
-  init_ptp_header(ptp, port, PTP_TX_FUP_BUFFER, &wordOffset, MSG_FUP, PTP_FUP_LENGTH,
+  init_ptp_header(ptp, port, PTP_TX_FUP_BUFFER, &wordOffset, MSG_FUP,
+                  PTP_FUP_LENGTH + TLV_HEADER_LENGTH + FOLLOW_UP_INFORMATION_TLV_LENGTH,
                   (uint16_t) FLAG_TWO_STEP);
   bufferBase = PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_FUP_BUFFER);
   write_packet(bufferBase, &wordOffset, 0x00000000);
   write_packet(bufferBase, &wordOffset, 0x00000000);
   write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  /* Add the follow-up information TLV */
+  packetWord = (ORGANIZATION_EXTENSION_TLV_TYPE << 16) |
+               FOLLOW_UP_INFORMATION_TLV_LENGTH;
+  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(bufferBase, &wordOffset, 0x0080C200);
+  write_packet(bufferBase, &wordOffset, 0x00010000); /* TODO: rate ratio is 1.0 unless we can forward */
+  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0x0000FFFF */
+  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: lastGmPhaseChange*/
+  write_packet(bufferBase, &wordOffset, 0x00000000);
+  write_packet(bufferBase, &wordOffset, 0x00000000);
+  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: scaledLastGmFreqChange */
 }
 
 /* Initializes the DELAY_REQ message transmit template */
