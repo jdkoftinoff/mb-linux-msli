@@ -63,6 +63,7 @@ module_param(init, int, S_IRUGO);
 #define AMC6821_REG_CONF4 0x04
 #define AMC6821_REG_STAT1 0x02
 #define AMC6821_REG_STAT2 0x03
+#define AMC6821_REG_LRTEMP_LOW 0x06
 #define AMC6821_REG_TDATA_LOW 0x08
 #define AMC6821_REG_TDATA_HI 0x09
 #define AMC6821_REG_LTEMP_HI 0x0A
@@ -127,7 +128,7 @@ module_param(init, int, S_IRUGO);
 
 enum {IDX_TEMP1_INPUT = 0, IDX_TEMP1_MIN, IDX_TEMP1_MAX,
 	IDX_TEMP1_CRIT, IDX_TEMP2_INPUT, IDX_TEMP2_MIN,
-	IDX_TEMP2_MAX, IDX_TEMP2_CRIT,
+	IDX_TEMP2_MAX, IDX_TEMP2_CRIT, IDX_TEMP12_LOW,
 	TEMP_IDX_LEN, };
 
 static const u8 temp_reg[] = {AMC6821_REG_LTEMP_HI,
@@ -137,7 +138,8 @@ static const u8 temp_reg[] = {AMC6821_REG_LTEMP_HI,
 			AMC6821_REG_RTEMP_HI,
 			AMC6821_REG_RTEMP_LIMIT_MIN,
 			AMC6821_REG_RTEMP_LIMIT_MAX,
-			AMC6821_REG_RTEMP_CRIT, };
+			AMC6821_REG_RTEMP_CRIT,
+			AMC6821_REG_LRTEMP_LOW, };
 
 enum {IDX_FAN1_INPUT = 0, IDX_FAN1_MIN, IDX_FAN1_MAX,
 	FAN1_IDX_LEN, };
@@ -221,8 +223,13 @@ static ssize_t get_temp(
 {
 	struct amc6821_data *data = amc6821_update_device(dev);
 	int ix = to_sensor_dev_attr(devattr)->index;
+	u8 lstemp = data->temp[IDX_TEMP12_LOW];
+	if (ix == IDX_TEMP1_INPUT) {
+		lstemp >>= 5;
+	}
+	lstemp &= 7;
 
-	return sprintf(buf, "%d\n", data->temp[ix] * 1000);
+	return sprintf(buf, "%d\n", data->temp[ix] * 1000 + lstemp * 125);
 }
 
 
