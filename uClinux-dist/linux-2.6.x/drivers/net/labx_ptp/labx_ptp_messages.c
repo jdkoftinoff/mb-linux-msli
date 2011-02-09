@@ -334,15 +334,15 @@ static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
   bufferBase = PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_FUP_BUFFER);
   write_packet(bufferBase, &wordOffset, 0x00000000);
   write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+  packetWord = ORGANIZATION_EXTENSION_TLV_TYPE;
+  write_packet(bufferBase, &wordOffset, packetWord);
 
   /* Add the follow-up information TLV */
-  packetWord = (ORGANIZATION_EXTENSION_TLV_TYPE << 16) |
-               FOLLOW_UP_INFORMATION_TLV_LENGTH;
+  packetWord = (FOLLOW_UP_INFORMATION_TLV_LENGTH << 16) | 0x0080;
   write_packet(bufferBase, &wordOffset, packetWord);
-  write_packet(bufferBase, &wordOffset, 0x0080C200);
-  write_packet(bufferBase, &wordOffset, 0x00010000); /* TODO: rate ratio is 1.0 unless we can forward */
-  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0x0000FFFF */
+  write_packet(bufferBase, &wordOffset, 0xC2000001);
+  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: rate ratio is 1.0 unless we can forward */
+  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0xFFFF0000 */
   write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: lastGmPhaseChange*/
   write_packet(bufferBase, &wordOffset, 0x00000000);
   write_packet(bufferBase, &wordOffset, 0x00000000);
