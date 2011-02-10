@@ -1,7 +1,7 @@
 PWD:=$(shell pwd)
 include $(PWD)/../../vendors/MeyerSound/dmitri-io/extras/common.mk
 US_CONFIG=$(UCLIBC_LIB_DIR)/microsupport/microsupport-config
-AVTP_CONFIG=$(UCLIBC_LIB_DIR)/avtp/avtp-config
+AVTP_CONFIG=$(UCLIBC_LIB_DIR)/avdecc/avdecc-config
 
 include $(PROJECT_TOP_DIR)/project.mk
 
