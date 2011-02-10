@@ -97,7 +97,7 @@ dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
 dir_4_$(CONFIG_LIB_MICROSUPPORT) += microsupport
-dir_5_$(CONFIG_LIB_AVTP)   += avtp
+dir_5_$(CONFIG_LIB_AVDECC)   += avdecc
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
@@ -207,7 +207,7 @@ clean: clean_links
 #
 LINKLIBS=\
     $(ROOTDIR)/lib/microsupport/tmp-target/build/lib/libmicrosupport.a \
-    $(ROOTDIR)/lib/avtp/tmp-target/build/lib/libavtp.a \
+    $(ROOTDIR)/lib/avdecc/tmp-target/build/lib/libavdecc.a \
 	$(ROOTDIR)/lib/libxml2/build/.libs/libxml2.so \
 	$(ROOTDIR)/lib/libjpeg/*.a \
 	$(ROOTDIR)/lib/libpng/*.a \
