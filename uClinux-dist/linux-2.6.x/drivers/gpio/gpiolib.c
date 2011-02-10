@@ -352,11 +352,19 @@ static const struct attribute_group gpiochip_attr_group = {
 static ssize_t export_store(struct class *class, const char *buf, size_t len)
 {
 	long	gpio;
-	int	status;
+	int	status = 0;
+	char *endp;
+	char ioname[64];
+	size_t ionamelen;
 
-	status = strict_strtol(buf, 0, &gpio);
-	if (status < 0)
+	gpio = simple_strtol(buf, &endp, 0);
+	if (endp <= buf) {
+		status = -EINVAL;
 		goto done;
+	}
+
+	buf = endp + strspn(endp, " ,\t"); /* Find second (name) argument, if it exists */
+	ionamelen = min(strcspn(buf, " ,\t\n")+1, sizeof(ioname));
 
 	/* No extra locking here; FLAG_SYSFS just signifies that the
 	 * request and export were done by on behalf of userspace, so
@@ -367,7 +375,12 @@ static ssize_t export_store(struct class *class, const char *buf, size_t len)
 	if (status < 0)
 		goto done;
 
-	status = gpio_export(gpio, true);
+	if (ionamelen > 1) {
+		strlcpy(ioname, buf, ionamelen);
+		status = gpio_export_named(gpio, true, ioname);
+	} else {
+		status = gpio_export(gpio, true);
+	}
 	if (status < 0)
 		gpio_free(gpio);
 	else
@@ -423,26 +436,19 @@ static struct class gpio_class = {
 
 
 /**
- * gpio_export - export a GPIO through sysfs
+ * gpio_export_named - export a GPIO through sysfs, assigning a local name
  * @gpio: gpio to make available, already requested
  * @direction_may_change: true if userspace may change gpio direction
- * Context: arch_initcall or later
+ * @ioname: Assigned name to be used, overriding default name
  *
- * When drivers want to make a GPIO accessible to userspace after they
- * have requested it -- perhaps while debugging, or as part of their
- * public interface -- they may use this routine.  If the GPIO can
- * change direction (some can't) and the caller allows it, userspace
- * will see "direction" sysfs attribute which may be used to change
- * the gpio's direction.  A "value" attribute will always be provided.
- *
- * Returns zero on success, else an error.
+ * Same as gpio_export, except that the sysfs entry will have the name
+ * specified by ioname
  */
-int gpio_export(unsigned gpio, bool direction_may_change)
+int gpio_export_named(unsigned gpio, bool direction_may_change, char *ioname)
 {
 	unsigned long		flags;
 	struct gpio_desc	*desc;
 	int			status = -EINVAL;
-	char			*ioname = NULL;
 
 	/* can't export until sysfs is available ... */
 	if (!gpio_class.p) {
@@ -466,7 +472,7 @@ int gpio_export(unsigned gpio, bool direction_may_change)
 	}
 	spin_unlock_irqrestore(&gpio_lock, flags);
 
-	if (desc->chip->names && desc->chip->names[gpio - desc->chip->base])
+	if (ioname == NULL && desc->chip->names && desc->chip->names[gpio - desc->chip->base])
 		ioname = desc->chip->names[gpio - desc->chip->base];
 
 	if (status == 0) {
@@ -497,6 +503,29 @@ done:
 
 	return status;
 }
+
+EXPORT_SYMBOL_GPL(gpio_export_named);
+
+/**
+ * gpio_export - export a GPIO through sysfs
+ * @gpio: gpio to make available, already requested
+ * @direction_may_change: true if userspace may change gpio direction
+ * Context: arch_initcall or later
+ *
+ * When drivers want to make a GPIO accessible to userspace after they
+ * have requested it -- perhaps while debugging, or as part of their
+ * public interface -- they may use this routine.  If the GPIO can
+ * change direction (some can't) and the caller allows it, userspace
+ * will see "direction" sysfs attribute which may be used to change
+ * the gpio's direction.  A "value" attribute will always be provided.
+ *
+ * Returns zero on success, else an error.
+ */
+int gpio_export(unsigned gpio, bool direction_may_change)
+{
+	return gpio_export_named(gpio, direction_may_change, NULL);
+}
+
 EXPORT_SYMBOL_GPL(gpio_export);
 
 static int match_export(struct device *dev, void *data)
@@ -1029,7 +1058,7 @@ EXPORT_SYMBOL_GPL(gpio_direction_output);
  */
 
 /**
- * __gpio_get_value() - return a gpio's value
+ * __gpio_get_value() - return a gpio's valuegarcia_fpga
  * @gpio: gpio whose value will be returned
  * Context: any
  *
