@@ -56,8 +56,11 @@
 
 #define HOST_MSG_LEN_REG        (0x003)
 
-#define SPI_IRQ_FLAGS_REG    (0x004)
+#define SPI_IRQ_FLAGS_SET_REG    (0x004)
 
+#define SPI_IRQ_FLAGS_CLEAR_REG  (0x005)
+
+#define SPI_IRQ_MASK_REG         (0x006)
 #define MAX_MAILBOX_MSG_BYTES (1024)
 
 #define MESSAGE_NOT_READY (0)
