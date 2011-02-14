@@ -29,7 +29,7 @@
 /* Register definitions as per "OPB Serial Peripheral Interface (SPI) (v1.00e)
  * Product Specification", DS464
  */
-#define XSPI_CR_OFFSET		0x62	/* 16-bit Control Register */
+#define XSPI_CR_OFFSET		0x60	/* Control Register (LS 10 bits of 32 bit word) */
 
 #define XSPI_CR_ENABLE		0x02
 #define XSPI_CR_MASTER_MODE	0x04
@@ -41,7 +41,7 @@
 #define XSPI_CR_MANUAL_SSELECT	0x80
 #define XSPI_CR_TRANS_INHIBIT	0x100
 
-#define XSPI_SR_OFFSET		0x67	/* 8-bit Status Register */
+#define XSPI_SR_OFFSET		0x64	/* 8-bit Status Register (LS byte of 32 bit word) */
 
 #define XSPI_SR_RX_EMPTY_MASK	0x01	/* Receive FIFO is empty */
 #define XSPI_SR_RX_FULL_MASK	0x02	/* Receive FIFO is full */
@@ -49,8 +49,8 @@
 #define XSPI_SR_TX_FULL_MASK	0x08	/* Transmit FIFO is full */
 #define XSPI_SR_MODE_FAULT_MASK	0x10	/* Mode fault error */
 
-#define XSPI_TXD_OFFSET		0x6b	/* 8-bit Data Transmit Register */
-#define XSPI_RXD_OFFSET		0x6f	/* 8-bit Data Receive Register */
+#define XSPI_TXD_OFFSET		0x68	/* 8-bit Data Transmit Register (LS byte of 32 bit word) */
+#define XSPI_RXD_OFFSET		0x6c	/* 8-bit Data Receive Register (LS byte of 32 bit word) */
 
 #define XSPI_SSR_OFFSET		0x70	/* 32-bit Slave Select Register */
 
@@ -90,21 +90,38 @@ struct xilinx_spi {
 	int remaining_bytes;	/* the number of bytes left to transfer */
 };
 
-static void xspi_init_hw(void __iomem *regs_base)
+inline void spi_regw(struct xilinx_spi *xspi, u32 offs, u32 val)
+{
+	out_be32(xspi->regs + offs, val);
+	#ifdef DEBUG
+	printk(KERN_DEBUG "%x=>%p  ", val, xspi->regs + offs);
+	#endif
+}
+
+inline u32 spi_regr(struct xilinx_spi *xspi, u32 offs)
+{
+	u32 val = in_be32(xspi->regs + offs);
+	#ifdef DEBUG
+	printk("%x<=%p  ", val, xspi->regs + offs);
+	#endif
+	return val;
+}
+
+static void xspi_init_hw(struct xilinx_spi *xspi)
 {
 	/* Reset the SPI device */
-	out_be32(regs_base + XIPIF_V123B_RESETR_OFFSET,
+	spi_regw(xspi, XIPIF_V123B_RESETR_OFFSET,
 		 XIPIF_V123B_RESET_MASK);
 	/* Disable all the interrupts just in case */
-	out_be32(regs_base + XIPIF_V123B_IIER_OFFSET, 0);
+	spi_regw(xspi, XIPIF_V123B_IIER_OFFSET, 0);
 	/* Enable the global IPIF interrupt */
-	out_be32(regs_base + XIPIF_V123B_DGIER_OFFSET,
+	spi_regw(xspi, XIPIF_V123B_DGIER_OFFSET,
 		 XIPIF_V123B_GINTR_ENABLE);
 	/* Deselect the slave on the SPI bus */
-	out_be32(regs_base + XSPI_SSR_OFFSET, 0xffff);
+	spi_regw(xspi, XSPI_SSR_OFFSET, ~0);
 	/* Disable the transmitter, enable Manual Slave Select Assertion,
 	 * put SPI controller into master mode, and enable it */
-	out_be16(regs_base + XSPI_CR_OFFSET,
+	spi_regw(xspi, XSPI_CR_OFFSET,
 		 XSPI_CR_TRANS_INHIBIT | XSPI_CR_MANUAL_SSELECT
 		 | XSPI_CR_MASTER_MODE | XSPI_CR_ENABLE);
 }
@@ -115,16 +132,16 @@ static void xilinx_spi_chipselect(struct spi_device *spi, int is_on)
 
 	if (is_on == BITBANG_CS_INACTIVE) {
 		/* Deselect the slave on the SPI bus */
-		out_be32(xspi->regs + XSPI_SSR_OFFSET, 0xffff);
+		spi_regw(xspi, XSPI_SSR_OFFSET, ~0);
 	} else if (is_on == BITBANG_CS_ACTIVE) {
 		/* Set the SPI clock phase and polarity */
-		u16 cr = in_be16(xspi->regs + XSPI_CR_OFFSET)
+		u32 cr = spi_regr(xspi, XSPI_CR_OFFSET)
 			 & ~XSPI_CR_MODE_MASK;
 		if (spi->mode & SPI_CPHA)
 			cr |= XSPI_CR_CPHA;
 		if (spi->mode & SPI_CPOL)
 			cr |= XSPI_CR_CPOL;
-		out_be16(xspi->regs + XSPI_CR_OFFSET, cr);
+		spi_regw(xspi, XSPI_CR_OFFSET, cr);
 
 		/* We do not check spi->max_speed_hz here as the SPI clock
 		 * frequency is not software programmable (the IP block design
@@ -132,8 +149,8 @@ static void xilinx_spi_chipselect(struct spi_device *spi, int is_on)
 		 */
 
 		/* Activate the chip select */
-		out_be32(xspi->regs + XSPI_SSR_OFFSET,
-			 ~(0x0001 << spi->chip_select));
+		spi_regw(xspi, XSPI_SSR_OFFSET,
+			 ~(1 << spi->chip_select));
 	}
 }
 
@@ -191,18 +208,21 @@ static int xilinx_spi_setup(struct spi_device *spi)
 
 static void xilinx_spi_fill_tx_fifo(struct xilinx_spi *xspi)
 {
-	u8 sr;
+	u32 sr;
 
+	/* Clear the Tx FIFO */
+	spi_regw(xspi, XSPI_CR_OFFSET, spi_regr(xspi, XSPI_CR_OFFSET)
+			| XSPI_CR_TXFIFO_RESET);
 	/* Fill the Tx FIFO with as many bytes as possible */
-	sr = in_8(xspi->regs + XSPI_SR_OFFSET);
+	sr = spi_regr(xspi, XSPI_SR_OFFSET);
 	while ((sr & XSPI_SR_TX_FULL_MASK) == 0 && xspi->remaining_bytes > 0) {
 		if (xspi->tx_ptr) {
-			out_8(xspi->regs + XSPI_TXD_OFFSET, *xspi->tx_ptr++);
+			spi_regw(xspi, XSPI_TXD_OFFSET, *xspi->tx_ptr++);
 		} else {
-			out_8(xspi->regs + XSPI_TXD_OFFSET, 0);
+			spi_regw(xspi, XSPI_TXD_OFFSET, 0);
 		}
 		xspi->remaining_bytes--;
-		sr = in_8(xspi->regs + XSPI_SR_OFFSET);
+		sr = spi_regr(xspi, XSPI_SR_OFFSET);
 	}
 }
 
@@ -210,7 +230,7 @@ static int xilinx_spi_txrx_bufs(struct spi_device *spi, struct spi_transfer *t)
 {
 	struct xilinx_spi *xspi = spi_master_get_devdata(spi->master);
 	u32 ipif_ier;
-	u16 cr;
+	u32 cr;
 
 	/* We get here with transmitter inhibited */
 
@@ -224,18 +244,18 @@ static int xilinx_spi_txrx_bufs(struct spi_device *spi, struct spi_transfer *t)
 	/* Enable the transmit empty interrupt, which we use to determine
 	 * progress on the transmission.
 	 */
-	ipif_ier = in_be32(xspi->regs + XIPIF_V123B_IIER_OFFSET);
-	out_be32(xspi->regs + XIPIF_V123B_IIER_OFFSET,
+	ipif_ier = spi_regr(xspi, XIPIF_V123B_IIER_OFFSET);
+	spi_regw(xspi, XIPIF_V123B_IIER_OFFSET,
 		 ipif_ier | XSPI_INTR_TX_EMPTY);
 
 	/* Start the transfer by not inhibiting the transmitter any longer */
-	cr = in_be16(xspi->regs + XSPI_CR_OFFSET) & ~XSPI_CR_TRANS_INHIBIT;
-	out_be16(xspi->regs + XSPI_CR_OFFSET, cr);
+	cr = spi_regr(xspi, XSPI_CR_OFFSET) & ~XSPI_CR_TRANS_INHIBIT;
+	spi_regw(xspi, XSPI_CR_OFFSET, cr);
 
 	wait_for_completion(&xspi->done);
 
 	/* Disable the transmit empty interrupt */
-	out_be32(xspi->regs + XIPIF_V123B_IIER_OFFSET, ipif_ier);
+	spi_regw(xspi, XIPIF_V123B_IIER_OFFSET, ipif_ier);
 
 	return t->len - xspi->remaining_bytes;
 }
@@ -252,32 +272,32 @@ static irqreturn_t xilinx_spi_irq(int irq, void *dev_id)
 	u32 ipif_isr;
 
 	/* Get the IPIF interrupts, and clear them immediately */
-	ipif_isr = in_be32(xspi->regs + XIPIF_V123B_IISR_OFFSET);
-	out_be32(xspi->regs + XIPIF_V123B_IISR_OFFSET, ipif_isr);
+	ipif_isr = spi_regr(xspi, XIPIF_V123B_IISR_OFFSET);
+	spi_regw(xspi, XIPIF_V123B_IISR_OFFSET, ipif_isr);
 
 	if (ipif_isr & XSPI_INTR_TX_EMPTY) {	/* Transmission completed */
-		u16 cr;
-		u8 sr;
+		u32 cr;
+		u32 sr;
 
 		/* A transmit has just completed. Process received data and
 		 * check for more data to transmit. Always inhibit the
 		 * transmitter while the Isr refills the transmit register/FIFO,
 		 * or make sure it is stopped if we're done.
 		 */
-		cr = in_be16(xspi->regs + XSPI_CR_OFFSET);
-		out_be16(xspi->regs + XSPI_CR_OFFSET,
+		cr = spi_regr(xspi, XSPI_CR_OFFSET);
+		spi_regw(xspi, XSPI_CR_OFFSET,
 			 cr | XSPI_CR_TRANS_INHIBIT);
 
 		/* Read out all the data from the Rx FIFO */
-		sr = in_8(xspi->regs + XSPI_SR_OFFSET);
+		sr = spi_regr(xspi, XSPI_SR_OFFSET);
 		while ((sr & XSPI_SR_RX_EMPTY_MASK) == 0) {
-			u8 data;
+			u32 data;
 
-			data = in_8(xspi->regs + XSPI_RXD_OFFSET);
+			data = spi_regr(xspi, XSPI_RXD_OFFSET);
 			if (xspi->rx_ptr) {
-				*xspi->rx_ptr++ = data;
+				*xspi->rx_ptr++ = (u8)(data & 0xFF);
 			}
-			sr = in_8(xspi->regs + XSPI_SR_OFFSET);
+			sr = spi_regr(xspi, XSPI_SR_OFFSET);
 		}
 
 		/* See if there is more data to send */
@@ -286,7 +306,7 @@ static irqreturn_t xilinx_spi_irq(int irq, void *dev_id)
 			/* Start the transfer by not inhibiting the
 			 * transmitter any longer
 			 */
-			out_be16(xspi->regs + XSPI_CR_OFFSET, cr);
+			spi_regw(xspi, XSPI_CR_OFFSET, cr);
 		} else {
 			/* No more data to send.
 			 * Indicate the transfer is completed.
@@ -370,7 +390,7 @@ static int __init xilinx_spi_of_probe(struct of_device *ofdev,
 	master->num_chipselect = *prop;
 
 	/* SPI controller initializations */
-	xspi_init_hw(xspi->regs);
+	xspi_init_hw(xspi);
 
 	/* Register for SPI Interrupt */
 	rc = request_irq(xspi->irq, xilinx_spi_irq, 0, XILINX_SPI_NAME, xspi);
