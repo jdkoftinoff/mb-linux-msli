@@ -233,11 +233,20 @@ static ssize_t garcia_w_reset(struct class *c, const char * buf, size_t count)
 	return count;
 }
 
+static ssize_t garcia_r_inputs(struct class *c, char *buf)
+{
+	int count = 0;
+	u32 val = garcia_fpga_read_gpio() & ~GARCIA_GPIO_RW_MASK;
+	count = sprintf(buf, "%x\n", val);
+	return count;
+}
+
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
 	__ATTR(ssidir, S_IRUGO | S_IWUGO, garcia_r_ssidir, garcia_w_ssidir),
 	__ATTR(mute, S_IRUGO | S_IWUGO, garcia_r_mute, garcia_w_mute),
 	__ATTR(reset, S_IRUGO | S_IWUGO, garcia_r_reset, garcia_w_reset),
+	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
 	__ATTR_NULL,
 };
 
