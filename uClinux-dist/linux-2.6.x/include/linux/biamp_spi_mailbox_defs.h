@@ -47,6 +47,10 @@ typedef struct {
 
 #define IOC_READ_MBOX              _IOWR(MBOX_IOC_CHAR, 0x03, MessageData)
 #define IOC_WRITE_RESP             _IOW(MBOX_IOC_CHAR,  0x04, MessageData)
-#define IOC_SET_IRQ_FLAGS          _IOW(MBOX_IOC_CHAR,  0x05, uint32_t)
+#define IOC_SET_SPI_IRQ_FLAGS      _IOW(MBOX_IOC_CHAR,  0x05, uint32_t)
+#define IOC_CLEAR_SPI_IRQ_FLAGS    _IOW(MBOX_IOC_CHAR,  0x06, uint32_t)
+#define IOC_READ_SPI_IRQ_FLAGS     _IOR(MBOX_IOC_CHAR, 0x07,  uint32_t)
+#define IOC_SET_SPI_IRQ_MASK       _IOW(MBOX_IOC_CHAR,  0x08, uint32_t)
+#define IOC_READ_SPI_IRQ_MASK      _IOR(MBOX_IOC_CHAR, 0x09,  uint32_t)
 
 #endif
