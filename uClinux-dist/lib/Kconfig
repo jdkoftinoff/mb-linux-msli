@@ -17,12 +17,12 @@ config LIB_MICROSUPPORT
       Include the microsupport C library for allocator, network, osc/midi protocols
       see http://github.com/jdkoftinoff/microsupport for more information
 
-config LIB_AVTP
-    bool "avtp ieee1722.1 library"
+config LIB_AVDECC
+    bool "avdecc ieee1722.1 library"
     default n
     help
-      Include the draft ieee1722.1 C library
-      see http://github.com/jdkoftinoff/avtp for more information
+      Include the draft ieee1722.1 C reference library
+      see http://www.avdecc.org/ for more information
 
 config LIB_BITVECTOR
 	bool "Build bit vector"
