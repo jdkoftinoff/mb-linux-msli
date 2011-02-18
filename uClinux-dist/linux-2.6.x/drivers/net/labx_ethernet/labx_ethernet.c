@@ -41,6 +41,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
+#include <linux/netdevice.h>
 #include "labx_ethernet.h"
 
 /************************** Constant Definitions *****************************/
@@ -441,6 +442,199 @@ static void InitHw(XLlTemac *InstancePtr)
 	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac InitHw: done\n");
 }
 
+#define MAC_MATCH_NONE 0
+#define MAC_MATCH_ALL 1
+
+static const u8 MAC_BROADCAST[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const u8 MAC_ZERO[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+#define NUM_SRL16E_CONFIG_WORDS 8
+#define NUM_SRL16E_INSTANCES    12
+
+/* Busy loops until the match unit configuration logic is idle.  The hardware goes 
+ * idle very quickly and deterministically after a configuration word is written, 
+ * so this should not consume very much time at all.
+ */
+static void wait_match_config(XLlTemac *InstancePtr) {
+  uint32_t statusWord;
+  uint32_t timeout = 10000;
+  do {
+    statusWord = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG);
+    if (timeout-- == 0)
+    {
+      printk("depacketizer: wait_match_config timeout!\n");
+      break;
+    }
+  } while(statusWord & MAC_ADDRESS_LOAD_ACTIVE);
+}
+
+/* Selects a set of match units for subsequent configuration loads */
+typedef enum { SELECT_NONE, SELECT_SINGLE, SELECT_ALL } SelectionMode;
+static void select_matchers(XLlTemac *InstancePtr,
+                            SelectionMode selectionMode,
+                            uint32_t matchUnit) {
+
+	switch(selectionMode) {
+		case SELECT_NONE:
+			/* De-select all the match units */
+			//printk("MAC SELECT %08X\n", 0);
+			labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 0);
+			break;
+
+		case SELECT_SINGLE:
+			/* Select a single unit */
+			//printk("MAC SELECT %08X\n", 1 << matchUnit);
+			labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 1 << matchUnit);
+			break;
+
+		default:
+			/* Select all match units at once */
+			//printk("MAC SELECT %08X\n", 0xFFFFFFFF);
+			labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 0xFFFFFFFF);
+			break;
+	}
+}
+
+/* Sets the loading mode for any selected match units.  This revolves around
+ * automatically disabling the match units' outputs while they're being
+ * configured so they don't fire false matches, and re-enabling them as their
+ * last configuration word is loaded.
+ */
+typedef enum { LOADING_MORE_WORDS, LOADING_LAST_WORD } LoadingMode;
+static void set_matcher_loading_mode(XLlTemac *InstancePtr,
+                                     LoadingMode loadingMode) {
+	uint32_t controlWord = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG);
+
+	if(loadingMode == LOADING_MORE_WORDS) {
+		/* Clear the "last word" bit to suppress false matches while the units are
+		 * only partially cleared out
+		 */
+		controlWord &= ~MAC_ADDRESS_LOAD_LAST;
+	} else {
+		/* Loading the final word, flag the match unit(s) to enable after the
+		 * next configuration word is loaded.
+		 */
+		controlWord |= MAC_ADDRESS_LOAD_LAST;
+	}
+	//printk("CONTROL WORD %08X\n", controlWord);
+	labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG, controlWord);
+}
+
+/* Clears any selected match units, preventing them from matching any packets */
+static void clear_selected_matchers(XLlTemac *InstancePtr) {
+	uint32_t wordIndex;
+
+	/* Ensure the unit(s) disable as the first word is load to prevent erronous
+	 * matches as the units become partially-cleared
+	 */
+	set_matcher_loading_mode(InstancePtr, LOADING_MORE_WORDS);
+
+	for(wordIndex = 0; wordIndex < NUM_SRL16E_CONFIG_WORDS; wordIndex++) {
+		/* Assert the "last word" flag on the last word required to complete the clearing
+		 * of the selected unit(s).
+		 */
+		if(wordIndex == (NUM_SRL16E_CONFIG_WORDS - 1)) {
+			set_matcher_loading_mode(InstancePtr, LOADING_LAST_WORD);
+		}
+		//printk("MAC LOAD %08X\n", 0);
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_LOAD_REG, 0);
+	}
+}
+
+/* Loads truth tables into a match unit using the newest, "unified" match
+ * architecture.  This is SRL16E based (not cascaded) due to the efficient
+ * packing of these primitives into Xilinx LUT6-based architectures.
+ */
+static void load_unified_matcher(XLlTemac *InstancePtr,
+                                 const uint8_t matchMac[6]) {
+	int32_t wordIndex;
+	int32_t lutIndex;
+	uint32_t configWord = 0x00000000;
+	uint32_t matchChunk;
+  
+	/* In this architecture, all of the SRL16Es are loaded in parallel, with each
+	 * configuration word supplying two bits to each.  Only one of the two bits can
+	 * ever be set, so there is just an explicit check for one.
+	 */
+	for(wordIndex = (NUM_SRL16E_CONFIG_WORDS - 1); wordIndex >= 0; wordIndex--) {
+		for(lutIndex = (NUM_SRL16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+			matchChunk = ((matchMac[5-(lutIndex/2)] >> ((lutIndex&1) << 2)) & 0x0F);
+			configWord <<= 2;
+			if(matchChunk == (wordIndex << 1)) configWord |= 0x01;
+			if(matchChunk == ((wordIndex << 1) + 1)) configWord |= 0x02;
+		}
+		/* 12 nybbles are packed to the MSB */
+		configWord <<= 8;
+
+		/* Two bits of truth table have been determined for each SRL16E, load the
+		 * word and wait for the configuration to occur.  Be sure to flag the last
+		 * word to automatically re-enable the match unit(s) as the last word completes.
+		 */
+		if(wordIndex == 0) set_matcher_loading_mode(InstancePtr, LOADING_LAST_WORD);
+		//printk("MAC LOAD %08X\n", configWord);
+		labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MAC_LOAD_REG, configWord);
+		wait_match_config(InstancePtr);
+	}
+}
+
+static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[6], int mode)
+{
+	/* Only allow programming up to the supported number of MAC match units */
+	if (unitNum >= InstancePtr->MacMatchUnits) return;
+
+	//printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
+	//	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+	/* Ascertain that the configuration logic is ready, then select the matcher */
+	wait_match_config(InstancePtr);
+	select_matchers(InstancePtr, SELECT_SINGLE, unitNum);
+
+	if (mode == MAC_MATCH_NONE) {
+		clear_selected_matchers(InstancePtr);
+	} else {
+		/* Set the loading mode to disable as we load the first word */
+		set_matcher_loading_mode(InstancePtr, LOADING_MORE_WORDS);
+      
+		/* Calculate matching truth tables for the LUTs and load them */
+		load_unified_matcher(InstancePtr, mac);
+	}
+
+	/* De-select the match unit */
+	select_matchers(InstancePtr, SELECT_NONE, 0);
+}
+
+static void UpdateMacFilters(XLlTemac *InstancePtr)
+{
+	int i;
+
+	/* Always allow our unicast mac */
+	ConfigureMacFilter(InstancePtr, 0, InstancePtr->Config.MacAddress, MAC_MATCH_ALL);
+
+	/* Allow broadcasts if configured to do so */
+	if (InstancePtr->Options & XTE_BROADCAST_OPTION) {
+		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_ALL);
+	} else {
+		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_NONE);
+	}
+
+	/* Allow multicasts if configured to do so */
+	if (InstancePtr->Options & XTE_MULTICAST_OPTION) {
+		struct dev_mc_list *dmi = InstancePtr->dev->mc_list;
+                int i;
+
+                for (i=2; (i<(InstancePtr->dev->mc_count+2)) && (i<InstancePtr->MacMatchUnits); i++) {
+			ConfigureMacFilter(InstancePtr, i, dmi->da_addr, MAC_MATCH_ALL);
+                        dmi = dmi->next;
+                }
+
+	} else {
+		/* Disable all multicast filters */
+		for (i=2; i<InstancePtr->MacMatchUnits; i++) {
+			ConfigureMacFilter(InstancePtr, i, MAC_ZERO, MAC_MATCH_NONE);
+		}
+	}
+}
+
 /*****************************************************************************/
 /**
  * labx_eth_SetMacAddress sets the MAC address for the TEMAC channel, specified
@@ -464,9 +658,8 @@ static void InitHw(XLlTemac *InstancePtr)
  ******************************************************************************/
 int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
-  /*	u32 MacAddr; */
 	u8 *Aptr = (u8 *) AddressPtr;
-    int byteIndex;
+	int byteIndex;
 
 	XASSERT_NONVOID(InstancePtr != NULL);
 	XASSERT_NONVOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -489,58 +682,16 @@ int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 		    "labx_eth_SetMacAddress: setting mac address to: 0x%08x%8x%8x%8x%8x%8x\n",
 		    Aptr[0], Aptr[1], Aptr[2], Aptr[3], Aptr[4], Aptr[5]);
 	/*
-	 * Set the MAC bits [31:0] in UAW0
-	 * Having Aptr be unsigned type prevents the following operations from sign extending
+	 * Save our MAC in the device structre and update the MAC filters.
 	 */
-    /* NOTE - No filtering support in the Lab X MAC yet!
-     * Temporarily cache this in the device structure since there is no hardware
-     * to remember it.
-     */
-    for(byteIndex = 0; byteIndex < 6; byteIndex++) {
-      InstancePtr->Config.MacAddress[byteIndex] = Aptr[byteIndex];
-    }
-#if 0
-	MacAddr = Aptr[0];
-	MacAddr |= Aptr[1] << 8;
-	MacAddr |= Aptr[2] << 16;
-	MacAddr |= Aptr[3] << 24;
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_0_AW0, MacAddr);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_0_EN0, 0xFFFFFFFF);
-	/* Set MAC bits [47:32] in UAW1 */
-	MacAddr = Aptr[4];
-	MacAddr |= Aptr[5] << 8;
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_0_AW1, MacAddr);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_0_EN1, 0x0000FFFF);
+	for(byteIndex = 0; byteIndex < 6; byteIndex++) {
+		InstancePtr->Config.MacAddress[byteIndex] = Aptr[byteIndex];
+	}
 
-	/* Set a filter to allow broadcasts through */
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_1_AW0, 0xFFFFFFFF);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_1_EN0, 0xFFFFFFFF);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_1_AW1, 0x0000FFFF);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_1_EN1, 0x0000FFFF);
-
-/* LAB X Note (CP) : NOTE: FILTER_2 is specific to avahi multi cast messages for my mix, we really need to implement multicast filtering */
-	/* Multicast Filter */
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_2_AW0, 0x005E0001);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_2_EN0, 0xFFFFFFFF);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_2_AW1, 0x0000FB00);
-	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-				  FILTER_2_EN1, 0x0000FFFF);
-#endif
+	UpdateMacFilters(InstancePtr);
 
 	return (XST_SUCCESS);
 }
-
 
 /*****************************************************************************/
 /**
@@ -563,9 +714,8 @@ int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 void labx_eth_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
-  /*	u32 MacAddr;*/
 	u8 *Aptr = (u8 *) AddressPtr;
-    int byteIndex;
+	int byteIndex;
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -579,28 +729,10 @@ void labx_eth_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 		     XTE_RDY_HARD_ACS_RDY_MASK);
 #endif
 
-    /* NOTE - No filtering support in the Lab X MAC yet!
-     * Temporarily cache this in the device structure since there is no hardware
-     * to remember it.
-     */
-    for(byteIndex = 0; byteIndex < 6; byteIndex++) {
-      Aptr[byteIndex] = InstancePtr->Config.MacAddress[byteIndex];
-    }
-#if 0
-	/* Read MAC bits [31:0] in UAW0 */
-	MacAddr = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					   FILTER_0_AW0);
-	Aptr[0] = (u8) MacAddr;
-	Aptr[1] = (u8) (MacAddr >> 8);
-	Aptr[2] = (u8) (MacAddr >> 16);
-	Aptr[3] = (u8) (MacAddr >> 24);
-
-	/* Read MAC bits [47:32] in UAW1 */
-	MacAddr = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					   FILTER_0_AW1);
-	Aptr[4] = (u8) MacAddr;
-	Aptr[5] = (u8) (MacAddr >> 8);
-#endif
+	/* Copy the saved MAC address to the caller */
+	for(byteIndex = 0; byteIndex < 6; byteIndex++) {
+		Aptr[byteIndex] = InstancePtr->Config.MacAddress[byteIndex];
+	}
 }
 
 /*****************************************************************************/
@@ -628,7 +760,6 @@ void labx_eth_GetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
  ******************************************************************************/
 int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 {
-  /*	u32 Reg;*/		/* Generic register contents */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
 	u32 RegTc;		/* Reflects original contents of TC  */
 	u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
@@ -727,74 +858,8 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 					  XTE_RCW1_OFFSET, RegNewRcw1);
 	}
 
-	/* Rest of options twiddle bits of other registers. Handle them one at
-	 * a time
-	 */
-
-    /* NOTE - No flow control or filtering at the moment in Lab X MAC! */
-#if 0
-	/* Turn on flow control */
-	if (Options & XTE_FLOW_CONTROL_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "setOptions: endabling flow control\n");
-		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_FCC_OFFSET);
-		Reg |= XTE_FCC_FCRX_MASK;
-		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_FCC_OFFSET, Reg);
-	}
-	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "setOptions: rcw1 is now (fcc): 0x%0x\n",
-		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					     XTE_RCW1_OFFSET));
-
-	/* Turn on promiscuous frame filtering (all frames are received ) */
-	if (Options & XTE_PROMISC_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "setOptions: endabling promiscuous mode\n");
-		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_AFM_OFFSET);
-		Reg |= XTE_AFM_PM_MASK;
-		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_AFM_OFFSET, Reg);
-	}
-	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "setOptions: rcw1 is now (afm): 0x%0x\n",
-		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					     XTE_RCW1_OFFSET));
-#endif
-
-	/* Allow broadcast address filtering */
-	if (Options & XTE_BROADCAST_OPTION) {
-#if 1
-		printk("labx_eth_llink: BROADCAST filter option not yet implemented\n");
-#else
-		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg &= ~XTE_RAF_BCSTREJ_MASK;
-		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
-#endif
-	}
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (raf): 0x%0x\n",
-		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					     XTE_RCW1_OFFSET));
-
-	/* Allow multicast address filtering */
-	if (Options & XTE_MULTICAST_OPTION) {
-#if 1
-		printk("labx_eth_llink: MULTICAST filter option not yet implemented\n");
-#else
-		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg &= ~XTE_RAF_MCSTREJ_MASK;
-		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
-#endif
-	}
-	xdbg_printf(XDBG_DEBUG_GENERAL,
-		    "setOptions: rcw1 is now (raf2): 0x%0x\n",
 		    labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
 					     XTE_RCW1_OFFSET));
 
@@ -805,6 +870,11 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 
 	/* Set options word to its new value */
 	InstancePtr->Options |= Options;
+
+	/* Enable broadcast or multicast address filtering */
+	if (Options & (XTE_BROADCAST_OPTION | XTE_MULTICAST_OPTION)) {
+		UpdateMacFilters(InstancePtr);
+	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "setOptions: rcw1 is now (end): 0x%0x\n",
@@ -839,7 +909,6 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
  ******************************************************************************/
 int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 {
-  /*	u32 Reg;*/		/* Generic */
 	u32 RegRcw1;		/* Reflects original contents of RCW1 */
 	u32 RegTc;		/* Reflects original contents of TC  */
 	u32 RegNewRcw1;		/* Reflects new contents of RCW1 */
@@ -946,61 +1015,6 @@ int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 					  XTE_RCW1_OFFSET, RegNewRcw1);
 	}
 
-	/* Rest of options twiddle bits of other registers. Handle them one at
-	 * a time
-	 */
-
-    /* NOTE - No flow control or filtering in Lab X MAC! */
-#if 0
-	/* Turn off flow control */
-	if (Options & XTE_FLOW_CONTROL_OPTION) {
-		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_FCC_OFFSET);
-		Reg &= ~XTE_FCC_FCRX_MASK;
-		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_FCC_OFFSET, Reg);
-	}
-
-	/* Turn off promiscuous frame filtering */
-	if (Options & XTE_PROMISC_OPTION) {
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: disabling promiscuous mode\n");
-		Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
-					       XTE_AFM_OFFSET);
-		Reg &= ~XTE_AFM_PM_MASK;
-		xdbg_printf(XDBG_DEBUG_GENERAL,
-			    "Xtemac_ClearOptions: setting AFM: 0x%0x\n", Reg);
-		labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
-					  XTE_AFM_OFFSET, Reg);
-	}
-#endif
-
-	/* Disable broadcast address filtering */
-	if (Options & XTE_BROADCAST_OPTION) {
-#if 1
-		printk("labx_eth_llink: BROADCAST option not yet implemented\n");
-#else
-		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg |= XTE_RAF_BCSTREJ_MASK;
-		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
-#endif
-	}
-
-	/* Disable multicast address filtering */
-	if (Options & XTE_MULTICAST_OPTION) {
-#if 1
-		printk("labx_eth_llink: MULTICAST option not yet implemented\n");
-#else
-		Reg = labx_eth_ReadReg(InstancePtr->Config.BaseAddress,
-				       XTE_RAF_OFFSET);
-		Reg |= XTE_RAF_MCSTREJ_MASK;
-		labx_eth_WriteReg(InstancePtr->Config.BaseAddress,
-				  XTE_RAF_OFFSET, Reg);
-#endif
-	}
-
 	/* The remaining options not handled here are managed elsewhere in the
 	 * driver. No register modifications are needed at this time. Reflecting the
 	 * option in InstancePtr->Options is good enough for now.
@@ -1008,6 +1022,11 @@ int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 
 	/* Set options word to its new value */
 	InstancePtr->Options &= ~Options;
+
+	/* Disable broadcast or multicast address filtering */
+	if (Options & (XTE_BROADCAST_OPTION | XTE_MULTICAST_OPTION)) {
+		UpdateMacFilters(InstancePtr);
+	}
 
 	return (XST_SUCCESS);
 }
