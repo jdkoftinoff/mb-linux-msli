@@ -603,17 +603,6 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_SYT_INTERVAL_REG),
             clockDomainSettings->sytInterval);
 
-  /* Set an initial half-period for depacketizer >= 1.6 */
-  if ((depacketizer->capabilities.versionMajor > 1) ||
-      (depacketizer->capabilities.versionMinor >= 6)) {
-
-    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG),
-              clockDomainSettings->halfPeriod);
-    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG),
-              clockDomainSettings->remainder);
-    controlValue |= MC_CONTROL_LOAD_HALF_PERIOD;
-  }
-
   /* Configure the generated clock edge for the clock domain that corresponds to a
    * sample. This should match the gateware that is providing the "current" time
    * reference to the depacketizer.
@@ -634,6 +623,18 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   }
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, RECOVERY_INDEX_REG),
             recoveryIndex);
+
+  /* Set an initial half-period for depacketizer >= 1.6 */
+  if ((depacketizer->capabilities.versionMajor > 1) ||
+      (depacketizer->capabilities.versionMinor >= 6)) {
+
+    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_RTC_INCREMENT_REG),
+              0x40000000); /* TODO - Where should we get the nominal increment from? */
+    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG),
+              clockDomainSettings->remainder);
+    XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG),
+              clockDomainSettings->halfPeriod);
+  }
 
   /* Finally, configure the VCO control logic for the domain.  If the domain is enabled,
    * it is configured as a proportional controller to servo an external VCO via a DAC

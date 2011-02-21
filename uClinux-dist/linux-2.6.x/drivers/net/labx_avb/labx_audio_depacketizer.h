@@ -112,19 +112,19 @@
 #  define RECOVERY_DISABLED  0x00000000
 #  define RECOVERY_ENABLED(device)  (device->streamIndexMask + 1)
 
-#define MC_SYT_INTERVAL_REG 0x001
-#define MC_CONTROL_REG      0x002
+#define MC_SYT_INTERVAL_REG  0x001
+#define MC_CONTROL_REG       0x002
 #  define MC_CONTROL_SAMPLE_EDGE_RISING  0x00000001
 #  define MC_CONTROL_SAMPLE_EDGE_FALLING 0x00000000
-#  define MC_CONTROL_LOAD_HALF_PERIOD    0x00000002
 
-#define MC_HALF_PERIOD_REG  0x003
-#define MC_REMAINDER_REG    0x004
+#define MC_HALF_PERIOD_REG   0x003
+#define MC_REMAINDER_REG     0x004
+#define MC_RTC_INCREMENT_REG 0x005
 
-#define DAC_OFFSET_REG      0x008
+#define DAC_OFFSET_REG       0x008
 #  define DAC_OFFSET_ZERO  0x00000000
 
-#define DAC_P_COEFF_REG     0x009
+#define DAC_P_COEFF_REG      0x009
 /* DAC control coefficients are signed, so the upper bit is the sign bit */
 #  define DAC_COEFF_MANTISSA_BITS  5
 #  define DAC_COEFF_FRACTION_BITS  12
@@ -134,7 +134,7 @@
 #  define DAC_COEFF_MAX            0x0001FFFF
 #  define DAC_COEFF(floatCoeff)  ((uint32_t)(floatCoeff * (float)(0x01 << DAC_COEFF_FRACTION_BITS)))
 
-#define LOCK_COUNT_REG      0x00A
+#define LOCK_COUNT_REG       0x00A
 #  define VCO_UNLOCK_COUNT_MASK   0x0FFF
 #  define VCO_UNLOCK_COUNT_SHIFT  0
 #  define VCO_LOCK_COUNT_MASK     0x0FFF
