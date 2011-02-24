@@ -20,7 +20,6 @@
 #include <linux/vmalloc.h>
 #include "xbasic_types.h"
 #include "xio.h"
-#include <linux/garcia_fpga.h>
 #include "garcia_fpga_priv.h"
 
 #ifdef CONFIG_OF
@@ -43,10 +42,20 @@
 #define DRIVER_NAME "garcia_fpga"
 #define DRIVER_VERSION "0.4"
 
+#define SLOT_RESET_PULSEWIDTH 3 /* mS */
+#define N_IRQRESP_VECTORS 8
+
 struct garcia_fpga_gpio_struct {
 	uint32_t fifo_irq;
 	uint32_t gpioaddr;
 	uint32_t shadow_value;
+	uint32_t last_gpio_irq;
+	struct {
+		uint32_t falling_mask;
+		uint32_t rising_mask;
+		gpio_irq_callback callback;
+		void *data;
+	} irqresponse[N_IRQRESP_VECTORS];
 	struct class *gpioclass;
 };
 
@@ -56,7 +65,7 @@ int garcia_led_set(int led, int value)
 {
 	uint32_t val;
 	int rc = -1;
-	val = (fpga_gpio.shadow_value & ~GARCIA_GPIO_RW_MASK);
+	val = fpga_gpio.shadow_value;
 	if (led == POWER_LED) {
 		switch(value) {
 		case BICOLOR_OFF:
@@ -93,12 +102,74 @@ int garcia_led_set(int led, int value)
 		fpga_gpio.shadow_value = val;
 	}
 	if (rc >= 0) {
-		val |= (garcia_fpga_read_gpio() & GARCIA_GPIO_RW_MASK);
+		val &= GARCIA_GPIO_INPUTS_MASK;
+		val |= (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK);
 		garcia_fpga_write_gpio(val);
 	}
 	return rc;
 }
 EXPORT_SYMBOL(garcia_led_set);
+
+int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
+		gpio_irq_callback callback, void *data)
+{
+	int i;
+	for (i = 0; i < N_IRQRESP_VECTORS; i++) {
+		if (callback == fpga_gpio.irqresponse[i].callback &&
+				data == fpga_gpio.irqresponse[i].data) { /* Found existing callback */
+			/* Release the callback if masks are 0 */
+			if (falling_edge_mask == 0 && rising_edge_mask == 0) {
+				fpga_gpio.irqresponse[i].callback = NULL;
+				fpga_gpio.irqresponse[i].data = NULL;
+			}
+			fpga_gpio.irqresponse[i].falling_mask = falling_edge_mask;
+			fpga_gpio.irqresponse[i].rising_mask = rising_edge_mask;
+			break;
+		} else if (fpga_gpio.irqresponse[i].callback == NULL) { /* Assign new callback */
+			fpga_gpio.irqresponse[i].callback = callback;
+			fpga_gpio.irqresponse[i].data = data;
+			fpga_gpio.irqresponse[i].falling_mask = falling_edge_mask;
+			fpga_gpio.irqresponse[i].rising_mask = rising_edge_mask;
+			break;
+		}
+	}
+	return ((i == N_IRQRESP_VECTORS) ? -ENFILE : 0);
+}
+EXPORT_SYMBOL(set_gpio_irq_callback);
+
+static irqreturn_t garcia_fpga_irq(int irq, void *data)
+{
+	struct garcia_fpga_gpio_struct *gp = data;
+	int i;
+	u32 value = garcia_fpga_ReadReg(gp->gpioaddr, GARCIA_FPGA_GPIO_REGISTER)
+				& GARCIA_FPGA_GPIO_MASK;
+	u32 changed = gp->last_gpio_irq ^ value;
+	if ((value & GARCIA_FPGA_GPIO_ALL_SPISEL) != 0) {
+		garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_REGISTER,
+				(value & ~GARCIA_GPIO_INPUTS_MASK) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+		garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_REGISTER,
+				(value & ~(GARCIA_GPIO_INPUTS_MASK | GARCIA_FPGA_GPIO_ALL_SPISEL)) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+	}
+	if (changed != 0) {
+		for (i = 0; i < N_IRQRESP_VECTORS; i++) {
+			if ((gp->irqresponse[i].falling_mask & changed) != 0 &&
+					(gp->irqresponse[i].falling_mask & value) == 0) {
+				(*(gp->irqresponse[i].callback))(value, gp->irqresponse[i].data);
+			}
+			if ((gp->irqresponse[i].rising_mask & changed) != 0 &&
+					(gp->irqresponse[i].rising_mask & value) != 0) {
+				(*(gp->irqresponse[i].callback))(value, gp->irqresponse[i].data);
+			}
+		}
+		gp->last_gpio_irq = value;
+	}
+	/* Reset the interrupt */
+	garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR,
+			garcia_fpga_ReadReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR));
+	return IRQ_HANDLED;
+}
 
 static ssize_t garcia_r_spimaster(struct class *c,char *buf)
 {
@@ -111,14 +182,13 @@ static ssize_t garcia_r_spimaster(struct class *c,char *buf)
 	} else {
 		val = 1;
 	}
-	count = sprintf(buf, "%d\n", val);
+	count = snprintf(buf, PAGE_SIZE, "%d\n", val);
 	return count;
 }
 
 static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t count)
 {
 	unsigned long int val;
-	unsigned long int cur;
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_GENERAL_DIR;
@@ -126,9 +196,18 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 			fpga_gpio.shadow_value |= GARCIA_FPGA_GENERAL_DIR;
 		}
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_SLOT_BUF_NOE;
-		cur = (garcia_fpga_read_gpio() & GARCIA_GPIO_RW_MASK) |
-				(fpga_gpio.shadow_value & ~GARCIA_GPIO_RW_MASK);
-		garcia_fpga_write_gpio(cur);
+		if (val != 0) { /* If we're a SPI master, reset all slots & mute all */
+			garcia_fpga_write_gpio(((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK)) &
+					~(GARCIA_FPGA_GPIO_ALL_MUTE | GARCIA_FPGA_GPIO_ALL_RESET));
+			msleep(SLOT_RESET_PULSEWIDTH);
+			garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK) |
+					GARCIA_FPGA_GPIO_ALL_RESET);
+		} else {
+			garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+		}
 	}
 	return count;
 }
@@ -142,27 +221,23 @@ static ssize_t garcia_r_ssidir(struct class *c, char *buf)
 			((fpga_gpio.shadow_value & GARCIA_FPGA_SLOT_SSI_DDIR_3) ? BIT(2) : 0) |
 			((fpga_gpio.shadow_value & GARCIA_FPGA_SLOT_SSI_DDIR_4) ? BIT(3) : 0) |
 			((fpga_gpio.shadow_value & GARCIA_FPGA_SLOT_SSI_DDIR_5) ? BIT(4) : 0);
-	count = sprintf(buf, "%u\n", val);
+	count = snprintf(buf, PAGE_SIZE, "%u\n", val);
 	return count;
 }
 
 static ssize_t garcia_w_ssidir(struct class *c, const char * buf, size_t count)
 {
 	unsigned long int val;
-	unsigned long int cur;
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
-		fpga_gpio.shadow_value &= ~(GARCIA_FPGA_SLOT_SSI_DDIR_1 |
-				GARCIA_FPGA_SLOT_SSI_DDIR_2 | GARCIA_FPGA_SLOT_SSI_DDIR_3 |
-				GARCIA_FPGA_SLOT_SSI_DDIR_4 | GARCIA_FPGA_SLOT_SSI_DDIR_5);
+		fpga_gpio.shadow_value &= ~GARCIA_FPGA_GPIO_ALL_SSI_DDIR;
 		if (val & BIT(0)) fpga_gpio.shadow_value |= GARCIA_FPGA_SLOT_SSI_DDIR_1;
 		if (val & BIT(1)) fpga_gpio.shadow_value |= GARCIA_FPGA_SLOT_SSI_DDIR_2;
 		if (val & BIT(2)) fpga_gpio.shadow_value |= GARCIA_FPGA_SLOT_SSI_DDIR_3;
 		if (val & BIT(3)) fpga_gpio.shadow_value |= GARCIA_FPGA_SLOT_SSI_DDIR_4;
 		if (val & BIT(4)) fpga_gpio.shadow_value |= GARCIA_FPGA_SLOT_SSI_DDIR_5;
-		cur = (garcia_fpga_read_gpio() & GARCIA_GPIO_RW_MASK) |
-				(fpga_gpio.shadow_value & ~GARCIA_GPIO_RW_MASK);
-		garcia_fpga_write_gpio(cur);
+		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
 	}
 	return count;
 }
@@ -171,12 +246,12 @@ static ssize_t garcia_r_mute(struct class *c, char *buf)
 {
 	int count = 0;
 	u32 val = garcia_fpga_read_gpio();
-	val = ((val & GARCIA_FPGA_GPIO_SLOT_MUTE_1) ? BIT(0) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_2) ? BIT(1) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_3) ? BIT(2) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_4) ? BIT(3) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_5) ? BIT(4) : 0);
-	count = sprintf(buf, "%u\n", val);
+	val = ((val & GARCIA_FPGA_GPIO_SLOT_MUTE_1) ? 0 : BIT(0)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_2) ? 0 : BIT(1)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_3) ? 0 : BIT(2)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_4) ? 0 : BIT(3)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_MUTE_5) ? 0 : BIT(4));
+	count = snprintf(buf, PAGE_SIZE, "%u\n", val);
 	return count;
 }
 
@@ -186,16 +261,15 @@ static ssize_t garcia_w_mute(struct class *c, const char * buf, size_t count)
 	unsigned long int cur;
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
-		cur = (fpga_gpio.shadow_value & ~GARCIA_GPIO_RW_MASK);
-		cur |= (garcia_fpga_read_gpio() & (GARCIA_FPGA_GPIO_SLOT_RESET_1 |
-				GARCIA_FPGA_GPIO_SLOT_RESET_2 | GARCIA_FPGA_GPIO_SLOT_RESET_3 |
-				GARCIA_FPGA_GPIO_SLOT_RESET_4 | GARCIA_FPGA_GPIO_SLOT_RESET_5));
-		if (val & BIT(0)) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_1;
-		if (val & BIT(1)) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_2;
-		if (val & BIT(2)) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_3;
-		if (val & BIT(3)) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_4;
-		if (val & BIT(4)) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_5;
-		garcia_fpga_write_gpio(cur);
+		cur = 0;
+		if ((val & BIT(0)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_1;
+		if ((val & BIT(1)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_2;
+		if ((val & BIT(2)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_3;
+		if ((val & BIT(3)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_4;
+		if ((val & BIT(4)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_MUTE_5;
+		garcia_fpga_write_gpio((((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK)) &
+				~GARCIA_FPGA_GPIO_ALL_MUTE) | cur);
 	}
 	return count;
 }
@@ -204,12 +278,12 @@ static ssize_t garcia_r_reset(struct class *c, char *buf)
 {
 	int count = 0;
 	u32 val = garcia_fpga_read_gpio();
-	val = ((val & GARCIA_FPGA_GPIO_SLOT_RESET_1) ? BIT(0) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_RESET_2) ? BIT(1) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_RESET_3) ? BIT(2) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_RESET_4) ? BIT(3) : 0) |
-			((val & GARCIA_FPGA_GPIO_SLOT_RESET_5) ? BIT(4) : 0);
-	count = sprintf(buf, "%u\n", val);
+	val = ((val & GARCIA_FPGA_GPIO_SLOT_RESET_1) ? 0 : BIT(0)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_RESET_2) ? 0 : BIT(1)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_RESET_3) ? 0 : BIT(2)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_RESET_4) ? 0 : BIT(3)) |
+			((val & GARCIA_FPGA_GPIO_SLOT_RESET_5) ? 0 : BIT(4));
+	count = snprintf(buf, PAGE_SIZE, "%u\n", val);
 	return count;
 }
 
@@ -219,25 +293,50 @@ static ssize_t garcia_w_reset(struct class *c, const char * buf, size_t count)
 	unsigned long int cur;
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
-		cur = (fpga_gpio.shadow_value & ~GARCIA_GPIO_RW_MASK);
-		cur |= (garcia_fpga_read_gpio() & (GARCIA_FPGA_GPIO_SLOT_MUTE_1 |
-				GARCIA_FPGA_GPIO_SLOT_MUTE_2 | GARCIA_FPGA_GPIO_SLOT_MUTE_3 |
-				GARCIA_FPGA_GPIO_SLOT_MUTE_4 | GARCIA_FPGA_GPIO_SLOT_MUTE_5));
-		if (val & BIT(0)) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_1;
-		if (val & BIT(1)) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_2;
-		if (val & BIT(2)) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_3;
-		if (val & BIT(3)) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_4;
-		if (val & BIT(4)) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_5;
-		garcia_fpga_write_gpio(cur);
+		cur =0;
+		if ((val & BIT(0)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_1;
+		if ((val & BIT(1)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_2;
+		if ((val & BIT(2)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_3;
+		if ((val & BIT(3)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_4;
+		if ((val & BIT(4)) == 0) cur |= GARCIA_FPGA_GPIO_SLOT_RESET_5;
+		garcia_fpga_write_gpio((((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK)) &
+				~GARCIA_FPGA_GPIO_ALL_RESET) | cur);
+		cur |= GARCIA_FPGA_GPIO_ALL_RESET;
+		msleep(SLOT_RESET_PULSEWIDTH);
+		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK) |
+				GARCIA_FPGA_GPIO_ALL_RESET);
 	}
+	return count;
+}
+
+static ssize_t garcia_r_spisel(struct class *c, char *buf)
+{
+	int count = 0;
+	u32 val = garcia_fpga_read_gpio();
+	val = ((val & GARCIA_FPGA_GPIO_SLOT_SPISEL_1) ? BIT(0) : 0) |
+			((val & GARCIA_FPGA_GPIO_SLOT_SPISEL_2) ? BIT(1) : 0) |
+			((val & GARCIA_FPGA_GPIO_SLOT_SPISEL_3) ? BIT(2) : 0) |
+			((val & GARCIA_FPGA_GPIO_SLOT_SPISEL_4) ? BIT(3) : 0) |
+			((val & GARCIA_FPGA_GPIO_SLOT_SPISEL_5) ? BIT(4) : 0);
+	count = snprintf(buf, PAGE_SIZE, "%u\n", val);
 	return count;
 }
 
 static ssize_t garcia_r_inputs(struct class *c, char *buf)
 {
 	int count = 0;
-	u32 val = garcia_fpga_read_gpio() & ~GARCIA_GPIO_RW_MASK;
-	count = sprintf(buf, "%x\n", val);
+	u32 val = garcia_fpga_read_gpio() & GARCIA_GPIO_INPUTS_MASK;
+	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
+	return count;
+}
+
+static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
+{
+	int count = 0;
+	u32 val = garcia_fpga_read_gpio();
+	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
 	return count;
 }
 
@@ -246,7 +345,9 @@ static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(ssidir, S_IRUGO | S_IWUGO, garcia_r_ssidir, garcia_w_ssidir),
 	__ATTR(mute, S_IRUGO | S_IWUGO, garcia_r_mute, garcia_w_mute),
 	__ATTR(reset, S_IRUGO | S_IWUGO, garcia_r_reset, garcia_w_reset),
+	__ATTR(spisel, S_IRUGO, garcia_r_spisel, NULL),
 	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
+	__ATTR(gpioraw, S_IRUGO, garcia_r_gpioraw, NULL),
 	__ATTR_NULL,
 };
 
@@ -281,8 +382,17 @@ static int __devinit garcia_fpga_probe(struct device *dev)
 
 	fpga_gpio.gpioaddr = (u32) ioremap_nocache(p_mem->start, p_mem->end - p_mem->start + 1);
 	fpga_gpio.fifo_irq = p_irq->start;
-	fpga_gpio.shadow_value = garcia_fpga_read_gpio() & GARCIA_GPIO_RW_MASK;
-	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
+	/* Register for GPIO Interrupt */
+	rc = request_irq(fpga_gpio.fifo_irq, garcia_fpga_irq, 0, DRIVER_NAME, &fpga_gpio);
+	if (rc != 0) {
+		dev_err(dev, "irq request failure: %d\n", fpga_gpio.fifo_irq);
+	} else {
+		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_GIER, GARCIA_FPGA_GPIO_GIE);
+		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_IPIER, GARCIA_FPGA_GPIO_IPIE);
+	}
+
+	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio();
+	fpga_gpio.shadow_value = (fpga_gpio.last_gpio_irq & ~GARCIA_GPIO_INPUTS_MASK) | GARCIA_FPGA_SLOT_BUF_NOE;
 	rc = class_register(&garcia_fpga_class);
 
 	return rc;
@@ -305,13 +415,24 @@ static int __devinit garcia_fpga_of_probe(struct of_device *ofdev, const struct 
 	/* Get IRQ for the device */
 	rc = of_irq_to_resource(ofdev->node, 0, &r_irq);
 	if(rc == NO_IRQ || rc == ENODEV) {
-		r_irq.start = 0;
+		dev_warn(&ofdev->dev, "no IRQ found\n");
+		r_irq.start = 19;
 		rc = 0;
 	}
 
 	fpga_gpio.gpioaddr = (u32) ioremap_nocache(r_mem.start, r_mem.end - r_mem.start + 1);
 	fpga_gpio.fifo_irq = r_irq.start;
-	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & GARCIA_GPIO_RW_MASK) | GARCIA_FPGA_SLOT_BUF_NOE;
+	/* Register for GPIO Interrupt */
+	rc = request_irq(fpga_gpio.fifo_irq, garcia_fpga_irq, 0, DRIVER_NAME, &fpga_gpio);
+	if (rc != 0) {
+		dev_err(&ofdev->dev, "irq request failure: %d\n", fpga_gpio.fifo_irq);
+	} else {
+		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_GIER, GARCIA_FPGA_GPIO_GIE);
+		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_IPIER, GARCIA_FPGA_GPIO_IPIE);
+	}
+	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_MASK;
+	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+			GARCIA_FPGA_SLOT_BUF_NOE;
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
 	rc |= class_register(&garcia_fpga_class);
 
