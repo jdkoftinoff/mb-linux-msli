@@ -47,6 +47,7 @@
 #define DRIVER_NAME "labx_dma"
 
 #define MAX_DMA_DEVICES 16
+static uint32_t instanceCount;
 static struct labx_dma_pdev* devices[MAX_DMA_DEVICES] = {};
 
 static int labx_dma_open(struct inode *inode, struct file *file)
@@ -105,7 +106,7 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
 			dma_pdev->name) == NULL) {
@@ -198,7 +199,7 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
 			dma_pdev->name) == NULL) {
@@ -288,6 +289,7 @@ static int __init labx_dma_driver_init(void)
   returnValue = of_register_platform_driver(&labx_dma_of_driver);
 #endif
  
+  instanceCount = 0;
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&labx_dma_platform_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
