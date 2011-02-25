@@ -1,27 +1,41 @@
 #!/bin/sh
 
-# For the moment, simply define static IP addresses
-IP_ADDRESS_A=192.168.1.1
-IP_ADDRESS_B=192.168.2.1
-IP_ADDRESS_C=192.168.3.1
-IP_ADDRESS_D=192.168.4.1
-
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
 
-echo "Setting up interface eth0: "
-ifconfig eth0 $IP_ADDRESS_A
+# For the moment, simply define static IP addresses
+IP_ADDRESS_PREFIX=192.168
 
-echo "Setting up interface eth1: "
-ifconfig eth1 $IP_ADDRESS_B
-
-echo "Setting up interface eth2: "
-ifconfig eth2 $IP_ADDRESS_C
-
-echo "Setting up interface eth3: "
-ifconfig eth3 $IP_ADDRESS_D
+IS_STAGEBOX=`cat /sys/class/garcia_fpga/jumper1`
+if [ $IS_STAGEBOX -eq 0 ] ; then
+  ifconfig eth3 $IP_ADDRESS_PREFIX.4.1
+  if [ $? -ne 0 ] ; then
+    IS_STAGEBOX=1 ;
+  else
+    ifconfig eth2 $IP_ADDRESS_PREFIX.3.1
+    if [ $? -ne 0 ] ; then
+      IS_STAGEBOX=1 ;
+    else
+      ifconfig eth1 $IP_ADDRESS_PREFIX.2.1
+      ifconfig eth0 $IP_ADDRESS_PREFIX.1.1
+    fi
+  fi
+else
+  echo "Jumper 1 installed - forcing stage box configuration"
+fi
+if [ $IS_STAGEBOX -ne 0 ] ; then
+  if [ `cat /sys/class/garcia_fpga/selector` -eq 4 ] ; then
+    ifconfig eth1 $IP_ADDRESS_PREFIX.4.2
+    ifconfig eth0 $IP_ADDRESS_PREFIX.3.2
+  else
+    ifconfig eth1 $IP_ADDRESS_PREFIX.2.2
+    ifconfig eth0 $IP_ADDRESS_PREFIX.1.2
+  fi
+  ifconfig eth2 down 2>/dev/null
+  ifconfig eth3 down 2>/dev/null
+fi
 
 mkdir /var/tmp/dhcpc
 mkdir /var/lib
