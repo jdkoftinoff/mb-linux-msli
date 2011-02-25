@@ -14,7 +14,7 @@
 #ifndef __LINUX_SPI_XILINX_SPI_H
 #define __LINUX_SPI_XILINX_SPI_H
 #include <linux/spi/spi.h>
-#define SPI_SELECT_PULSEWIDTH       3       /* mS slave select pulse width */
+//#define SPI_SELECT_PULSEWIDTH       3       /* mS slave select pulse width */
 
 /* Strobe slave select: Generate an active pulse on the device's slave select
  * line for SPI_SELECT_PULSEWIDTH mS, or if SPI_SELECT_PULSEWIDTH is undefined,
