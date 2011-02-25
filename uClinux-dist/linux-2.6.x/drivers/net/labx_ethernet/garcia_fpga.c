@@ -144,7 +144,7 @@ static irqreturn_t garcia_fpga_irq(int irq, void *data)
 	u32 value = garcia_fpga_ReadReg(gp->gpioaddr, GARCIA_FPGA_GPIO_REGISTER)
 				& GARCIA_FPGA_GPIO_MASK;
 	u32 changed = gp->last_gpio_irq ^ value;
-	if ((value & GARCIA_FPGA_GPIO_ALL_SPISEL) != 0) {
+	if ((value & changed & GARCIA_FPGA_GPIO_ALL_SPISEL) != 0) {
 		garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_REGISTER,
 				(value & ~GARCIA_GPIO_INPUTS_MASK) |
 				(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
