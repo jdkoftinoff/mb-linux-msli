@@ -226,7 +226,6 @@ static void labx_eth_mac_adjust_link(struct net_device *dev);
 /* for exclusion of all program flows (processes, ISRs and BHs) */
 static spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
 static spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
-static spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
 /* Helper function to determine if a given XLlTemac error warrants a reset. */
 extern inline int status_requires_reset(int s)
@@ -392,19 +391,6 @@ inline void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
   spin_lock_irqsave(&XTE_spinlock, flags);
   labx_eth_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
   spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-
-static inline int _labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry)
-{
-  int status;
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  status = labx_eth_MulticastClear(InstancePtr, Entry);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  return status;
 }
 
 static inline int _labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
@@ -810,6 +796,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 
   if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
     {
+      if (dev->mc_count > 6) printk("Switching to promisc mode (too many multicast addrs: %d > 6)\n", dev->mc_count);
       dev->flags |= IFF_PROMISC;
       Options |= XTE_PROMISC_OPTION;
     }
@@ -822,11 +809,6 @@ static void xenet_set_multicast_list(struct net_device *dev)
   _labx_eth_Stop(&lp->Emac);
   (int) _labx_eth_SetOptions(&lp->Emac, Options);
   (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
-
-  if (dev->mc_count > 0 && dev->mc_count <= 6)
-    {
-      // TODO: Program multicast filters
-    }
 
   if (dev->flags & IFF_UP)
     {
@@ -1693,6 +1675,8 @@ static int xtenet_setup(struct device *dev,
                         struct resource *r_irq,
                         struct labx_eth_platform_data *pdata) {
   u32 virt_baddr;		/* virtual base address of TEMAC */
+  u32 versionReg;
+  int major, minor;
   int i;
 
   labx_eth_Config Temac_Config;
@@ -1724,6 +1708,7 @@ static int xtenet_setup(struct device *dev,
    */
   lp = netdev_priv(ndev);
   lp->ndev = ndev;
+  lp->Emac.dev = ndev;
   lp->fifo_irq = pdata->fifo_irq;
   strncpy(lp->phy_name,pdata->phy_name,64);
 
@@ -1756,6 +1741,11 @@ static int xtenet_setup(struct device *dev,
     rc = -ENODEV;
     goto error;
   }
+  versionReg = labx_eth_ReadReg(lp->Emac.Config.BaseAddress, REVISION_REG);
+  minor = (versionReg & REVISION_MINOR_MASK) >> REVISION_MINOR_SHIFT;
+  major = (versionReg & REVISION_MAJOR_MASK) >> REVISION_MAJOR_SHIFT;
+  lp->Emac.MacMatchUnits = (versionReg & REVISION_MATCH_MASK) >> REVISION_MATCH_SHIFT;
+
   /* Set the MAC address */
   for (i = 0; i < 6; i++) {
     if (macaddr[i] != 0)
@@ -1847,11 +1837,8 @@ static int xtenet_setup(struct device *dev,
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
-  printk("%s: Lab X Tri-mode MAC at 0x%08X, IRQ %d using PHY at MDIO 0x%02X\n",
-	 ndev->name,
-	 r_mem->start,
-	 ndev->irq,
-	 lp->gmii_addr);
+  printk("%s: Lab X Tri-mode MAC Version %d.%d at 0x%08X, IRQ %d using PHY at MDIO 0x%02X, %d MAC Filters\n",
+         ndev->name, major, minor, r_mem->start, (int)ndev->irq, lp->gmii_addr, lp->Emac.MacMatchUnits);
 
   if (pdata->phy_mask != 0) {
     return labx_eth_mdio_bus_init(dev, pdata, &lp->Emac);

@@ -62,6 +62,7 @@ static void disable_mailbox(struct spi_mailbox *mailbox) {
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, CONTROL_REG));
   controlRegister &= ~MAILBOX_ENABLE;
   XIo_Out32(REGISTER_ADDRESS(mailbox, CONTROL_REG), controlRegister);
+  DBG("Mailbox disabled\n");
 }
 
 /* Enables the passed instance */
@@ -449,7 +450,7 @@ static int spi_mailbox_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&mailbox->cdev, &spi_mailbox_fops);
   mailbox->cdev.owner = THIS_MODULE;
-  kobject_set_name(&mailbox->cdev.kobj, "%s%d", pdev->name, pdev->id);
+  kobject_set_name(&mailbox->cdev.kobj, "%s%d", mailbox->name, mailbox->instanceNumber);
   mailbox->instanceNumber = instanceCount++;
   cdev_add(&mailbox->cdev, MKDEV(DRIVER_MAJOR, mailbox->instanceNumber), 1);
 
@@ -461,6 +462,8 @@ static int spi_mailbox_probe(const char *name,
     XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), ALL_IRQS);
     XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG), IRQ_S2H_MSG_RX);
   }
+
+  DBG("Mailbox initialized\n");
 
   /* Return success */
   return(0);
