@@ -208,7 +208,8 @@ static void xilinx_spi_chipselect(struct spi_device *spi, int is_on)
 		 * frequency is not software programmable (the IP block design
 		 * parameter)
 		 */
-
+		/* Kill any pending SPI interrupts */
+		spi_regw(xspi, XIPIF_V123B_IISR_OFFSET, spi_regr(xspi, XIPIF_V123B_IISR_OFFSET));
 		if ((spi->mode & SPI_SLAVE) == 0) {
 			/* If master, and chip select is used, activate the chip select */
 			if (strobedelay == NULL) {
