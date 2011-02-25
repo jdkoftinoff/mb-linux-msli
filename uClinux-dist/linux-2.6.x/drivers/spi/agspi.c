@@ -187,9 +187,10 @@ static ssize_t agspi_read(struct file *filp, char __user *buf,
 		if (wait_for_completion_interruptible(&agspi->read_complete)) {
 				return -ERESTARTSYS; /* signal: tell the fs layer to handle it */
 		}
+		len = agspi_do_xfer(agspi, NULL, agspi->buffer, count);
+	} else {
+		len = (agspi->m.status == 0) ? agspi->m.actual_length : agspi->m.status;
 	}
-
-	len = agspi_do_xfer(agspi, NULL, agspi->buffer, count);
 	if (len == -EREMOTEIO) { /* It's OK if received bytes < buffer length */
 		len = (agspi->m.status == -EREMOTEIO) ? agspi->m.actual_length : agspi->m.status;
 	}
@@ -215,7 +216,11 @@ static ssize_t agspi_write(struct file *filp, const char __user *buf,
 	if (copy_from_user(slave_tx_buf, buf, count) != 0) {
 		return -EFAULT;
 	}
-	len = agspi_do_xfer(agspi, slave_tx_buf, NULL, count);
+	if ((agspi->spi->mode & SPI_SLAVE) != 0) {
+		len = agspi_do_xfer(agspi, slave_tx_buf, NULL, count);
+	} else {
+		len = agspi_do_xfer(agspi, slave_tx_buf, agspi->buffer, count);
+	}
 	return len;
 }
 
