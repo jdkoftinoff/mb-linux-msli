@@ -326,10 +326,32 @@ static ssize_t garcia_r_spisel(struct class *c, char *buf)
 
 static ssize_t garcia_r_inputs(struct class *c, char *buf)
 {
-	int count = 0;
-	u32 val = garcia_fpga_read_gpio() & GARCIA_GPIO_INPUTS_MASK;
-	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
-	return count;
+	return (snprintf(buf, PAGE_SIZE, "%x\n",
+			garcia_fpga_read_gpio() & GARCIA_GPIO_INPUTS_MASK));
+}
+
+static ssize_t garcia_r_selector(struct class *c, char *buf)
+{
+	return (snprintf(buf, PAGE_SIZE, "%d\n",
+			garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_BOX_ID_MASK));
+}
+
+static ssize_t garcia_r_pushbutton(struct class *c, char *buf)
+{
+	return (snprintf(buf, PAGE_SIZE, "%d\n",
+			((garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_PUSHBUTTON) == 0)));
+}
+
+static ssize_t garcia_r_jumper1(struct class *c, char *buf)
+{
+	return (snprintf(buf, PAGE_SIZE, "%d\n",
+			((garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_JUMPER_1) == 0)));
+}
+
+static ssize_t garcia_r_jumper2(struct class *c, char *buf)
+{
+	return (snprintf(buf, PAGE_SIZE, "%d\n",
+			((garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_JUMPER_2) == 0)));
 }
 
 static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
@@ -347,6 +369,10 @@ static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(reset, S_IRUGO | S_IWUGO, garcia_r_reset, garcia_w_reset),
 	__ATTR(spisel, S_IRUGO, garcia_r_spisel, NULL),
 	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
+	__ATTR(selector, S_IRUGO, garcia_r_selector, NULL),
+	__ATTR(pushbutton, S_IRUGO, garcia_r_pushbutton, NULL),
+	__ATTR(jumper1, S_IRUGO, garcia_r_jumper1, NULL),
+	__ATTR(jumper2, S_IRUGO, garcia_r_jumper2, NULL),
 	__ATTR(gpioraw, S_IRUGO, garcia_r_gpioraw, NULL),
 	__ATTR_NULL,
 };
