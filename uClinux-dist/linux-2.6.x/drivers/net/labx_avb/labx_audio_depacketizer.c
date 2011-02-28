@@ -28,6 +28,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/kthread.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -36,7 +37,7 @@
 #endif // CONFIG_OF
 
 
-/* Driver name and the revision of hardware expected (1.1 - 1.2) */
+/* Driver name and the revision of hardware expected (1.1 - 1.6) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
 #define DRIVER_VERSION_MAX  0x16
@@ -695,7 +696,39 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     wake_up_interruptible(&(depacketizer->syncedWriteQueue));
   }
   
+  /* Detect the stream change IRQ */
+  if((maskedFlags & STREAM_IRQ) != 0) {
+    depacketizer->streamStatusGeneration++;
+
+    /* Wake up all threads waiting for a stream status event */
+    wake_up_interruptible(&(depacketizer->streamStatusQueue));
+  }
+
   return(IRQ_HANDLED);
+}
+
+static int netlink_thread(void *data)
+{
+  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)data;
+  uint32_t streamStatusGeneration = depacketizer->streamStatusGeneration;
+
+  __set_current_state(TASK_RUNNING);
+
+  do {
+    set_current_state(TASK_INTERRUPTIBLE);
+      
+    wait_event_interruptible(depacketizer->streamStatusQueue,
+                             (depacketizer->streamStatusGeneration != streamStatusGeneration));
+
+    __set_current_state(TASK_RUNNING);
+
+    streamStatusGeneration = depacketizer->streamStatusGeneration;
+
+    audio_depacketizer_stream_event(depacketizer);
+
+  } while (!kthread_should_stop());
+
+  return 0;
 }
 
 /*
@@ -1067,14 +1100,26 @@ static int audio_depacketizer_probe(const char *name,
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(depacketizer->syncedWriteQueue));
 
+  /* Initialize the waitqueue used for stream status events */
+  init_waitqueue_head(&(depacketizer->streamStatusQueue));
+
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
+  }
+
+  depacketizer->netlinkTask = kthread_run(netlink_thread, (void*)depacketizer, "depacketizer");
+  if (IS_ERR(depacketizer->netlinkTask)) {
+    printk(KERN_ERR "Depacketizer netlink task creation failed.\n");
+    returnValue = -EIO;
+    goto kthread_fail;
   }
 
   /* Return success */
   return(0);
 
+ kthread_fail:
+  cdev_del(&depacketizer->cdev);
  unmap:
   iounmap(depacketizer->virtualAddress);
  release:
@@ -1188,6 +1233,7 @@ static int audio_depacketizer_platform_remove(struct platform_device *pdev)
   depacketizer = platform_get_drvdata(pdev);
   if(!depacketizer) return(-1);
 
+  kthread_stop(depacketizer->netlinkTask);
   cdev_del(&depacketizer->cdev);
   reset_depacketizer(depacketizer);
   iounmap(depacketizer->virtualAddress);
@@ -1228,6 +1274,10 @@ static int __init audio_depacketizer_driver_init(void)
     printk(KERN_INFO DRIVER_NAME ": Failed to allocate character device range\n");
     goto device_unregister;
   }
+
+  /* Initialize the Netlink layer for the driver */
+  register_audio_depacketizer_netlink();
+
   return(0);
 
 device_unregister:
@@ -1239,6 +1289,9 @@ error:
 static void __exit audio_depacketizer_driver_exit(void)
 {
   unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
+  /* Unregister Generic Netlink family */
+  unregister_audio_depacketizer_netlink();
 
   /* Unregister as a platform device driver */
   platform_driver_unregister(&audio_depacketizer_driver);

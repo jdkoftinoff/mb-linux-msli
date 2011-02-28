@@ -65,8 +65,9 @@
 
 #define IRQ_MASK_REG         (0x008)
 #define IRQ_FLAGS_REG        (0x009)
-#  define NO_IRQS   (0x00000000)
-#  define SYNC_IRQ  (0x00000001)
+#  define NO_IRQS    (0x00000000)
+#  define SYNC_IRQ   (0x00000001)
+#  define STREAM_IRQ (0x00000002)
 
 #define SYNC_REG             (0x00A)
 #  define CANCEL_SYNC      (0x00000000)
@@ -231,6 +232,17 @@ struct audio_depacketizer {
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
+
+  /* Netlink events */
+  wait_queue_head_t streamStatusQueue;
+  uint32_t streamStatusGeneration;
+  uint32_t netlinkSequence;
+  struct task_struct *netlinkTask;
 };
+
+/* From labx_audio_depacketizer_netlink.c */
+extern int register_audio_depacketizer_netlink(void);
+extern void unregister_audio_depacketizer_netlink(void);
+extern int audio_depacketizer_stream_event(struct audio_depacketizer *depacketizer);
 
 #endif
