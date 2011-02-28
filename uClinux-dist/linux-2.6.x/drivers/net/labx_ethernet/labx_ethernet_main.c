@@ -497,13 +497,13 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
       lp->phy_dev->advertising &= ~SUPPORTED_1000baseT_Half;
       lp->phy_dev->drv->config_aneg(lp->phy_dev);
 
-      printk("%s: About to call phy_start_aneg()\n",__func__);
+      /*printk("%s: About to call phy_start_aneg()\n",__func__);*/
       ret = phy_start_aneg(lp->phy_dev);
       if (0 != ret) {
 	printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
-      } else {
+      } /* else {
 	printk("%s: phy_start_aneg() Passed\n",__func__);
-      }
+      } */
     }
 
   /*
@@ -515,7 +515,7 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
   (int) _labx_eth_SetOptions(&lp->Emac, Options);
   (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
   Options = labx_eth_GetOptions(&lp->Emac);
-  printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options);
+  /* printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options); */
 
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
 		       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
@@ -761,6 +761,13 @@ static int xenet_close(struct net_device *dev)
 
   struct net_local *lp = netdev_priv(dev);
 
+  /* Stop the connected phy device if there is one */
+  if (lp->phy_dev) {
+    phy_stop(lp->phy_dev);
+    phy_disconnect(lp->phy_dev);
+    lp->phy_dev = NULL;
+  }
+
   /* Stop Send queue */
   netif_stop_queue(dev);
 
@@ -793,22 +800,36 @@ static void xenet_set_multicast_list(struct net_device *dev)
   struct net_local *lp = netdev_priv(dev);
 
   u32 Options = labx_eth_GetOptions(&lp->Emac);
+  u32 maxMulticast = lp->Emac.MacMatchUnits - 2;
 
-  if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
-    {
-      if (dev->mc_count > 6) printk("Switching to promisc mode (too many multicast addrs: %d > 6)\n", dev->mc_count);
-      dev->flags |= IFF_PROMISC;
-      Options |= XTE_PROMISC_OPTION;
+  if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > maxMulticast) {
+    if (dev->mc_count > maxMulticast) {
+      printk("Switching to promisc mode (too many multicast addrs: %d > %d)\n", dev->mc_count, maxMulticast);
     }
-  else
-    {
-      Options &= ~XTE_PROMISC_OPTION;
-    }
+    dev->flags |= IFF_PROMISC;
+    Options |= XTE_PROMISC_OPTION;
+  } else {
+    Options &= ~XTE_PROMISC_OPTION;
+  }
+
+  if (dev->flags&IFF_MULTICAST) {
+    Options |= XTE_MULTICAST_OPTION;
+  } else {
+    Options &= ~XTE_MULTICAST_OPTION;
+  }
+
+  if (dev->flags&IFF_BROADCAST) {
+    Options |= XTE_BROADCAST_OPTION;
+  } else {
+    Options &= ~XTE_BROADCAST_OPTION;
+  }
 
   //printk("Options: %08X, dev->flags %08X\n", Options, dev->flags);
   _labx_eth_Stop(&lp->Emac);
   (int) _labx_eth_SetOptions(&lp->Emac, Options);
   (int) _labx_eth_ClearOptions(&lp->Emac, ~Options);
+
+  labx_eth_UpdateMacFilters(&lp->Emac);
 
   if (dev->flags & IFF_UP)
     {
@@ -1618,9 +1639,19 @@ static void xtenet_remove_ndev(struct net_device *ndev)
 static int xtenet_remove(struct device *dev)
 {
   struct net_device *ndev = dev_get_drvdata(dev);
+  struct net_local *lp = netdev_priv(ndev);
 
-  unregister_netdev(ndev);
-  xtenet_remove_ndev(ndev);
+  /* Remove the MDIO bus registration if there was one */
+  if (lp->Emac.mdio_bus) {
+    mdiobus_unregister(lp->Emac.mdio_bus);
+    lp->Emac.mdio_bus = NULL;
+  }
+
+  /* Remove the network device registration if there was one */
+  if (ndev) {
+    unregister_netdev(ndev);
+    xtenet_remove_ndev(ndev);
+  }
 
   return 0;		/* success */
 }
@@ -1708,7 +1739,6 @@ static int xtenet_setup(struct device *dev,
    */
   lp = netdev_priv(ndev);
   lp->ndev = ndev;
-  lp->Emac.dev = ndev;
   lp->fifo_irq = pdata->fifo_irq;
   strncpy(lp->phy_name,pdata->phy_name,64);
 
@@ -1745,6 +1775,7 @@ static int xtenet_setup(struct device *dev,
   minor = (versionReg & REVISION_MINOR_MASK) >> REVISION_MINOR_SHIFT;
   major = (versionReg & REVISION_MAJOR_MASK) >> REVISION_MAJOR_SHIFT;
   lp->Emac.MacMatchUnits = (versionReg & REVISION_MATCH_MASK) >> REVISION_MATCH_SHIFT;
+  lp->Emac.dev = ndev;
 
   /* Set the MAC address */
   for (i = 0; i < 6; i++) {
@@ -1768,11 +1799,11 @@ static int xtenet_setup(struct device *dev,
     goto error;
   }
 
-  printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
+  /*printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
 	 ndev->name,
 	 pdata->mac_addr[0], pdata->mac_addr[1],
 	 pdata->mac_addr[2], pdata->mac_addr[3],
-	 pdata->mac_addr[4], pdata->mac_addr[5]);
+	 pdata->mac_addr[4], pdata->mac_addr[5]); */
 
   lp->max_frame_size = XTE_MAX_JUMBO_FRAME_SIZE;
   if (ndev->mtu > XTE_JUMBO_MTU)
@@ -1791,7 +1822,7 @@ static int xtenet_setup(struct device *dev,
   ndev->get_stats = xenet_get_stats;
   ndev->set_multicast_list = xenet_set_multicast_list;
   ndev->set_mac_address = xenet_set_mac_address;
-  ndev->flags &= ~IFF_MULTICAST;
+  ndev->flags |= IFF_MULTICAST;
   ndev->do_ioctl = xenet_ioctl;
   ndev->tx_timeout = xenet_tx_timeout;
   ndev->watchdog_timeo = TX_TIMEOUT;
