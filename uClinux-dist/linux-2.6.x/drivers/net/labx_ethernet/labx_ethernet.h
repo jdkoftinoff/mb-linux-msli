@@ -253,8 +253,8 @@
  *
  *****************************************************************************/
 
-#ifndef XTEMAC_H		/* prevent circular inclusions */
-#define XTEMAC_H		/* by using protection macros */
+#ifndef LABX_ETHERNET_H		/* prevent circular inclusions */
+#define LABX_ETHERNET_H		/* by using protection macros */
 
 #ifdef __cplusplus
 extern "C" {
@@ -270,12 +270,6 @@ extern "C" {
 #include <linux/interrupt.h>
 
 /************************** Constant Definitions *****************************/
-
-/*
- * Device information
- */
-#define XTE_DEVICE_NAME     "xlltemac"
-#define XTE_DEVICE_DESC     "Xilinx Tri-speed 10/100/1000 MAC"
 
 /* LocalLink TYPE Enumerations */
 #define XPAR_LL_FIFO    1
@@ -735,9 +729,8 @@ void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		      u16 *PhyDataPtr);
 void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		       u16 PhyData);
-int labx_eth_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-void labx_eth_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
-int labx_eth_MulticastClear(XLlTemac *InstancePtr, int Entry);
+
+void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr);
 
 extern int labx_eth_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pdata, XLlTemac *InstancePtr);
 #ifdef __cplusplus

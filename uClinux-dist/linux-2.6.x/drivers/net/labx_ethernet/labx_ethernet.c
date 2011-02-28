@@ -603,7 +603,7 @@ static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[
 	select_matchers(InstancePtr, SELECT_NONE, 0);
 }
 
-static void UpdateMacFilters(XLlTemac *InstancePtr)
+void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 {
 	int i;
 
@@ -688,7 +688,7 @@ int labx_eth_SetMacAddress(XLlTemac *InstancePtr, void *AddressPtr)
 		InstancePtr->Config.MacAddress[byteIndex] = Aptr[byteIndex];
 	}
 
-	UpdateMacFilters(InstancePtr);
+	labx_eth_UpdateMacFilters(InstancePtr);
 
 	return (XST_SUCCESS);
 }
@@ -873,7 +873,7 @@ int labx_eth_SetOptions(XLlTemac *InstancePtr, u32 Options)
 
 	/* Enable broadcast or multicast address filtering */
 	if (Options & (XTE_BROADCAST_OPTION | XTE_MULTICAST_OPTION)) {
-		UpdateMacFilters(InstancePtr);
+		labx_eth_UpdateMacFilters(InstancePtr);
 	}
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
@@ -1025,7 +1025,7 @@ int labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
 
 	/* Disable broadcast or multicast address filtering */
 	if (Options & (XTE_BROADCAST_OPTION | XTE_MULTICAST_OPTION)) {
-		UpdateMacFilters(InstancePtr);
+		labx_eth_UpdateMacFilters(InstancePtr);
 	}
 
 	return (XST_SUCCESS);
