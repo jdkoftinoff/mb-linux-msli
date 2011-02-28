@@ -315,7 +315,7 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
   return(labx_local_audio_probe(name, pdev, addressRange, numChannels, NULL, NULL, NULL));
 }
 
-static int __exit labx_local_audio_pdev_remove(struct platform_device *pdev);
+static int __devexit labx_local_audio_pdev_remove(struct platform_device *pdev);
 
 static int __devexit labx_local_audio_of_remove(struct of_device *dev)
 {
@@ -371,7 +371,7 @@ int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev) {
   return(0);
 }
 
-static __exit int labx_local_audio_pdev_remove(struct platform_device *pdev)
+static __devexit int labx_local_audio_pdev_remove(struct platform_device *pdev)
 {
   struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)platform_get_drvdata(pdev);
   return(labx_local_audio_remove(local_audio_pdev));

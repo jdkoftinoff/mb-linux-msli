@@ -172,7 +172,7 @@ free:
 	return ret;
 }
 
-static int __exit labx_dma_pdev_remove(struct platform_device *pdev);
+static int __devexit labx_dma_pdev_remove(struct platform_device *pdev);
 
 static int __devexit labx_dma_of_remove(struct of_device *dev)
 {
@@ -279,7 +279,7 @@ free:
 	return ret;
 }
 
-static int __exit labx_dma_pdev_remove(struct platform_device *pdev)
+static int __devexit labx_dma_pdev_remove(struct platform_device *pdev)
 {
 	int i;
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)platform_get_drvdata(pdev);
