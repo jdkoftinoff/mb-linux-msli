@@ -645,13 +645,28 @@ typedef struct {
   uint32_t alus;
   uint32_t parameterAddressBits;
   uint32_t codeAddressBits;
+  uint32_t hasStatusFifo;
 } DMACapabilities;
 
 #define DMA_IOC_GET_CAPS      _IOR(DMA_IOC_CHAR, 0x0A, DMACapabilities)
 
+#define DMA_NO_STATUS_FIFO  (0)
+#define DMA_HAS_STATUS_FIFO (1)
+
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)
 #define LABX_DMA_NUM_RESOURCES             (1)
-  
+
+/* Constant and type definitions for the optional status FIFO */
+
+/* Maximum size, in words, of a single status packet */
+#define MAX_STATUS_PACKET_WORDS (12)
+
+/* Structure type definition for encapsulating a status packet */
+typedef struct {
+  uint32_t length;
+  uint32_t packetData[MAX_STATUS_PACKET_WORDS];
+} DMAStatusPacket;
+
 #endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
 

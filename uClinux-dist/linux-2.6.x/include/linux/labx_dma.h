@@ -32,10 +32,16 @@
 
 #define NAME_MAX_SIZE  256
 
+/* Maximum number of status packets which can be pending */
+#define MAX_STATUS_PACKETS (8)
+
 /* DMA structure (for use inside other drivers that include DMA) */
 #define NO_IRQ_SUPPLIED   (-1)
 struct labx_dma {
   void __iomem  *virtualAddress;
+
+  /* Pointer to the enclosing device's name */
+  char *name;
 
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
@@ -48,6 +54,12 @@ struct labx_dma {
 
   /* Interrupt request number */
   int32_t irq;
+
+  /* Circular buffer of status packets */
+  spinlock_t statusMutex;
+  DMAStatusPacket *statusHead;
+  DMAStatusPacket *statusTail;
+  DMAStatusPacket  statusPackets[MAX_STATUS_PACKETS];
 };
 
 /* DMA Platform device structure */
@@ -69,7 +81,7 @@ struct labx_dma_pdev {
 };
 
 /* DMA device probe */
-extern void labx_dma_probe(struct labx_dma *dma);
+extern int labx_dma_probe(struct labx_dma *dma);
 
 /* DMA ioctl processing */
 extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg);
@@ -89,15 +101,36 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 #define DMA_CONTROL_REG                 0x00
   #define DMA_DISABLE  0x00000000
   #define DMA_ENABLE   0x00000001
+
 #define DMA_CHANNEL_ENABLE_REG          0x01
+
 #define DMA_CHANNEL_START_REG           0x02
-#define DMA_CHANNEL_IRQ_ENABLE_REG      0x03
-#define DMA_CHANNEL_IRQ_REG             0x04
+
+#define DMA_IRQ_ENABLE_REG              0x03
+#define DMA_IRQ_FLAGS_REG               0x04
+#  define DMA_NO_IRQS                (0x00000000)
+#  define DMA_SYNC_IRQ               (0x80000000)
+#  define DMA_STAT_OVRFLW_IRQ        (0x40000000)
+#  define DMA_STAT_READY_IRQ         (0x20000000)
+#  define DMA_CHAN_IRQ(whichChannel) (0x00000001 << whichChannel)
+#  define DMA_ALL_IRQS               (0xFFFFFFFF)
+
 #define DMA_SYNC_REG                    0x05
 #  define DMA_CANCEL_SYNC      (0x00000000)
 #  define DMA_SYNC_NEXT_WRITE  (0x00000001)
 #  define DMA_SYNC_PENDING     (0x80000000)
+
+#define DMA_STATUS_FIFO_FLAGS_REG       0x06
+#  define DMA_STATUS_FIFO_FULL    (0x00000010)
+#  define DMA_STATUS_FIFO_EMPTY   (0x00000008)
+#  define DMA_STATUS_READ_POPPED  (0x00000004)
+#  define DMA_STATUS_FIFO_BEGIN   (0x00000002)
+#  define DMA_STATUS_FIFO_END     (0x00000001)
+
+#define DMA_STATUS_FIFO_DATA_REG        0x07
+
 #define DMA_CAPABILITIES_REG            0x7E
+#  define DMA_CAPS_STATUS_FIFO_BIT           0x010000
 #  define DMA_CAPS_INDEX_SHIFT               12
 #  define DMA_CAPS_INDEX_MASK                0x0F
 #  define DMA_CAPS_CHANNELS_SHIFT            10

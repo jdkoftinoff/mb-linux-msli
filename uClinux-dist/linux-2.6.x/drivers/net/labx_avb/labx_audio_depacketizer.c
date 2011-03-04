@@ -891,7 +891,7 @@ static int audio_depacketizer_probe(const char *name,
                                     struct platform_device *pdev,
                                     struct resource *addressRange,
                                     struct resource *irq,
-				    const char *interfaceType) {
+                                    const char *interfaceType) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -1033,6 +1033,14 @@ static int audio_depacketizer_probe(const char *name,
      */
     depacketizer->hasDma = INSTANCE_HAS_DMA;
     depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
+
+    /* TEMPORARY - Indicate that the DMA has no IRQ; we need to be able to provide
+     *             one for use with the status FIFO!
+     */
+    depacketizer->dma.irq = NO_IRQ_SUPPLIED;
+
+    /* Point the DMA at our name */
+    depacketizer->dma.name = depacketizer->name;
     labx_dma_probe(&depacketizer->dma); 
 #else
     /* The interface type specified by the platform involves a DMA instance,

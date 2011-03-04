@@ -84,8 +84,10 @@ static const struct file_operations labx_dma_fops = {
 #ifdef CONFIG_OF
 static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
-	struct resource r_mem_struct;
+    struct resource r_mem_struct = {};
+    struct resource r_irq_struct = {};
 	struct resource *addressRange = &r_mem_struct;
+    struct resource *irq          = &r_irq_struct;
 	struct labx_dma_pdev *dma_pdev;
 	int ret;
 	int i;
@@ -109,11 +111,14 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
-			dma_pdev->name) == NULL) {
+                          dma_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
 	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
+
+    /* Point the enclosed DMA structure to our name */
+    dma_pdev->dma.name = dma_pdev->name;
 
 	dma_pdev->dma.virtualAddress = 
 		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
@@ -122,6 +127,15 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 		goto release;
 	}
 	//printk("DMA Virtual %p\n", dma_pdev->dma.virtualAddress);
+
+    /* Obtain the interrupt request number for the instance */
+    ret = of_irq_to_resource(ofdev->node, 0, irq);
+    if(ret == NO_IRQ) {
+      /* No IRQ was defined; indicate as much */
+      dma_pdev->dma.irq = NO_IRQ_SUPPLIED;
+    } else {
+      dma_pdev->dma.irq = irq->start;
+    }
 
 	dma_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
 	dma_pdev->miscdev.name = dma_pdev->name;
@@ -184,6 +198,7 @@ static struct of_platform_driver labx_dma_of_driver = {
 static int labx_dma_pdev_probe(struct platform_device *pdev)
 {
 	struct resource *addressRange;
+    struct resource *irq;
 	struct labx_dma_pdev *dma_pdev;
 	int ret;
 	int i;
@@ -196,17 +211,31 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	dma_pdev = (struct labx_dma_pdev*) kzalloc(sizeof(struct labx_dma_pdev), GFP_KERNEL);
 	if(!dma_pdev) return(-ENOMEM);
 
+    /* Attempt to obtain the IRQ; if none is specified, the resource pointer is
+     * NULL, and polling will be used.
+     */
+    irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+    if(irq == NULL) {
+      dma_pdev->dma.irq = NO_IRQ_SUPPLIED;
+    } else {
+      dma_pdev->dma.irq = irq->start;
+    }
+
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
 	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
-	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
-			dma_pdev->name) == NULL) {
+	if(request_mem_region(dma_pdev->physicalAddress, 
+                          dma_pdev->addressRangeSize,
+                          dma_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
 	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
+
+    /* Point the enclosed DMA structure to our name */
+    dma_pdev->dma.name = dma_pdev->name;
 
 	dma_pdev->dma.virtualAddress = 
 		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);

@@ -230,7 +230,10 @@ int labx_local_audio_probe(const char *name,
     goto release;
   }
   //printk("DMA Virtual %p\n", local_audio_pdev->dma.virtualAddress);
-  //
+  
+  /* Assign no IRQ to the encapsulated DMA; it does not require one for this application. */
+  local_audio_pdev->dma.irq = NO_IRQ_SUPPLIED;
+
   local_audio_pdev->numChannels = numChannels;
   printk("  Local Audio interface found with %d channels.\n", 
          local_audio_pdev->numChannels);
@@ -245,6 +248,9 @@ int labx_local_audio_probe(const char *name,
   platform_set_drvdata(pdev, local_audio_pdev);
   local_audio_pdev->pdev = pdev;
   dev_set_drvdata(local_audio_pdev->miscdev.this_device, local_audio_pdev);
+
+  /* Point the DMA at our name */
+  local_audio_pdev->dma.name = local_audio_pdev->name;
 
   labx_dma_probe(&local_audio_pdev->dma);
 

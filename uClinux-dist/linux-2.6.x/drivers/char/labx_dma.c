@@ -28,27 +28,48 @@
 #include <linux/module.h>
 #include <asm/uaccess.h>
 #include <xio.h>
+#include <linux/interrupt.h>
 #include <linux/labx_dma_coprocessor_defs.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 
 #define DRIVER_VERSION_MIN  0x10
-#define DRIVER_VERSION_MAX  0x11
+#define DRIVER_VERSION_MAX  0x12
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
-void labx_dma_probe(struct labx_dma *dma)
-{
+/* Interrupt service routine for the instance */
+static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
+  struct labx_dma *dma = (struct labx_dma*) dev_id;
+  uint32_t maskedFlags;
+  uint32_t irqMask;
+
+  /* Read the interrupt flags and immediately clear them */
+  maskedFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG));
+  irqMask = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG));
+  maskedFlags &= irqMask;
+  XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG), maskedFlags);
+
+  /* Detect the status ready IRQ */
+  if((maskedFlags & DMA_STAT_READY_IRQ) != 0) {
+    /* TODO - Actually pull the data... */
+    printk("DMA status ready!\n");
+  }
+
+  return(IRQ_HANDLED);
+}
+
+int labx_dma_probe(struct labx_dma *dma) {
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
   uint32_t versionCompare;
+  int returnValue = 0;
   
-
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
    * many bits an address sub-range field gets shifted up.  Each instruction is
@@ -67,14 +88,13 @@ void labx_dma_probe(struct labx_dma *dma)
 
     printk(KERN_INFO "Found incompatible hardware version %d.%d at %p\n",
            versionMajor, versionMinor, dma->virtualAddress);
-    return;
+    return(-1);
   }
 
   /* Decode the various bits in the capabilities word */
   if (versionCompare < CAPS_INDEX_VERSION) {
     dma->capabilities.indexCounters = 4;
-  }
-  else {
+  } else {
     dma->capabilities.indexCounters = (capsWord >> DMA_CAPS_INDEX_SHIFT) & DMA_CAPS_INDEX_MASK;
   }
   dma->capabilities.alus = (capsWord >> DMA_CAPS_ALU_SHIFT) & DMA_CAPS_ALU_MASK;
@@ -84,20 +104,50 @@ void labx_dma_probe(struct labx_dma *dma)
 
   dma->regionShift = (dma->capabilities.codeAddressBits + 2);
 
+  /* Check to see if the hardware has a status FIFO */
+  dma->capabilities.hasStatusFifo = 
+    ((capsWord & DMA_CAPS_STATUS_FIFO_BIT) ? DMA_HAS_STATUS_FIFO : DMA_NO_STATUS_FIFO);
+
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(dma->syncedWriteQueue));
 
-  /* TEMPORARY - Don't indicate an IRQ assignment just yet; this needs to be
-   *             added as a parameter to this function.
-   *             Make sure we disable the IRQ, request, then re-enable (is this
-   *             the appropriate place to enable?)
-   */
-  dma->irq = NO_IRQ_SUPPLIED;
+  /* Initialize the data structures storing status information */
+  spin_lock_init(&dma->statusMutex);
+  dma->statusHead = &dma->statusPackets[0];
+  dma->statusTail = &dma->statusPackets[0];
+
+  /* Ensure that no interrupts are enabled */
+  XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), DMA_NO_IRQS);
+
+  /* Request the IRQ if one was supplied */
+  if(dma->irq != NO_IRQ_SUPPLIED) {
+    returnValue = request_irq(dma->irq, 
+                              &labx_dma_interrupt, 
+                              IRQF_DISABLED, 
+                              dma->name, 
+                              dma);
+    if (returnValue) {
+      printk(KERN_ERR "%s : Could not allocate Lab X DMA interrupt (%d).\n",
+             dma->name, dma->irq);
+    }
+  }
 
   printk(KERN_INFO "Found DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
     dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
-  printk(KERN_INFO "   %d param bits, %d code bits, %d shift\n",
-    dma->capabilities.parameterAddressBits, dma->capabilities.codeAddressBits, dma->regionShift);
+  printk(KERN_INFO "  %d param bits, %d code bits, %d shift, %s status FIFO\n",
+         dma->capabilities.parameterAddressBits,
+         dma->capabilities.codeAddressBits, 
+         dma->regionShift,
+         ((dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) ? "has" : "no"));
+
+  /* Make a note if the instance has a status FIFO but no IRQ was supplied */
+  if(dma->irq != NO_IRQ_SUPPLIED) {
+    printk(KERN_INFO "  IRQ %d\n", dma->irq);
+  } else if(dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) {
+    printk(KERN_WARNING "  Status FIFO services are unavailable due to lack of an IRQ\n");
+  }
+
+  return(returnValue);
 }
 
 /* Waits for a synchronized write to commit, using either polling or
@@ -105,7 +155,6 @@ void labx_dma_probe(struct labx_dma *dma)
  */
 static int32_t await_synced_write(struct labx_dma *dma) {
   int32_t returnValue = 0;
-  uint32_t tempValue;
 
   /* Determine whether to use an interrupt or polling */
   if(dma->irq != NO_IRQ_SUPPLIED) {
