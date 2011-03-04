@@ -367,7 +367,7 @@ static irqreturn_t labx_audio_packetizer_interrupt(int irq, void *dev_id) {
   maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, IRQ_FLAGS_REG), maskedFlags);
 
-  /* Detect the timer IRQ */
+  /* Detect the synchronized write IRQ */
   if((maskedFlags & SYNC_IRQ) != 0) {
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(packetizer->syncedWriteQueue));

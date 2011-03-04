@@ -53,6 +53,12 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   maskedFlags &= irqMask;
   XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG), maskedFlags);
 
+  /* Detect the synchronized write IRQ */
+  if((maskedFlags & DMA_SYNC_IRQ) != 0) {
+    /* Wake up all threads waiting for a synchronization event */
+    wake_up_interruptible(&(dma->syncedWriteQueue));
+  }
+
   /* Detect the status ready IRQ */
   if((maskedFlags & DMA_STAT_READY_IRQ) != 0) {
     /* TODO - Actually pull the data... */
@@ -121,6 +127,8 @@ int labx_dma_probe(struct labx_dma *dma) {
 
   /* Request the IRQ if one was supplied */
   if(dma->irq != NO_IRQ_SUPPLIED) {
+    uint32_t irqMask;
+
     returnValue = request_irq(dma->irq, 
                               &labx_dma_interrupt, 
                               IRQF_DISABLED, 
@@ -130,6 +138,19 @@ int labx_dma_probe(struct labx_dma *dma) {
       printk(KERN_ERR "%s : Could not allocate Lab X DMA interrupt (%d).\n",
              dma->name, dma->irq);
     }
+
+    /* Clear all interrupt flags at the beginning and enable the IRQs:
+     *
+     * DMA_SYNC_IRQ - Used to detect successful synchronized writes
+     * DMA_STAT_READY_IRQ - Used to detect status data arrival in the status FIFO
+     *                      (if so equipped).
+     */
+    irqMask = DMA_SYNC_IRQ;
+    if(dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) {
+      irqMask |= DMA_STAT_READY_IRQ;
+    }
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG), DMA_ALL_IRQS);
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), irqMask);
   }
 
   printk(KERN_INFO "Found DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
@@ -156,7 +177,7 @@ int labx_dma_probe(struct labx_dma *dma) {
 static int32_t await_synced_write(struct labx_dma *dma) {
   int32_t returnValue = 0;
 
-  /* Determine whether to use an interrupt or polling */
+  /* Determine whether to use an interrupt or polling. */
   if(dma->irq != NO_IRQ_SUPPLIED) {
     int32_t waitResult;
 
@@ -187,8 +208,7 @@ static int32_t await_synced_write(struct labx_dma *dma) {
 }
 
 /* Loads the passed microcode descriptor into the instance */
-static int32_t load_descriptor(struct labx_dma *dma,
-                               ConfigWords *descriptor) {
+static int32_t load_descriptor(struct labx_dma *dma, ConfigWords *descriptor) {
   uint32_t wordIndex;
   uintptr_t wordAddress;
   uint32_t lastIndex;
@@ -311,7 +331,7 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
         return(-EFAULT);
       }
       descriptor.configWords = configWords;
-      load_descriptor(dma, &descriptor);
+      returnValue = load_descriptor(dma, &descriptor);
     }
     break;
 
