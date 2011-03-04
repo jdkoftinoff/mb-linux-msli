@@ -933,6 +933,7 @@ static int audio_depacketizer_probe(const char *name,
   uint32_t versionMinor;
   uint32_t versionCompare;
   uint32_t maxStreamShifter;
+  int32_t dmaIrqParam;
   int returnValue;
   
   /* Create and populate a device structure */
@@ -1069,13 +1070,22 @@ static int audio_depacketizer_probe(const char *name,
     depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
 
     /* TEMPORARY - Indicate that the DMA has no IRQ; we need to be able to provide
-     *             one for use with the status FIFO!
+     *             one for use with the status FIFO!  This is a shared IRQ; we need
+     *             to supply the shared IRQ we use, and make sure we request it
+     *             locally with IRQF_SHARED (if that's still the appropriate way to
+     *             specify) and determine whether we've handled an interrupt in the ISR.
      */
-    depacketizer->dma.irq = NO_IRQ_SUPPLIED;
+    dmaIrqParam = DMA_NO_IRQ_SUPPLIED;
+#if 0
+    if(depacketizer->irq == NO_IRQ_SUPPLIED) {
+      dmaIrqParam = DMA_NO_IRQ_SUPPLIED;
+    } else {
+      dmaIrqParam = depacketizer->irq;
+    }
+#endif
 
-    /* Point the DMA at our name */
-    depacketizer->dma.name = depacketizer->name;
-    labx_dma_probe(&depacketizer->dma); 
+    /* Allow the underlying DMA driver to infer its microcode size */
+    labx_dma_probe(&depacketizer->dma, depacketizer->name, DMA_UCODE_SIZE_UNKNOWN, dmaIrqParam); 
 #else
     /* The interface type specified by the platform involves a DMA instance,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the

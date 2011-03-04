@@ -645,6 +645,7 @@ typedef struct {
   uint32_t alus;
   uint32_t parameterAddressBits;
   uint32_t codeAddressBits;
+  uint32_t microcodeWords;
   uint32_t hasStatusFifo;
 } DMACapabilities;
 

@@ -89,6 +89,9 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	struct resource *addressRange = &r_mem_struct;
     struct resource *irq          = &r_irq_struct;
 	struct labx_dma_pdev *dma_pdev;
+    int32_t irqParam;
+    int32_t *int32Ptr;
+    int32_t microcodeWords;
 	int ret;
 	int i;
   	struct platform_device *pdev = to_platform_device(&ofdev->dev);
@@ -117,9 +120,6 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	}
 	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
 
-    /* Point the enclosed DMA structure to our name */
-    dma_pdev->dma.name = dma_pdev->name;
-
 	dma_pdev->dma.virtualAddress = 
 		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
 	if(!dma_pdev->dma.virtualAddress) {
@@ -132,9 +132,9 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
     ret = of_irq_to_resource(ofdev->node, 0, irq);
     if(ret == NO_IRQ) {
       /* No IRQ was defined; indicate as much */
-      dma_pdev->dma.irq = NO_IRQ_SUPPLIED;
+      irqParam = DMA_NO_IRQ_SUPPLIED;
     } else {
-      dma_pdev->dma.irq = irq->start;
+      irqParam = irq->start;
     }
 
 	dma_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
@@ -149,19 +149,28 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	dma_pdev->pdev = pdev;
 	dev_set_drvdata(dma_pdev->miscdev.this_device, dma_pdev);
 
-	labx_dma_probe(&dma_pdev->dma);
+    /* See if the device tree has a valid parameter to tell us our microcode size */
+    int32Ptr = (int32_t *) of_get_property(ofdev->node, "xlnx,microcode-words", NULL);
+    if(int32Ptr == NULL) {
+      /* Allow the DMA driver to infer its microcode size */
+      microcodeWords = DMA_UCODE_SIZE_UNKNOWN;
+    } else {
+      /* Specify the known size */
+      microcodeWords = *int32Ptr;
+    }
+    
+    /* Invoke the base device driver's probe function */
+	labx_dma_probe(&dma_pdev->dma, dma_pdev->name, microcodeWords, irqParam);
 
-	for (i=0; i<MAX_DMA_DEVICES; i++)
-	{
-		if (NULL == devices[i])
-		{
-          /* printk(DRIVER_NAME ": Device %d = %p\n", i, dma_pdev);*/
-          /* printk(DRIVER_NAME ": Misc minor is %d\n", dma_pdev->miscdev.minor);*/
-			devices[i] = dma_pdev;
-			break;
-		}
+	for (i=0; i<MAX_DMA_DEVICES; i++) {
+      if (NULL == devices[i]) {
+        /* printk(DRIVER_NAME ": Device %d = %p\n", i, dma_pdev);*/
+        /* printk(DRIVER_NAME ": Misc minor is %d\n", dma_pdev->miscdev.minor);*/
+        devices[i] = dma_pdev;
+        break;
+      }
 	}
-	return 0;
+	return(0);
 
 unmap:
 	iounmap(dma_pdev->dma.virtualAddress);
@@ -200,6 +209,7 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	struct resource *addressRange;
     struct resource *irq;
 	struct labx_dma_pdev *dma_pdev;
+    int32_t irqParam;
 	int ret;
 	int i;
 
@@ -216,9 +226,9 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
      */
     irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
     if(irq == NULL) {
-      dma_pdev->dma.irq = NO_IRQ_SUPPLIED;
+      irqParam = DMA_NO_IRQ_SUPPLIED;
     } else {
-      dma_pdev->dma.irq = irq->start;
+      irqParam = irq->start;
     }
 
 	/* Request and map the device's I/O memory region into uncacheable space */
@@ -233,9 +243,6 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 		goto free;
 	}
 	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
-
-    /* Point the enclosed DMA structure to our name */
-    dma_pdev->dma.name = dma_pdev->name;
 
 	dma_pdev->dma.virtualAddress = 
 		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
@@ -257,7 +264,12 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	dma_pdev->pdev = pdev;
 	dev_set_drvdata(dma_pdev->miscdev.this_device, dma_pdev);
 
-	labx_dma_probe(&dma_pdev->dma);
+    /* Call the base driver probe function, passing our name and IRQ selection.
+     * Since we have no "platform data" structure defined, there is no mechanism
+     * for allowing the platform to specify the exact amount of microcode RAM; the
+     * DMA driver will assume the entire microcode address space is backed with RAM.
+     */
+	labx_dma_probe(&dma_pdev->dma, dma_pdev->name, DMA_UCODE_SIZE_UNKNOWN, irqParam);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)
 	{

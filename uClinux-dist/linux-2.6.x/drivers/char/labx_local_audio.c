@@ -231,9 +231,6 @@ int labx_local_audio_probe(const char *name,
   }
   //printk("DMA Virtual %p\n", local_audio_pdev->dma.virtualAddress);
   
-  /* Assign no IRQ to the encapsulated DMA; it does not require one for this application. */
-  local_audio_pdev->dma.irq = NO_IRQ_SUPPLIED;
-
   local_audio_pdev->numChannels = numChannels;
   printk("  Local Audio interface found with %d channels.\n", 
          local_audio_pdev->numChannels);
@@ -252,7 +249,15 @@ int labx_local_audio_probe(const char *name,
   /* Point the DMA at our name */
   local_audio_pdev->dma.name = local_audio_pdev->name;
 
-  labx_dma_probe(&local_audio_pdev->dma);
+  /* Call the general-purpose probe function for the Lab X Dma_Coprocessor.
+   * Provide our device name, and assign no IRQ to the encapsulated DMA; it 
+   * does not require one for this application.  Ask the underlying driver
+   * code to infer the microcode RAM size for us.
+   */
+  labx_dma_probe(&local_audio_pdev->dma, 
+                 local_audio_pdev->name, 
+                 DMA_UCODE_SIZE_UNKNOWN, 
+                 DMA_NO_IRQ_SUPPLIED);
 
   for (dmaIndex = 0; dmaIndex < MAX_DMA_DEVICES; dmaIndex++) {
     if (NULL == devices[dmaIndex]) {

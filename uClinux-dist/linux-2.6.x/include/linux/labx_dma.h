@@ -33,15 +33,28 @@
 #define NAME_MAX_SIZE  256
 
 /* Maximum number of status packets which can be pending */
-#define MAX_STATUS_PACKETS (8)
+#define MAX_STATUS_PACKETS  (8)
+
+/* Constant allowing an encapsulating driver to tell us that it has
+ * no IRQ resources for us to use
+ */
+#define DMA_NO_IRQ_SUPPLIED  (-1)
+
+/* Similar constant to indicate that the encapsulating driver has no
+ * idea how much microcode RAM an instance being probed has.  If probed
+ * with this parameter, the driver will assume that the entire address
+ * space mapped for microcode (as reported by the DMA capabilities register)
+ * is backed with RAM.
+ */
+#define DMA_UCODE_SIZE_UNKNOWN  (-1)
 
 /* DMA structure (for use inside other drivers that include DMA) */
-#define NO_IRQ_SUPPLIED   (-1)
 struct labx_dma {
+  /* Virtual address pointer for the memory-mapped hardware */
   void __iomem  *virtualAddress;
 
   /* Pointer to the enclosing device's name */
-  char *name;
+  const char *name;
 
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
@@ -80,8 +93,26 @@ struct labx_dma_pdev {
   struct labx_dma dma;
 };
 
-/* DMA device probe */
-extern int labx_dma_probe(struct labx_dma *dma);
+/**
+ * DMA device probe function
+ *
+ * @param dma             - DMA device structure to probe with
+ * @param name            - Pointer to the name of the enclosing device.  The memory this
+ *                          points to must not be destroyed, e.g. the actual name buffer in
+ *                          the enclosing driver's own device structure.
+ * @param microcodeWords - Number of words of microcode RAM the instance has,
+ *                         if known.  Pass DMA_UCODE_SIZE_UNKNOWN if unknown, and
+ *                         it will be assumed that the full address space mapped for
+ *                         microcode in the hardware is RAM-backed.
+ * @param irq            - Interrupt request index to use; pass DMA_NO_IRQ_SUPPLIED if
+ *                         a hardware interrupt is unavailable to the instance.  Some
+ *                         capabilities may not be functional without an IRQ (e.g. the
+ *                         status FIFO netlink events)
+ */
+extern int32_t labx_dma_probe(struct labx_dma *dma, 
+                              const char *name, 
+                              int32_t microcodeWords, 
+                              int32_t irq);
 
 /* DMA ioctl processing */
 extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg);

@@ -68,13 +68,21 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   return(IRQ_HANDLED);
 }
 
-int labx_dma_probe(struct labx_dma *dma) {
+int32_t labx_dma_probe(struct labx_dma *dma, 
+                       const char *name, 
+                       int32_t microcodeWords, 
+                       int32_t irq) {
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
   uint32_t versionMinor;
   uint32_t versionCompare;
-  int returnValue = 0;
+  uint32_t maxMicrocodeWords;
+  int32_t returnValue = 0;
+
+  /* Retain the name of the encapsulating device instance, as well as the IRQ */
+  dma->name = name;
+  dma->irq  = irq;
   
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -107,8 +115,26 @@ int labx_dma_probe(struct labx_dma *dma) {
   dma->capabilities.dmaChannels = (capsWord >> DMA_CAPS_CHANNELS_SHIFT) & DMA_CAPS_CHANNELS_MASK;
   dma->capabilities.parameterAddressBits = (capsWord >> DMA_CAPS_PARAM_ADDRESS_BITS_SHIFT) & DMA_CAPS_PARAM_ADDRESS_BITS_MASK;
   dma->capabilities.codeAddressBits = (capsWord >> DMA_CAPS_CODE_ADDRESS_BITS_SHIFT) & DMA_CAPS_CODE_ADDRESS_BITS_MASK;
-
   dma->regionShift = (dma->capabilities.codeAddressBits + 2);
+
+  /* Either infer the number of microcode words available from the code address bits,
+   * or sanity check the specified amount against the same.
+   */
+  maxMicrocodeWords = (0x01 << dma->capabilities.codeAddressBits);
+  if(microcodeWords < 0) {
+    /* Encapsulating device doesn't know the exact microcode size, assume that
+     * the full microcode address space is available for use.
+     */
+    dma->capabilities.microcodeWords = maxMicrocodeWords;
+  } else {
+    /* Sanity-check the value we've been provided */
+    if(microcodeWords > maxMicrocodeWords) {
+      printk(KERN_INFO "(labx-dma, \"%s\") : Microcode size (%d) exceeds maximum of %d words\n",
+             dma->name, microcodeWords, maxMicrocodeWords);
+      return(-1);
+    }
+    dma->capabilities.microcodeWords = microcodeWords;
+  }
 
   /* Check to see if the hardware has a status FIFO */
   dma->capabilities.hasStatusFifo = 
@@ -126,7 +152,7 @@ int labx_dma_probe(struct labx_dma *dma) {
   XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), DMA_NO_IRQS);
 
   /* Request the IRQ if one was supplied */
-  if(dma->irq != NO_IRQ_SUPPLIED) {
+  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     uint32_t irqMask;
 
     returnValue = request_irq(dma->irq, 
@@ -153,23 +179,28 @@ int labx_dma_probe(struct labx_dma *dma) {
     XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), irqMask);
   }
 
-  printk(KERN_INFO "Found DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
+  /* Make a note if the instance is inferring its microcode size */
+  printk(KERN_INFO "\nFound DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
     dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
-  printk(KERN_INFO "  %d param bits, %d code bits, %d shift, %s status FIFO\n",
+  printk(KERN_INFO "  %d param bits, %d code bits, %d microcode words%s, %s status FIFO\n",
          dma->capabilities.parameterAddressBits,
          dma->capabilities.codeAddressBits, 
-         dma->regionShift,
+         dma->capabilities.microcodeWords,
+         ((microcodeWords < 0) ? " (INFERRED)" : ""),
          ((dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) ? "has" : "no"));
 
   /* Make a note if the instance has a status FIFO but no IRQ was supplied */
-  if(dma->irq != NO_IRQ_SUPPLIED) {
-    printk(KERN_INFO "  IRQ %d\n", dma->irq);
+  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+    printk(KERN_INFO "  IRQ %d\n\n", dma->irq);
   } else if(dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) {
-    printk(KERN_WARNING "  Status FIFO services are unavailable due to lack of an IRQ\n");
-  }
+    printk(KERN_WARNING "  Status FIFO services are unavailable due to lack of an IRQ\n\n");
+  } else printk("\n");
 
   return(returnValue);
 }
+
+/* Export the probe function for encapsulating drivers to use */
+EXPORT_SYMBOL(labx_dma_probe);
 
 /* Waits for a synchronized write to commit, using either polling or
  * an interrupt-driven waitqueue.
@@ -178,7 +209,7 @@ static int32_t await_synced_write(struct labx_dma *dma) {
   int32_t returnValue = 0;
 
   /* Determine whether to use an interrupt or polling. */
-  if(dma->irq != NO_IRQ_SUPPLIED) {
+  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     int32_t waitResult;
 
     /* Place ourselves onto a wait queue if the synced write is flagged as
@@ -241,7 +272,6 @@ static int32_t load_descriptor(struct labx_dma *dma, ConfigWords *descriptor) {
 
   return(returnValue);
 }
-EXPORT_SYMBOL(labx_dma_probe);
 
 /* Buffer for storing configuration words */
 static uint32_t configWords[MAX_CONFIG_WORDS];
