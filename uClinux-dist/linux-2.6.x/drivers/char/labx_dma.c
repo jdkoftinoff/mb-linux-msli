@@ -23,18 +23,25 @@
  *
  */
 
-#include <linux/labx_dma.h>
-#include <linux/types.h>
-#include <linux/module.h>
+/* System headers */
 #include <asm/uaccess.h>
-#include <xio.h>
+#include <linux/types.h>
 #include <linux/interrupt.h>
+#include <linux/kdev_t.h>
 #include <linux/kthread.h>
+#include <linux/labx_dma.h>
 #include <linux/labx_dma_coprocessor_defs.h>
-#include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/sched.h>
+#include <net/genetlink.h>
+#include <net/netlink.h>
+#include <xio.h>
 
+#define DRIVER_NAME "labx_dma"
+
+/* Hardware version number definitions for detecting compatability */
 #define DRIVER_VERSION_MIN  0x10
 #define DRIVER_VERSION_MAX  0x12
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
@@ -74,12 +81,54 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   return(returnValue);
 }
 
+/* Generic Netlink family definition */
+static struct genl_family events_genl_family = {
+  .id      = GENL_ID_GENERATE,
+  .hdrsize = 0,
+  .name    = LABX_DMA_EVENTS_FAMILY_NAME,
+  .version = LABX_DMA_EVENTS_FAMILY_VERSION,
+  .maxattr = LABX_DMA_EVENTS_A_MAX,
+};
+
+/* Multicast groups */
+static struct genl_multicast_group labx_dma_mcast = {
+  .name = LABX_DMA_EVENTS_STATUS_GROUP,
+};
+
 /* Method to conditionally transmit a Netlink packet containing one or more
  * packets of information from the status FIFO
  */
-static void tx_netlink_status(struct labx_dma *dma) {
+static int tx_netlink_status(struct labx_dma *dma) {
+  struct sk_buff *skb;
+  void *msgHead;
+  int returnValue = 0;
+
   /* First evaluate whether there are any packets to be sent at all */
   if(dma->statusTail != dma->statusHead) {
+    /* We will send a packet, allocate a socket buffer */
+    skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+    if(skb == NULL) return(-ENOMEM);
+
+    /* Create the message headers */
+    msgHead = genlmsg_put(skb, 
+                          0, 
+                          dma->netlinkSequence++, 
+                          &events_genl_family, 
+                          0, 
+                          LABX_DMA_EVENTS_C_STATUS_PACKETS);
+    if(msgHead == NULL) {
+      returnValue = -ENOMEM;
+      goto tx_failure;
+    }
+
+    /* Write the DMA device's major and minor number to identify the message source.
+     * Both values are required since this driver can be used encapsulated within any
+     * number of more complex devices.  Both are captured in a dev_t, which is cast
+     * to a 32-bit unsigned quantity here.
+     */
+    returnValue = nla_put_u32(skb, LABX_DMA_EVENTS_A_DMA_DEVICE, (uint32_t) dma->deviceNode);
+    if(returnValue != 0) goto tx_failure;
+
     /* Set an attribute indicating whether the status FIFO overflowed before
      * this packet could be sent
      */
@@ -87,15 +136,37 @@ static void tx_netlink_status(struct labx_dma *dma) {
     /* Iterate through the circular buffer of status packets until all have
      * been consumed 
      */
+    while(dma->statusTail != dma->statusHead) {
+      /* TODO - Marshal each status packet - do we do this in a table? */
+      printk("DMA status Tx!\n");
     
-    printk("Would Tx Netlink!\n");
-
-    /* Advance the tail pointer, wrapping at the end of the buffers */
-    dma->statusTail++;
-    if((dma->statusTail - dma->statusPackets) >= MAX_STATUS_PACKETS) {
-      dma->statusTail = dma->statusPackets;
+      /* Advance the tail pointer, wrapping at the end of the buffers */
+      dma->statusTail++;
+      if((dma->statusTail - dma->statusPackets) >= MAX_STATUS_PACKETS) {
+        dma->statusTail = dma->statusPackets;
+      }
     }
-  }
+
+    /* Finalize the message and multicast it */
+    genlmsg_end(skb, msgHead);
+    returnValue = genlmsg_multicast(skb, 0, labx_dma_mcast.id, GFP_ATOMIC);
+
+    switch(returnValue) {
+    case 0:
+    case -ESRCH:
+      // Success or no process was listening, simply break
+      break;
+
+    default:
+      // This is an actual error, print the return code
+      printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+             returnValue);
+      goto tx_failure;
+    }
+  } /* if(any packets to send) */
+
+ tx_failure:
+  return(returnValue);
 }
 
 /* Kernel thread used to produce Netlink packets based upon the status FIFO */
@@ -206,7 +277,9 @@ static int netlink_thread(void *data) {
   return(0);
 }
 
-int32_t labx_dma_probe(struct labx_dma *dma, 
+int32_t labx_dma_probe(struct labx_dma *dma,
+                       uint32_t deviceMajor,
+                       uint32_t deviceMinor, 
                        const char *name, 
                        int32_t microcodeWords, 
                        int32_t irq) {
@@ -218,9 +291,12 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   uint32_t maxMicrocodeWords;
   int32_t returnValue = 0;
 
-  /* Retain the name of the encapsulating device instance, as well as the IRQ */
-  dma->name = name;
-  dma->irq  = irq;
+  /* Retain the name of the encapsulating device instance, as well as the device
+   * node information and IRQ.
+   */
+  dma->name       = name;
+  dma->deviceNode = MKDEV(deviceMajor, deviceMinor);
+  dma->irq        = irq;
   
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -609,6 +685,43 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
   return(returnValue);
 }
 EXPORT_SYMBOL(labx_dma_ioctl);
+
+/* Driver initialization and exit */
+static int __init labx_dma_driver_init(void) {
+  int returnValue;
+
+  printk(KERN_INFO DRIVER_NAME ": DMA Coprocessor Driver\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright (c) Lab X Technologies, LLC\n");
+
+  /* Simply register our Generic Netlink resources */
+  printk(KERN_INFO DRIVER_NAME ": Registering Lab X DMA Generic Netlink family\n");
+  
+  /* Register the Generic Netlink family for use */
+  returnValue = genl_register_family(&events_genl_family);
+  if(returnValue != 0) {
+    printk(KERN_INFO DRIVER_NAME ": Failed to register Generic Netlink family\n");
+    goto register_failure;
+  }
+
+  /* Register multicast groups */
+  returnValue = genl_register_mc_group(&events_genl_family, &labx_dma_mcast);
+  if(returnValue != 0) {
+    printk(KERN_INFO DRIVER_NAME ": Failed to register Generic Netlink multicast group\n");
+    genl_unregister_family(&events_genl_family);
+    goto register_failure;
+  }
+
+ register_failure:
+  return(returnValue);
+}
+
+static void __exit labx_dma_driver_exit(void) {
+  /* Unregister the Generic Netlink family */
+  genl_unregister_family(&events_genl_family);
+}
+
+module_init(labx_dma_driver_init);
+module_exit(labx_dma_driver_exit);
 
 MODULE_AUTHOR("Chris Wulff");
 MODULE_LICENSE("GPL");

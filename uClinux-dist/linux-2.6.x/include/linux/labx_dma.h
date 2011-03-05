@@ -60,6 +60,9 @@ struct labx_dma {
   /* Pointer to the enclosing device's name */
   const char *name;
 
+  /* Device node of the enclosing device */
+  dev_t deviceNode;
+
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
 
@@ -106,10 +109,12 @@ struct labx_dma_pdev {
 /**
  * DMA device probe function
  *
- * @param dma             - DMA device structure to probe with
- * @param name            - Pointer to the name of the enclosing device.  The memory this
- *                          points to must not be destroyed, e.g. the actual name buffer in
- *                          the enclosing driver's own device structure.
+ * @param dma            - DMA device structure to probe with
+ * @param deviceMajor    - Major number of the enclosing device
+ * @param deviceMinor    - Minor number of the enclosing device
+ * @param name           - Pointer to the name of the enclosing device.  The memory this
+ *                         points to must not be destroyed, e.g. the actual name buffer in
+ *                         the enclosing driver's own device structure.
  * @param microcodeWords - Number of words of microcode RAM the instance has,
  *                         if known.  Pass DMA_UCODE_SIZE_UNKNOWN if unknown, and
  *                         it will be assumed that the full address space mapped for
@@ -120,6 +125,8 @@ struct labx_dma_pdev {
  *                         status FIFO netlink events)
  */
 extern int32_t labx_dma_probe(struct labx_dma *dma, 
+                              uint32_t deviceMajor,
+                              uint32_t deviceMinor,
                               const char *name, 
                               int32_t microcodeWords, 
                               int32_t irq);

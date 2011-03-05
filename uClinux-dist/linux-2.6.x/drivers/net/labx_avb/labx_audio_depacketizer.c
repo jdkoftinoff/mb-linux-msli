@@ -1065,6 +1065,9 @@ static int audio_depacketizer_probe(const char *name,
   spin_lock_init(&depacketizer->mutex);
   depacketizer->opened = false;
 
+  /* Assign an instance number to the depacketizer for use as a minor number */
+  depacketizer->instanceNumber = instanceCount++;
+
   /* Test to see whether the depacketizer instance has a Dma_Coprocessor
    * module contained within for handling the back-end of the audio data
    */
@@ -1085,7 +1088,12 @@ static int audio_depacketizer_probe(const char *name,
     }
 
     /* Allow the underlying DMA driver to infer its microcode size */
-    labx_dma_probe(&depacketizer->dma, depacketizer->name, DMA_UCODE_SIZE_UNKNOWN, dmaIrqParam); 
+    labx_dma_probe(&depacketizer->dma, 
+                   DRIVER_MAJOR,
+                   depacketizer->instanceNumber,
+                   depacketizer->name, 
+                   DMA_UCODE_SIZE_UNKNOWN, 
+                   dmaIrqParam); 
 #else
     /* The interface type specified by the platform involves a DMA instance,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the
@@ -1106,7 +1114,6 @@ static int audio_depacketizer_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&depacketizer->cdev, &audio_depacketizer_fops);
   depacketizer->cdev.owner = THIS_MODULE;
-  depacketizer->instanceNumber = instanceCount++;
   kobject_set_name(&depacketizer->cdev.kobj, "%s.%d", depacketizer->name, depacketizer->instanceNumber);
   returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
   if (returnValue < 0)
@@ -1275,8 +1282,8 @@ static struct platform_driver audio_depacketizer_driver = {
 static int __init audio_depacketizer_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
+  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer Driver\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright (c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_audio_depacketizer_driver);

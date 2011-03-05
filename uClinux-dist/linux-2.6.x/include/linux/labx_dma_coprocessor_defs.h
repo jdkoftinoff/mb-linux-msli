@@ -739,5 +739,27 @@ typedef struct {
   uint32_t packetData[MAX_STATUS_PACKET_WORDS];
 } DMAStatusPacket;
 
+/* Generic Netlink family name, version, and multicast groups for Lab X DMA events */
+#define LABX_DMA_EVENTS_FAMILY_NAME     "LABX_DMA_EVTS"
+#define LABX_DMA_EVENTS_FAMILY_VERSION  1
+#define LABX_DMA_EVENTS_STATUS_GROUP    "StatusGroup"
+
+/* Constant enumeration for Netlink event commands from the Lab X DMA driver */
+enum {
+  LABX_DMA_EVENTS_C_UNSPEC,
+  LABX_DMA_EVENTS_C_STATUS_PACKETS,
+  __LABX_DMA_EVENTS_C_MAX,
+};
+#define LABX_DMA_EVENTS_C_MAX (__LABX_DMA_EVENTS_C_MAX - 1)
+
+/* Netlink family attributes */
+enum {
+  LABX_DMA_EVENTS_A_UNSPEC,
+  LABX_DMA_EVENTS_A_DMA_DEVICE,
+  LABX_DMA_EVENTS_A_STATUS_OVERFLOW,
+  __LABX_DMA_EVENTS_A_MAX,
+};
+#define LABX_DMA_EVENTS_A_MAX (__LABX_DMA_EVENTS_A_MAX - 1)
+
 #endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
 

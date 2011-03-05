@@ -255,6 +255,8 @@ int labx_local_audio_probe(const char *name,
    * code to infer the microcode RAM size for us.
    */
   labx_dma_probe(&local_audio_pdev->dma, 
+                 MISC_MAJOR,
+                 local_audio_pdev->miscdev.minor,
                  local_audio_pdev->name, 
                  DMA_UCODE_SIZE_UNKNOWN, 
                  DMA_NO_IRQ_SUPPLIED);

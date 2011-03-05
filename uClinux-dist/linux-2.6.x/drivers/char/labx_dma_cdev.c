@@ -160,7 +160,12 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
     }
     
     /* Invoke the base device driver's probe function */
-	labx_dma_probe(&dma_pdev->dma, dma_pdev->name, microcodeWords, irqParam);
+	labx_dma_probe(&dma_pdev->dma, 
+                   MISC_MAJOR,
+                   dma_pdev->miscdev.minor,
+                   dma_pdev->name, 
+                   microcodeWords, 
+                   irqParam);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++) {
       if (NULL == devices[i]) {
@@ -269,7 +274,12 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
      * for allowing the platform to specify the exact amount of microcode RAM; the
      * DMA driver will assume the entire microcode address space is backed with RAM.
      */
-	labx_dma_probe(&dma_pdev->dma, dma_pdev->name, DMA_UCODE_SIZE_UNKNOWN, irqParam);
+	labx_dma_probe(&dma_pdev->dma, 
+                   MISC_MAJOR,
+                   dma_pdev->miscdev.minor,
+                   dma_pdev->name, 
+                   DMA_UCODE_SIZE_UNKNOWN, 
+                   irqParam);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)
 	{
@@ -314,15 +324,15 @@ static int __devexit labx_dma_pdev_remove(struct platform_device *pdev)
 
 /* Platform device driver structure */
 static struct platform_driver labx_dma_platform_driver = {
-	.probe  = labx_dma_pdev_probe,
-	.remove = labx_dma_pdev_remove,
-	.driver = {
-		.name = DRIVER_NAME,
-	}
+  .probe  = labx_dma_pdev_probe,
+  .remove = labx_dma_pdev_remove,
+  .driver = {
+    .name = DRIVER_NAME,
+  }
 };
 
 /* Driver initialization and exit */
-static int __init labx_dma_driver_init(void)
+static int __init labx_dma_cdev_driver_init(void)
 {
   int returnValue;
 
@@ -340,14 +350,14 @@ static int __init labx_dma_driver_init(void)
   return(0);
 }
 
-static void __exit labx_dma_driver_exit(void)
+static void __exit labx_dma_cdev_driver_exit(void)
 {
   /* Unregister as a platform device driver */
   platform_driver_unregister(&labx_dma_platform_driver);
 }
 
-module_init(labx_dma_driver_init);
-module_exit(labx_dma_driver_exit);
+module_init(labx_dma_cdev_driver_init);
+module_exit(labx_dma_cdev_driver_exit);
 
 MODULE_AUTHOR("Chris Wulff");
 MODULE_LICENSE("GPL");
