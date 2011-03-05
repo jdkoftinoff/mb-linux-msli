@@ -758,6 +758,14 @@ static int audio_depacketizer_open(struct inode *inode, struct file *filp)
   }
   spin_unlock_irqrestore(&depacketizer->mutex, flags);
   preempt_enable();
+
+  /* Ensure the packet engine is reset */
+  reset_depacketizer(depacketizer);
+
+  /* Open the DMA, if we have one */
+  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_open(&depacketizer->dma);
+  }
   
   return(returnValue);
 }
@@ -766,6 +774,14 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
   unsigned long flags;
+
+  /* Release the DMA, if we have one */
+  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_release(&depacketizer->dma);
+  }
+
+  /* Ensure the packet engine is reset */
+  reset_depacketizer(depacketizer);
 
   preempt_disable();
   spin_lock_irqsave(&depacketizer->mutex, flags);

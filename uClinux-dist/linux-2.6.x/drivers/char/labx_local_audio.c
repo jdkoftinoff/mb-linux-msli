@@ -53,8 +53,7 @@
 #define MAX_DMA_DEVICES 16
 static struct labx_local_audio_pdev* devices[MAX_DMA_DEVICES] = {};
 
-static int labx_local_audio_open(struct inode *inode, struct file *filp)
-{
+static int labx_local_audio_open(struct inode *inode, struct file *filp) {
   int i;
   struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
   for (i = 0; i<MAX_DMA_DEVICES; i++) {
@@ -67,17 +66,38 @@ static int labx_local_audio_open(struct inode *inode, struct file *filp)
   }
   local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
 
+  /* Ensure the local audio hardware is reset */
+
+
+  /* Also open the DMA instance */
+  labx_dma_open(&local_audio_pdev->dma);
+
   /* Invoke the open() operation on the derived driver, if there is one */
   if((local_audio_pdev->derivedFops != NULL) && 
      (local_audio_pdev->derivedFops->open != NULL)) {
     local_audio_pdev->derivedFops->open(inode, filp);
   }
 
-  return 0;
+  return(0);
+}
+
+static int labx_local_audio_release(struct inode *inode, struct file *filp) {
+  struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
+
+  /* Invoke the release() operation on the derived driver, if there is one */
+  if((local_audio_pdev->derivedFops != NULL) && 
+     (local_audio_pdev->derivedFops->release != NULL)) {
+    local_audio_pdev->derivedFops->release(inode, filp);
+  }
+
+  /* Also release the DMA instance */
+  labx_dma_release(&local_audio_pdev->dma);
+
+  return(0);
 }
 
 static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
-				       unsigned int command, unsigned long arg)
+                                       unsigned int command, unsigned long arg)
 {
   struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
   int returnValue;
@@ -87,17 +107,17 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
     {
       struct LocalAudioChannelMapping mapping;
       if(copy_from_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
-	printk("CFU failed\n");
-	return(-EFAULT);
+        printk("CFU failed\n");
+        return(-EFAULT);
       }
 			
       if (mapping.channel >= local_audio_pdev->numChannels) {
-	printk("Channel check failed: %d, %d\n", mapping.channel, local_audio_pdev->numChannels);
-	return(-EINVAL);
+        printk("Channel check failed: %d, %d\n", mapping.channel, local_audio_pdev->numChannels);
+        return(-EINVAL);
       }
 
       XIo_Out32(LOCAL_AUDIO_REGISTER_BASE(&local_audio_pdev->dma, LOCAL_AUDIO_CHANNEL_REG + mapping.channel),
-		mapping.streams);
+                mapping.streams);
     }
     break;
 
@@ -106,17 +126,17 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
       struct LocalAudioChannelMapping mapping;
 
       if(copy_from_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
-	return(-EFAULT);
+        return(-EFAULT);
       }
 			
       if (mapping.channel >= local_audio_pdev->numChannels) {
-	return(-EINVAL);
+        return(-EINVAL);
       }
 			
       mapping.streams = XIo_In32(LOCAL_AUDIO_REGISTER_BASE(&local_audio_pdev->dma, LOCAL_AUDIO_CHANNEL_REG + mapping.channel));
 
       if(copy_to_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
-	return(-EFAULT);
+        return(-EFAULT);
       }
     }
     break;
@@ -127,11 +147,11 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
       uint32_t value = 0;
 
       if(copy_from_user(&config, (void __user*)arg, sizeof(config)) != 0) {
-	return(-EFAULT);
+        return(-EFAULT);
       }
 
       switch(config.mode)
-      {
+        {
         default:
           return(-EINVAL);
 
@@ -153,13 +173,13 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
         case LA_INSERT_MODE_LFSR:
           value = LOCAL_AUDIO_INSERTER_ENABLE;
           break;
-      }
+        }
 
       value |= (config.stream << LOCAL_AUDIO_INSERTER_STREAM_SHIFT) & LOCAL_AUDIO_INSERTER_STREAM_MASK;
       value |= (config.slot << LOCAL_AUDIO_INSERTER_SLOT_SHIFT) & LOCAL_AUDIO_INSERTER_SLOT_MASK;
       
       XIo_Out32(LOCAL_AUDIO_INSERTER_BASE(&local_audio_pdev->dma, LOCAL_AUDIO_INSERTER_TDM_CTRL_REG),
-        value);
+                value);
     }
     break;
 
@@ -181,8 +201,9 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
 }
 
 static const struct file_operations labx_local_audio_fops = {
-  .open = labx_local_audio_open,
-  .ioctl = labx_local_audio_ioctl_cdev,
+  .open    = labx_local_audio_open,
+  .release = labx_local_audio_release,
+  .ioctl   = labx_local_audio_ioctl_cdev,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by
@@ -281,7 +302,7 @@ int labx_local_audio_probe(const char *name,
   iounmap(local_audio_pdev->dma.virtualAddress);
  release:
   release_mem_region(local_audio_pdev->physicalAddress, 
-		     local_audio_pdev->addressRangeSize);
+                     local_audio_pdev->addressRangeSize);
  free:
   kfree(local_audio_pdev);
   return(ret);
@@ -365,7 +386,7 @@ int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev) {
   int dmaIndex;
 
   /* Make sure the DMA unit is no longer running */
-  XIo_Out32(DMA_REGISTER_ADDRESS(&local_audio_pdev->dma, DMA_CONTROL_REG), DMA_DISABLE);
+  labx_dma_release(&local_audio_pdev->dma);
 
   misc_deregister(&local_audio_pdev->miscdev);
 

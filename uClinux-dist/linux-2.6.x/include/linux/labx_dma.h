@@ -131,8 +131,12 @@ extern int32_t labx_dma_probe(struct labx_dma *dma,
                               int32_t microcodeWords, 
                               int32_t irq);
 
+/* DMA open and release operations */
+extern int32_t labx_dma_open(struct labx_dma *dma);
+extern int32_t labx_dma_release(struct labx_dma *dma);
+
 /* DMA ioctl processing */
-extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg);
+extern int labx_dma_ioctl(struct labx_dma *dma, unsigned int command, unsigned long arg);
 
 #define DMA_REGISTER_RANGE 0
 #define DMA_MICROCODE_RANGE 1
@@ -147,10 +151,11 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 
 /* Register address and control field #defines */
 #define DMA_CONTROL_REG                 0x00
-  #define DMA_DISABLE  0x00000000
-  #define DMA_ENABLE   0x00000001
+#  define DMA_DISABLE  0x00000000
+#  define DMA_ENABLE   0x00000001
 
 #define DMA_CHANNEL_ENABLE_REG          0x01
+#  define DMA_CHANNELS_NONE  (0x00000000)
 
 #define DMA_CHANNEL_START_REG           0x02
 

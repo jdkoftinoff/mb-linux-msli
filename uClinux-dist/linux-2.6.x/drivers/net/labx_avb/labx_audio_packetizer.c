@@ -424,6 +424,9 @@ static int audio_packetizer_open(struct inode *inode, struct file *filp)
     packetizer->opened = true;
   }
 
+  /* Ensure the packetizer is reset */
+  reset_packetizer(packetizer);
+
   /* Invoke the open() operation on the derived driver, if there is one */
   if((packetizer->derivedFops != NULL) && 
      (packetizer->derivedFops->open != NULL)) {
@@ -440,6 +443,9 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
 {
   struct audio_packetizer *packetizer = (struct audio_packetizer*)filp->private_data;
   unsigned long flags;
+
+  /* Ensure the packetizer is reset */
+  reset_packetizer(packetizer);
 
   preempt_disable();
   spin_lock_irqsave(&packetizer->mutex, flags);

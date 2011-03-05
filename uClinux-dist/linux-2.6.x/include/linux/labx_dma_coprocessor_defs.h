@@ -761,5 +761,9 @@ enum {
 };
 #define LABX_DMA_EVENTS_A_MAX (__LABX_DMA_EVENTS_A_MAX - 1)
 
+/* Enumerated values for the status overflow field */
+#define DMA_STATUS_FIFO_GOOD      ((uint32_t) 0)
+#define DMA_STATUS_FIFO_OVERFLOW  ((uint32_t) 1)
+
 #endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
 

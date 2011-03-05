@@ -102,6 +102,7 @@ static int tx_netlink_status(struct labx_dma *dma) {
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
+  uint32_t maskedFlags;
 
   /* First evaluate whether there are any packets to be sent at all */
   if(dma->statusTail != dma->statusHead) {
@@ -130,15 +131,22 @@ static int tx_netlink_status(struct labx_dma *dma) {
     if(returnValue != 0) goto tx_failure;
 
     /* Set an attribute indicating whether the status FIFO overflowed before
-     * this packet could be sent
+     * this packet could be sent.  This is indicated by the overflow IRQ bit,
+     * which is cleared unconditionally once read.
      */
+    maskedFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG));
+    maskedFlags &= DMA_STAT_OVRFLW_IRQ;
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG), maskedFlags);
+    returnValue = nla_put_u32(skb, 
+                              LABX_DMA_EVENTS_A_STATUS_OVERFLOW, 
+                              ((maskedFlags != 0) ? DMA_STATUS_FIFO_OVERFLOW :
+                                                    DMA_STATUS_FIFO_GOOD));
 
     /* Iterate through the circular buffer of status packets until all have
      * been consumed 
      */
     while(dma->statusTail != dma->statusHead) {
-      /* TODO - Marshal each status packet - do we do this in a table? */
-      printk("DMA status Tx!\n");
+      /* TODO - Marshal each status packet - do we do this in an attributes table? */
     
       /* Advance the tail pointer, wrapping at the end of the buffers */
       dma->statusTail++;
@@ -563,9 +571,27 @@ static void copy_descriptor(struct labx_dma *dma,
   }
 }
 
+/* Disables the engine as a whole; any enabled channels remain enabled */
+static void disable_dma(struct labx_dma *dma) {
+  XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_DISABLE);
+}
+
+/* Opens the instance for use, placing the hardware into a known state */
+int32_t labx_dma_open(struct labx_dma *dma) {
+  /* Ensure that all channels and the DMA as a whole are disabled */
+  disable_dma(dma);
+  XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), DMA_CHANNELS_NONE);
+  return(0);
+}
+
+/* Closes the instance, disabling the hardware */
+int32_t labx_dma_release(struct labx_dma *dma) {
+  disable_dma(dma);
+  return(0);
+}
+
 /* I/O control operations for the driver */
-int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg)
-{
+int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg) {
   int returnValue = 0;
 
   /* Switch on the request */
@@ -575,7 +601,7 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     break;
 
   case DMA_IOC_STOP_ENGINE:
-    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CONTROL_REG), DMA_DISABLE);
+    disable_dma(dma);
     break;
 
   case DMA_IOC_LOAD_DESCRIPTOR:
@@ -617,7 +643,7 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
   case DMA_IOC_START_CHANNEL:
     /* printk(KERN_INFO "DMA (%p) Start Channel %08X (%p)\n", dma, (int)arg, (void*)DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)); */
     XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), 
-      XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) | (1<<arg));
+              XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) | (1<<arg));
     break;
 
   case DMA_IOC_STOP_CHANNEL:

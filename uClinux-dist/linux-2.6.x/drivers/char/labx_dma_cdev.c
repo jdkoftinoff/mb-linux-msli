@@ -50,35 +50,46 @@
 static uint32_t instanceCount;
 static struct labx_dma_pdev* devices[MAX_DMA_DEVICES] = {};
 
-static int labx_dma_open(struct inode *inode, struct file *file)
-{
-	int i;
+static int labx_dma_open_cdev(struct inode *inode, struct file *filp) {
+  int i;
+  struct labx_dma_pdev *dma_pdev = NULL;
 
-	for (i = 0; i<MAX_DMA_DEVICES; i++)
-	{
-      /* printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));*/
-		if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode)))
-		{
-          /* printk("labx_dma_open: found %p\n", devices[i]);*/
-			file->private_data = devices[i];
-			break;
-		}
-	}
+  for (i = 0; i<MAX_DMA_DEVICES; i++) {
+    /* printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));*/
+    if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode)))
+      {
+        /* printk("labx_dma_open: found %p\n", devices[i]);*/
+        dma_pdev = devices[i];
+        filp->private_data = dma_pdev;
+        break;
+      }
+  }
 
-	return 0;
+  if(dma_pdev == NULL) return(-1);
+
+  /* Inform the encapsulated DMA driver that it is being opened */
+  return(labx_dma_open(&dma_pdev->dma));
 }
 
-static int labx_dma_ioctl_cdev(struct inode *inode, struct file *filp,
-                               unsigned int command, unsigned long arg)
-{
+static int labx_dma_release_cdev(struct inode *inode, struct file *filp) {
+  struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)filp->private_data;
+
+  /* Simply let our DMA know it's closing */
+  return(labx_dma_release(&dma_pdev->dma));
+}
+
+static int labx_dma_ioctl_cdev(struct inode *inode,
+                               struct file *filp,
+                               unsigned int command, unsigned long arg) {
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)filp->private_data;
 
 	return labx_dma_ioctl(&dma_pdev->dma, command, arg);
 }
 
 static const struct file_operations labx_dma_fops = {
-	.open = labx_dma_open,
-	.ioctl = labx_dma_ioctl_cdev,
+	.open    = labx_dma_open_cdev,
+    .release = labx_dma_release_cdev,
+	.ioctl   = labx_dma_ioctl_cdev,
 };
 
 #ifdef CONFIG_OF
