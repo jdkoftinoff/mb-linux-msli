@@ -1121,16 +1121,18 @@ static int audio_depacketizer_probe(const char *name,
   /* Initialize the waitqueue used for stream status events */
   init_waitqueue_head(&(depacketizer->streamStatusQueue));
 
-  /* Now that the device is configured, enable interrupts if they are to be used */
-  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
-  }
-
-  depacketizer->netlinkTask = kthread_run(netlink_thread, (void*)depacketizer, "depacketizer");
+  /* Initialize the netlink state and start the thread */
+  depacketizer->netlinkSequence = 0;
+  depacketizer->netlinkTask = kthread_run(netlink_thread, (void*)depacketizer, "%s:netlink", depacketizer->name);
   if (IS_ERR(depacketizer->netlinkTask)) {
     printk(KERN_ERR "Depacketizer netlink task creation failed.\n");
     returnValue = -EIO;
     goto kthread_fail;
+  }
+
+  /* Now that the device is configured, enable interrupts if they are to be used */
+  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
   }
 
   /* Return success */

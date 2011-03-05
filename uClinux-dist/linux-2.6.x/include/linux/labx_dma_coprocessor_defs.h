@@ -731,11 +731,11 @@ typedef struct {
 /* Constant and type definitions for the optional status FIFO */
 
 /* Maximum size, in words, of a single status packet */
-#define MAX_STATUS_PACKET_WORDS (12)
+#define MAX_STATUS_PACKET_WORDS (15)
 
 /* Structure type definition for encapsulating a status packet */
 typedef struct {
-  uint32_t length;
+  uint32_t packetLength;
   uint32_t packetData[MAX_STATUS_PACKET_WORDS];
 } DMAStatusPacket;
 

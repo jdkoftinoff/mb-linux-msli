@@ -74,12 +74,38 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   return(returnValue);
 }
 
+/* Method to conditionally transmit a Netlink packet containing one or more
+ * packets of information from the status FIFO
+ */
+static void tx_netlink_status(struct labx_dma *dma) {
+  /* First evaluate whether there are any packets to be sent at all */
+  if(dma->statusTail != dma->statusHead) {
+    /* Set an attribute indicating whether the status FIFO overflowed before
+     * this packet could be sent
+     */
+
+    /* Iterate through the circular buffer of status packets until all have
+     * been consumed 
+     */
+    
+    printk("Would Tx Netlink!\n");
+
+    /* Advance the tail pointer, wrapping at the end of the buffers */
+    dma->statusTail++;
+    if((dma->statusTail - dma->statusPackets) >= MAX_STATUS_PACKETS) {
+      dma->statusTail = dma->statusPackets;
+    }
+  }
+}
+
 /* Kernel thread used to produce Netlink packets based upon the status FIFO */
 static int netlink_thread(void *data) {
   struct labx_dma *dma = (struct labx_dma*) data;
   uint32_t fifoFlags;
   uint32_t fifoDataWord;
-  uint32_t lengthCounter = 0;
+  uint32_t addToPacket;
+  uint32_t finishPacket;
+  DMAStatusPacket *nextStatusHead;
 
   /* Use the "__" version to avoid using a memory barrier, no need since
    * we're going to the running state
@@ -100,35 +126,37 @@ static int netlink_thread(void *data) {
      */
     dma->statusReady = DMA_STATUS_IDLE;
 
-    /* TODO - Refactor this out! */
     /* Read from the status FIFO as long as it is either not empty, or the word
      * at its output was just popped by the last read and hasn't yet been "seen".
      */
     fifoFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_FLAGS_REG));
     while(((fifoFlags & DMA_STATUS_FIFO_EMPTY) == 0) |
           ((fifoFlags & DMA_STATUS_READ_POPPED) != 0)) {
+      /* Presume we aren't adding to or ending the packet (we will check if needed) */
+      addToPacket = 0;
+      finishPacket = 0;
 
       /* If there is a word popped by the last read, the begin / end flags in the status
        * register correspond to it right now.  Once we go and read the data word itself,
        * the flags may relate to the *next* popped word, if one exists.
        */
       if((fifoFlags & DMA_STATUS_READ_POPPED) != 0) {
+        /* This word will be added to the packet */
+        addToPacket = 1;
+
         /* The read word and flags are valid from the previous read! */
         if((fifoFlags & DMA_STATUS_FIFO_BEGIN) != 0) {
-          /* This signifies the beginning of a status word, reset the length counter */
-          lengthCounter = 1;
+          /* This signifies the beginning of a status packet, reset the index counter. */
+          dma->statusIndex = 0;
         } else {
           /* This is either a normal status word or the one flagged as the "end" of a packet */
-          lengthCounter++;
+          dma->statusIndex++;
         }
 
         /* See if this is the end of the packet - note that it is entirely possible for a
          * single-word packet to be pushed, which has both the "begin" and "end" flags set
          */
-        if((fifoFlags & DMA_STATUS_FIFO_END) != 0) {
-          /* Simply report the length of each packet we receive for now */
-          printk("DMA STATUS : %d words\n", lengthCounter);
-        }
+        finishPacket = ((fifoFlags & DMA_STATUS_FIFO_END) != 0);
       } /* if(FIFO word ready) */
           
       /* Since we're here, it means that we need to read some FIFO data: either to pop the
@@ -136,10 +164,43 @@ static int netlink_thread(void *data) {
        * which was popped by the last read, or both!
        */
       fifoDataWord = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_DATA_REG));
+
+      /* Add the new word to the packet data, if it was valid */
+      if(addToPacket != 0) {
+        dma->statusHead->packetData[dma->statusIndex] = fifoDataWord;
+
+        /* Commit the present packet if this was the last word */
+        if(finishPacket != 0) {
+          dma->statusHead->packetLength = (dma->statusIndex + 1);
+          
+          /* Pre-compute the next location of the status head, wrapping to the beginning
+           * of the status packet ring when the end has been hit.
+           */
+          nextStatusHead = (dma->statusHead + 1);
+          if((nextStatusHead - dma->statusPackets) >= MAX_STATUS_PACKETS) {
+            nextStatusHead = dma->statusPackets;
+          }
+
+          /* Check to see whether we are about to "catch up" with the tail pointer;
+           * if so, it's time to transmit a Netlink packet of multiple status packets
+           * before we overflow with status data.
+           */
+          if(nextStatusHead == dma->statusTail) tx_netlink_status(dma);
+
+          /* Advance the head pointer to its new location */
+          dma->statusHead = nextStatusHead;
+        }
+      }
           
       /* Re-sample the FIFO status flags for the next iteration */
       fifoFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_FLAGS_REG));
     } /* while(FIFO words pending) */
+
+    /* We have fallen out of the FIFO-draining loop, meaning that we have emptied
+     * it and processed the last word which was available.  Transmit a Netlink
+     * packet if there are any complete status packets to be sent.
+     */
+    tx_netlink_status(dma);
   } while(!kthread_should_stop());
 
   return(0);
@@ -224,7 +285,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   init_waitqueue_head(&(dma->statusFifoQueue));
 
   /* Initialize the data structures storing status information */
-  spin_lock_init(&dma->statusMutex);
+  dma->statusIndex = 0;
   dma->statusHead = &dma->statusPackets[0];
   dma->statusTail = &dma->statusPackets[0];
 
@@ -234,8 +295,8 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Run the thread assigned to converting status FIFO words into Netlink packets
    * after initializing its state to wait for the ISR
    */
-  printk("START NETLINK, dma @ 0x%08X\n", (uint32_t)dma);
   dma->statusReady = DMA_STATUS_IDLE;
+  dma->netlinkSequence = 0;
   dma->netlinkTask = kthread_run(netlink_thread, (void*) dma, "%s:netlink", dma->name);
   if (IS_ERR(dma->netlinkTask)) {
     printk(KERN_ERR "%s: DMA Netlink task creation failed\n", dma->name);

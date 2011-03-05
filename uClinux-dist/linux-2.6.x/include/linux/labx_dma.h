@@ -79,7 +79,7 @@ struct labx_dma {
   int32_t irq;
 
   /* Circular buffer of status packets */
-  spinlock_t statusMutex;
+  uint32_t statusIndex;
   DMAStatusPacket *statusHead;
   DMAStatusPacket *statusTail;
   DMAStatusPacket  statusPackets[MAX_STATUS_PACKETS];
