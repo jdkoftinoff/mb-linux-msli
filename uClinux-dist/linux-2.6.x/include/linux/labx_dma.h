@@ -48,6 +48,10 @@
  */
 #define DMA_UCODE_SIZE_UNKNOWN  (-1)
 
+/* Flag values for ISR -> Netlink thread handshaking */
+#define DMA_STATUS_IDLE      (0)
+#define DMA_NEW_STATUS_READY (1)
+
 /* DMA structure (for use inside other drivers that include DMA) */
 struct labx_dma {
   /* Virtual address pointer for the memory-mapped hardware */
@@ -62,8 +66,14 @@ struct labx_dma {
   /* Capabilites from the CAPS registers */
   DMACapabilities capabilities;
 
-  /* Wait queue for putting threads to sleep */
+  /* Wait queue for putting userspace threads to sleep for synced writes */
   wait_queue_head_t syncedWriteQueue;
+
+  /* Wait queue and other state for the Netlink thread */
+  wait_queue_head_t statusFifoQueue;
+  uint32_t netlinkSequence;
+  struct task_struct *netlinkTask;
+  uint32_t statusReady;
 
   /* Interrupt request number */
   int32_t irq;

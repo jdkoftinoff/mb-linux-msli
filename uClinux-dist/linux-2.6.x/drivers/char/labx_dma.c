@@ -29,6 +29,7 @@
 #include <asm/uaccess.h>
 #include <xio.h>
 #include <linux/interrupt.h>
+#include <linux/kthread.h>
 #include <linux/labx_dma_coprocessor_defs.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
@@ -46,6 +47,7 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   struct labx_dma *dma = (struct labx_dma*) dev_id;
   uint32_t maskedFlags;
   uint32_t irqMask;
+  irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_FLAGS_REG));
@@ -57,15 +59,90 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   if((maskedFlags & DMA_SYNC_IRQ) != 0) {
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(dma->syncedWriteQueue));
+    returnValue = IRQ_HANDLED;
   }
 
   /* Detect the status ready IRQ */
   if((maskedFlags & DMA_STAT_READY_IRQ) != 0) {
-    /* TODO - Actually pull the data... */
-    printk("DMA status ready!\n");
+    /* Wake up the Netlink thread to consume status data */
+    dma->statusReady = DMA_NEW_STATUS_READY;
+    wake_up_interruptible(&(dma->statusFifoQueue));
+    returnValue = IRQ_HANDLED;
   }
 
-  return(IRQ_HANDLED);
+  /* Return whether this was an IRQ we handled or not */
+  return(returnValue);
+}
+
+/* Kernel thread used to produce Netlink packets based upon the status FIFO */
+static int netlink_thread(void *data) {
+  struct labx_dma *dma = (struct labx_dma*) data;
+  uint32_t fifoFlags;
+  uint32_t fifoDataWord;
+  uint32_t lengthCounter = 0;
+
+  /* Use the "__" version to avoid using a memory barrier, no need since
+   * we're going to the running state
+   */
+  __set_current_state(TASK_RUNNING);
+
+  do {
+    set_current_state(TASK_INTERRUPTIBLE);
+
+    /* Go to sleep only if the status FIFO is empty */
+    wait_event_interruptible(dma->statusFifoQueue, (dma->statusReady == DMA_NEW_STATUS_READY));
+
+    __set_current_state(TASK_RUNNING);
+
+    /* Set the status flag as "idle"; the status ready IRQ is triggered only
+     * when the FIFO goes from an empty to not-empty state, so there's no race
+     * condition here.
+     */
+    dma->statusReady = DMA_STATUS_IDLE;
+
+    /* TODO - Refactor this out! */
+    /* Read from the status FIFO as long as it is either not empty, or the word
+     * at its output was just popped by the last read and hasn't yet been "seen".
+     */
+    fifoFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_FLAGS_REG));
+    while(((fifoFlags & DMA_STATUS_FIFO_EMPTY) == 0) |
+          ((fifoFlags & DMA_STATUS_READ_POPPED) != 0)) {
+
+      /* If there is a word popped by the last read, the begin / end flags in the status
+       * register correspond to it right now.  Once we go and read the data word itself,
+       * the flags may relate to the *next* popped word, if one exists.
+       */
+      if((fifoFlags & DMA_STATUS_READ_POPPED) != 0) {
+        /* The read word and flags are valid from the previous read! */
+        if((fifoFlags & DMA_STATUS_FIFO_BEGIN) != 0) {
+          /* This signifies the beginning of a status word, reset the length counter */
+          lengthCounter = 1;
+        } else {
+          /* This is either a normal status word or the one flagged as the "end" of a packet */
+          lengthCounter++;
+        }
+
+        /* See if this is the end of the packet - note that it is entirely possible for a
+         * single-word packet to be pushed, which has both the "begin" and "end" flags set
+         */
+        if((fifoFlags & DMA_STATUS_FIFO_END) != 0) {
+          /* Simply report the length of each packet we receive for now */
+          printk("DMA STATUS : %d words\n", lengthCounter);
+        }
+      } /* if(FIFO word ready) */
+          
+      /* Since we're here, it means that we need to read some FIFO data: either to pop the
+       * first word coming out of an empty state, "priming" the process, to process a word
+       * which was popped by the last read, or both!
+       */
+      fifoDataWord = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_DATA_REG));
+          
+      /* Re-sample the FIFO status flags for the next iteration */
+      fifoFlags = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_STATUS_FIFO_FLAGS_REG));
+    } /* while(FIFO words pending) */
+  } while(!kthread_should_stop());
+
+  return(0);
 }
 
 int32_t labx_dma_probe(struct labx_dma *dma, 
@@ -143,6 +220,9 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(dma->syncedWriteQueue));
 
+  /* Initialize the waitqueue used for status FIFO events */
+  init_waitqueue_head(&(dma->statusFifoQueue));
+
   /* Initialize the data structures storing status information */
   spin_lock_init(&dma->statusMutex);
   dma->statusHead = &dma->statusPackets[0];
@@ -151,13 +231,25 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Ensure that no interrupts are enabled */
   XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), DMA_NO_IRQS);
 
+  /* Run the thread assigned to converting status FIFO words into Netlink packets
+   * after initializing its state to wait for the ISR
+   */
+  printk("START NETLINK, dma @ 0x%08X\n", (uint32_t)dma);
+  dma->statusReady = DMA_STATUS_IDLE;
+  dma->netlinkTask = kthread_run(netlink_thread, (void*) dma, "%s:netlink", dma->name);
+  if (IS_ERR(dma->netlinkTask)) {
+    printk(KERN_ERR "%s: DMA Netlink task creation failed\n", dma->name);
+    return(-EIO);
+  }
+
   /* Request the IRQ if one was supplied */
   if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     uint32_t irqMask;
 
+    /* Permit the IRQ to be shared with an enclosing hardware module */
     returnValue = request_irq(dma->irq, 
                               &labx_dma_interrupt, 
-                              IRQF_DISABLED, 
+                              IRQF_SHARED,
                               dma->name, 
                               dma);
     if (returnValue) {
@@ -278,7 +370,7 @@ static uint32_t configWords[MAX_CONFIG_WORDS];
 
 static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 {
-  // Reuse configWords space to hold buffer pointers
+  /* Reuse configWords space to hold buffer pointers */
   void** pointers = (void**)configWords;
   int i,j;
 
@@ -286,12 +378,12 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
   {
     if (alloc->size < 4096)
     {
-      // Force alignment
+      /* Force alignment */
       pointers[i] = (void*)(((uintptr_t)(kmalloc(alloc->size*2, GFP_DMA) + alloc->size-1)) & ~(alloc->size-1));
     }
     else
     {
-      // Page size chunks or greater will always be aligned
+      /* Page size chunks or greater will always be aligned */
       pointers[i] = kmalloc(alloc->size, GFP_DMA);
     }
 
@@ -310,7 +402,7 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 
 static int free_buffers(struct labx_dma* dma, DMAAlloc* alloc)
 {
-  // Reuse configWords space to hold buffer pointers
+  /* Reuse configWords space to hold buffer pointers */
   void** pointers = (void**)configWords;
   int i;
 

@@ -684,6 +684,7 @@ static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
 static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
+  irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
@@ -694,6 +695,7 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   if((maskedFlags & SYNC_IRQ) != 0) {
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(depacketizer->syncedWriteQueue));
+    returnValue = IRQ_HANDLED;
   }
   
   /* Detect the stream change IRQ */
@@ -702,9 +704,11 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
 
     /* Wake up all threads waiting for a stream status event */
     wake_up_interruptible(&(depacketizer->streamStatusQueue));
+    returnValue = IRQ_HANDLED;
   }
 
-  return(IRQ_HANDLED);
+  /* Return whether this was an IRQ we handled or not */
+  return(returnValue);
 }
 
 static int netlink_thread(void *data)
@@ -964,9 +968,13 @@ static int audio_depacketizer_probe(const char *name,
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
   if(irq != NULL) {
+    /* Request the IRQ as a shared line, since we may share it with a DMA */
     depacketizer->irq = irq->start;
-    returnValue = request_irq(depacketizer->irq, &labx_audio_depacketizer_interrupt, 
-                              IRQF_DISABLED, depacketizer->name, depacketizer);
+    returnValue = request_irq(depacketizer->irq, 
+                              &labx_audio_depacketizer_interrupt, 
+                              IRQF_SHARED, 
+                              depacketizer->name, 
+                              depacketizer);
     if (returnValue) {
       printk(KERN_ERR "%s : Could not allocate Lab X Audio Depacketizer interrupt (%d).\n",
              depacketizer->name, depacketizer->irq);
@@ -1069,20 +1077,12 @@ static int audio_depacketizer_probe(const char *name,
     depacketizer->hasDma = INSTANCE_HAS_DMA;
     depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
 
-    /* TEMPORARY - Indicate that the DMA has no IRQ; we need to be able to provide
-     *             one for use with the status FIFO!  This is a shared IRQ; we need
-     *             to supply the shared IRQ we use, and make sure we request it
-     *             locally with IRQF_SHARED (if that's still the appropriate way to
-     *             specify) and determine whether we've handled an interrupt in the ISR.
-     */
-    dmaIrqParam = DMA_NO_IRQ_SUPPLIED;
-#if 0
+    /* Provide the encapsulated DMA with the shared interrupt line */
     if(depacketizer->irq == NO_IRQ_SUPPLIED) {
       dmaIrqParam = DMA_NO_IRQ_SUPPLIED;
     } else {
       dmaIrqParam = depacketizer->irq;
     }
-#endif
 
     /* Allow the underlying DMA driver to infer its microcode size */
     labx_dma_probe(&depacketizer->dma, depacketizer->name, DMA_UCODE_SIZE_UNKNOWN, dmaIrqParam); 
