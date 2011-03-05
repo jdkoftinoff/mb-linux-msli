@@ -127,6 +127,7 @@ static int tx_netlink_status(struct labx_dma *dma) {
      * number of more complex devices.  Both are captured in a dev_t, which is cast
      * to a 32-bit unsigned quantity here.
      */
+    printk("Dispatch for device major / minor (%d, %d)\n", MAJOR(dma->deviceNode), MINOR(dma->deviceNode));
     returnValue = nla_put_u32(skb, LABX_DMA_EVENTS_A_DMA_DEVICE, (uint32_t) dma->deviceNode);
     if(returnValue != 0) goto tx_failure;
 
