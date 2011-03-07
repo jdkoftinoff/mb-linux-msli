@@ -116,6 +116,7 @@ typedef enum
 #define DMA_OPCODE_ADDRESS_ALIGN          0x14
 #define DMA_OPCODE_INDEX_LOGICAL          0x15
 #define DMA_OPCODE_SET_BYTE_ORDER         0x16
+#define DMA_OPCODE_PUSH_STATUS            0x17
 #define DMA_OPCODE_STOP                   0xFF
 
 /* Constants identifying different branch conditions */
@@ -206,6 +207,14 @@ typedef enum
 #define DMA_CACHE_ADDRESS_MASK(config)       (((1<<DMA_CACHE_ADDRESS_BITS)-1)<<DMA_CACHE_ADDRESS_SHIFT(config))
 #define DMA_BUFFER_ADDRESS_SHIFT(config)     (0)
 #define DMA_TRANSFER_LENGTH_SHIFT(config)    (0)
+#define DMA_STATUS_IMMEDIATE_MASK            (0x0FF)
+#define   DMA_STATUS_SOURCE_SHIFT            (8)
+#define   DMA_STATUS_SOURCE_BITS             (2)
+#define     DMA_STATUS_SOURCE_IMMEDIATE      (0x00)
+#define     DMA_STATUS_SOURCE_INDEX          (0x01)
+#define     DMA_STATUS_SOURCE_ALU            (0x02)
+#define DMA_STATUS_END_BIT                   (0x01 << (DMA_STATUS_SOURCE_SHIFT + DMA_STATUS_SOURCE_BITS))
+#define DMA_STATUS_BEGIN_BIT                 (DMA_STATUS_END_BIT << 1)
 
 /* Returns a NOP instruction */
 static inline DMAInstruction DMA_NOP(DMAConfiguration config)
@@ -322,7 +331,9 @@ static inline DMAInstruction DMA_LOAD_ALU(DMAConfiguration config, EDMAALU alu_S
 /* @param store_Address - Base location to address the RAM block */
 /* @param index_Select  - Index counter to use as an offset to the store address */
 /* @param interlock     - Hold the parameter interlock or not */
-static inline DMAInstruction DMA_STORE_ALU(DMAConfiguration config, EDMAALU alu_Select, EDMASource source_Select,
+static inline DMAInstruction DMA_STORE_ALU(DMAConfiguration config, 
+                                           EDMAALU alu_Select, 
+                                           EDMASource source_Select,
 	uint32_t store_Address, EDMAIndex index_Select, EInterlock interlock)
 {
 	return ((DMA_OPCODE_STORE_ALU << DMA_OPCODE_SHIFT(config)) |
@@ -579,28 +590,87 @@ static inline DMAInstruction DMA_STOP(DMAConfiguration config)
 /* @param address_Modulus - Modulus which will be applied to check for alignment */
 static inline DMAInstruction DMA_ADDRESS_ALIGN(DMAConfiguration config, uint32_t address_Modulus)
 {
-	return ((DMA_OPCODE_ADDRESS_ALIGN << DMA_OPCODE_SHIFT(config)) |
-		((address_Modulus-1) << DMA_CODE_ADDRESS_SHIFT(config)));
+  return ((DMA_OPCODE_ADDRESS_ALIGN << DMA_OPCODE_SHIFT(config)) |
+          ((address_Modulus-1) << DMA_CODE_ADDRESS_SHIFT(config)));
 }
 
 /* Returns an INDEX_LOGICAL instruction used to perform a logical operation on an index register */
 /* @param index_Select - Index register to use */
 /* @param index_Op     - Logical operation to perform */
 /* @param logic_Value  - Constant to be used as the second input to the logical operation */
-static inline DMAInstruction DMA_INDEX_LOGICAL(DMAConfiguration config, EDMAIndex index_Select,
-	EDMALogicalOperation index_Op, uint32_t logic_Value)
+static inline DMAInstruction DMA_INDEX_LOGICAL(DMAConfiguration config, 
+                                               EDMAIndex index_Select,
+                                               EDMALogicalOperation index_Op, 
+                                               uint32_t logic_Value)
 {
-        return ((DMA_OPCODE_INDEX_LOGICAL << DMA_OPCODE_SHIFT(config)) |
-                (index_Select << DMA_INDEX_SELECT_SHIFT(config))       |
-		(index_Op     << DMA_LOGICAL_OP_SHIFT(config))         |
-                ((logic_Value << DMA_INDEX_VALUE_SHIFT(config))&DMA_INDEX_VALUE_MASK(config)));
+  return ((DMA_OPCODE_INDEX_LOGICAL << DMA_OPCODE_SHIFT(config)) |
+          (index_Select << DMA_INDEX_SELECT_SHIFT(config))       |
+          (index_Op     << DMA_LOGICAL_OP_SHIFT(config))         |
+          ((logic_Value << DMA_INDEX_VALUE_SHIFT(config))&DMA_INDEX_VALUE_MASK(config)));
 }
 
 /* Returns an SET_BYTE_ORDER instruction used to set byte ordering from the cache */
 /* @param byte_Order - Byte order (each nybble defines a byte; ex. 0x0123 for standard order) */
 static inline DMAInstruction DMA_SET_BYTE_ORDER(DMAConfiguration config, uint32_t byte_Order)
 {
-        return ((DMA_OPCODE_SET_BYTE_ORDER << DMA_OPCODE_SHIFT(config)) | byte_Order);
+  return ((DMA_OPCODE_SET_BYTE_ORDER << DMA_OPCODE_SHIFT(config)) | byte_Order);
+}
+
+/**
+ * Returns a PUSH_STATUS instruction used to push "packets" of status data up to the
+ * host processor.  This variant pushes an immediate value.
+ *
+ * @param begin_Packet    - Indicates whether this word represents the beginning of a packet
+ * @param end_Packet      - Indicates whether this word represents the end of a packet
+ * @param immediate_Value - Immediate value to be pushed
+ */
+static inline DMAInstruction DMA_PUSH_STATUS_IMMEDIATE(DMAConfiguration config,
+                                                       bool begin_Packet,
+                                                       bool end_Packet,
+                                                       uint8_t immediate_Value) {
+  return((DMA_OPCODE_PUSH_STATUS << DMA_OPCODE_SHIFT(config))     |
+         (begin_Packet ? DMA_STATUS_BEGIN_BIT : 0x00)             |
+         (end_Packet ? DMA_STATUS_END_BIT : 0x00)                 |
+         (DMA_STATUS_SOURCE_IMMEDIATE << DMA_STATUS_SOURCE_SHIFT) |
+         (immediate_Value & DMA_STATUS_IMMEDIATE_MASK));
+}
+
+/**
+  * Returns a PUSH_STATUS instruction used to push "packets" of status data up to the
+  * host processor.  This variant pushes an index register.
+  *
+  * @param begin_Packet - Indicates whether this word represents the beginning of a packet
+  * @param end_Packet   - Indicates whether this word represents the end of a packet
+  * @param index_Select - Index register to push
+  */
+static inline DMAInstruction DMA_PUSH_STATUS_INDEX(DMAConfiguration config,
+                                                   bool begin_Packet,
+                                                   bool end_Packet,
+                                                   EDMAIndex index_Select) {
+  return((DMA_OPCODE_PUSH_STATUS << DMA_OPCODE_SHIFT(config)) |
+         (index_Select << DMA_INDEX_SELECT_SHIFT(config))     |
+         (begin_Packet ? DMA_STATUS_BEGIN_BIT : 0x00)         |
+         (end_Packet ? DMA_STATUS_END_BIT : 0x00)             |
+         (DMA_STATUS_SOURCE_INDEX << DMA_STATUS_SOURCE_SHIFT));
+}
+
+/*
+  * Returns a PUSH_STATUS instruction used to push "packets" of status data up to the
+  * host processor.  This variant pushes an ALU value.
+  *
+  * @param begin_Packet - Indicates whether this word represents the beginning of a packet
+  * @param end_Packet   - Indicates whether this word represents the end of a packet
+  * @param alu_Select   - Which ALU unit to push
+  */
+static inline DMAInstruction DMA_PUSH_STATUS_ALU(DMAConfiguration config,
+                                                 bool begin_Packet,
+                                                 bool end_Packet,
+                                                 EDMAALU alu_Select) {
+  return((DMA_OPCODE_PUSH_STATUS << DMA_OPCODE_SHIFT(config)) |
+         (alu_Select << DMA_ALU_SELECT_SHIFT(config))         |
+         (begin_Packet ? DMA_STATUS_BEGIN_BIT : 0x00)         |
+         (end_Packet ? DMA_STATUS_END_BIT : 0x00)             |
+         (DMA_STATUS_SOURCE_ALU << DMA_STATUS_SOURCE_SHIFT));
 }
 
 /* DMA-specific I/O control definitions */
@@ -645,13 +715,76 @@ typedef struct {
   uint32_t alus;
   uint32_t parameterAddressBits;
   uint32_t codeAddressBits;
+  uint32_t microcodeWords;
+  uint32_t hasStatusFifo;
 } DMACapabilities;
 
 #define DMA_IOC_GET_CAPS      _IOR(DMA_IOC_CHAR, 0x0A, DMACapabilities)
 
+#define DMA_NO_STATUS_FIFO  (0)
+#define DMA_HAS_STATUS_FIFO (1)
+
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)
 #define LABX_DMA_NUM_RESOURCES             (1)
-  
-#endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
 
+/* Constant and type definitions for the optional status FIFO */
+
+/* Maximum size, in words, of a single status packet */
+#define MAX_STATUS_PACKET_WORDS (15)
+
+/* Maximum number of status packets which can be packed into a
+ * single Netlink datagram
+ */
+#define MAX_STATUS_PACKETS_PER_DGRAM  (8)
+
+/* Structure type definition for encapsulating a status packet */
+typedef struct {
+  uint32_t packetLength;
+  uint32_t packetData[MAX_STATUS_PACKET_WORDS];
+} DMAStatusPacket;
+
+/* Generic Netlink family name, version, and multicast groups for Lab X DMA events */
+#define LABX_DMA_EVENTS_FAMILY_NAME     "LABX_DMA_EVTS"
+#define LABX_DMA_EVENTS_FAMILY_VERSION  1
+#define LABX_DMA_EVENTS_STATUS_GROUP    "StatusGroup"
+
+/* Constant enumeration for Netlink event commands from the Lab X DMA driver */
+enum {
+  LABX_DMA_EVENTS_C_UNSPEC,
+  LABX_DMA_EVENTS_C_STATUS_PACKETS,
+  __LABX_DMA_EVENTS_C_MAX,
+};
+#define LABX_DMA_EVENTS_C_MAX (__LABX_DMA_EVENTS_C_MAX - 1)
+
+/* Netlink family attributes */
+enum {
+  LABX_DMA_EVENTS_A_UNSPEC,
+  LABX_DMA_EVENTS_A_DMA_DEVICE,
+  LABX_DMA_EVENTS_A_STATUS_OVERFLOW,
+  LABX_DMA_EVENTS_A_STATUS_ARRAY,
+  __LABX_DMA_EVENTS_A_MAX,
+};
+#define LABX_DMA_EVENTS_A_MAX (__LABX_DMA_EVENTS_A_MAX - 1)
+
+/* Enumerated values for the status overflow field */
+#define DMA_STATUS_FIFO_GOOD      ((uint32_t) 0)
+#define DMA_STATUS_FIFO_OVERFLOW  ((uint32_t) 1)
+
+/* Constant enumeration defining an array of status packets */
+enum {
+  LABX_DMA_STATUS_ARRAY_A_LENGTH,
+  LABX_DMA_STATUS_ARRAY_A_PACKETS,
+  __LABX_DMA_STATUS_ARRAY_A_MAX,
+};
+#define LABX_DMA_STATUS_ARRAY_A_MAX (__LABX_DMA_STATUS_ARRAY_A_MAX - 1)
+
+/* Constant enumeration defining a single status packet */
+enum {
+  LABX_DMA_STATUS_PACKET_A_LENGTH,
+  LABX_DMA_STATUS_PACKET_A_WORDS,
+  __LABX_DMA_STATUS_PACKET_A_MAX,
+};
+#define LABX_DMA_STATUS_PACKET_A_MAX (__LABX_DMA_STATUS_PACKET_A_MAX - 1)
+
+#endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */

@@ -47,45 +47,62 @@
 #define DRIVER_NAME "labx_dma"
 
 #define MAX_DMA_DEVICES 16
+static uint32_t instanceCount;
 static struct labx_dma_pdev* devices[MAX_DMA_DEVICES] = {};
 
-static int labx_dma_open(struct inode *inode, struct file *file)
-{
-	int i;
+static int labx_dma_open_cdev(struct inode *inode, struct file *filp) {
+  int i;
+  struct labx_dma_pdev *dma_pdev = NULL;
 
-	for (i = 0; i<MAX_DMA_DEVICES; i++)
-	{
-      /* printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));*/
-		if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode)))
-		{
-          /* printk("labx_dma_open: found %p\n", devices[i]);*/
-			file->private_data = devices[i];
-			break;
-		}
-	}
+  for (i = 0; i<MAX_DMA_DEVICES; i++) {
+    /* printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));*/
+    if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode)))
+      {
+        /* printk("labx_dma_open: found %p\n", devices[i]);*/
+        dma_pdev = devices[i];
+        filp->private_data = dma_pdev;
+        break;
+      }
+  }
 
-	return 0;
+  if(dma_pdev == NULL) return(-1);
+
+  /* Inform the encapsulated DMA driver that it is being opened */
+  return(labx_dma_open(&dma_pdev->dma));
 }
 
-static int labx_dma_ioctl_cdev(struct inode *inode, struct file *filp,
-                               unsigned int command, unsigned long arg)
-{
+static int labx_dma_release_cdev(struct inode *inode, struct file *filp) {
+  struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)filp->private_data;
+
+  /* Simply let our DMA know it's closing */
+  return(labx_dma_release(&dma_pdev->dma));
+}
+
+static int labx_dma_ioctl_cdev(struct inode *inode,
+                               struct file *filp,
+                               unsigned int command, unsigned long arg) {
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)filp->private_data;
 
 	return labx_dma_ioctl(&dma_pdev->dma, command, arg);
 }
 
 static const struct file_operations labx_dma_fops = {
-	.open = labx_dma_open,
-	.ioctl = labx_dma_ioctl_cdev,
+	.open    = labx_dma_open_cdev,
+    .release = labx_dma_release_cdev,
+	.ioctl   = labx_dma_ioctl_cdev,
 };
 
 #ifdef CONFIG_OF
 static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
-	struct resource r_mem_struct;
+    struct resource r_mem_struct = {};
+    struct resource r_irq_struct = {};
 	struct resource *addressRange = &r_mem_struct;
+    struct resource *irq          = &r_irq_struct;
 	struct labx_dma_pdev *dma_pdev;
+    int32_t irqParam;
+    int32_t *int32Ptr;
+    int32_t microcodeWords;
 	int ret;
 	int i;
   	struct platform_device *pdev = to_platform_device(&ofdev->dev);
@@ -105,10 +122,10 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, pdev->id);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
-			dma_pdev->name) == NULL) {
+                          dma_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
@@ -122,6 +139,15 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	}
 	//printk("DMA Virtual %p\n", dma_pdev->dma.virtualAddress);
 
+    /* Obtain the interrupt request number for the instance */
+    ret = of_irq_to_resource(ofdev->node, 0, irq);
+    if(ret == NO_IRQ) {
+      /* No IRQ was defined; indicate as much */
+      irqParam = DMA_NO_IRQ_SUPPLIED;
+    } else {
+      irqParam = irq->start;
+    }
+
 	dma_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
 	dma_pdev->miscdev.name = dma_pdev->name;
 	dma_pdev->miscdev.fops = &labx_dma_fops;
@@ -134,19 +160,33 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
 	dma_pdev->pdev = pdev;
 	dev_set_drvdata(dma_pdev->miscdev.this_device, dma_pdev);
 
-	labx_dma_probe(&dma_pdev->dma);
+    /* See if the device tree has a valid parameter to tell us our microcode size */
+    int32Ptr = (int32_t *) of_get_property(ofdev->node, "xlnx,microcode-words", NULL);
+    if(int32Ptr == NULL) {
+      /* Allow the DMA driver to infer its microcode size */
+      microcodeWords = DMA_UCODE_SIZE_UNKNOWN;
+    } else {
+      /* Specify the known size */
+      microcodeWords = *int32Ptr;
+    }
+    
+    /* Invoke the base device driver's probe function */
+	labx_dma_probe(&dma_pdev->dma, 
+                   MISC_MAJOR,
+                   dma_pdev->miscdev.minor,
+                   dma_pdev->name, 
+                   microcodeWords, 
+                   irqParam);
 
-	for (i=0; i<MAX_DMA_DEVICES; i++)
-	{
-		if (NULL == devices[i])
-		{
-          /* printk(DRIVER_NAME ": Device %d = %p\n", i, dma_pdev);*/
-          /* printk(DRIVER_NAME ": Misc minor is %d\n", dma_pdev->miscdev.minor);*/
-			devices[i] = dma_pdev;
-			break;
-		}
+	for (i=0; i<MAX_DMA_DEVICES; i++) {
+      if (NULL == devices[i]) {
+        /* printk(DRIVER_NAME ": Device %d = %p\n", i, dma_pdev);*/
+        /* printk(DRIVER_NAME ": Misc minor is %d\n", dma_pdev->miscdev.minor);*/
+        devices[i] = dma_pdev;
+        break;
+      }
 	}
-	return 0;
+	return(0);
 
 unmap:
 	iounmap(dma_pdev->dma.virtualAddress);
@@ -183,7 +223,9 @@ static struct of_platform_driver labx_dma_of_driver = {
 static int labx_dma_pdev_probe(struct platform_device *pdev)
 {
 	struct resource *addressRange;
+    struct resource *irq;
 	struct labx_dma_pdev *dma_pdev;
+    int32_t irqParam;
 	int ret;
 	int i;
 
@@ -195,13 +237,24 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	dma_pdev = (struct labx_dma_pdev*) kzalloc(sizeof(struct labx_dma_pdev), GFP_KERNEL);
 	if(!dma_pdev) return(-ENOMEM);
 
+    /* Attempt to obtain the IRQ; if none is specified, the resource pointer is
+     * NULL, and polling will be used.
+     */
+    irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+    if(irq == NULL) {
+      irqParam = DMA_NO_IRQ_SUPPLIED;
+    } else {
+      irqParam = irq->start;
+    }
+
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, pdev->id);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, instanceCount++);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
-	if(request_mem_region(dma_pdev->physicalAddress, dma_pdev->addressRangeSize,
-			dma_pdev->name) == NULL) {
+	if(request_mem_region(dma_pdev->physicalAddress, 
+                          dma_pdev->addressRangeSize,
+                          dma_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
@@ -227,7 +280,17 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	dma_pdev->pdev = pdev;
 	dev_set_drvdata(dma_pdev->miscdev.this_device, dma_pdev);
 
-	labx_dma_probe(&dma_pdev->dma);
+    /* Call the base driver probe function, passing our name and IRQ selection.
+     * Since we have no "platform data" structure defined, there is no mechanism
+     * for allowing the platform to specify the exact amount of microcode RAM; the
+     * DMA driver will assume the entire microcode address space is backed with RAM.
+     */
+	labx_dma_probe(&dma_pdev->dma, 
+                   MISC_MAJOR,
+                   dma_pdev->miscdev.minor,
+                   dma_pdev->name, 
+                   DMA_UCODE_SIZE_UNKNOWN, 
+                   irqParam);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)
 	{
@@ -272,15 +335,15 @@ static int __devexit labx_dma_pdev_remove(struct platform_device *pdev)
 
 /* Platform device driver structure */
 static struct platform_driver labx_dma_platform_driver = {
-	.probe  = labx_dma_pdev_probe,
-	.remove = labx_dma_pdev_remove,
-	.driver = {
-		.name = DRIVER_NAME,
-	}
+  .probe  = labx_dma_pdev_probe,
+  .remove = labx_dma_pdev_remove,
+  .driver = {
+    .name = DRIVER_NAME,
+  }
 };
 
 /* Driver initialization and exit */
-static int __init labx_dma_driver_init(void)
+static int __init labx_dma_cdev_driver_init(void)
 {
   int returnValue;
 
@@ -288,6 +351,7 @@ static int __init labx_dma_driver_init(void)
   returnValue = of_register_platform_driver(&labx_dma_of_driver);
 #endif
  
+  instanceCount = 0;
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&labx_dma_platform_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
@@ -297,14 +361,14 @@ static int __init labx_dma_driver_init(void)
   return(0);
 }
 
-static void __exit labx_dma_driver_exit(void)
+static void __exit labx_dma_cdev_driver_exit(void)
 {
   /* Unregister as a platform device driver */
   platform_driver_unregister(&labx_dma_platform_driver);
 }
 
-module_init(labx_dma_driver_init);
-module_exit(labx_dma_driver_exit);
+module_init(labx_dma_cdev_driver_init);
+module_exit(labx_dma_cdev_driver_exit);
 
 MODULE_AUTHOR("Chris Wulff");
 MODULE_LICENSE("GPL");

@@ -80,6 +80,8 @@ struct spi_device {
 #define	SPI_LSB_FIRST	0x08			/* per-word bits-on-wire */
 #define	SPI_3WIRE	0x10			/* SI/SO signals shared */
 #define	SPI_LOOP	0x20			/* loopback mode */
+#define	SPI_SLAVE	0x40			/* This _spi_master" driver is actually a
+									 * slave and uses spi_device 0 */
 	u8			bits_per_word;
 	int			irq;
 	void			*controller_state;

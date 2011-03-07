@@ -18,6 +18,9 @@ ifeq ($(UCLIBC_UCLINUX_BROKEN_MUNMAP),y)
 CFLAGS += -DMALLOC_MMB_DEBUGGING
 endif
 endif
+ifeq ($(UCLIBC_MALLOC_DEBUG_FILL),y)
+CFLAGS += -DMALLOC_DEBUG_FILL
+endif
 
 STDLIB_MALLOC_DIR := $(top_srcdir)libc/stdlib/malloc
 STDLIB_MALLOC_OUT := $(top_builddir)libc/stdlib/malloc

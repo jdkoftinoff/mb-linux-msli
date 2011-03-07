@@ -684,6 +684,7 @@ static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
 static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
+  irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
@@ -694,6 +695,7 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   if((maskedFlags & SYNC_IRQ) != 0) {
     /* Wake up all threads waiting for a synchronization event */
     wake_up_interruptible(&(depacketizer->syncedWriteQueue));
+    returnValue = IRQ_HANDLED;
   }
   
   /* Detect the stream change IRQ */
@@ -702,9 +704,11 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
 
     /* Wake up all threads waiting for a stream status event */
     wake_up_interruptible(&(depacketizer->streamStatusQueue));
+    returnValue = IRQ_HANDLED;
   }
 
-  return(IRQ_HANDLED);
+  /* Return whether this was an IRQ we handled or not */
+  return(returnValue);
 }
 
 static int netlink_thread(void *data)
@@ -754,6 +758,14 @@ static int audio_depacketizer_open(struct inode *inode, struct file *filp)
   }
   spin_unlock_irqrestore(&depacketizer->mutex, flags);
   preempt_enable();
+
+  /* Ensure the packet engine is reset */
+  reset_depacketizer(depacketizer);
+
+  /* Open the DMA, if we have one */
+  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_open(&depacketizer->dma);
+  }
   
   return(returnValue);
 }
@@ -762,6 +774,14 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
   unsigned long flags;
+
+  /* Release the DMA, if we have one */
+  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_release(&depacketizer->dma);
+  }
+
+  /* Ensure the packet engine is reset */
+  reset_depacketizer(depacketizer);
 
   preempt_disable();
   spin_lock_irqsave(&depacketizer->mutex, flags);
@@ -925,7 +945,7 @@ static int audio_depacketizer_probe(const char *name,
                                     struct platform_device *pdev,
                                     struct resource *addressRange,
                                     struct resource *irq,
-				    const char *interfaceType) {
+                                    const char *interfaceType) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -933,6 +953,7 @@ static int audio_depacketizer_probe(const char *name,
   uint32_t versionMinor;
   uint32_t versionCompare;
   uint32_t maxStreamShifter;
+  int32_t dmaIrqParam;
   int returnValue;
   
   /* Create and populate a device structure */
@@ -963,9 +984,13 @@ static int audio_depacketizer_probe(const char *name,
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
   if(irq != NULL) {
+    /* Request the IRQ as a shared line, since we may share it with a DMA */
     depacketizer->irq = irq->start;
-    returnValue = request_irq(depacketizer->irq, &labx_audio_depacketizer_interrupt, 
-                              IRQF_DISABLED, depacketizer->name, depacketizer);
+    returnValue = request_irq(depacketizer->irq, 
+                              &labx_audio_depacketizer_interrupt, 
+                              IRQF_SHARED, 
+                              depacketizer->name, 
+                              depacketizer);
     if (returnValue) {
       printk(KERN_ERR "%s : Could not allocate Lab X Audio Depacketizer interrupt (%d).\n",
              depacketizer->name, depacketizer->irq);
@@ -1056,6 +1081,9 @@ static int audio_depacketizer_probe(const char *name,
   spin_lock_init(&depacketizer->mutex);
   depacketizer->opened = false;
 
+  /* Assign an instance number to the depacketizer for use as a minor number */
+  depacketizer->instanceNumber = instanceCount++;
+
   /* Test to see whether the depacketizer instance has a Dma_Coprocessor
    * module contained within for handling the back-end of the audio data
    */
@@ -1067,7 +1095,21 @@ static int audio_depacketizer_probe(const char *name,
      */
     depacketizer->hasDma = INSTANCE_HAS_DMA;
     depacketizer->dma.virtualAddress = depacketizer->virtualAddress + (depacketizer->capabilities.maxInstructions*4*4);
-    labx_dma_probe(&depacketizer->dma); 
+
+    /* Provide the encapsulated DMA with the shared interrupt line */
+    if(depacketizer->irq == NO_IRQ_SUPPLIED) {
+      dmaIrqParam = DMA_NO_IRQ_SUPPLIED;
+    } else {
+      dmaIrqParam = depacketizer->irq;
+    }
+
+    /* Allow the underlying DMA driver to infer its microcode size */
+    labx_dma_probe(&depacketizer->dma, 
+                   DRIVER_MAJOR,
+                   depacketizer->instanceNumber,
+                   depacketizer->name, 
+                   DMA_UCODE_SIZE_UNKNOWN, 
+                   dmaIrqParam); 
 #else
     /* The interface type specified by the platform involves a DMA instance,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the
@@ -1088,7 +1130,6 @@ static int audio_depacketizer_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&depacketizer->cdev, &audio_depacketizer_fops);
   depacketizer->cdev.owner = THIS_MODULE;
-  depacketizer->instanceNumber = instanceCount++;
   kobject_set_name(&depacketizer->cdev.kobj, "%s.%d", depacketizer->name, depacketizer->instanceNumber);
   returnValue = cdev_add(&depacketizer->cdev, MKDEV(DRIVER_MAJOR, depacketizer->instanceNumber), 1);
   if (returnValue < 0)
@@ -1103,16 +1144,18 @@ static int audio_depacketizer_probe(const char *name,
   /* Initialize the waitqueue used for stream status events */
   init_waitqueue_head(&(depacketizer->streamStatusQueue));
 
-  /* Now that the device is configured, enable interrupts if they are to be used */
-  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
-  }
-
-  depacketizer->netlinkTask = kthread_run(netlink_thread, (void*)depacketizer, "depacketizer");
+  /* Initialize the netlink state and start the thread */
+  depacketizer->netlinkSequence = 0;
+  depacketizer->netlinkTask = kthread_run(netlink_thread, (void*)depacketizer, "%s:netlink", depacketizer->name);
   if (IS_ERR(depacketizer->netlinkTask)) {
     printk(KERN_ERR "Depacketizer netlink task creation failed.\n");
     returnValue = -EIO;
     goto kthread_fail;
+  }
+
+  /* Now that the device is configured, enable interrupts if they are to be used */
+  if(depacketizer->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
   }
 
   /* Return success */
@@ -1255,8 +1298,8 @@ static struct platform_driver audio_depacketizer_driver = {
 static int __init audio_depacketizer_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
+  printk(KERN_INFO DRIVER_NAME ": AVB Audio Depacketizer Driver\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright (c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_audio_depacketizer_driver);

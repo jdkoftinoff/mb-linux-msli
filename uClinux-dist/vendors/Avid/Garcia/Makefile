@@ -134,6 +134,11 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
+	agspi0,c,101,0 \
+	agspi1,c,101,1 \
+	agspi2,c,101,2 \
+	agspi3,c,101,3 \
+	agspi4,c,101,4 \
 	spidev0,c,153,0 \
 	spidev1,c,153,1 \
 	spidev2,c,153,2 \
@@ -156,7 +161,13 @@ endif
 
 # Add the Xilinx SPI Master peripheral device node
 ifdef CONFIG_XILINX_SPI
-DEVICES += spidev0,c,153,0 \
+DEVICES +=
+	agspi0,c,101,0 \
+	agspi1,c,101,1 \
+	agspi2,c,101,2 \
+	agspi3,c,101,3 \
+	agspi4,c,101,4 \
+	spidev0,c,153,0 \
 	spidev1,c,153,1 \
 	spidev2,c,153,2 \
 	spidev3,c,153,3 \

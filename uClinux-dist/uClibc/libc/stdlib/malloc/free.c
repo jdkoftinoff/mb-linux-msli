@@ -47,6 +47,9 @@ __free_to_heap (void *mem, struct heap_free_area **heap
 		(long)mem, (long)MALLOC_BASE (mem), MALLOC_SIZE (mem));
 
   size = MALLOC_SIZE (mem);
+#ifdef MALLOC_DEBUG_FILL
+  memset(mem, 0xdd, size - MALLOC_HEADER_SIZE);
+#endif
   mem = MALLOC_BASE (mem);
 
   __heap_lock (heap_lock);

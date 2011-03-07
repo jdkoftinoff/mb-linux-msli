@@ -62,6 +62,7 @@ static void disable_mailbox(struct spi_mailbox *mailbox) {
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, CONTROL_REG));
   controlRegister &= ~MAILBOX_ENABLE;
   XIo_Out32(REGISTER_ADDRESS(mailbox, CONTROL_REG), controlRegister);
+  DBG("Mailbox disabled\n");
 }
 
 /* Enables the passed instance */
@@ -211,14 +212,47 @@ static void send_message_response(struct spi_mailbox *mailbox,
 
 /* Set IRQ flags
  */
-static void set_irq_flags(struct spi_mailbox *mailbox, uint8_t flagValue) {
-  uint8_t irqFlags;
+static void set_spi_irq_flags(struct spi_mailbox *mailbox, uint8_t flagValue) {
 	
   DBG("Setting mailbox flags \n");
-  XIo_Out32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_REG), flagValue);
-  irqFlags = XIo_In32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_REG));
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_SET_REG), flagValue);
 }
 
+/* Read IRQ flags
+ */
+static uint8_t read_spi_irq_flags(struct spi_mailbox *mailbox) {
+  uint8_t irqFlags;
+	
+  DBG("Clearing mailbox flags \n");
+  irqFlags = XIo_In32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_SET_REG));
+  return(irqFlags);
+}
+
+/* Clear IRQ flags
+ */
+static void clear_spi_irq_flags(struct spi_mailbox *mailbox, uint8_t flagValue) {
+	
+  DBG("Clearing mailbox flags \n");
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SPI_IRQ_FLAGS_CLEAR_REG), flagValue);
+}
+
+/* Set IRQ mask 
+ */
+static void set_spi_irq_mask(struct spi_mailbox *mailbox, uint8_t maskValue) {
+	
+  DBG("Setting mailbox mask \n");
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SPI_IRQ_MASK_REG), maskValue);
+}
+
+/* Read IRQ mask
+ */
+static uint8_t read_spi_irq_mask(struct spi_mailbox *mailbox) {
+  uint8_t irqMask;
+	
+  DBG("Reading mailbox mask \n");
+  irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, SPI_IRQ_MASK_REG));
+  return(irqMask);
+}
 /* Buffer for storing configuration words */
 static uint8_t messageBuffer[MAX_MESSAGE_DATA];
 
@@ -288,11 +322,39 @@ static int spi_mailbox_ioctl(struct inode *inode, struct file *flip,
    }  
    break;
   
-  case IOC_SET_IRQ_FLAGS:
+  case IOC_SET_SPI_IRQ_FLAGS:
    {
-     set_irq_flags(mailbox, ((uint8_t)arg));
+     set_spi_irq_flags(mailbox, ((uint8_t)arg));
    }
    break;
+
+  case IOC_CLEAR_SPI_IRQ_FLAGS:
+  {
+    clear_spi_irq_flags(mailbox, ((uint8_t)arg));
+  }
+
+  case IOC_READ_SPI_IRQ_FLAGS:
+  {
+    uint32_t returnValue = read_spi_irq_flags(mailbox);
+     
+    if(copy_to_user((void __user*)arg, &returnValue, sizeof(returnValue)) != 0 ) {
+       return(-EFAULT);
+     }
+  }
+
+  case IOC_SET_SPI_IRQ_MASK:
+  {
+    set_spi_irq_mask(mailbox, ((uint8_t)arg));
+  }
+
+  case IOC_READ_SPI_IRQ_MASK:
+  {
+    uint32_t returnValue = read_spi_irq_mask(mailbox);
+    
+    if(copy_to_user((void __user*)arg, &returnValue, sizeof(returnValue)) != 0 ) {
+       return(-EFAULT);
+     }
+  }
 
   default:
     /* We don't recognize this command.
@@ -388,7 +450,7 @@ static int spi_mailbox_probe(const char *name,
   /* Add as a character device to make the instance available for use */
   cdev_init(&mailbox->cdev, &spi_mailbox_fops);
   mailbox->cdev.owner = THIS_MODULE;
-  kobject_set_name(&mailbox->cdev.kobj, "%s%d", pdev->name, pdev->id);
+  kobject_set_name(&mailbox->cdev.kobj, "%s%d", mailbox->name, mailbox->instanceNumber);
   mailbox->instanceNumber = instanceCount++;
   cdev_add(&mailbox->cdev, MKDEV(DRIVER_MAJOR, mailbox->instanceNumber), 1);
 
@@ -400,6 +462,8 @@ static int spi_mailbox_probe(const char *name,
     XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), ALL_IRQS);
     XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG), IRQ_S2H_MSG_RX);
   }
+
+  DBG("Mailbox initialized\n");
 
   /* Return success */
   return(0);

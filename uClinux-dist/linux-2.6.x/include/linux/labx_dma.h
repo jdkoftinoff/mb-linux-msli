@@ -32,10 +32,33 @@
 
 #define NAME_MAX_SIZE  256
 
+/* Constant allowing an encapsulating driver to tell us that it has
+ * no IRQ resources for us to use
+ */
+#define DMA_NO_IRQ_SUPPLIED  (-1)
+
+/* Similar constant to indicate that the encapsulating driver has no
+ * idea how much microcode RAM an instance being probed has.  If probed
+ * with this parameter, the driver will assume that the entire address
+ * space mapped for microcode (as reported by the DMA capabilities register)
+ * is backed with RAM.
+ */
+#define DMA_UCODE_SIZE_UNKNOWN  (-1)
+
+/* Flag values for ISR -> Netlink thread handshaking */
+#define DMA_STATUS_IDLE      (0)
+#define DMA_NEW_STATUS_READY (1)
+
 /* DMA structure (for use inside other drivers that include DMA) */
-#define NO_IRQ_SUPPLIED   (-1)
 struct labx_dma {
+  /* Virtual address pointer for the memory-mapped hardware */
   void __iomem  *virtualAddress;
+
+  /* Pointer to the enclosing device's name */
+  const char *name;
+
+  /* Device node of the enclosing device */
+  dev_t deviceNode;
 
   /* Bit shift for the address sub-range */
   uint32_t regionShift;
@@ -43,11 +66,23 @@ struct labx_dma {
   /* Capabilites from the CAPS registers */
   DMACapabilities capabilities;
 
-  /* Wait queue for putting threads to sleep */
+  /* Wait queue for putting userspace threads to sleep for synced writes */
   wait_queue_head_t syncedWriteQueue;
+
+  /* Wait queue and other state for the Netlink thread */
+  wait_queue_head_t statusFifoQueue;
+  uint32_t netlinkSequence;
+  struct task_struct *netlinkTask;
+  uint32_t statusReady;
 
   /* Interrupt request number */
   int32_t irq;
+
+  /* Circular buffer of status packets */
+  uint32_t statusIndex;
+  DMAStatusPacket *statusHead;
+  DMAStatusPacket *statusTail;
+  DMAStatusPacket  statusPackets[MAX_STATUS_PACKETS_PER_DGRAM];
 };
 
 /* DMA Platform device structure */
@@ -68,11 +103,37 @@ struct labx_dma_pdev {
   struct labx_dma dma;
 };
 
-/* DMA device probe */
-extern void labx_dma_probe(struct labx_dma *dma);
+/**
+ * DMA device probe function
+ *
+ * @param dma            - DMA device structure to probe with
+ * @param deviceMajor    - Major number of the enclosing device
+ * @param deviceMinor    - Minor number of the enclosing device
+ * @param name           - Pointer to the name of the enclosing device.  The memory this
+ *                         points to must not be destroyed, e.g. the actual name buffer in
+ *                         the enclosing driver's own device structure.
+ * @param microcodeWords - Number of words of microcode RAM the instance has,
+ *                         if known.  Pass DMA_UCODE_SIZE_UNKNOWN if unknown, and
+ *                         it will be assumed that the full address space mapped for
+ *                         microcode in the hardware is RAM-backed.
+ * @param irq            - Interrupt request index to use; pass DMA_NO_IRQ_SUPPLIED if
+ *                         a hardware interrupt is unavailable to the instance.  Some
+ *                         capabilities may not be functional without an IRQ (e.g. the
+ *                         status FIFO netlink events)
+ */
+extern int32_t labx_dma_probe(struct labx_dma *dma, 
+                              uint32_t deviceMajor,
+                              uint32_t deviceMinor,
+                              const char *name, 
+                              int32_t microcodeWords, 
+                              int32_t irq);
+
+/* DMA open and release operations */
+extern int32_t labx_dma_open(struct labx_dma *dma);
+extern int32_t labx_dma_release(struct labx_dma *dma);
 
 /* DMA ioctl processing */
-extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg);
+extern int labx_dma_ioctl(struct labx_dma *dma, unsigned int command, unsigned long arg);
 
 #define DMA_REGISTER_RANGE 0
 #define DMA_MICROCODE_RANGE 1
@@ -87,17 +148,39 @@ extern int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned l
 
 /* Register address and control field #defines */
 #define DMA_CONTROL_REG                 0x00
-  #define DMA_DISABLE  0x00000000
-  #define DMA_ENABLE   0x00000001
+#  define DMA_DISABLE  0x00000000
+#  define DMA_ENABLE   0x00000001
+
 #define DMA_CHANNEL_ENABLE_REG          0x01
+#  define DMA_CHANNELS_NONE  (0x00000000)
+
 #define DMA_CHANNEL_START_REG           0x02
-#define DMA_CHANNEL_IRQ_ENABLE_REG      0x03
-#define DMA_CHANNEL_IRQ_REG             0x04
+
+#define DMA_IRQ_ENABLE_REG              0x03
+#define DMA_IRQ_FLAGS_REG               0x04
+#  define DMA_NO_IRQS                (0x00000000)
+#  define DMA_SYNC_IRQ               (0x80000000)
+#  define DMA_STAT_OVRFLW_IRQ        (0x40000000)
+#  define DMA_STAT_READY_IRQ         (0x20000000)
+#  define DMA_CHAN_IRQ(whichChannel) (0x00000001 << whichChannel)
+#  define DMA_ALL_IRQS               (0xFFFFFFFF)
+
 #define DMA_SYNC_REG                    0x05
 #  define DMA_CANCEL_SYNC      (0x00000000)
 #  define DMA_SYNC_NEXT_WRITE  (0x00000001)
 #  define DMA_SYNC_PENDING     (0x80000000)
+
+#define DMA_STATUS_FIFO_FLAGS_REG       0x06
+#  define DMA_STATUS_FIFO_FULL    (0x00000010)
+#  define DMA_STATUS_FIFO_EMPTY   (0x00000008)
+#  define DMA_STATUS_READ_POPPED  (0x00000004)
+#  define DMA_STATUS_FIFO_BEGIN   (0x00000002)
+#  define DMA_STATUS_FIFO_END     (0x00000001)
+
+#define DMA_STATUS_FIFO_DATA_REG        0x07
+
 #define DMA_CAPABILITIES_REG            0x7E
+#  define DMA_CAPS_STATUS_FIFO_BIT           0x010000
 #  define DMA_CAPS_INDEX_SHIFT               12
 #  define DMA_CAPS_INDEX_MASK                0x0F
 #  define DMA_CAPS_CHANNELS_SHIFT            10

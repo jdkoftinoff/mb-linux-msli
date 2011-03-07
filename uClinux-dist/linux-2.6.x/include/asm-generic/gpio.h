@@ -141,6 +141,7 @@ extern int __gpio_to_irq(unsigned gpio);
  * but more typically is configured entirely from userspace.
  */
 extern int gpio_export(unsigned gpio, bool direction_may_change);
+extern int gpio_export_named(unsigned gpio, bool direction_may_change, char *ioname);
 extern void gpio_unexport(unsigned gpio);
 
 #endif	/* CONFIG_GPIO_SYSFS */
