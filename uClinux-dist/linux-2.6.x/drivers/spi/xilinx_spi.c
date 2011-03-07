@@ -84,6 +84,9 @@
 
 #define SPI_SLAVE_BUFSIZE	        512		/* Size of slave buffer */
 
+// #define XSPI_DEBUG_FIFOIO
+// #define XSPI_DEBUG_REGIO
+
 struct xilinx_spi {
 	/* bitbang has to be first */
 	struct spi_bitbang bitbang;
@@ -107,7 +110,7 @@ struct xilinx_spi {
 inline void spi_regw(struct xilinx_spi *xspi, u32 offs, u32 val)
 {
 	out_be32(xspi->regs + offs, val);
-	#ifdef DEBUG
+	#ifdef XSPI_DEBUG_REGIO
 	printk(KERN_DEBUG "%x=>%p  ", val, xspi->regs + offs);
 	#endif
 }
@@ -115,7 +118,7 @@ inline void spi_regw(struct xilinx_spi *xspi, u32 offs, u32 val)
 inline u32 spi_regr(struct xilinx_spi *xspi, u32 offs)
 {
 	u32 val = in_be32(xspi->regs + offs);
-	#ifdef DEBUG
+	#ifdef XSPI_DEBUG_REGIO
 	printk("%x<=%p  ", val, xspi->regs + offs);
 	#endif
 	return val;
@@ -290,8 +293,14 @@ static void xilinx_spi_fill_tx_fifo(struct xilinx_spi *xspi)
 	sr = spi_regr(xspi, XSPI_SR_OFFSET);
 	while ((sr & XSPI_SR_TX_FULL_MASK) == 0 && xspi->remaining_bytes > 0) {
 		if (xspi->tx_ptr) {
+			#ifdef XSPI_DEBUG_FIFOIO
+			printk("[%02x]", *xspi->tx_ptr);
+			#endif
 			spi_regw(xspi, XSPI_TXD_OFFSET, *xspi->tx_ptr++);
 		} else {
+			#ifdef XSPI_DEBUG_FIFOIO
+			printk("[--]");
+			#endif
 			spi_regw(xspi, XSPI_TXD_OFFSET, 0);
 		}
 		xspi->remaining_bytes--;
@@ -406,6 +415,9 @@ static irqreturn_t xilinx_spi_irq(int irq, void *dev_id)
 				u32 data;
 
 				data = spi_regr(xspi, XSPI_RXD_OFFSET);
+				#ifdef XSPI_DEBUG_FIFOIO
+				printk("<%02x>", data & 0xff);
+				#endif
 				if (xspi->rx_ptr) {
 					*xspi->rx_ptr++ = (u8)(data & 0xFF);
 				}
@@ -438,6 +450,9 @@ static irqreturn_t xilinx_spi_irq(int irq, void *dev_id)
 				u32 data;
 
 				data = spi_regr(xspi, XSPI_RXD_OFFSET);
+				#ifdef XSPI_DEBUG_FIFOIO
+				printk("{%02x}", data & 0xff);
+				#endif
 				if (xspi->rx_ptr - xspi->slave_rx_buf < sizeof(xspi->slave_rx_buf)) {
 					*xspi->rx_ptr++ = (u8)(data & 0xFF);
 				}
