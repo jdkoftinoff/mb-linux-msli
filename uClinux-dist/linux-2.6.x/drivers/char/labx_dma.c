@@ -100,9 +100,11 @@ static struct genl_multicast_group labx_dma_mcast = {
  */
 static int tx_netlink_status(struct labx_dma *dma) {
   struct sk_buff *skb;
+  struct nlattr *statusArray;
   void *msgHead;
   int returnValue = 0;
   uint32_t maskedFlags;
+  uint32_t numStatusPackets;
 
   /* First evaluate whether there are any packets to be sent at all */
   if(dma->statusTail != dma->statusHead) {
@@ -140,19 +142,56 @@ static int tx_netlink_status(struct labx_dma *dma) {
                               LABX_DMA_EVENTS_A_STATUS_OVERFLOW, 
                               ((maskedFlags != 0) ? DMA_STATUS_FIFO_OVERFLOW :
                                                     DMA_STATUS_FIFO_GOOD));
+    if(returnValue != 0) goto tx_failure;
+
+    /* Begin a nested attribute of status FIFO packets */
+    statusArray = nla_nest_start(skb, LABX_DMA_EVENTS_A_STATUS_ARRAY);
+    if(statusArray == NULL) goto tx_failure;
+
+    /* Determine how many packets will be written and record this */
+    numStatusPackets = (dma->statusHead - dma->statusTail);
+    if(numStatusPackets < 0) numStatusPackets += MAX_STATUS_PACKETS_PER_DGRAM;
+    returnValue = nla_put_u32(skb, LABX_DMA_STATUS_ARRAY_A_LENGTH, numStatusPackets);
+    if(returnValue != 0) goto tx_failure;
 
     /* Iterate through the circular buffer of status packets until all have
-     * been consumed 
+     * been consumed.  Each status FIFO packet is encoded as an entry in an
+     * overall Netlink table.
      */
     while(dma->statusTail != dma->statusHead) {
-      /* TODO - Marshal each status packet - do we do this in an attributes table? */
-    
+      DMAStatusPacket *statusPacket = dma->statusTail;
+      struct nlattr *packetNesting;
+      uint32_t wordIndex;
+      int32_t nestIndex;
+
+      /* Each packet is itself a nested table of words; begin the nesting */
+      packetNesting = nla_nest_start(skb, LABX_DMA_STATUS_ARRAY_A_PACKETS);
+      if(packetNesting == NULL) goto tx_failure;
+      
+      /* Write the length of the packet and then its raw words */
+      returnValue = nla_put_u32(skb, 
+                                LABX_DMA_STATUS_PACKET_A_LENGTH, 
+                                statusPacket->packetLength);
+      if(returnValue != 0) goto tx_failure;
+
+      nestIndex = LABX_DMA_STATUS_PACKET_A_WORDS;
+      for(wordIndex = 0; wordIndex < statusPacket->packetLength; wordIndex++) {
+        returnValue = nla_put_u32(skb, nestIndex++, statusPacket->packetData[wordIndex]);
+        if(returnValue != 0) goto tx_failure;
+      }
+      
+      /* Close the nesting for the present status packet */
+      nla_nest_end(skb, packetNesting);
+
       /* Advance the tail pointer, wrapping at the end of the buffers */
       dma->statusTail++;
-      if((dma->statusTail - dma->statusPackets) >= MAX_STATUS_PACKETS) {
+      if((dma->statusTail - dma->statusPackets) >= MAX_STATUS_PACKETS_PER_DGRAM) {
         dma->statusTail = dma->statusPackets;
       }
     }
+
+    /* Close the nested array of status packets */
+    nla_nest_end(skb, statusArray);
 
     /* Finalize the message and multicast it */
     genlmsg_end(skb, msgHead);
@@ -255,7 +294,7 @@ static int netlink_thread(void *data) {
            * of the status packet ring when the end has been hit.
            */
           nextStatusHead = (dma->statusHead + 1);
-          if((nextStatusHead - dma->statusPackets) >= MAX_STATUS_PACKETS) {
+          if((nextStatusHead - dma->statusPackets) >= MAX_STATUS_PACKETS_PER_DGRAM) {
             nextStatusHead = dma->statusPackets;
           }
 

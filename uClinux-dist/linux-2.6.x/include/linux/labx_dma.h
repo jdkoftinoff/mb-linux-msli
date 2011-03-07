@@ -32,9 +32,6 @@
 
 #define NAME_MAX_SIZE  256
 
-/* Maximum number of status packets which can be pending */
-#define MAX_STATUS_PACKETS  (8)
-
 /* Constant allowing an encapsulating driver to tell us that it has
  * no IRQ resources for us to use
  */
@@ -85,7 +82,7 @@ struct labx_dma {
   uint32_t statusIndex;
   DMAStatusPacket *statusHead;
   DMAStatusPacket *statusTail;
-  DMAStatusPacket  statusPackets[MAX_STATUS_PACKETS];
+  DMAStatusPacket  statusPackets[MAX_STATUS_PACKETS_PER_DGRAM];
 };
 
 /* DMA Platform device structure */

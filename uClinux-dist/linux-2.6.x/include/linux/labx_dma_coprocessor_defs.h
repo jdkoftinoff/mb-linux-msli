@@ -733,6 +733,11 @@ typedef struct {
 /* Maximum size, in words, of a single status packet */
 #define MAX_STATUS_PACKET_WORDS (15)
 
+/* Maximum number of status packets which can be packed into a
+ * single Netlink datagram
+ */
+#define MAX_STATUS_PACKETS_PER_DGRAM  (8)
+
 /* Structure type definition for encapsulating a status packet */
 typedef struct {
   uint32_t packetLength;
@@ -757,6 +762,7 @@ enum {
   LABX_DMA_EVENTS_A_UNSPEC,
   LABX_DMA_EVENTS_A_DMA_DEVICE,
   LABX_DMA_EVENTS_A_STATUS_OVERFLOW,
+  LABX_DMA_EVENTS_A_STATUS_ARRAY,
   __LABX_DMA_EVENTS_A_MAX,
 };
 #define LABX_DMA_EVENTS_A_MAX (__LABX_DMA_EVENTS_A_MAX - 1)
@@ -765,5 +771,20 @@ enum {
 #define DMA_STATUS_FIFO_GOOD      ((uint32_t) 0)
 #define DMA_STATUS_FIFO_OVERFLOW  ((uint32_t) 1)
 
-#endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
+/* Constant enumeration defining an array of status packets */
+enum {
+  LABX_DMA_STATUS_ARRAY_A_LENGTH,
+  LABX_DMA_STATUS_ARRAY_A_PACKETS,
+  __LABX_DMA_STATUS_ARRAY_A_MAX,
+};
+#define LABX_DMA_STATUS_ARRAY_A_MAX (__LABX_DMA_STATUS_ARRAY_A_MAX - 1)
 
+/* Constant enumeration defining a single status packet */
+enum {
+  LABX_DMA_STATUS_PACKET_A_LENGTH,
+  LABX_DMA_STATUS_PACKET_A_WORDS,
+  __LABX_DMA_STATUS_PACKET_A_MAX,
+};
+#define LABX_DMA_STATUS_PACKET_A_MAX (__LABX_DMA_STATUS_PACKET_A_MAX - 1)
+
+#endif /* _LABX_DMA_COPROCESSOR_DEFS_H_ */
