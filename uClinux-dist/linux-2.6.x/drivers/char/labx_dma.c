@@ -122,13 +122,11 @@ static int tx_netlink_status(struct labx_dma *dma) {
       goto tx_failure;
     }
 
-    /* Write the DMA device's major and minor number to identify the message source.
-     * Both values are required since this driver can be used encapsulated within any
-     * number of more complex devices.  Both are captured in a dev_t, which is cast
-     * to a 32-bit unsigned quantity here.
+    /* Write the DMA device's ID, properly translated for userspace, to identify the
+     * message source.  The full ID is required since this driver can be used encapsulated 
+     * within any number of more complex devices.
      */
-    printk("Dispatch for device major / minor (%d, %d)\n", MAJOR(dma->deviceNode), MINOR(dma->deviceNode));
-    returnValue = nla_put_u32(skb, LABX_DMA_EVENTS_A_DMA_DEVICE, (uint32_t) dma->deviceNode);
+    returnValue = nla_put_u32(skb, LABX_DMA_EVENTS_A_DMA_DEVICE, new_encode_dev(dma->deviceNode));
     if(returnValue != 0) goto tx_failure;
 
     /* Set an attribute indicating whether the status FIFO overflowed before
