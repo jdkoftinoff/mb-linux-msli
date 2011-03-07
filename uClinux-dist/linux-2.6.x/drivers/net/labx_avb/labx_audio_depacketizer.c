@@ -718,7 +718,7 @@ static int netlink_thread(void *data)
     set_current_state(TASK_INTERRUPTIBLE);
       
     wait_event_interruptible(depacketizer->streamStatusQueue,
-                             (depacketizer->streamStatusGeneration != streamStatusGeneration));
+                             ((depacketizer->streamStatusGeneration != streamStatusGeneration) || (kthread_should_stop())));
 
     __set_current_state(TASK_RUNNING);
 
