@@ -9,5 +9,5 @@ EXTRA_CFLAGS += -I$(TOPDIR)/drivers/net/labx_avb
 # Include the Labrinth-specific drivers which layer
 # functionality atop the Lab X AVB Audio drivers
 obj-y += labrinth_avb_packetizer.o
+obj-y += labrinth_legacy_bridge.o
 obj-y += labrinth_tdm_output.o
-
