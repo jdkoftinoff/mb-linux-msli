@@ -250,7 +250,7 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 	/* Request and map the device's I/O memory region into uncacheable space */
 	dma_pdev->physicalAddress = addressRange->start;
 	dma_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s%d", pdev->name, instanceCount++);
+	snprintf(dma_pdev->name, NAME_MAX_SIZE, "%s.%d", pdev->name, pdev->id);
 	dma_pdev->name[NAME_MAX_SIZE - 1] = '\0';
 	if(request_mem_region(dma_pdev->physicalAddress, 
                           dma_pdev->addressRangeSize,
@@ -259,6 +259,7 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
 		goto free;
 	}
 	//printk("DMA Physical %08X\n", dma_pdev->physicalAddress);
+	instanceCount++;
 
 	dma_pdev->dma.virtualAddress = 
 		(void*) ioremap_nocache(dma_pdev->physicalAddress, dma_pdev->addressRangeSize);
