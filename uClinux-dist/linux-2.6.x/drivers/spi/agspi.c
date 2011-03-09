@@ -524,7 +524,7 @@ static int agspi_probe(struct spi_device *spi)
 		agspi->devt = MKDEV(AGSPI_MAJOR, minor);
 		init_completion(&agspi->read_complete);
 		init_completion(&agspi->done);
-		set_gpio_irq_callback(0, GARCIA_FPGA_GPIO_SLOT_SPISEL_1 << minor,
+		set_gpio_irq_callback(0, BIT(21) << minor,
 				xspi_ss_irq_callback, agspi);
 
 		dev = device_create(&agspi_class, &spi->dev, agspi->devt,
