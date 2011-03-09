@@ -66,6 +66,8 @@ struct agctl_data {
 	spinlock_t			ac_lock;
 	struct list_head	device_entry;
 	struct completion   done;
+	char				nodename[32];
+	struct class		agclass;
 	struct fasync_struct *async_queue; /* asynchronous readers */
 
 	/* buffer is NULL unless this device is open (users > 0) */
@@ -89,6 +91,7 @@ static DEFINE_MUTEX(device_list_lock);
 #define AC_CONTROL_OFFSET	0x18	/* 6-bit Status/Control Register */
 #define AC_CLK_COUNT_OFFSET	0x1C	/* 8-bit Clock Count Register (s:RO, m:R/W) */
 
+#define AC_CTL_SSI_DDIR		BIT(6)	/* Data direction of SSI (R/W) */
 #define AC_CTL_SLAVE_MODE	BIT(5)	/* Driver is slave to Hub48 (RO) */
 #define AC_CTL_RESET_SIG	BIT(4)	/* Reset signal is asserted (s:in, m:out) */
 #define AC_CTL_MUTE_SIG 	BIT(3)	/* Mute signal is asserted (s:in, m:out) */
@@ -368,13 +371,45 @@ static struct file_operations agctl_fops = {
 };
 
 /*-------------------------------------------------------------------------*/
-static ssize_t agdev_w_reset(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf, size_t count)
+static ssize_t agdev_w_ssi_ddir(struct class *class, const char *buf, size_t count)
 {
 	uint32_t status;
 	long int val;
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (strict_strtol(buf, 0, &val) != 0) {
+		return -EINVAL;
+	}
+	if (agctl != NULL) {
+		spin_lock_irq(&agctl->ac_lock);
+		status = agc_regr(agctl, AC_CONTROL_OFFSET);
+		if (val == 0) {
+			status &= ~AC_CTL_SSI_DDIR;
+		} else {
+			status |= AC_CTL_SSI_DDIR;
+		}
+		agc_regw(agctl, AC_CONTROL_OFFSET, status);
+		spin_unlock_irq(&agctl->ac_lock);
+	}
+	return count;
+}
+
+static ssize_t agdev_r_ssi_ddir(struct class *class, char *buf)
+{
+	uint32_t ddir = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		ddir = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_SSI_DDIR) != 0);
+	}
+	return (snprintf(buf, PAGE_SIZE, "%u\n", ddir));
+}
+
+static CLASS_ATTR(ssi_ddir, S_IRUGO | S_IWUSR, agdev_r_ssi_ddir, agdev_w_ssi_ddir);
+
+static ssize_t agdev_w_reset(struct class *class, const char *buf, size_t count)
+{
+	uint32_t status;
+	long int val;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (strict_strtol(buf, 0, &val) != 0) {
 		return -EINVAL;
 	}
@@ -394,27 +429,23 @@ static ssize_t agdev_w_reset(struct device *dev,
 	return count;
 }
 
-static ssize_t agdev_r_reset(struct device *dev,
-				       struct device_attribute *attr,
-				       char *buf)
+static ssize_t agdev_r_reset(struct class *class, char *buf)
 {
 	uint32_t rst = 0;
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
 		rst = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_RESET_SIG) != 0);
 	}
 	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
 }
 
-static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR, agdev_r_reset, agdev_w_reset);
+static CLASS_ATTR(reset, S_IRUGO | S_IWUSR, agdev_r_reset, agdev_w_reset);
 
-static ssize_t agdev_w_mute(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf, size_t count)
+static ssize_t agdev_w_mute(struct class *class, const char *buf, size_t count)
 {
 	uint32_t status;
 	long int val;
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (strict_strtol(buf, 0, &val) != 0) {
 		return -EINVAL;
 	}
@@ -434,26 +465,22 @@ static ssize_t agdev_w_mute(struct device *dev,
 	return count;
 }
 
-static ssize_t agdev_r_mute(struct device *dev,
-				       struct device_attribute *attr,
-				       char *buf)
+static ssize_t agdev_r_mute(struct class *class, char *buf)
 {
 	uint32_t rst = 0;
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
 		rst = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_MUTE_SIG) != 0);
 	}
 	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
 }
 
-static DEVICE_ATTR(mute, S_IRUGO | S_IWUSR, agdev_r_mute, agdev_w_mute);
+static CLASS_ATTR(mute, S_IRUGO | S_IWUSR, agdev_r_mute, agdev_w_mute);
 
-static ssize_t agdev_w_strobe(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
+static ssize_t agdev_w_strobe(struct class *class, const char *buf, size_t count)
 {
 	long int val;
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (strict_strtol(buf, 0, &val) != 0) {
 		return -EINVAL;
 	}
@@ -465,53 +492,27 @@ static ssize_t agdev_w_strobe(struct device *dev,
 	return count;
 }
 
-static ssize_t agdev_r_strobe(struct device *dev,
-				       struct device_attribute *attr,
-				       char *buf)
+static ssize_t agdev_r_strobe(struct class *class, char *buf)
 {
-	struct agctl_data *agctl = dev_get_drvdata(dev);
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	return (snprintf(buf, PAGE_SIZE, "%u\n", abs(agctl->strobedelay)));
 }
 
-static DEVICE_ATTR(strobe, S_IRUGO | S_IWUSR, agdev_r_strobe, agdev_w_strobe);
-
-static ssize_t agctl_r_minors(struct class *c,char *buf)
-{
-	return(sprintf(buf, "%ld\n", find_first_zero_bit(minors, N_AGCTL_MINORS)));
-}
-
-/* This class makes mdev/udev create the
- * /dev/agctl-B.C character device nodes exposing our userspace API.
- * It also simplifies memory management.
- */
-
-static struct class_attribute agctl_class_attrs[] = {
-	__ATTR(minors, S_IRUGO, agctl_r_minors, NULL),
-	__ATTR_NULL,
-};
-
-static struct class agctl_class = {
-	.name =		DRIVER_NAME,
-	.owner =	THIS_MODULE,
-	.class_attrs =	agctl_class_attrs,
-};
+static CLASS_ATTR(strobe, S_IRUGO | S_IWUSR, agdev_r_strobe, agdev_w_strobe);
 
 /*-------------------------------------------------------------------------*/
 
 static int garcia_control_probe(const char *name, struct platform_device *pdev,
-		void __iomem *address, uint32_t irq, const char *interfaceType)
+		void __iomem *address, uint32_t irq)
 {
 	struct agctl_data *agctl;
 	unsigned long minor;
-	int status;
+	int status = 0;
 
 	/* Allocate driver data */
-	printk("Probe Garcia control type \"%s\", name \"%s\" at address %p IRQ %d",
-			interfaceType, name, address, irq);
 	agctl = kzalloc(sizeof(*agctl), GFP_KERNEL);
 	if (!agctl)
 		return -ENOMEM;
-
 	/* Initialize the driver data */
 	spin_lock_init(&agctl->ac_lock);
 
@@ -523,8 +524,8 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 	mutex_lock(&device_list_lock);
 	minor = find_first_zero_bit(minors, N_AGCTL_MINORS);
 	if (minor < N_AGCTL_MINORS) {
-		struct device *dev;
-
+		printk("Probe Garcia control, name \"%s\" devnode %d.%ld, at address %p IRQ %d\n",
+				name, AGCTL_MAJOR, minor, address, irq);
 		agctl->devt = MKDEV(AGCTL_MAJOR, minor);
 		init_completion(&agctl->done);
 
@@ -538,13 +539,21 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		}
 
 		agctl->regs = address;
-		dev = device_create(&agctl_class, NULL, agctl->devt,
-				    agctl, "agctl-%d.%ld", AGCTL_MAJOR, minor);
-		status = device_create_file(dev, &dev_attr_reset);
-		status = device_create_file(dev, &dev_attr_mute);
-		status = device_create_file(dev, &dev_attr_strobe);
-		sysfs_create_link(agctl_class.dev_kobj, &dev->kobj, dev->kobj.name);
-		status = IS_ERR(dev) ? PTR_ERR(dev) : 0;
+		snprintf(agctl->nodename, sizeof(agctl->nodename), "agctl-%d.%ld", AGCTL_MAJOR, minor);
+		agctl->agclass.name = agctl->nodename;
+		agctl->agclass.owner = THIS_MODULE;
+		agctl->agclass.class_release = NULL;
+		class_register(&agctl->agclass);
+
+		if (IS_ERR(&agctl->agclass)) {
+			printk(KERN_ERR "Unable create sysfs class for %s\n", agctl->nodename);
+			return PTR_ERR(&agctl->agclass);
+		}
+
+		status = class_create_file(&agctl->agclass, &class_attr_ssi_ddir);
+		status = class_create_file(&agctl->agclass, &class_attr_reset);
+		status = class_create_file(&agctl->agclass, &class_attr_mute);
+		status = class_create_file(&agctl->agclass, &class_attr_strobe);
 	} else {
 		dev_dbg(&pdev->dev, "no minor number available!\n");
 		status = -ENODEV;
@@ -566,7 +575,6 @@ static int garcia_control_platform_probe(struct platform_device *pdev)
 {
 	struct resource *r_irq;
 	struct resource *r_mem;
-	char *interfaceType;
 	void __iomem *iom;
 
 	/* Obtain the resources for this instance */
@@ -589,42 +597,25 @@ static int garcia_control_platform_probe(struct platform_device *pdev)
 	 */
 	r_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
-	/* The only other platform data provided is a string specifying the
-	 * interface type for the instance
-	 */
-	interfaceType = (char *) pdev->dev.platform_data;
-	if(interfaceType == NULL) {
-		printk(KERN_ERR "%s: No interface type string specified\n", pdev->name);
-		return -EFAULT;
-	}
-
 	/* Dispatch to the generic function */
-	return(garcia_control_probe(pdev->name, pdev, iom, r_irq->start, interfaceType));
-}
-
-static int __match_devt(struct device *dev, void *data)
-{
-	return (dev->devt == *(dev_t *)data);
+	return(garcia_control_probe(pdev->name, pdev, iom, r_irq->start));
 }
 
 static int garcia_control_platform_remove(struct platform_device *pdev)
 {
 	struct agctl_data *agctl = platform_get_drvdata(pdev);
-	struct device *dev;
 
  	if (!agctl) {
  		return(-1);
  	}
-	dev = class_find_device(&agctl_class, NULL,
-			&agctl->devt, __match_devt);
-
 	/* prevent new opens */
 	mutex_lock(&device_list_lock);
 	list_del(&agctl->device_entry);
-	device_remove_file(dev, &dev_attr_reset);
-	device_remove_file(dev, &dev_attr_mute);
-	device_remove_file(dev, &dev_attr_strobe);
-	device_destroy(&agctl_class, agctl->devt);
+	class_remove_file(&agctl->agclass, &class_attr_ssi_ddir);
+	class_remove_file(&agctl->agclass, &class_attr_reset);
+	class_remove_file(&agctl->agclass, &class_attr_mute);
+	class_remove_file(&agctl->agclass, &class_attr_strobe);
+	class_unregister(&agctl->agclass);
 	clear_bit(MINOR(agctl->devt), minors);
 	iounmap(agctl->regs);
 	if (agctl->users == 0)
@@ -643,8 +634,8 @@ static int __devinit garcia_control_of_probe(struct of_device *ofdev, const stru
 	struct resource *r_mem = &r_mem_struct;
 	struct platform_device *pdev = to_platform_device(&ofdev->dev);
 	const char *name = dev_name(&ofdev->dev);
-	const char *interfaceType;
 	void __iomem *iom;
+	int irq;
 
 	/* Obtain the resources for this instance */
 	rc = of_address_to_resource(ofdev->node, 0, r_mem);
@@ -660,20 +651,14 @@ static int __devinit garcia_control_of_probe(struct of_device *ofdev, const stru
 
 	iom = ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
 
-	rc = of_irq_to_resource(ofdev->node, 0, r_irq);
-	if (rc) {
+	irq = of_irq_to_resource(ofdev->node, 0, r_irq);
+	if (irq == NO_IRQ) {
 		dev_warn(&ofdev->dev,"invalid interrupt\n");
-		return rc;
-	}
-
-	interfaceType = (char *) of_get_property(ofdev->node, "xlnx,interface-type", NULL);
-	if(interfaceType == NULL) {
-		dev_warn(&ofdev->dev, "No interface type specified in device tree\n");
-		return(-EFAULT);
+		return -ENXIO;
 	}
 
 	/* Dispatch to the generic function */
-	return(garcia_control_probe(name, pdev, iom, r_irq->start, interfaceType));
+	return(garcia_control_probe(name, pdev, iom, irq));
 }
 
 static int __devexit garcia_control_of_remove(struct of_device *dev)
@@ -684,7 +669,7 @@ static int __devexit garcia_control_of_remove(struct of_device *dev)
 }
 
 static struct of_device_id garcia_control_of_match[] = {
-	{ .compatible = "xlnx,labx-garcia-control-1.00.a", },
+	{ .compatible = "xlnx,avid-config-bus-controller-1.00.a", },
 	{ /* end of list */ },
 };
 
@@ -729,21 +714,12 @@ static int __init agctl_init(void)
 	 */
 	BUILD_BUG_ON(N_AGCTL_MINORS > 256);
 	status = register_chrdev(AGCTL_MAJOR, DRIVER_NAME, &agctl_fops);
-	if (status < 0)
-		return status;
-
-	status = class_register(&agctl_class);
-
-	if (status < 0) {
-		unregister_chrdev(AGCTL_MAJOR, DRIVER_NAME);
-	}
 	return status;
 }
 module_init(agctl_init);
 
 static void __exit agctl_exit(void)
 {
-	class_unregister(&agctl_class);
 	unregister_chrdev(AGCTL_MAJOR, DRIVER_NAME);
 }
 module_exit(agctl_exit);
