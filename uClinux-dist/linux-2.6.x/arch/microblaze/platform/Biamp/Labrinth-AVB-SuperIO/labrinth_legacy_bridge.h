@@ -30,7 +30,6 @@
 #include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/ioport.h>
-#include <linux/miscdevice.h>
 #include <linux/types.h>
 
 /* Address range definitions */
@@ -80,11 +79,13 @@
 #define NAME_MAX_SIZE    (256)
 
 struct legacy_bridge {
-  /* Misc device */
-  struct miscdevice miscdev;
-
   /* Pointer back to the platform device */
   struct platform_device *pdev;
+
+  /* Character device data */
+  struct cdev cdev;
+  dev_t       deviceNumber;
+  uint32_t    instanceNumber;
 
   /* Name for use in identification */
   char name[NAME_MAX_SIZE];

@@ -26,7 +26,6 @@
 #include "labrinth_legacy_bridge.h"
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
-#include <linux/miscdevice.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -40,6 +39,9 @@
  * This driver will work with revision 1.1 only.
  */
 #define DRIVER_NAME "labrinth_legacy_bridge"
+
+/* Major device number for the driver */
+#define DRIVER_MAJOR 222
 
 /* Maximum number of legacy_bridges and instance count */
 #define MAX_INSTANCES 4
@@ -113,7 +115,7 @@ static int legacy_bridge_ioctl(struct inode *inode,
 }
 
 /* Character device file operations structure */
-static struct file_operations legacy_bridge_fops = {
+static const struct file_operations legacy_bridge_fops = {
   .open	   = legacy_bridge_open,
   .release = legacy_bridge_release,
   .ioctl   = legacy_bridge_ioctl,
@@ -140,8 +142,10 @@ static int legacy_bridge_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   bridge->physicalAddress = addressRange->start;
   bridge->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+
   snprintf(bridge->name, NAME_MAX_SIZE, "%s%d", name, instanceCount++);
   bridge->name[NAME_MAX_SIZE - 1] = '\0';
+
   if(request_mem_region(bridge->physicalAddress, bridge->addressRangeSize,
                         bridge->name) == NULL) {
     returnValue = -ENOMEM;
@@ -156,7 +160,7 @@ static int legacy_bridge_probe(const char *name,
   }
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X AVB Legacy Bridge at 0x%08X, ",
+  printk(KERN_INFO "%s: Found Labrinth Legacy Bridge at 0x%08X\n",
          bridge->name, 
          (uint32_t)bridge->physicalAddress);
 
@@ -164,19 +168,16 @@ static int legacy_bridge_probe(const char *name,
   spin_lock_init(&bridge->mutex);
   bridge->opened = false;
 
-  /* Register as a misc device */
-  bridge->miscdev.minor = MISC_DYNAMIC_MINOR;
-  bridge->miscdev.name = bridge->name;
-  bridge->miscdev.fops = &legacy_bridge_fops;
-  returnValue = misc_register(&bridge->miscdev);
-  if(returnValue) {
-    printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
-    goto unmap;
-  }
-
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, bridge);
   bridge->pdev = pdev;
+
+  /* Add as a character device to make the instance available for use */
+  cdev_init(&bridge->cdev, &legacy_bridge_fops);
+  bridge->cdev.owner = THIS_MODULE;
+  bridge->instanceNumber = instanceCount++;
+  kobject_set_name(&bridge->cdev.kobj, "%s.%d", bridge->name, bridge->instanceNumber);
+  cdev_add(&bridge->cdev, MKDEV(DRIVER_MAJOR, bridge->instanceNumber), 1);
 
   /* Return success */
   return(0);
@@ -195,7 +196,8 @@ static int legacy_bridge_probe(const char *name,
 static int legacy_bridge_platform_remove(struct platform_device *pdev);
 
 /* Probe for registered devices */
-static int __devinit legacy_bridge_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+//static int __devinit legacy_bridge_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+static int legacy_bridge_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct  = {};
   struct resource *addressRange = &r_mem_struct;
@@ -211,8 +213,7 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev, const struc
   }
 
   /* Dispatch to the generic function */
-  return(0);
-  /*  return(legacy_bridge_probe(name, pdev, addressRange)); */
+  return(legacy_bridge_probe(name, pdev, addressRange));
 }
 
 static int __devexit legacy_bridge_of_remove(struct of_device *dev)
@@ -293,10 +294,15 @@ static int __init legacy_bridge_driver_init(void)
 #endif
  
   /* Register as a platform device driver */
-  instanceCount = 0;
   if((returnValue = platform_driver_register(&legacy_bridge_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
     return(returnValue);
+  }
+
+  /* Allocate a range of major / minor device numbers for use */
+  instanceCount = 0;
+  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0), MAX_INSTANCES, DRIVER_NAME)) < 0) { 
+    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
   }
 
   return(0);
@@ -304,6 +310,8 @@ static int __init legacy_bridge_driver_init(void)
 
 static void __exit legacy_bridge_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
   /* Unregister as a platform device driver */
   platform_driver_unregister(&legacy_bridge_driver);
 }
