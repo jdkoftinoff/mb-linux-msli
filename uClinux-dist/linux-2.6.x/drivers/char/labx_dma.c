@@ -621,12 +621,14 @@ int32_t labx_dma_open(struct labx_dma *dma) {
   XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), DMA_CHANNELS_NONE);
   return(0);
 }
+EXPORT_SYMBOL(labx_dma_open);
 
 /* Closes the instance, disabling the hardware */
 int32_t labx_dma_release(struct labx_dma *dma) {
   disable_dma(dma);
   return(0);
 }
+EXPORT_SYMBOL(labx_dma_release);
 
 /* I/O control operations for the driver */
 int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg) {
