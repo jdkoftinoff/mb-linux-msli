@@ -94,4 +94,13 @@ typedef struct {
   
 #define IOC_CONFIG_MAC_FILTER _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x01, MacFilterConfig)
 
+/* Command to place the bridge's PHY into one of the test modes defined
+ * in phy.h
+ */
+
+#define PHY_NORMAL_MODE   0x00
+#define PHY_TEST_LOOPBACK 0x01
+
+#define IOC_CONFIG_PHY_TEST_MODE _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x01, uint32_t)
+
 #endif

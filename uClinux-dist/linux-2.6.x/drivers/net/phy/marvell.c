@@ -313,13 +313,7 @@ static int m88e3015_config_aneg(struct phy_device *phydev)
 {
 	int err;
 
-	printk("M88E3015 ANEG stub!\n");
 	err = phy_write(phydev, MII_BMCR, BMCR_RESET);
-	if (err < 0)
-		return err;
-
-	err = phy_write(phydev, MII_M1011_PHY_SCR,
-			MII_M1011_PHY_SCR_AUTO_CROSS);
 	if (err < 0)
 		return err;
 
@@ -327,41 +321,36 @@ static int m88e3015_config_aneg(struct phy_device *phydev)
 	return 0;
 }
 
-static int m88e3015_config_init(struct phy_device *phydev)
-{
+static int m88e3015_config_init(struct phy_device *phydev) {
 	int err;
 
-	/* Change address */
-	printk("M88E3015 init stub!\n");
-	err = phy_write(phydev, 0x16, 0x0002);
-	if (err < 0)
-		return err;
-
-	/* Enable 1000 Mbit */
-	err = phy_write(phydev, 0x15, 0x1070);
-	if (err < 0)
-		return err;
-
-	/* Change address */
-	err = phy_write(phydev, 0x16, 0x0003);
-	if (err < 0)
-		return err;
-
-	/* Adjust LED Control */
-	err = phy_write(phydev, 0x10, 0x021e);
-	if (err < 0)
-		return err;
-
-	/* Reset address */
-	err = phy_write(phydev, 0x16, 0x0);
-	if (err < 0)
-		return err;
-
+    /* Place into 100 Mbit-capable, auto-negotiation mode */
+	err = phy_write(phydev, MII_BMCR, (BMCR_ANENABLE | BMCR_ANRESTART));
+	if (err < 0) return err;
 	err = phy_write(phydev, MII_BMCR, BMCR_RESET);
-	if (err < 0)
-		return err;
+	if (err < 0) return err;
 
 	return 0;
+}
+
+static void m88e3015_set_test_mode(struct phy_device *phydev, u32 mode) {
+  /* Configure the PHY for the selected test mode, if supported */
+  switch(mode) {
+  case PHY_TEST_INT_LOOP:
+    phydev->autoneg = AUTONEG_DISABLE;
+    phy_write(phydev, MII_BMCR, (BMCR_RESET | BMCR_LOOPBACK | BMCR_SPEED100 | BMCR_FULLDPLX));
+    printk("88E3015 internal loopback configured\n");
+    break;
+
+  default:
+    /* No test mode or one we don't support, normal operation */
+    if(mode != PHY_TEST_NONE) {
+      printk("PHY test mode unsupported by 88E3015\n");
+    }
+    phy_write(phydev, MII_BMCR, (BMCR_RESET | BMCR_ANENABLE | BMCR_ANRESTART));
+    phydev->autoneg = AUTONEG_ENABLE;
+    printk("88E3015 set for normal operation\n");
+  }
 }
 
 static int m88e1145_config_init(struct phy_device *phydev)
@@ -588,6 +577,7 @@ static struct phy_driver marvell_drivers[] = {
 		.read_status = &genphy_read_status,
 		.ack_interrupt = &marvell_ack_interrupt,
 		.config_intr = &marvell_config_intr,
+        .set_test_mode  = &m88e3015_set_test_mode,
 		.driver = {.owner = THIS_MODULE,},
 	},
 	{

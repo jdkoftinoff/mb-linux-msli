@@ -432,6 +432,30 @@ static int legacy_bridge_ioctl(struct inode *inode,
   switch(command) {
   case IOC_CONFIG_MAC_FILTER:
     break;
+
+  case IOC_CONFIG_PHY_TEST_MODE:
+    {
+      uint32_t testMode;
+      uint32_t phyTestMode;
+
+      /* Dispatch to the PHY driver */
+      if(copy_from_user(&testMode, (void __user*)arg, sizeof(testMode)) != 0) {
+        return(-EFAULT);
+      }
+
+      switch(testMode) {
+      case PHY_TEST_LOOPBACK:
+        phyTestMode = PHY_TEST_INT_LOOP;
+        break;
+
+      default:
+        /* Presume normal mode */
+        phyTestMode = PHY_TEST_NONE;
+      }
+
+      bridge->phy_dev->drv->set_test_mode(bridge->phy_dev, phyTestMode);
+    }
+    break;
     
   default:
     returnValue = -EINVAL;
@@ -477,7 +501,7 @@ static int legacy_bridge_probe(const char *name,
   ndev = alloc_etherdev(sizeof(struct legacy_bridge));
   if (!ndev) {
     dev_err(&pdev->dev, "%s : Could not allocate net device\n", DRIVER_NAME);
-    kfree(bridge);
+    kfree(ndev);
     return(-ENOMEM);
   }
   SET_NETDEV_DEV(ndev, &pdev->dev);
@@ -504,7 +528,7 @@ static int legacy_bridge_probe(const char *name,
   if(request_mem_region(bridge->physicalAddress, bridge->addressRangeSize,
                         bridge->name) == NULL) {
     returnValue = -ENOMEM;
-    goto free;
+    goto netdev_error;
   }
 
   bridge->virtualAddress = 
@@ -548,14 +572,11 @@ static int legacy_bridge_probe(const char *name,
   /* Return success */
   return(0);
 
- unmap:
-  iounmap(bridge->virtualAddress);
  release:
   release_mem_region(bridge->physicalAddress, bridge->addressRangeSize);
  netdev_error:
   if(ndev) free_netdev(ndev);
- free:
-  kfree(bridge);
+
   return(returnValue);
 }
 
@@ -699,7 +720,6 @@ static int legacy_bridge_platform_probe(struct platform_device *pdev) {
 static int legacy_bridge_remove(struct legacy_bridge *bridge) {
   iounmap(bridge->virtualAddress);
   release_mem_region(bridge->physicalAddress, bridge->addressRangeSize);
-
   free_netdev(bridge->ndev);
   return(0);
 }
