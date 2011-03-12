@@ -485,7 +485,7 @@ static struct platform_driver labrinth_tdm_driver = {
 };
 
 /* Driver initialization and exit */
-static int __init labrinth_tdm_driver_init(void)
+static int __devinit labrinth_tdm_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": Labrinth Audio TDM Output driver\n");
@@ -504,7 +504,7 @@ static int __init labrinth_tdm_driver_init(void)
   return(0);
 }
 
-static void __exit labrinth_tdm_driver_exit(void)
+static void __devexit labrinth_tdm_driver_exit(void)
 {
   /* Unregister as a platform device driver */
   platform_driver_unregister(&labrinth_tdm_driver);

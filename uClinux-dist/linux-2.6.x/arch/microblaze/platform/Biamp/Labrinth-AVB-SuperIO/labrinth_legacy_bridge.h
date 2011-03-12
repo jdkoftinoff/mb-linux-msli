@@ -26,11 +26,6 @@
 #ifndef _LABRINTH_LEGACY_BRIDGE_H_
 #define _LABRINTH_LEGACY_BRIDGE_H_
 
-#include <linux/cdev.h>
-#include <linux/fs.h>
-#include <linux/highmem.h>
-#include <linux/ioport.h>
-#include <linux/phy.h>
 #include <linux/types.h>
 
 /* Address range definitions */
@@ -79,41 +74,6 @@
 #  define MAC_SPEED_10_MBPS  (0x00000000)
 #  define MAC_SPEED_100_MBPS (0x00000001)
 #  define MAC_SPEED_1_GBPS   (0x00000002)
-
-/* Driver structure to maintain state for each device instance */
-#define NAME_MAX_SIZE    (256)
-
-struct legacy_bridge {
-  /* Pointer back to the platform device */
-  struct platform_device *pdev;
-
-  /* Character device data */
-  struct cdev cdev;
-  dev_t       deviceNumber;
-  uint32_t    instanceNumber;
-
-  /* Name for use in identification */
-  char name[NAME_MAX_SIZE];
-
-  /* Physical and virtual base address */
-  uintptr_t      physicalAddress;
-  uintptr_t      addressRangeSize;
-  void __iomem  *virtualAddress;
-
-  /* Number of MAC match units the hardware has */
-  uint32_t macMatchUnits;
-
-  /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
-   * These values are for the PHY connected to this instance.
-   */
-  uint8_t phy_type;
-  uint8_t phy_addr;
-  char phy_name[BUS_ID_SIZE];
-
-  /* Mutex for the device instance */
-  spinlock_t mutex;
-  bool opened;
-};
 
 /* I/O control commands and structures specific to the redundancy switch
  * hardware which may be used with two depacketizers

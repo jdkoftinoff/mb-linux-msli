@@ -23,12 +23,13 @@
  *
  */
 
-#include "labrinth_legacy_bridge.h"
+#include <linux/cdev.h>
 #include <linux/dma-mapping.h>
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
 #include <linux/mii.h>
 #include <linux/netdevice.h>
+#include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -37,6 +38,7 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
+#include "labrinth_legacy_bridge.h"
 
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
@@ -74,6 +76,41 @@ static const u8 MAC_ZERO[6]      = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 /* Note: This must be <= MII_BUS_ID_SIZE which is currently 17 (including trailing '\0') */
 #define MDIO_OF_BUSNAME_FMT "labxeth%08x"
+
+/* Driver structure to maintain state for each device instance */
+#define NAME_MAX_SIZE    (256)
+
+struct legacy_bridge {
+  /* Pointer back to the platform device */
+  struct platform_device *pdev;
+
+  /* Character device data */
+  struct cdev cdev;
+  dev_t       deviceNumber;
+  uint32_t    instanceNumber;
+
+  /* Name for use in identification */
+  char name[NAME_MAX_SIZE];
+
+  /* Physical and virtual base address */
+  uintptr_t      physicalAddress;
+  uintptr_t      addressRangeSize;
+  void __iomem  *virtualAddress;
+
+  /* Number of MAC match units the hardware has */
+  uint32_t macMatchUnits;
+
+  /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
+   * These values are for the PHY connected to this instance.
+   */
+  uint8_t phy_type;
+  uint8_t phy_addr;
+  char phy_name[BUS_ID_SIZE];
+
+  /* Mutex for the device instance */
+  spinlock_t mutex;
+  bool opened;
+};
 
 /* Busy loops until the match unit configuration logic is idle.  The hardware goes 
  * idle very quickly and deterministically after a configuration word is written, 
@@ -595,8 +632,7 @@ static struct platform_driver legacy_bridge_driver = {
 };
 
 /* Driver initialization and exit */
-/* TODO - Try __dev_init here!!! */
-static int __init legacy_bridge_driver_init(void)
+static int __devinit legacy_bridge_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": Biamp Labrinth Legacy Bridge driver\n");
@@ -620,7 +656,7 @@ static int __init legacy_bridge_driver_init(void)
   return(0);
 }
 
-static void __exit legacy_bridge_driver_exit(void)
+static void __devexit legacy_bridge_driver_exit(void)
 {
   unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
 
