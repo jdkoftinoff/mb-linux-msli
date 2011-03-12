@@ -336,9 +336,12 @@ static void reset_legacy_bridge(struct legacy_bridge *bridge) {
  */
 
 static int legacy_bridge_open(struct inode *inode, struct file *filp) {
-  struct legacy_bridge *bridge = (struct legacy_bridge*)filp->private_data;
+  struct legacy_bridge *bridge;
   unsigned long flags;
   int returnValue = 0;
+
+  bridge = container_of(inode->i_cdev, struct legacy_bridge, cdev);
+  filp->private_data = bridge;
 
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
@@ -362,6 +365,8 @@ static int legacy_bridge_release(struct inode *inode, struct file *filp) {
   struct legacy_bridge *bridge = (struct legacy_bridge*)filp->private_data;
   unsigned long flags;
 
+  printk("legacy_bridge_release()!\n");
+  
   /* Reset the hardware before releasing it */
   reset_legacy_bridge(bridge);
   
@@ -426,7 +431,7 @@ static int legacy_bridge_probe(const char *name,
   bridge->physicalAddress = addressRange->start;
   bridge->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
 
-  snprintf(bridge->name, NAME_MAX_SIZE, "%s%d", name, instanceCount++);
+  snprintf(bridge->name, NAME_MAX_SIZE, "%s%d", name, instanceCount);
   bridge->name[NAME_MAX_SIZE - 1] = '\0';
 
   if(request_mem_region(bridge->physicalAddress, bridge->addressRangeSize,
