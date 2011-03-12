@@ -30,20 +30,24 @@
 #include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/ioport.h>
+#include <linux/phy.h>
 #include <linux/types.h>
 
 /* Address range definitions */
 #define BRIDGE_REGS_BASE   (0x00000000)
 #define LABX_MAC_REGS_BASE (0x00004000)
 
+/* Port selection for within the bridge register space */
+#define AVB_PORT_0 (0x00000000)
+#define AVB_PORT_1 (0x00001000)
+#define BRIDGE_PORT_MASK (0x00001000)
+
 /* NOTE - At the moment, the only registers hosted by the bridge
- *        logic are the packet filters; there are not any global
+ *        logic are the per-port acket filters; there are not any global
  *        registers.
  */
-
-/* NOTE - At the moment we have only one port */
-#define BRIDGE_REG_ADDRESS(device, offset) \
-  ((uintptr_t) device->virtualAddress | (offset << 2))
+#define BRIDGE_REG_ADDRESS(device, port, offset)         \
+  ((uintptr_t) device->virtualAddress | (port & BRIDGE_PORT_MASK) | (offset << 2))
 
 /* Per-port packet filter registers */
 #define VLAN_MASK_REG        (0x00000000)
@@ -58,6 +62,7 @@
 #  define FILTER_LOAD_LAST   (0x00000200)
 
 #define FILTER_LOAD_REG      (0x00000003)
+#  define FILTER_LOAD_CLEAR (0x00000000)
 
 /* Address definitions for the Lab X MAC used for the backplane PHY */
 
@@ -94,6 +99,16 @@ struct legacy_bridge {
   uintptr_t      physicalAddress;
   uintptr_t      addressRangeSize;
   void __iomem  *virtualAddress;
+
+  /* Number of MAC match units the hardware has */
+  uint32_t macMatchUnits;
+
+  /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
+   * These values are for the PHY connected to this instance.
+   */
+  uint8_t phy_type;
+  uint8_t phy_addr;
+  char phy_name[BUS_ID_SIZE];
 
   /* Mutex for the device instance */
   spinlock_t mutex;

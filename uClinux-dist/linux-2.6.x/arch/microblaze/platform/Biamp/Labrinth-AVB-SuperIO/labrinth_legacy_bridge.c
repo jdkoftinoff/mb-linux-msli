@@ -25,7 +25,10 @@
 
 #include "labrinth_legacy_bridge.h"
 #include <linux/dma-mapping.h>
+#include <linux/etherdevice.h>
 #include <linux/interrupt.h>
+#include <linux/mii.h>
+#include <linux/netdevice.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -47,14 +50,249 @@
 #define MAX_INSTANCES 4
 static uint32_t instanceCount;
 
-/* Number of milliseconds we will wait before bailing out of a synced write */
-#define SYNCED_WRITE_TIMEOUT_MSECS  (100)
-
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DBG(f, x...)
 #endif
+
+/* Default and maximum number of MAC match units */
+#define DEFAULT_MAC_MATCH_UNITS  (4)
+#define MAX_MAC_MATCH_UNITS     (32)
+
+#define MAC_MATCH_NONE 0
+#define MAC_MATCH_ALL 1
+
+static const u8 MAC_BROADCAST[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const u8 MAC_ZERO[6]      = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+#define NUM_SRL16E_CONFIG_WORDS 8
+#define NUM_SRL16E_INSTANCES    12
+
+/* Special value indicating "no PHY supplied" */
+#define NO_PHY_SUPPLIED_TYPE (0xFF)
+
+/* Note: This must be <= MII_BUS_ID_SIZE which is currently 17 (including trailing '\0') */
+#define MDIO_OF_BUSNAME_FMT "labxeth%08x"
+
+/* Busy loops until the match unit configuration logic is idle.  The hardware goes 
+ * idle very quickly and deterministically after a configuration word is written, 
+ * so this should not consume very much time at all.
+ */
+static void wait_match_config(struct legacy_bridge *bridge,
+                              uint32_t whichPort) {
+  uint32_t statusWord;
+  uint32_t timeout = 10000;
+  do {
+    statusWord = XIo_In32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
+    if (timeout-- == 0) {
+      printk("depacketizer: wait_match_config timeout!\n");
+      break;
+    }
+  } while(statusWord & FILTER_LOAD_ACTIVE);
+}
+
+/* Selects a set of match units for subsequent configuration loads */
+typedef enum { SELECT_NONE, SELECT_SINGLE, SELECT_ALL } SelectionMode;
+static void select_matchers(struct legacy_bridge *bridge,
+                            uint32_t whichPort,
+                            SelectionMode selectionMode,
+                            uint32_t matchUnit) {
+
+  switch(selectionMode) {
+  case SELECT_NONE:
+    /* De-select all the match units */
+    //printk("MAC SELECT %08X\n", 0);
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG),
+              FILTER_SELECT_NONE);
+    break;
+
+  case SELECT_SINGLE:
+    /* Select a single unit */
+    //printk("MAC SELECT %08X\n", 1 << matchUnit);
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), (1 << matchUnit));
+    break;
+
+  default:
+    /* Select all match units at once */
+    //printk("MAC SELECT %08X\n", 0xFFFFFFFF);
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), 
+              FILTER_SELECT_ALL);
+    break;
+  }
+}
+
+/* Sets the loading mode for any selected match units.  This revolves around
+ * automatically disabling the match units' outputs while they're being
+ * configured so they don't fire false matches, and re-enabling them as their
+ * last configuration word is loaded.
+ */
+typedef enum { LOADING_MORE_WORDS, LOADING_LAST_WORD } LoadingMode;
+static void set_matcher_loading_mode(struct legacy_bridge *bridge,
+                                     uint32_t whichPort,
+                                     LoadingMode loadingMode) {
+  uint32_t controlWord = XIo_In32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
+
+  if(loadingMode == LOADING_MORE_WORDS) {
+    /* Clear the "last word" bit to suppress false matches while the units are
+     * only partially cleared out
+     */
+    controlWord &= ~FILTER_LOAD_LAST;
+  } else {
+    /* Loading the final word, flag the match unit(s) to enable after the
+     * next configuration word is loaded.
+     */
+    controlWord |= FILTER_LOAD_LAST;
+  }
+  //printk("CONTROL WORD %08X\n", controlWord);
+  XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG), controlWord);
+}
+
+/* Clears any selected match units, preventing them from matching any packets */
+static void clear_selected_matchers(struct legacy_bridge *bridge,
+                                    uint32_t whichPort) {
+  uint32_t wordIndex;
+
+  /* Ensure the unit(s) disable as the first word is load to prevent erronous
+   * matches as the units become partially-cleared
+   */
+  set_matcher_loading_mode(bridge, whichPort, LOADING_MORE_WORDS);
+
+  for(wordIndex = 0; wordIndex < NUM_SRL16E_CONFIG_WORDS; wordIndex++) {
+    /* Assert the "last word" flag on the last word required to complete the clearing
+     * of the selected unit(s).
+     */
+    if(wordIndex == (NUM_SRL16E_CONFIG_WORDS - 1)) {
+      set_matcher_loading_mode(bridge, whichPort, LOADING_LAST_WORD);
+    }
+    //printk("MAC LOAD %08X\n", 0);
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), 
+              FILTER_LOAD_CLEAR);
+  }
+}
+
+/* Loads truth tables into a match unit using the newest, "unified" match
+ * architecture.  This is SRL16E based (not cascaded) due to the efficient
+ * packing of these primitives into Xilinx LUT6-based architectures.
+ */
+static void load_unified_matcher(struct legacy_bridge *bridge,
+                                 uint32_t whichPort,
+                                 const uint8_t matchMac[6]) {
+  int32_t wordIndex;
+  int32_t lutIndex;
+  uint32_t configWord = 0x00000000;
+  uint32_t matchChunk;
+  
+  /* In this architecture, all of the SRL16Es are loaded in parallel, with each
+   * configuration word supplying two bits to each.  Only one of the two bits can
+   * ever be set, so there is just an explicit check for one.
+   */
+  for(wordIndex = (NUM_SRL16E_CONFIG_WORDS - 1); wordIndex >= 0; wordIndex--) {
+    for(lutIndex = (NUM_SRL16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+      matchChunk = ((matchMac[5-(lutIndex/2)] >> ((lutIndex&1) << 2)) & 0x0F);
+      configWord <<= 2;
+      if(matchChunk == (wordIndex << 1)) configWord |= 0x01;
+      if(matchChunk == ((wordIndex << 1) + 1)) configWord |= 0x02;
+    }
+    /* 12 nybbles are packed to the MSB */
+    configWord <<= 8;
+
+    /* Two bits of truth table have been determined for each SRL16E, load the
+     * word and wait for the configuration to occur.  Be sure to flag the last
+     * word to automatically re-enable the match unit(s) as the last word completes.
+     */
+    if(wordIndex == 0) set_matcher_loading_mode(bridge, whichPort, LOADING_LAST_WORD);
+    //printk("MAC LOAD %08X\n", configWord);
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), configWord);
+    wait_match_config(bridge, whichPort);
+  }
+}
+
+static void configure_mac_filter(struct legacy_bridge *bridge, 
+                                 uint32_t whichPort,
+                                 uint32_t unitNum, 
+                                 const u8 mac[6], 
+                                 uint32_t mode) {
+  /* Only allow programming up to the supported number of MAC match units */
+  if (unitNum >= bridge->macMatchUnits) return;
+
+  //printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
+  //	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  
+  /* Ascertain that the configuration logic is ready, then select the matcher */
+  wait_match_config(bridge, whichPort);
+  select_matchers(bridge, whichPort, SELECT_SINGLE, unitNum);
+
+  if (mode == MAC_MATCH_NONE) {
+    clear_selected_matchers(bridge, whichPort);
+  } else {
+    /* Set the loading mode to disable as we load the first word */
+    set_matcher_loading_mode(bridge, whichPort, LOADING_MORE_WORDS);
+    
+    /* Calculate matching truth tables for the LUTs and load them */
+    load_unified_matcher(bridge, whichPort, mac);
+  }
+  
+  /* De-select the match unit */
+  select_matchers(bridge, whichPort, SELECT_NONE, 0);
+}
+
+/* Retain this as an example for ioctl() */
+#if 0                    
+void labx_eth_UpdateMacFilters(struct legacy_bridge *bridge)
+{
+  int i;
+
+  /* Always allow our unicast mac */
+  ConfigureMacFilter(bridge, 0, bridge->Config.MacAddress, MAC_MATCH_ALL);
+
+  /* Allow broadcasts if configured to do so */
+  if (bridge->Options & XTE_BROADCAST_OPTION) {
+    ConfigureMacFilter(bridge, 1, MAC_BROADCAST, MAC_MATCH_ALL);
+  } else {
+    ConfigureMacFilter(bridge, 1, MAC_BROADCAST, MAC_MATCH_NONE);
+  }
+
+  /* Allow multicasts if configured to do so */
+  if (bridge->Options & XTE_MULTICAST_OPTION) {
+    struct dev_mc_list *dmi = bridge->dev->mc_list;
+    int i;
+
+    for (i=2; (i<(bridge->dev->mc_count+2)) && (i<bridge->macMatchUnits); i++) {
+      ConfigureMacFilter(bridge, i, dmi->da_addr, MAC_MATCH_ALL);
+      dmi = dmi->next;
+    }
+
+  } else {
+    /* Disable all multicast filters */
+    for (i=2; i<bridge->macMatchUnits; i++) {
+      ConfigureMacFilter(bridge, i, MAC_ZERO, MAC_MATCH_NONE);
+    }
+  }
+}
+#endif
+
+/*
+ * Resets the packet bridge to a known state - permitting pass-through
+ * of data from the backplane to the AVB network, but permitting no
+ * traffic in the other direction.
+ */
+static void reset_legacy_bridge(struct legacy_bridge *bridge) {
+  /* Clear out all of the Rx filter match units for both ports */
+  printk("Clearing match units\n");
+  select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
+  clear_selected_matchers(bridge, AVB_PORT_0);
+  select_matchers(bridge, AVB_PORT_0, SELECT_NONE, 0);
+#ifdef FOO_BOTH_PORTS
+  select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
+  clear_selected_matchers(bridge, AVB_PORT_0);
+  select_matchers(bridge, AVB_PORT_0, SELECT_NONE, 0);
+#endif
+
+  /* Hit the backplane MAC's Tx and Rx reset registers */
+  
+  // TODO! Also hit the MAC Tx / Rx reset
+}
 
 /*
  * Character device hook functions
@@ -76,6 +314,9 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
 
   spin_unlock_irqrestore(&bridge->mutex, flags);
   preempt_enable();
+
+  /* Reset the hardware */
+  reset_legacy_bridge(bridge);
   
   return(returnValue);
 }
@@ -84,6 +325,9 @@ static int legacy_bridge_release(struct inode *inode, struct file *filp) {
   struct legacy_bridge *bridge = (struct legacy_bridge*)filp->private_data;
   unsigned long flags;
 
+  /* Reset the hardware before releasing it */
+  reset_legacy_bridge(bridge);
+  
   preempt_disable();
   spin_lock_irqsave(&bridge->mutex, flags);
   bridge->opened = false;
@@ -125,13 +369,15 @@ static const struct file_operations legacy_bridge_fops = {
 /* Function containing the "meat" of the probe mechanism - this is used by
  * the OpenFirmware probe as well as the standard platform device mechanism.
  * This is exported to allow polymorphic drivers to invoke it.
- * @param name - Base name of the instance
- * @param pdev - Platform device structure
- * @param addressRange - Resource describing the hardware's I/O range
+ * @param name          - Base name of the instance
+ * @param pdev          - Platform device structure
+ * @param addressRange  - Resource describing the hardware's I/O range
+ * @param macMatchUnits - Number of MAC match units the hardware has
  */
 static int legacy_bridge_probe(const char *name, 
                                struct platform_device *pdev,
-                               struct resource *addressRange) {
+                               struct resource *addressRange,
+                               uint32_t macMatchUnits) {
   struct legacy_bridge *bridge;
   int returnValue;
 
@@ -159,10 +405,14 @@ static int legacy_bridge_probe(const char *name,
     goto release;
   }
 
+  /* Retain other parameters */
+  bridge->macMatchUnits = macMatchUnits;
+
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Labrinth Legacy Bridge at 0x%08X\n",
+  printk(KERN_INFO "\n%s: Found Labrinth Legacy Bridge at 0x%08X\n",
          bridge->name, 
          (uint32_t)bridge->physicalAddress);
+  printk(KERN_INFO "  %d MAC filters per AVB port\n\n", bridge->macMatchUnits);
 
   /* Initialize other resources */
   spin_lock_init(&bridge->mutex);
@@ -196,14 +446,24 @@ static int legacy_bridge_probe(const char *name,
 static int legacy_bridge_platform_remove(struct platform_device *pdev);
 
 /* Probe for registered devices */
-//static int __devinit legacy_bridge_of_probe(struct of_device *ofdev, const struct of_device_id *match)
-static int legacy_bridge_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+static int __devinit legacy_bridge_of_probe(struct of_device *ofdev, 
+                                            const struct of_device_id *match)
 {
   struct resource r_mem_struct  = {};
   struct resource *addressRange = &r_mem_struct;
+  struct resource r_connected_mdio_mem_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
   const char *name = dev_name(&ofdev->dev);
+  uint32_t macMatchUnits = DEFAULT_MAC_MATCH_UNITS;
+  uint32_t phy_type;
+  uint32_t phy_addr;
+  char phy_name[BUS_ID_SIZE];
+  const phandle *mdio_controller_handle;
+  struct device_node *mdio_controller_node;
+  uint32_t *uint32Ptr;
   int rc = 0;
+
+  printk("Probing device \"%s\"\n", name);
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
@@ -212,8 +472,59 @@ static int legacy_bridge_of_probe(struct of_device *ofdev, const struct of_devic
     return(rc);
   }
 
+  /* Get the number of MAC match units from the device tree */
+  uint32Ptr = (uint32_t *) of_get_property(ofdev->node, "xlnx,rx-filters-per-port", NULL);
+  if(uint32Ptr != NULL) {
+    /* Specify the known number */
+    macMatchUnits = *uint32Ptr;
+    if(macMatchUnits > MAX_MAC_MATCH_UNITS) {
+      dev_warn(&ofdev->dev, "Match unit count (%d) invalid, using default\n", macMatchUnits);
+      macMatchUnits = DEFAULT_MAC_MATCH_UNITS;
+    }
+  }
+
+  /* Connected PHY information; make sure all properties are specified or mark the
+   * parameters as having no PHY specified
+   */
+  uint32Ptr = (uint32_t *) of_get_property(ofdev->node, "xlnx,phy-type", NULL);
+  if(uint32Ptr != NULL) {
+    phy_type = (uint8_t) *uint32Ptr;
+    
+    uint32Ptr = (uint32_t *) of_get_property(ofdev->node, "xlnx,phy-addr", NULL);
+    if(uint32Ptr != NULL) {
+      phy_addr = (uint8_t) *uint32Ptr;
+
+      phy_name[0] = '\0';
+      mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-controller", NULL);
+      if(!mdio_controller_handle) {
+        dev_warn(&ofdev->dev, "No MDIO connection specified\n");
+        phy_type = NO_PHY_SUPPLIED_TYPE;
+      } else {
+        mdio_controller_node = of_find_node_by_phandle(*mdio_controller_handle);
+        if (!mdio_controller_node) {
+          dev_warn(&ofdev->dev, "No MDIO connection found\n");
+          phy_type = NO_PHY_SUPPLIED_TYPE;
+        } else {
+          /* The MDIO controller node is itself the entity able to talk over MDIO;
+           * it is not a compound device.
+           */
+          rc = of_address_to_resource(mdio_controller_node, 0, &r_connected_mdio_mem_struct);
+          snprintf(phy_name, BUS_ID_SIZE, MDIO_OF_BUSNAME_FMT ":%02x", (u32)r_connected_mdio_mem_struct.start, phy_addr);
+          phy_name[BUS_ID_SIZE - 1] = '\0';
+          printk("  %s:phy_name: %s\n",__func__, phy_name);
+        }
+      }
+    } else {
+      dev_warn(&ofdev->dev, "No PHY address specified\n");
+      phy_type = NO_PHY_SUPPLIED_TYPE;
+    }
+  } else {
+    dev_warn(&ofdev->dev, "No PHY type specified\n");
+    phy_type = NO_PHY_SUPPLIED_TYPE;
+  }
+
   /* Dispatch to the generic function */
-  return(legacy_bridge_probe(name, pdev, addressRange));
+  return(legacy_bridge_probe(name, pdev, addressRange, macMatchUnits));
 }
 
 static int __devexit legacy_bridge_of_remove(struct of_device *dev)
@@ -253,8 +564,8 @@ static int legacy_bridge_platform_probe(struct platform_device *pdev) {
     return(-ENXIO);
   }
 
-  /* Dispatch to the generic function */
-  return(legacy_bridge_probe(pdev->name, pdev, addressRange));
+  /* Dispatch to the generic function, using the default number of match units */
+  return(legacy_bridge_probe(pdev->name, pdev, addressRange, DEFAULT_MAC_MATCH_UNITS));
 }
 
 /* Remove a previously-probed device */
@@ -284,6 +595,7 @@ static struct platform_driver legacy_bridge_driver = {
 };
 
 /* Driver initialization and exit */
+/* TODO - Try __dev_init here!!! */
 static int __init legacy_bridge_driver_init(void)
 {
   int returnValue;
