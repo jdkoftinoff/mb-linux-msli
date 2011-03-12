@@ -89,6 +89,9 @@ struct legacy_bridge {
   dev_t       deviceNumber;
   uint32_t    instanceNumber;
 
+  /* Network device structure for PHY interaction */
+  struct net_device *ndev;
+
   /* Name for use in identification */
   char name[NAME_MAX_SIZE];
 
@@ -106,6 +109,7 @@ struct legacy_bridge {
   uint8_t phy_type;
   uint8_t phy_addr;
   char phy_name[BUS_ID_SIZE];
+  struct phy_device *phy_dev;
 
   /* Mutex for the device instance */
   spinlock_t mutex;
@@ -331,6 +335,18 @@ static void reset_legacy_bridge(struct legacy_bridge *bridge) {
   // TODO! Also hit the MAC Tx / Rx reset
 }
 
+/* PHY link speed change callback function */
+static void legacy_bridge_adjust_link(struct net_device *dev)
+{
+  struct legacy_bridge *bridge = netdev_priv(dev);
+
+  if (bridge->phy_dev->link != PHY_DOWN) {
+    printk("%s : Link up, %d Mb/s\n", bridge->ndev->name, bridge->phy_dev->speed);
+  } else {
+    printk("%s : Link down\n", bridge->ndev->name);
+  }
+}
+
 /*
  * Character device hook functions
  */
@@ -358,11 +374,36 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   /* Reset the hardware */
   reset_legacy_bridge(bridge);
   
+  /* Perform PHY setup using the platform-supplied hook method */
+  printk("%s: About to connect to phy device\n",__func__);
+  if(bridge->phy_dev == NULL) {
+    /* Lookup phy device */
+    bridge->phy_dev = phy_connect(bridge->ndev, 
+                                  bridge->phy_name, 
+                                  &legacy_bridge_adjust_link,
+                                  0, 
+                                  PHY_INTERFACE_MODE_MII);
+    if(!IS_ERR(bridge->phy_dev)) {
+      int ret;
+
+      printk("%s: About to call phy_start_aneg()\n",__func__);
+      ret = phy_start_aneg(bridge->phy_dev);
+      if (0 != ret) {
+        printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
+      } else {
+        printk("%s: phy_start_aneg() Passed\n",__func__);
+      }
+    } else {
+      printk("Not able to find Phy");
+      bridge->phy_dev = NULL;
+    }
+  }
+
   return(returnValue);
 }
 
 static int legacy_bridge_release(struct inode *inode, struct file *filp) {
-  struct legacy_bridge *bridge = (struct legacy_bridge*)filp->private_data;
+  struct legacy_bridge *bridge = (struct legacy_bridge*) filp->private_data;
   unsigned long flags;
 
   printk("legacy_bridge_release()!\n");
@@ -386,7 +427,7 @@ static int legacy_bridge_ioctl(struct inode *inode,
                                unsigned long arg) {
   // Switch on the request
   int returnValue = 0;
-  struct legacy_bridge *bridge = (struct legacy_bridge*)filp->private_data;
+  struct legacy_bridge *bridge = (struct legacy_bridge*) filp->private_data;
 
   switch(command) {
   case IOC_CONFIG_MAC_FILTER:
@@ -415,17 +456,43 @@ static const struct file_operations legacy_bridge_fops = {
  * @param pdev          - Platform device structure
  * @param addressRange  - Resource describing the hardware's I/O range
  * @param macMatchUnits - Number of MAC match units the hardware has
+ * @param phy_type      - PHY type
+ * @param phy_addr      - PHY MDIO address
+ * @param phy_name      - PHY name string
  */
 static int legacy_bridge_probe(const char *name, 
                                struct platform_device *pdev,
                                struct resource *addressRange,
-                               uint32_t macMatchUnits) {
+                               uint32_t macMatchUnits,
+                               uint32_t phy_type,
+                               uint32_t phy_addr,
+                               const char *phy_name) {
   struct legacy_bridge *bridge;
+  struct net_device *ndev = NULL;
   int returnValue;
 
-  /* Create and populate a device structure */
-  bridge = (struct legacy_bridge*) kmalloc(sizeof(struct legacy_bridge), GFP_KERNEL);
-  if(!bridge) return(-ENOMEM);
+  /* Create an Ethernet device instance, sized with enough extra data to
+   * encapsulate a struct legacy_bridge as its private data
+   */
+  ndev = alloc_etherdev(sizeof(struct legacy_bridge));
+  if (!ndev) {
+    dev_err(&pdev->dev, "%s : Could not allocate net device\n", DRIVER_NAME);
+    kfree(bridge);
+    return(-ENOMEM);
+  }
+  SET_NETDEV_DEV(ndev, &pdev->dev);
+
+  /* Allocate the dev name early so we can use it in our messages */
+  if(strchr(ndev->name, '%')) {
+    returnValue = dev_alloc_name(ndev, ndev->name);
+    if(returnValue < 0) goto netdev_error;
+  }
+
+  /* Point to the private data structure allocated by the parent net_device,
+   * and set up navigation back up to the parent
+   */
+  bridge = netdev_priv(ndev);
+  bridge->ndev = ndev;
 
   /* Request and map the device's I/O memory region into uncacheable space */
   bridge->physicalAddress = addressRange->start;
@@ -449,6 +516,13 @@ static int legacy_bridge_probe(const char *name,
 
   /* Retain other parameters */
   bridge->macMatchUnits = macMatchUnits;
+  bridge->phy_type      = phy_type;
+  if(phy_type != NO_PHY_SUPPLIED_TYPE) {
+    bridge->phy_addr      = phy_addr;
+    strncpy(bridge->phy_name, phy_name, BUS_ID_SIZE);
+    bridge->phy_name[BUS_ID_SIZE - 1] = '\0';
+    bridge->phy_dev = NULL;
+  }
 
   /* Announce the device */
   printk(KERN_INFO "\n%s: Found Labrinth Legacy Bridge at 0x%08X\n",
@@ -478,6 +552,8 @@ static int legacy_bridge_probe(const char *name,
   iounmap(bridge->virtualAddress);
  release:
   release_mem_region(bridge->physicalAddress, bridge->addressRangeSize);
+ netdev_error:
+  if(ndev) free_netdev(ndev);
  free:
   kfree(bridge);
   return(returnValue);
@@ -498,7 +574,7 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev,
   const char *name = dev_name(&ofdev->dev);
   uint32_t macMatchUnits = DEFAULT_MAC_MATCH_UNITS;
   uint32_t phy_type;
-  uint32_t phy_addr;
+  uint32_t phy_addr = 0;
   char phy_name[BUS_ID_SIZE];
   const phandle *mdio_controller_handle;
   struct device_node *mdio_controller_node;
@@ -566,7 +642,7 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev,
   }
 
   /* Dispatch to the generic function */
-  return(legacy_bridge_probe(name, pdev, addressRange, macMatchUnits));
+  return(legacy_bridge_probe(name, pdev, addressRange, macMatchUnits, phy_type, phy_addr, phy_name));
 }
 
 static int __devexit legacy_bridge_of_remove(struct of_device *dev)
@@ -606,15 +682,25 @@ static int legacy_bridge_platform_probe(struct platform_device *pdev) {
     return(-ENXIO);
   }
 
-  /* Dispatch to the generic function, using the default number of match units */
-  return(legacy_bridge_probe(pdev->name, pdev, addressRange, DEFAULT_MAC_MATCH_UNITS));
+  /* Dispatch to the generic function, using the default number of match units.
+   * NOTE - We do not yet have a platform device structure from which to discern
+   *        the PHY information.
+   */
+  return(legacy_bridge_probe(pdev->name, 
+                             pdev, 
+                             addressRange, 
+                             DEFAULT_MAC_MATCH_UNITS, 
+                             NO_PHY_SUPPLIED_TYPE, 
+                             0, 
+                             NULL));
 }
 
 /* Remove a previously-probed device */
 static int legacy_bridge_remove(struct legacy_bridge *bridge) {
   iounmap(bridge->virtualAddress);
   release_mem_region(bridge->physicalAddress, bridge->addressRangeSize);
-  kfree(bridge);
+
+  free_netdev(bridge->ndev);
   return(0);
 }
 
