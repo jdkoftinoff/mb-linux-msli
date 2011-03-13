@@ -59,7 +59,7 @@
 		#cpus = <0x1>;
 		#size-cells = <0>;
 		microblaze_0: cpu@0 {
-			clock-frequency = <100000000>;
+			clock-frequency = <125000000>;
 			compatible = "xlnx,microblaze-7.20.d";
 			d-cache-baseaddr = <0x90000000>;
 			d-cache-highaddr = <0x97ffffff>;
@@ -72,7 +72,7 @@
 			i-cache-size = <0x4000>;
 			model = "microblaze,7.20.d";
 			reg = <0>;
-			timebase-frequency = <100000000>;
+			timebase-frequency = <125000000>;
 			xlnx,addr-tag-bits = <0xd>;
 			xlnx,allow-dcache-wr = <0x1>;
 			xlnx,allow-icache-wr = <0x1>;
@@ -160,7 +160,7 @@
 			xlnx,max-mem-width = <0x10>;
 			xlnx,mch-native-dwidth = <0x20>;
 			xlnx,mch-splb-awidth = <0x20>;
-			xlnx,mch-splb-clk-period-ps = <0x2710>;
+			xlnx,mch-splb-clk-period-ps = <0x1f40>;
 			xlnx,mch0-accessbuf-depth = <0x10>;
 			xlnx,mch0-protocol = <0x0>;
 			xlnx,mch0-rddatabuf-depth = <0x10>;
@@ -234,7 +234,7 @@
 			xlnx,xcl3-writexfer = <0x1>;
 		} ;
 		MIDI: serial@84030000 {
-			clock-frequency = <100000000>;
+			clock-frequency = <125000000>;
 			compatible = "xlnx,xps-uartlite-1.01.a", "xlnx,xps-uartlite-1.00.a";
 			current-speed = <31250>;
 			device_type = "serial";
@@ -249,7 +249,7 @@
 			xlnx,use-parity = <0x0>;
 		} ;
 		RS232: serial@83e00000 {
-			clock-frequency = <100000000>;
+			clock-frequency = <125000000>;
 			compatible = "xlnx,xps-uartlite-1.01.a", "xlnx,xps-uartlite-1.00.a";
 			current-speed = <115200>;
 			device_type = "serial";
@@ -264,7 +264,7 @@
 			xlnx,use-parity = <0x0>;
 		} ;
 		RS232_Atmel: serial@84040000 {
-			clock-frequency = <100000000>;
+			clock-frequency = <125000000>;
 			compatible = "xlnx,xps-uartlite-1.01.a", "xlnx,xps-uartlite-1.00.a";
 			current-speed = <62500>;
 			device_type = "serial";
@@ -318,7 +318,7 @@
 		xps_iic_0: i2c@81600000 {
 			compatible = "xlnx,xps-iic-2.02.a", "xlnx,xps-iic-2.00.a";
 			reg = < 0x81600000 0x10000 >;
-			xlnx,clk-freq = <0x5f5e100>;
+			xlnx,clk-freq = <0x7735940>;
 			xlnx,family = "virtex5";
 			xlnx,gpo-width = <0x1>;
 			xlnx,iic-freq = <0x9c40>;
