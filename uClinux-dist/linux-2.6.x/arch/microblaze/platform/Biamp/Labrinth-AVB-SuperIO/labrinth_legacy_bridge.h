@@ -28,6 +28,9 @@
 
 #include <linux/types.h>
 
+/* Number of AVB bridge ports */
+#define NUM_AVB_BRIDGE_PORTS 2
+
 /* Address range definitions */
 #define BRIDGE_REGS_BASE   (0x00000000)
 #define LABX_MAC_REGS_BASE (0x00004000)

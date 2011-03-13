@@ -257,8 +257,8 @@ static void configure_mac_filter(struct legacy_bridge *bridge,
   /* Only allow programming up to the supported number of MAC match units */
   if (unitNum >= bridge->macMatchUnits) return;
 
-  //printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
-  //	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
+         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   
   /* Ascertain that the configuration logic is ready, then select the matcher */
   wait_match_config(bridge, whichPort);
@@ -277,41 +277,6 @@ static void configure_mac_filter(struct legacy_bridge *bridge,
   /* De-select the match unit */
   select_matchers(bridge, whichPort, SELECT_NONE, 0);
 }
-
-/* Retain this as an example for ioctl() */
-#if 0                    
-void labx_eth_UpdateMacFilters(struct legacy_bridge *bridge)
-{
-  int i;
-
-  /* Always allow our unicast mac */
-  ConfigureMacFilter(bridge, 0, bridge->Config.MacAddress, MAC_MATCH_ALL);
-
-  /* Allow broadcasts if configured to do so */
-  if (bridge->Options & XTE_BROADCAST_OPTION) {
-    ConfigureMacFilter(bridge, 1, MAC_BROADCAST, MAC_MATCH_ALL);
-  } else {
-    ConfigureMacFilter(bridge, 1, MAC_BROADCAST, MAC_MATCH_NONE);
-  }
-
-  /* Allow multicasts if configured to do so */
-  if (bridge->Options & XTE_MULTICAST_OPTION) {
-    struct dev_mc_list *dmi = bridge->dev->mc_list;
-    int i;
-
-    for (i=2; (i<(bridge->dev->mc_count+2)) && (i<bridge->macMatchUnits); i++) {
-      ConfigureMacFilter(bridge, i, dmi->da_addr, MAC_MATCH_ALL);
-      dmi = dmi->next;
-    }
-
-  } else {
-    /* Disable all multicast filters */
-    for (i=2; i<bridge->macMatchUnits; i++) {
-      ConfigureMacFilter(bridge, i, MAC_ZERO, MAC_MATCH_NONE);
-    }
-  }
-}
-#endif
 
 /*
  * Resets the packet bridge to a known state - permitting pass-through
@@ -354,6 +319,7 @@ static void legacy_bridge_adjust_link(struct net_device *dev)
 static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   struct legacy_bridge *bridge;
   unsigned long flags;
+  uint8_t broadcastMac[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
   int returnValue = 0;
 
   bridge = container_of(inode->i_cdev, struct legacy_bridge, cdev);
@@ -399,6 +365,10 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
     }
   }
 
+  /* TEMPORARY - Auto-configure for broadcast traffic! */
+  printk("Auto-configuring for BROADCAST traffic\n");
+  configure_mac_filter(bridge, 0, 0, broadcastMac, MAC_MATCH_ALL);
+
   return(returnValue);
 }
 
@@ -431,6 +401,24 @@ static int legacy_bridge_ioctl(struct inode *inode,
 
   switch(command) {
   case IOC_CONFIG_MAC_FILTER:
+    {
+      MacFilterConfig filterConfig;
+
+      if(copy_from_user(&filterConfig, (void __user*)arg, sizeof(MacFilterConfig)) != 0) {
+        return(-EFAULT);
+      }
+
+      /* Validate the parameters */
+      if((filterConfig.whichAvbPort >= NUM_AVB_BRIDGE_PORTS) |
+         (filterConfig.whichFilter >= bridge->macMatchUnits)) return(-ENODEV);
+      
+      /* Configure the filter for the instance with the passed parameters */
+      configure_mac_filter(bridge,
+                           filterConfig.whichAvbPort,
+                           filterConfig.whichFilter,
+                           filterConfig.macAddress,
+                           (filterConfig.enabled ? MAC_MATCH_ALL : MAC_MATCH_NONE));
+    }
     break;
 
   case IOC_CONFIG_PHY_TEST_MODE:
