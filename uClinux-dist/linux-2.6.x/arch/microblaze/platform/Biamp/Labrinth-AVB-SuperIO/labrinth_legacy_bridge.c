@@ -125,7 +125,7 @@ static void wait_match_config(struct legacy_bridge *bridge,
   uint32_t statusWord;
   uint32_t timeout = 10000;
   do {
-    statusWord = XIo_In32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
+    statusWord = XIo_In32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
     if (timeout-- == 0) {
       printk("depacketizer: wait_match_config timeout!\n");
       break;
@@ -144,20 +144,20 @@ static void select_matchers(struct legacy_bridge *bridge,
   case SELECT_NONE:
     /* De-select all the match units */
     //printk("MAC SELECT %08X\n", 0);
-    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG),
+    XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG),
               FILTER_SELECT_NONE);
     break;
 
   case SELECT_SINGLE:
     /* Select a single unit */
     //printk("MAC SELECT %08X\n", 1 << matchUnit);
-    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), (1 << matchUnit));
+    XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), (1 << matchUnit));
     break;
 
   default:
     /* Select all match units at once */
     //printk("MAC SELECT %08X\n", 0xFFFFFFFF);
-    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), 
+    XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_SELECT_REG), 
               FILTER_SELECT_ALL);
     break;
   }
@@ -172,7 +172,7 @@ typedef enum { LOADING_MORE_WORDS, LOADING_LAST_WORD } LoadingMode;
 static void set_matcher_loading_mode(struct legacy_bridge *bridge,
                                      uint32_t whichPort,
                                      LoadingMode loadingMode) {
-  uint32_t controlWord = XIo_In32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
+  uint32_t controlWord = XIo_In32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG));
 
   if(loadingMode == LOADING_MORE_WORDS) {
     /* Clear the "last word" bit to suppress false matches while the units are
@@ -186,7 +186,7 @@ static void set_matcher_loading_mode(struct legacy_bridge *bridge,
     controlWord |= FILTER_LOAD_LAST;
   }
   //printk("CONTROL WORD %08X\n", controlWord);
-  XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG), controlWord);
+  XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_CTRL_STAT_REG), controlWord);
 }
 
 /* Clears any selected match units, preventing them from matching any packets */
@@ -207,7 +207,7 @@ static void clear_selected_matchers(struct legacy_bridge *bridge,
       set_matcher_loading_mode(bridge, whichPort, LOADING_LAST_WORD);
     }
     //printk("MAC LOAD %08X\n", 0);
-    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), 
+    XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), 
               FILTER_LOAD_CLEAR);
   }
 }
@@ -244,7 +244,7 @@ static void load_unified_matcher(struct legacy_bridge *bridge,
      */
     if(wordIndex == 0) set_matcher_loading_mode(bridge, whichPort, LOADING_LAST_WORD);
     //printk("MAC LOAD %08X\n", configWord);
-    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), configWord);
+    XIo_Out32(BRIDGE_PORT_REG_ADDRESS(bridge, whichPort, FILTER_LOAD_REG), configWord);
     wait_match_config(bridge, whichPort);
   }
 }
@@ -289,15 +289,47 @@ static void reset_legacy_bridge(struct legacy_bridge *bridge) {
   select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
   clear_selected_matchers(bridge, AVB_PORT_0);
   select_matchers(bridge, AVB_PORT_0, SELECT_NONE, 0);
-#ifdef FOO_BOTH_PORTS
-  select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
-  clear_selected_matchers(bridge, AVB_PORT_0);
-  select_matchers(bridge, AVB_PORT_0, SELECT_NONE, 0);
-#endif
+  select_matchers(bridge, AVB_PORT_1, SELECT_ALL, 0);
+  clear_selected_matchers(bridge, AVB_PORT_1);
+  select_matchers(bridge, AVB_PORT_1, SELECT_NONE, 0);
+
+  /* Disable transmission on both ports */
+  XIo_Out32(BRIDGE_REG_ADDRESS(bridge, BRIDGE_CTRL_REG), BRIDGE_TX_EN_NONE);
 
   /* Hit the backplane MAC's Tx and Rx reset registers */
-  
-  // TODO! Also hit the MAC Tx / Rx reset
+  XIo_Out32(BP_MAC_REG_ADDRESS(bridge, MAC_RX_CONFIG_REG),
+            MAC_RX_RESET);
+  XIo_Out32(BP_MAC_REG_ADDRESS(bridge, MAC_TX_CONFIG_REG),
+            MAC_TX_RESET);
+}
+
+/* Configures the bridge ports */
+static void legacy_bridge_config_ports(struct legacy_bridge *bridge,
+                                       BridgePortsConfig *portsConfig) {
+  /* If neither Tx port is enabled, disabled everything by resettting the
+   * entire bridge, which also clears all of the Rx MAC filters for both ports
+   * in addition to disabling Tx on both ports.
+   */
+  if((portsConfig->txPortsEnable[0] == TX_PORT_DISABLED) &
+     (portsConfig->txPortsEnable[1] == TX_PORT_DISABLED)) {
+    reset_legacy_bridge(bridge);
+  } else {
+    uint32_t bridgeConfigWord = BRIDGE_TX_EN_NONE;
+
+    /* Actively bridging, configure appropriately */
+    if(portsConfig->rxPortSelection == RX_PORT_1_SELECT) {
+      bridgeConfigWord |= BRIDGE_RX_PORT_1;
+    }
+
+    if(portsConfig->txPortsEnable[0] == TX_PORT_ENABLED) {
+      bridgeConfigWord |= BRIDGE_TX_EN_PORT_0;
+    }
+
+    if(portsConfig->txPortsEnable[1] == TX_PORT_ENABLED) {
+      bridgeConfigWord |= BRIDGE_TX_EN_PORT_1;
+    }
+    XIo_Out32(BRIDGE_REG_ADDRESS(bridge, BRIDGE_CTRL_REG), bridgeConfigWord);
+  }
 }
 
 /* PHY link speed change callback function */
@@ -366,8 +398,8 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   }
 
   /* TEMPORARY - Auto-configure for broadcast traffic! */
-  printk("Auto-configuring for BROADCAST traffic\n");
-  configure_mac_filter(bridge, 0, 0, broadcastMac, MAC_MATCH_ALL);
+  //  printk("Auto-configuring for BROADCAST traffic\n");
+  //  configure_mac_filter(bridge, 0, 0, broadcastMac, MAC_MATCH_ALL);
 
   return(returnValue);
 }
@@ -445,6 +477,21 @@ static int legacy_bridge_ioctl(struct inode *inode,
     }
     break;
     
+  case IOC_CONFIG_BRIDGE_PORTS:
+    {
+      BridgePortsConfig portsConfig;
+      uint32_t testMode;
+      uint32_t phyTestMode;
+
+      if(copy_from_user(&portsConfig, (void __user*)arg, sizeof(portsConfig)) != 0) {
+        return(-EFAULT);
+      }
+
+      /* Configure the bridge ports */
+      legacy_bridge_config_ports(bridge, &portsConfig);
+    }
+    break;
+
   default:
     returnValue = -EINVAL;
   }

@@ -36,16 +36,29 @@
 #define LABX_MAC_REGS_BASE (0x00004000)
 
 /* Port selection for within the bridge register space */
-#define AVB_PORT_0 (0x00000000)
-#define AVB_PORT_1 (0x00001000)
-#define BRIDGE_PORT_MASK (0x00001000)
+#define AVB_PORTS_BASE   (0x00000080)
+#define AVB_PORT_0       (0x00000000)
+#define AVB_PORT_1       (0x00000040)
+#define BRIDGE_PORT_MASK (0x00000040)
 
-/* NOTE - At the moment, the only registers hosted by the bridge
- *        logic are the per-port acket filters; there are not any global
- *        registers.
- */
-#define BRIDGE_REG_ADDRESS(device, port, offset)         \
-  ((uintptr_t) device->virtualAddress | (port & BRIDGE_PORT_MASK) | (offset << 2))
+/* Macro for addressing a global bridge register */
+#define BRIDGE_REG_ADDRESS(device, offset)         \
+  ((uintptr_t) device->virtualAddress | (offset << 2))
+
+/* Global bridge registers */
+#define BRIDGE_CTRL_REG  (0x00000000)
+#  define BRIDGE_RX_PORT_0     (0x00000000)
+#  define BRIDGE_RX_PORT_1     (0x00000001)
+#  define BRIDGE_TX_EN_NONE    (0x00000000)
+#  define BRIDGE_TX_EN_PORT_0  (0x00000002)
+#  define BRIDGE_TX_EN_PORT_1  (0x00000004)
+
+/* Macro for addressing a per-port bridge register */
+#define BRIDGE_PORT_REG_ADDRESS(device, port, offset) \
+  ((uintptr_t) device->virtualAddress |          \
+   AVB_PORTS_BASE                     |          \
+   (port & BRIDGE_PORT_MASK)          |          \
+   (offset << 2))
 
 /* Per-port packet filter registers */
 #define VLAN_MASK_REG        (0x00000000)
@@ -104,6 +117,19 @@ typedef struct {
 #define PHY_NORMAL_MODE   0x00
 #define PHY_TEST_LOOPBACK 0x01
 
-#define IOC_CONFIG_PHY_TEST_MODE _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x01, uint32_t)
+#define IOC_CONFIG_PHY_TEST_MODE _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x02, uint32_t)
+
+/* Command to configure the transmit and receive port selections */
+#define RX_PORT_0_SELECT  (0)
+#define RX_PORT_1_SELECT  (1)
+#define TX_PORT_DISABLED  (0)
+#define TX_PORT_ENABLED   (1)
+
+typedef struct {
+  uint32_t rxPortSelection;
+  uint32_t txPortsEnable[NUM_AVB_BRIDGE_PORTS];
+} BridgePortsConfig;
+
+#define IOC_CONFIG_BRIDGE_PORTS _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x03, BridgePortsConfig)
 
 #endif
