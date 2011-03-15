@@ -408,8 +408,6 @@ static int legacy_bridge_release(struct inode *inode, struct file *filp) {
   struct legacy_bridge *bridge = (struct legacy_bridge*) filp->private_data;
   unsigned long flags;
 
-  printk("legacy_bridge_release()!\n");
-  
   /* Reset the hardware before releasing it */
   reset_legacy_bridge(bridge);
   
