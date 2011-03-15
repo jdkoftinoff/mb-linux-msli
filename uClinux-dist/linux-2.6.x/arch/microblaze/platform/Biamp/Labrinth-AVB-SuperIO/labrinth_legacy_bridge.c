@@ -58,6 +58,12 @@ static uint32_t instanceCount;
 #define DBG(f, x...)
 #endif
 
+/* Hard-coded network device name for use with PHY drivers - we never
+ * register this as a network device, we wouldn't want anyone to think
+ * you could actually use it as such
+ */
+#define FIXED_NDEV_NAME ("eth7")
+
 /* Default and maximum number of MAC match units */
 #define DEFAULT_MAC_MATCH_UNITS  (4)
 #define MAX_MAC_MATCH_UNITS     (32)
@@ -285,7 +291,6 @@ static void configure_mac_filter(struct legacy_bridge *bridge,
  */
 static void reset_legacy_bridge(struct legacy_bridge *bridge) {
   /* Clear out all of the Rx filter match units for both ports */
-  printk("Clearing match units\n");
   select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
   clear_selected_matchers(bridge, AVB_PORT_0);
   select_matchers(bridge, AVB_PORT_0, SELECT_NONE, 0);
@@ -539,11 +544,15 @@ static int legacy_bridge_probe(const char *name,
   }
   SET_NETDEV_DEV(ndev, &pdev->dev);
 
-  /* Allocate the dev name early so we can use it in our messages */
-  if(strchr(ndev->name, '%')) {
-    returnValue = dev_alloc_name(ndev, ndev->name);
-    if(returnValue < 0) goto netdev_error;
-  }
+  /* Allocate the dev name early so we can use it in our messages
+   *
+   * NOTE - There are a *lot* of things we are not setting up for this as a
+   *        network device!  We really just require it as an abstraction for
+   *        the PHY driver to talk to.  Therefore, we don't register it with
+   *        the system using register_netdev() and give it a far-out name that
+   *        isn't allocated using the normal call to dev_alloc_name() either.
+   */
+  strcpy(ndev->name, FIXED_NDEV_NAME);
 
   /* Point to the private data structure allocated by the parent net_device,
    * and set up navigation back up to the parent
