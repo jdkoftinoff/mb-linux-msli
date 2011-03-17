@@ -1110,12 +1110,6 @@ config LABX_LOCAL_AUDIO
 	help
 	  Select this to enable a misc device node to use for talking to Local Audio hardware.
 
-config GARCIA_CONTROL
-  tristate "Avid Garcia sound card control device driver support"
-  help
-    This supports the Avid Garcia sound card controller in master
-    and slave mode.
-
 config DEVPORT
 	bool
 	depends on !M68K

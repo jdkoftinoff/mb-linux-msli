@@ -109,7 +109,6 @@ obj-$(CONFIG_TCG_TPM)		+= tpm/
 obj-$(CONFIG_LABX_DMA)          += labx_dma.o
 obj-$(CONFIG_LABX_DMA_CDEV)     += labx_dma_cdev.o
 obj-$(CONFIG_LABX_LOCAL_AUDIO)  += labx_local_audio.o
-obj-$(CONFIG_GARCIA_CONTROL)		+= garcia_control.o
 EXTRA_CFLAGS	+= -I$(TOPDIR)/drivers/xilinx_common
 
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o

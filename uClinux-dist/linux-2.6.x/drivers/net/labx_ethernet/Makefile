@@ -12,4 +12,4 @@ labx_direct_ethernet-objs	:= labx_ethernet_main.o    \
 				   labx_ethernet_mdio.o
 
 obj-$(CONFIG_LABX_ETHERNET) += labx_direct_ethernet.o
-obj-$(CONFIG_GARCIA_FPGA)   += garcia_fpga.o
+
