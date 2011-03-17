@@ -204,6 +204,7 @@ romfs:
 	$(ROMFSINST) -s /var/devices/gpio/gnet_out /dev/gpio/gnet_out
 
 	$(ROMFSINST) -s /dev/ttyUL2 /dev/ttyMIDI
+	$(ROMFSINST) -s /dev/ttyUL3 /dev/ttyGNET
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
 	$(ROMFSINST) -s /var/tmp/dhcpc/resolv.conf /etc/resolv.conf
 	$(ROMFSINST) -s /var/tmp/avahi /etc/avahi
