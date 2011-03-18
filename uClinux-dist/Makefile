@@ -44,8 +44,8 @@ SCRIPTSDIR = $(ROOTDIR)/config/kconfig
 TFTPDIR    = /tftpboot
 BUILD_START_STRING ?= $(shell date "+%a, %d %b %Y %T %z")
 NON_SMP_BUILD := 1
-export HOST_NCPU := 1
-export SUBDIR_SMP_BUILD := -j1
+#export HOST_NCPU := 1
+#export SUBDIR_SMP_BUILD := -j1
 
 LINUX_CONFIG  = $(ROOTDIR)/$(LINUXDIR)/.config
 CONFIG_CONFIG = $(ROOTDIR)/config/.config
