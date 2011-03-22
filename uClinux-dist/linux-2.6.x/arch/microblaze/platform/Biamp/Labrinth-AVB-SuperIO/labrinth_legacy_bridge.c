@@ -52,10 +52,10 @@
 #define MAX_INSTANCES 4
 static uint32_t instanceCount;
 
-#if 0
-#define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
+#if 1
+#define DEBUG_NOTE(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
-#define DBG(f, x...)
+#define DEBUG_NOTE(f, x...)
 #endif
 
 /* Hard-coded network device name for use with PHY drivers - we never
@@ -116,6 +116,7 @@ struct legacy_bridge {
   uint8_t phy_addr;
   char phy_name[BUS_ID_SIZE];
   struct phy_device *phy_dev;
+  int current_speed;
 
   /* Mutex for the device instance */
   spinlock_t mutex;
@@ -263,16 +264,20 @@ static void configure_mac_filter(struct legacy_bridge *bridge,
   /* Only allow programming up to the supported number of MAC match units */
   if (unitNum >= bridge->macMatchUnits) return;
 
-  printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
-         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  
   /* Ascertain that the configuration logic is ready, then select the matcher */
   wait_match_config(bridge, whichPort);
   select_matchers(bridge, whichPort, SELECT_SINGLE, unitNum);
 
   if (mode == MAC_MATCH_NONE) {
+    DEBUG_NOTE("Config port %d, match unit %d disabled\n",
+               whichPort, unitNum);
+  
     clear_selected_matchers(bridge, whichPort);
   } else {
+    DEBUG_NOTE("Config port %d, match unit %d address: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+               whichPort, unitNum,
+               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
     /* Set the loading mode to disable as we load the first word */
     set_matcher_loading_mode(bridge, whichPort, LOADING_MORE_WORDS);
     
@@ -290,6 +295,8 @@ static void configure_mac_filter(struct legacy_bridge *bridge,
  * traffic in the other direction.
  */
 static void reset_legacy_bridge(struct legacy_bridge *bridge) {
+  DEBUG_NOTE("Resetting legacy bridge\n");
+
   /* Clear out all of the Rx filter match units for both ports */
   select_matchers(bridge, AVB_PORT_0, SELECT_ALL, 0);
   clear_selected_matchers(bridge, AVB_PORT_0);
@@ -323,14 +330,19 @@ static void legacy_bridge_config_ports(struct legacy_bridge *bridge,
 
     /* Actively bridging, configure appropriately */
     if(portsConfig->rxPortSelection == RX_PORT_1_SELECT) {
+      DEBUG_NOTE("Bridging backplane legacy Rx to port 1\n");
       bridgeConfigWord |= BRIDGE_RX_PORT_1;
+    } else {
+      DEBUG_NOTE("Bridging backplane legacy Rx to port 0\n");
     }
 
     if(portsConfig->txPortsEnable[0] == TX_PORT_ENABLED) {
+      DEBUG_NOTE("Bridging backplane legacy Tx to port 0\n");
       bridgeConfigWord |= BRIDGE_TX_EN_PORT_0;
     }
 
     if(portsConfig->txPortsEnable[1] == TX_PORT_ENABLED) {
+      DEBUG_NOTE("Bridging backplane legacy Tx to port 1\n");
       bridgeConfigWord |= BRIDGE_TX_EN_PORT_1;
     }
     XIo_Out32(BRIDGE_REG_ADDRESS(bridge, BRIDGE_CTRL_REG), bridgeConfigWord);
@@ -343,7 +355,10 @@ static void legacy_bridge_adjust_link(struct net_device *dev)
   struct legacy_bridge *bridge = netdev_priv(dev);
 
   if (bridge->phy_dev->link != PHY_DOWN) {
-    printk("%s : Link up, %d Mb/s\n", bridge->ndev->name, bridge->phy_dev->speed);
+    if(bridge->current_speed != bridge->phy_dev->speed) {
+      printk("%s : Link up, %d Mb/s\n", bridge->ndev->name, bridge->phy_dev->speed);
+      bridge->current_speed = bridge->phy_dev->speed;
+    }
   } else {
     printk("%s : Link down\n", bridge->ndev->name);
   }
@@ -356,7 +371,6 @@ static void legacy_bridge_adjust_link(struct net_device *dev)
 static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   struct legacy_bridge *bridge;
   unsigned long flags;
-  uint8_t broadcastMac[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
   int returnValue = 0;
 
   bridge = container_of(inode->i_cdev, struct legacy_bridge, cdev);
@@ -379,6 +393,7 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   
   /* Perform PHY setup using the platform-supplied hook method */
   printk("%s: About to connect to phy device\n",__func__);
+  bridge->current_speed = 0;
   if(bridge->phy_dev == NULL) {
     /* Lookup phy device */
     bridge->phy_dev = phy_connect(bridge->ndev, 
@@ -401,10 +416,6 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
       bridge->phy_dev = NULL;
     }
   }
-
-  /* TEMPORARY - Auto-configure for broadcast traffic! */
-  //  printk("Auto-configuring for BROADCAST traffic\n");
-  //  configure_mac_filter(bridge, 0, 0, broadcastMac, MAC_MATCH_ALL);
 
   return(returnValue);
 }
@@ -483,8 +494,6 @@ static int legacy_bridge_ioctl(struct inode *inode,
   case IOC_CONFIG_BRIDGE_PORTS:
     {
       BridgePortsConfig portsConfig;
-      uint32_t testMode;
-      uint32_t phyTestMode;
 
       if(copy_from_user(&portsConfig, (void __user*)arg, sizeof(portsConfig)) != 0) {
         return(-EFAULT);
@@ -492,6 +501,18 @@ static int legacy_bridge_ioctl(struct inode *inode,
 
       /* Configure the bridge ports */
       legacy_bridge_config_ports(bridge, &portsConfig);
+    }
+    break;
+
+  case IOC_GET_BRIDGE_CAPS:
+    {
+      BridgeCapabilities bridgeCaps;
+
+      /* Populate the capabilities structure and return it by copy */
+      bridgeCaps.macMatchUnits = bridge->macMatchUnits;
+      if(copy_to_user((void __user*)arg, &bridgeCaps, sizeof(BridgeCapabilities)) != 0) {
+        return(-EFAULT);
+      }
     }
     break;
 

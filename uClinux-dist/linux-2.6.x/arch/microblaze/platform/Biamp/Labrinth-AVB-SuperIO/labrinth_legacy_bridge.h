@@ -132,4 +132,12 @@ typedef struct {
 
 #define IOC_CONFIG_BRIDGE_PORTS _IOW(LEGACY_BRIDGE_IOC_CHAR, 0x03, BridgePortsConfig)
 
+/* Command to fetch bridge capabilities */
+
+typedef struct {
+  uint32_t macMatchUnits;
+} BridgeCapabilities;
+
+#define IOC_GET_BRIDGE_CAPS _IOR(LEGACY_BRIDGE_IOC_CHAR, 0x04, BridgeCapabilities)
+
 #endif
