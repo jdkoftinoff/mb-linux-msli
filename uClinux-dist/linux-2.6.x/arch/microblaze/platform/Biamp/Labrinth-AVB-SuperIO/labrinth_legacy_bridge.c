@@ -52,7 +52,7 @@
 #define MAX_INSTANCES 4
 static uint32_t instanceCount;
 
-#if 1
+#if 0
 #define DEBUG_NOTE(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DEBUG_NOTE(f, x...)
@@ -392,7 +392,7 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   reset_legacy_bridge(bridge);
   
   /* Perform PHY setup using the platform-supplied hook method */
-  printk("%s: About to connect to phy device\n",__func__);
+  DEBUG_NOTE("%s: About to connect to phy device\n",__func__);
   bridge->current_speed = 0;
   if(bridge->phy_dev == NULL) {
     /* Lookup phy device */
@@ -404,15 +404,15 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
     if(!IS_ERR(bridge->phy_dev)) {
       int ret;
 
-      printk("%s: About to call phy_start_aneg()\n",__func__);
+      DEBUG_NOTE("%s: About to call phy_start_aneg()\n",__func__);
       ret = phy_start_aneg(bridge->phy_dev);
       if (0 != ret) {
-        printk("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
+        DEBUG_NOTE("%s: phy_start_aneg() Failed with code %d\n",__func__,ret);
       } else {
-        printk("%s: phy_start_aneg() Passed\n",__func__);
+        DEBUG_NOTE("%s: phy_start_aneg() Passed\n",__func__);
       }
     } else {
-      printk("Not able to find Phy");
+      printk("%s: Not able to find Phy", __func__);
       bridge->phy_dev = NULL;
     }
   }
