@@ -91,7 +91,7 @@
 /* Buffer for storing stream map entries */
 static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
 
-/* Configures the psuedorandom analyzer */
+/* Configures the pseudorandom analyzer */
 static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
                                AnalyzerConfig *analyzerConfig) {
   uint32_t controlRegister;
@@ -107,8 +107,8 @@ static void configure_analyzer(struct labrinth_tdm_output *tdmOutput,
     controlRegister |= (analyzerConfig->sportChannel & ANALYZER_SLOT_MASK);
     controlRegister |= ANALYZER_ENABLE;
 
-    /* Set up the analyzer to predict either a psuedorandom or linear ramp */
-    if(analyzerConfig->signalControl == ANALYSIS_PSUEDORANDOM) {
+    /* Set up the analyzer to predict either a pseudorandom or linear ramp */
+    if(analyzerConfig->signalControl == ANALYSIS_PSEUDORANDOM) {
       controlRegister &= ~ANALYZER_RAMP;
     } else controlRegister |= ANALYZER_RAMP;
 
@@ -172,7 +172,7 @@ static void reset_labrinth_tdm(struct labrinth_tdm_output *tdmOutput) {
   uint32_t bankIndex;
   uint32_t channelIndex;
 
-  /* Disable the psuedorandom analyzer */
+  /* Disable the pseudorandom analyzer */
   analyzerConfig.enable = LFSR_ANALYZER_DISABLE;
   configure_analyzer(tdmOutput, &analyzerConfig);
 
@@ -303,7 +303,7 @@ static irqreturn_t labrinth_tdm_interrupt(int irq, void *dev_id) {
   maskedFlags &= irqMask;
   XIo_Out32(TDM_DEMUX_ADDRESS(tdmOutput, TDM_IRQ_FLAGS_REG), maskedFlags);
 
-  /* Detect the psuedorandom analysis error IRQ */
+  /* Detect the pseudorandom analysis error IRQ */
   if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
     /* TEMPORARY - Just announce this and treat it as a one-shot.
      *             Ultimately this should be communicated via generic Netlink.
@@ -313,7 +313,7 @@ static irqreturn_t labrinth_tdm_interrupt(int irq, void *dev_id) {
     printk("%s: Analysis error!\n", tdmOutput->labxLocalAudio->name);
   }
 
-  /* Detect the psuedorandom analysis error IRQ */
+  /* Detect the pseudorandom analysis error IRQ */
   if((maskedFlags & DMA_ERROR_IRQ) != 0) {
     /* TEMPORARY - Just announce this and treat it as a one-shot.
      *             Ultimately this should be communicated via generic Netlink.
