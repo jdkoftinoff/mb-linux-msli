@@ -354,12 +354,13 @@ static void legacy_bridge_adjust_link(struct net_device *dev)
 {
   struct legacy_bridge *bridge = netdev_priv(dev);
 
-  if (bridge->phy_dev->link != PHY_DOWN) {
+  if(bridge->phy_dev->link != PHY_DOWN) {
     if(bridge->current_speed != bridge->phy_dev->speed) {
       printk("%s : Link up, %d Mb/s\n", bridge->ndev->name, bridge->phy_dev->speed);
       bridge->current_speed = bridge->phy_dev->speed;
     }
-  } else {
+  } else if(bridge->current_speed != 0) {
+    bridge->current_speed = 0;
     printk("%s : Link down\n", bridge->ndev->name);
   }
 }

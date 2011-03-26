@@ -1244,13 +1244,13 @@ labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
  * status information we'd like. This is the list of strings used for that
  * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
  */
-static char labx_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
+static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
   "txpkts", "txdropped", "txerr", "txfifoerr",
   "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
   "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
 };
 
-#define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethtool_gstrings_stats)
+#define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
 
 /* Array defining the test modes we support */
 static const char labx_ethernet_gstrings_test[][ETH_GSTRING_LEN] = {
@@ -1279,7 +1279,7 @@ labx_ethtool_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 	   (LABX_ETHERNET_TEST_LEN * ETH_GSTRING_LEN));
     break;
   case ETH_SS_STATS:
-    memcpy(data, *labx_ethernet_gstrings_test,
+    memcpy(data, *labx_ethernet_gstrings_stats,
 	   (LABX_ETHERNET_STATS_LEN * ETH_GSTRING_LEN));
     break;
   }
@@ -1319,15 +1319,28 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
                 lp->phy_dev->drv->name);
 }
 
+static void labx_ethtool_get_stats(struct net_device *dev, 
+                                   struct ethtool_stats *stats, 
+                                   u64 *data) {
+  struct net_local *lp = netdev_priv(dev);
+  uint32_t statIndex;
+
+  /* TEMPORARY - just getting the framework working */
+  for(statIndex = 0; statIndex < LABX_ETHERNET_STATS_LEN; statIndex++) {
+    data[statIndex] = (u64) statIndex;
+  }
+}
+
 /* ethtool operations structure */
 static const struct ethtool_ops labx_ethtool_ops = {
-  .get_settings   = labx_ethtool_get_settings,
-  .set_settings   = labx_ethtool_set_settings,
-  .get_drvinfo    = labx_ethtool_get_drvinfo,
-  .get_regs       = labx_ethtool_get_regs,
-  .self_test      = labx_ethtool_self_test,
-  .get_sset_count = labx_ethtool_get_sset_count,
-  .get_strings    = labx_ethtool_get_strings,
+  .get_settings      = labx_ethtool_get_settings,
+  .set_settings      = labx_ethtool_set_settings,
+  .get_drvinfo       = labx_ethtool_get_drvinfo,
+  .get_regs          = labx_ethtool_get_regs,
+  .self_test         = labx_ethtool_self_test,
+  .get_sset_count    = labx_ethtool_get_sset_count,
+  .get_strings       = labx_ethtool_get_strings,
+  .get_ethtool_stats = labx_ethtool_get_stats,
 #if 0
   .get_link = ethtool_op_get_link,
   .nway_reset = labx_ethtool_nwayreset,
@@ -1340,255 +1353,6 @@ static const struct ethtool_ops labx_ethtool_ops = {
   .set_eeprom = labx_ethtool_set_eeprom,
 #endif
 };
-
-/* DEPRECATED ethtool ioctl() */
-#if 0
-static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
-{
-  struct net_local *lp = netdev_priv(dev);
-  struct ethtool_cmd ecmd;
-  struct ethtool_drvinfo edrv;
-  struct ethtool_pauseparam epp;
-  struct mac_regsDump regs;
-  int ret = -EOPNOTSUPP;
-  u32 Options;
-
-  if (copy_from_user(&ecmd, rq->ifr_data, sizeof(ecmd)))
-    return -EFAULT;
-  switch (ecmd.cmd) {
-  case ETHTOOL_GSET:	/* Get setting. No command option needed w/ ethtool */
-    ret = labx_ethtool_get_settings(dev, &ecmd);
-    if (ret < 0)
-      return -EIO;
-    if (copy_to_user(rq->ifr_data, &ecmd, sizeof(ecmd)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  case ETHTOOL_SSET:	/* Change setting. Use "-s" command option w/ ethtool */
-    ret = labx_ethtool_set_settings(dev, &ecmd);
-    break;
-  case ETHTOOL_GPAUSEPARAM:	/* Get pause parameter information. Use "-a" w/ ethtool */
-    ret = labx_ethtool_get_settings(dev, &ecmd);
-    if (ret < 0)
-      return ret;
-    epp.cmd = ecmd.cmd;
-    epp.autoneg = ecmd.autoneg;
-    Options = labx_eth_GetOptions(&lp->Emac);
-    if (Options & XTE_FCS_INSERT_OPTION) {
-      epp.rx_pause = 1;
-      epp.tx_pause = 1;
-    }
-    else {
-      epp.rx_pause = 0;
-      epp.tx_pause = 0;
-    }
-    if (copy_to_user
-	(rq->ifr_data, &epp, sizeof(struct ethtool_pauseparam)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  case ETHTOOL_SPAUSEPARAM:	/* Set pause parameter. Use "-A" w/ ethtool */
-    return -EOPNOTSUPP;	/* TODO: To support in next version */
-  case ETHTOOL_GRXCSUM:{	/* Get rx csum offload info. Use "-k" w/ ethtool */
-    struct ethtool_value edata = { ETHTOOL_GRXCSUM };
-
-    edata.data =
-      (lp->local_features & LOCAL_FEATURE_RX_CSUM) !=
-      0;
-    if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_SRXCSUM:{	/* Set rx csum offload info. Use "-K" w/ ethtool */
-    struct ethtool_value edata;
-
-    if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-      return -EFAULT;
-
-    if (edata.data) {
-      if (labx_eth_IsRxCsum(&lp->Emac) == TRUE) {
-	lp->local_features |=
-	  LOCAL_FEATURE_RX_CSUM;
-      }
-    }
-    else {
-      lp->local_features &= ~LOCAL_FEATURE_RX_CSUM;
-    }
-
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_GTXCSUM:{	/* Get tx csum offload info. Use "-k" w/ ethtool */
-    struct ethtool_value edata = { ETHTOOL_GTXCSUM };
-
-    edata.data = (dev->features & NETIF_F_IP_CSUM) != 0;
-    if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_STXCSUM:{	/* Set tx csum offload info. Use "-K" w/ ethtool */
-    struct ethtool_value edata;
-
-    if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-      return -EFAULT;
-
-    if (edata.data) {
-      if (labx_eth_IsTxCsum(&lp->Emac) == TRUE) {
-	dev->features |= NETIF_F_IP_CSUM;
-      }
-    }
-    else {
-      dev->features &= ~NETIF_F_IP_CSUM;
-    }
-
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_GSG:{	/* Get ScatterGather info. Use "-k" w/ ethtool */
-    struct ethtool_value edata = { ETHTOOL_GSG };
-
-    edata.data = (dev->features & NETIF_F_SG) != 0;
-    if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_SSG:{	/* Set ScatterGather info. Use "-K" w/ ethtool */
-    struct ethtool_value edata;
-
-    if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-      return -EFAULT;
-
-    if (edata.data) {
-      /* Features for DMA, preserve for future */
-      /*
-	if (labx_eth_IsDma(&lp->Emac)) {
-	dev->features |=
-	NETIF_F_SG | NETIF_F_FRAGLIST;
-	}
-      */
-    }
-    else {
-      dev->features &=
-	~(NETIF_F_SG | NETIF_F_FRAGLIST);
-    }
-
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_GCOALESCE:	/* Get coalescing info. Use "-c" w/ ethtool */
-    /* For the moment, break since no DMA is supported */
-    break;
-
-  case ETHTOOL_SCOALESCE:	/* Set coalescing info. Use "-C" w/ ethtool */
-    /* For the moment, break since no DMA is supported */
-    break;
-
-  case ETHTOOL_GDRVINFO:	/* Get driver information. Use "-i" w/ ethtool */
-    edrv.cmd = edrv.cmd;
-    ret = labx_ethtool_get_drvinfo(dev, &edrv);
-    if (ret < 0) {
-      return -EIO;
-    }
-    edrv.n_stats = XENET_STATS_LEN;
-    if (copy_to_user
-	(rq->ifr_data, &edrv, sizeof(struct ethtool_drvinfo))) {
-      return -EFAULT;
-    }
-    ret = 0;
-    break;
-  case ETHTOOL_GREGS:	/* Get register values. Use "-d" with ethtool */
-    regs.hd.cmd = edrv.cmd;
-    labx_ethtool_get_regs(dev, &(regs.hd), &ret);
-    if (ret < 0) {
-      return ret;
-    }
-    if (copy_to_user
-	(rq->ifr_data, &regs, sizeof(struct mac_regsDump))) {
-      return -EFAULT;
-    }
-    ret = 0;
-    break;
-  case ETHTOOL_GRINGPARAM:	/* Get RX/TX ring parameters. Use "-g" w/ ethtool */
-    /* For the moment, return error since no DMA is supported */
-    return -EFAULT;
-    break;
-
-  case ETHTOOL_NWAY_RST:	/* Restart auto negotiation if enabled. Use "-r" w/ ethtool */
-    return -EOPNOTSUPP;	/* TODO: To support in next version */
-  case ETHTOOL_GSTRINGS:{
-    struct ethtool_gstrings gstrings = { ETHTOOL_GSTRINGS };
-    void *addr = rq->ifr_data;
-    char *strings = NULL;
-
-    if (copy_from_user(&gstrings, addr, sizeof(gstrings))) {
-      return -EFAULT;
-    }
-    switch (gstrings.string_set) {
-    case ETH_SS_STATS:
-      gstrings.len = XENET_STATS_LEN;
-      strings = *labx_ethtool_gstrings_stats;
-      break;
-    default:
-      return -EOPNOTSUPP;
-    }
-    if (copy_to_user(addr, &gstrings, sizeof(gstrings))) {
-      return -EFAULT;
-    }
-    addr += offsetof(struct ethtool_gstrings, data);
-    if (copy_to_user
-	(addr, strings, gstrings.len * ETH_GSTRING_LEN)) {
-      return -EFAULT;
-    }
-    ret = 0;
-    break;
-  }
-  case ETHTOOL_GSTATS:{
-    struct {
-      struct ethtool_stats cmd;
-      uint64_t data[XENET_STATS_LEN];
-    } stats = { {
-	ETHTOOL_GSTATS, XENET_STATS_LEN}};
-
-    stats.data[0] = lp->ndev->stats.tx_packets;
-    stats.data[1] = lp->ndev->stats.tx_dropped;
-    stats.data[2] = lp->ndev->stats.tx_errors;
-    stats.data[3] = lp->ndev->stats.tx_fifo_errors;
-    stats.data[4] = lp->ndev->stats.rx_packets;
-    stats.data[5] = lp->ndev->stats.rx_dropped;
-    stats.data[6] = lp->ndev->stats.rx_errors;
-    stats.data[7] = lp->ndev->stats.rx_fifo_errors;
-    stats.data[8] = lp->ndev->stats.rx_crc_errors;
-    stats.data[9] = lp->max_frags_in_a_packet;
-    stats.data[10] = lp->tx_hw_csums;
-    stats.data[11] = lp->rx_hw_csums;
-
-    if (copy_to_user(rq->ifr_data, &stats, sizeof(stats))) {
-      return -EFAULT;
-    }
-    ret = 0;
-    break;
-  }
-
-  case ETHTOOL_GLINK:{
-    struct ethtool_value edata = { ETHTOOL_GLINK };
-
-    edata.data = (netif_carrier_ok(dev) == 0) ? 0 : 1;
-
-    if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-      return -EFAULT;
-    ret = 0;
-    break;
-  }
-
-  default:
-    return -EOPNOTSUPP;	/* All other operations not supported */
-  }
-  return ret;
-}
-#endif /* DEPRECATED ethtool ioctl() */
 
 static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
