@@ -1244,10 +1244,9 @@ labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
  * status information we'd like. This is the list of strings used for that
  * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
  */
+#define RX_CRC_ERRS_INDEX  (0)
 static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
-  "txpkts", "txdropped", "txerr", "txfifoerr",
-  "rxpkts", "rxdropped", "rxerr", "rxfifoerr",
-  "rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
+  "RxCrcErrors",
 };
 
 #define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
@@ -1289,6 +1288,7 @@ static void
 labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info, 
 		       u64 *test_results) {
   struct net_local *lp = netdev_priv(dev);
+  XLlTemac *InstancePtr = (XLlTemac *) &lp->Emac;
   u32 phy_test_mode;
 
   /* Clear the test results */
@@ -1317,18 +1317,23 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
     lp->phy_dev->drv->set_test_mode(lp->phy_dev, phy_test_mode);
   } else printk("%s PHY driver does not support test modes\n",
                 lp->phy_dev->drv->name);
+
+  /* Having switched modes, clear the hardware statistics counters */
+  labx_eth_WriteReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG, 0);
 }
 
 static void labx_ethtool_get_stats(struct net_device *dev, 
                                    struct ethtool_stats *stats, 
                                    u64 *data) {
   struct net_local *lp = netdev_priv(dev);
-  uint32_t statIndex;
+  XLlTemac *InstancePtr = (XLlTemac *) &lp->Emac;
 
-  /* TEMPORARY - just getting the framework working */
-  for(statIndex = 0; statIndex < LABX_ETHERNET_STATS_LEN; statIndex++) {
-    data[statIndex] = (u64) statIndex;
-  }
+  /* Copy each statistic into the data location for it.  At the moment, the
+   * only statistic is hosted directly within a hardware register.
+   */
+
+  /* Fetch the CRC count from hardware */
+  data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
 }
 
 /* ethtool operations structure */
