@@ -307,6 +307,7 @@ struct ptp_device {
   uint32_t rtcLockCounter;
   uint32_t rtcLockTicks;
   uint32_t rtcUnlockTicks;
+  RtcIncrement currentIncrement;
 
   /* Present role and delay mechanism for the endpoint */
   PtpRole presentRole;
@@ -393,6 +394,7 @@ void LinkDelaySyncIntervalSetting_StateMachine(struct ptp_device *ptp, uint32_t 
 /* From labx_ptp_rtc.c */
 void disable_rtc(struct ptp_device *ptp);
 void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
+void get_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void get_local_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
