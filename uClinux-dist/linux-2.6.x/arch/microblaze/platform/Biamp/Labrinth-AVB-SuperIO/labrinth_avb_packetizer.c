@@ -336,7 +336,7 @@ static struct platform_driver labrinth_packetizer_driver = {
 };
 
 /* Driver initialization and exit */
-static int __init labrinth_packetizer_driver_init(void)
+static int __devinit labrinth_packetizer_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": Labrinth Audio Packetizer driver\n");
@@ -355,7 +355,7 @@ static int __init labrinth_packetizer_driver_init(void)
   return(0);
 }
 
-static void __exit labrinth_packetizer_driver_exit(void)
+static void __devexit labrinth_packetizer_driver_exit(void)
 {
   /* Unregister as a platform device driver */
   platform_driver_unregister(&labrinth_packetizer_driver);

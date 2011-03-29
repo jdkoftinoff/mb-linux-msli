@@ -237,6 +237,11 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 /* 802.1AS MDPdelayReq state machine (11.2.15.3) transitions */
 void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
 {
+  if(ptp->properties.delayMechanism != PTP_DELAY_MECHANISM_P2P) {
+    /* The PDELAY state machine should only be active in P2P mode */
+    return;
+  }
+
 //  printk("PTP IDX %d, PE %d, PTTE %d, PDIT %d, PDRI %d\n", port, ptp->ports[port].portEnabled,
 //    ptp->ports[port].pttPortEnabled, ptp->ports[port].pdelayIntervalTimer, ptp->ports[port].pdelayReqInterval);
 

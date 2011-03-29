@@ -43,7 +43,7 @@ struct labrinth_tdm_output {
 #define LFSR_ANALYZER_DISABLE  (0x00)
 #define LFSR_ANALYZER_ENABLE   (0x01)
 
-#define ANALYSIS_PSUEDORANDOM  (0x00)
+#define ANALYSIS_PSEUDORANDOM  (0x00)
 #define ANALYSIS_RAMP          (0x01)
 
 typedef struct {

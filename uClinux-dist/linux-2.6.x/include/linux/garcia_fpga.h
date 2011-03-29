@@ -33,37 +33,31 @@ enum {
 #define GARCIA_FPGA_GPIO_DEBUG_1 BIT(8)
 #define GARCIA_FPGA_GPIO_DEBUG_2 BIT(9)
 #define GARCIA_FPGA_GPIO_DEBUG_3 BIT(10)
-#define GARCIA_FPGA_GPIO_SLOT_MUTE_1 BIT(11)
-#define GARCIA_FPGA_GPIO_SLOT_MUTE_2 BIT(12)
-#define GARCIA_FPGA_GPIO_SLOT_MUTE_3 BIT(13)
-#define GARCIA_FPGA_GPIO_SLOT_MUTE_4 BIT(14)
-#define GARCIA_FPGA_GPIO_SLOT_MUTE_5 BIT(15)
-#define GARCIA_FPGA_GPIO_SLOT_RESET_1 BIT(16)
-#define GARCIA_FPGA_GPIO_SLOT_RESET_2 BIT(17)
-#define GARCIA_FPGA_GPIO_SLOT_RESET_3 BIT(18)
-#define GARCIA_FPGA_GPIO_SLOT_RESET_4 BIT(19)
-#define GARCIA_FPGA_GPIO_SLOT_RESET_5 BIT(20)
-#define GARCIA_FPGA_GPIO_SLOT_SPISEL_1 BIT(21)
-#define GARCIA_FPGA_GPIO_SLOT_SPISEL_2 BIT(22)
-#define GARCIA_FPGA_GPIO_SLOT_SPISEL_3 BIT(23)
-#define GARCIA_FPGA_GPIO_SLOT_SPISEL_4 BIT(24)
-#define GARCIA_FPGA_GPIO_SLOT_SPISEL_5 BIT(25)
 
 #define GARCIA_FPGA_POWER_LED_A BIT(0)
 #define GARCIA_FPGA_POWER_LED_B BIT(1)
 #define GARCIA_FPGA_STATUS_LED_A BIT(2)
 #define GARCIA_FPGA_STATUS_LED_B BIT(3)
 #define GARCIA_FPGA_SLOT_BUF_NOE BIT(4)
-#define GARCIA_FPGA_SLOT_SSI_DDIR_1 BIT(5)
-#define GARCIA_FPGA_SLOT_SSI_DDIR_2 BIT(6)
-#define GARCIA_FPGA_SLOT_SSI_DDIR_3 BIT(7)
-#define GARCIA_FPGA_SLOT_SSI_DDIR_4 BIT(8)
-#define GARCIA_FPGA_SLOT_SSI_DDIR_5 BIT(9)
 #define GARCIA_FPGA_GENERAL_DIR BIT(10)
 
 int garcia_led_set(int led, int value);
 typedef void (*gpio_irq_callback)(uint32_t gpioval, void *data);
 int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
 		gpio_irq_callback callback, void *data);
+
+/* ioctl commands of Garcia control character device */
+
+#define GARCIA_IOC_MAGIC 'g'
+#define GARCIA_IOC_READ_STATUS    _IOR(GARCIA_IOC_MAGIC, 0, __u32)
+#define GARCIA_IOC_READ_STATUS_NB _IOR(GARCIA_IOC_MAGIC, 1, __u32)
+#define GARCIA_IOC_WRITE_STATUS   _IOW(GARCIA_IOC_MAGIC, 2, __u32)
+
+#define GARCIA_STATUS_MASTER_MODE	0x20	/* Driver is master (Hub48 emulator) (RO) */
+#define GARCIA_STATUS_INT_ENA		0x10	/* Interrupt enabled */
+#define GARCIA_STATUS_RESET_SIG		 0x8	/* Reset signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_MUTE_SIG		 0x4	/* Mute signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_STROBE		 0x2	/* Strobe signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_SSI_DDIR		 0x1	/* Data direction of SSI (R/W) */
 
 #endif /* GARCIA_FPGA_H_ */

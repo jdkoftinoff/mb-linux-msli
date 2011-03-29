@@ -145,9 +145,10 @@ DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,233,0
 
 # Add the Biamp SPI mailbox peripheral device node
-ifdef CONFIG_SPI_MAILBOX
 DEVICES += mailbox0,c,235,0
-endif
+
+# Add the Biamp legacy packet bridge device node
+DEVICES += legacy_bridge0,c,222,0
 
 # Add the Xilinx SPI Master peripheral device node
 ifdef CONFIG_XILINX_SPI

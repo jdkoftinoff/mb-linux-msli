@@ -236,12 +236,6 @@ config SPI_XILINX
 #
 comment "SPI Protocol Masters"
 
-config SPI_AGSPI
-	tristate "Avid Garcia sound card SPI device driver support"
-	depends on SPI_XILINX
-	help
-	  This supports the Avid Garcia sound card SPI protocol drivers.
-
 config SPI_SPIDEV
 	tristate "User mode SPI device driver support"
 	depends on EXPERIMENTAL

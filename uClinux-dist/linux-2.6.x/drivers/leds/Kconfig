@@ -229,7 +229,7 @@ config LEDS_BD2802
 
 config LEDS_GARCIA
 	tristate "LED driver for Avid Garcia"
-	depends on LEDS_CLASS && GARCIA_FPGA
+	depends on LEDS_CLASS
 	help
 	  This option enables support for LEDs on the Avid Garcia board.
 

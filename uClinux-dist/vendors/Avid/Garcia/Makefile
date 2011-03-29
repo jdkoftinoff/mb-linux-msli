@@ -134,11 +134,6 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	agspi0,c,101,0 \
-	agspi1,c,101,1 \
-	agspi2,c,101,2 \
-	agspi3,c,101,3 \
-	agspi4,c,101,4 \
 	spidev0,c,153,0 \
 	spidev1,c,153,1 \
 	spidev2,c,153,2 \
@@ -154,19 +149,22 @@ endif
 ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
 DEVICES += depacketizer0,c,252,0
 DEVICES += depacketizer1,c,252,1
+DEVICES += depacketizer2,c,252,2
+DEVICES += depacketizer3,c,252,3
 endif
 ifdef CONFIG_LABX_PTP
 DEVICES += ptp0,c,253,0
 endif
 
 # Add the Xilinx SPI Master peripheral device node
+DEVICES += \
+	agcontrol0,c,101,0 \
+	agcontrol1,c,101,1 \
+	agcontrol2,c,101,2 \
+	agcontrol3,c,101,3 \
+	agcontrol4,c,101,4
 ifdef CONFIG_XILINX_SPI
-DEVICES +=
-	agspi0,c,101,0 \
-	agspi1,c,101,1 \
-	agspi2,c,101,2 \
-	agspi3,c,101,3 \
-	agspi4,c,101,4 \
+DEVICES += \
 	spidev0,c,153,0 \
 	spidev1,c,153,1 \
 	spidev2,c,153,2 \

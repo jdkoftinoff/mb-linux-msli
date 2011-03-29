@@ -48,6 +48,9 @@ void disable_rtc(struct ptp_device *ptp) {
 void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
   uint32_t incrementWord;
 
+  /* Save the current increment if anyone needs it */
+  ptp->currentIncrement = *increment;
+
   /* Assemble a single value from the increment components */
   incrementWord = ((increment->mantissa & RTC_MANTISSA_MASK) << RTC_MANTISSA_SHIFT);
   incrementWord |= (increment->fraction & RTC_FRACTION_MASK);
@@ -55,6 +58,11 @@ void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
 
   /* The actual write is already atomic, so no need to ensure mutual exclusion */
   XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), incrementWord);
+}
+
+/* Return the current increment value */
+void get_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
+  *increment = ptp->currentIncrement;
 }
 
 /* Captures the present RTC time, returning it into the passed structure */
@@ -240,6 +248,9 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       slaveOffset = (((int32_t) difference.nanoseconds) + ((int32_t) difference2.nanoseconds));
       slaveOffset >>= 1;
       slaveOffsetValid = PTP_RTC_OFFSET_VALID;
+
+      /* Save the delay in the same spot as P2P mode does for consistency. */
+      ptp->ports[port].neighborPropDelay = (-difference2.nanoseconds) - slaveOffset;
     }
   } else {
     /* The peer delay mechanism uses the SYNC->FUP messages, but relies upon the
@@ -322,6 +333,11 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      */
     newRtcIncrement |= PTP_RTC_ENABLE;
     if(ptp->rtcChangesAllowed) {
+      /* Save the current increment if anyone needs it */
+      ptp->currentIncrement.mantissa = (newRtcIncrement >> RTC_MANTISSA_SHIFT) & RTC_MANTISSA_MASK;
+      ptp->currentIncrement.fraction = (newRtcIncrement & RTC_FRACTION_MASK);
+
+      /* Update the increment register */
       XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement); 
     }
 
