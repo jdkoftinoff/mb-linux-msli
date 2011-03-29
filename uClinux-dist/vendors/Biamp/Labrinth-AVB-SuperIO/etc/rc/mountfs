@@ -6,5 +6,5 @@ mount -t romfs /dev/mtdblock5 /mnt/apps
 
 # Mount the configuration JFFS2
 echo "Mounting configuration JFFS2 image"
-mount -t jffs2 /dev/mtdblock6 /mnt/config
+mount -t jffs2 /dev/mtdblock7 /mnt/config
 
