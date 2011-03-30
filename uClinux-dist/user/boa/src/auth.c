@@ -57,6 +57,10 @@ struct _auth_dir_ {
 
 typedef struct _auth_dir_ auth_dir;
 
+#ifndef bzero
+#define bzero(b,len) (memset((b), '\0', (len)), (void) 0)
+#endif
+
 static auth_dir *auth_hashtable [AUTH_HASHTABLE_SIZE];
 #ifdef CONFIG_USER_OLD_PASSWORDS
 char auth_old_password[16];

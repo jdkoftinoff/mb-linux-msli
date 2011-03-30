@@ -41,6 +41,10 @@
 #include "boa.h"
 #include <netdb.h>
 
+#ifndef bzero
+#define bzero(b,len) (memset((b), '\0', (len)), (void) 0)
+#endif
+
 #ifdef EMBED
   FILE *yyin;
 #else
