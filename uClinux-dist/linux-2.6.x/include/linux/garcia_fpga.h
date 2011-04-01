@@ -53,11 +53,15 @@ int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
 #define GARCIA_IOC_READ_STATUS_NB _IOR(GARCIA_IOC_MAGIC, 1, __u32)
 #define GARCIA_IOC_WRITE_STATUS   _IOW(GARCIA_IOC_MAGIC, 2, __u32)
 
-#define GARCIA_STATUS_MASTER_MODE	0x20	/* Driver is master (Hub48 emulator) (RO) */
-#define GARCIA_STATUS_INT_ENA		0x10	/* Interrupt enabled */
-#define GARCIA_STATUS_RESET_SIG		 0x8	/* Reset signal is asserted (s:in, m:out) */
-#define GARCIA_STATUS_MUTE_SIG		 0x4	/* Mute signal is asserted (s:in, m:out) */
-#define GARCIA_STATUS_STROBE		 0x2	/* Strobe signal is asserted (s:in, m:out) */
-#define GARCIA_STATUS_SSI_DDIR		 0x1	/* Data direction of SSI (R/W) */
+#define GARCIA_STATUS_SERDES_SYNC	0x200	/* SERDES/buffers are synced (RO) */
+#define GARCIA_STATUS_LRCLK_ACTIVE	0x100	/* LRCLK is present (RO) */
+#define GARCIA_STATUS_LRCLK_MASTER	 0x80	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */
+#define GARCIA_STATUS_BUFFER_COLL	 0x40	/* Buffer collision (RO) */
+#define GARCIA_STATUS_MASTER_MODE	 0x20	/* Driver is master (Hub48 emulator) (RO) */
+#define GARCIA_STATUS_INT_ENA		 0x10	/* Interrupt enabled */
+#define GARCIA_STATUS_RESET_SIG		  0x8	/* Reset signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_MUTE_SIG		  0x4	/* Mute signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_STROBE		  0x2	/* Strobe signal is asserted (s:in, m:out) */
+#define GARCIA_STATUS_SSI_DDIR		  0x1	/* Data direction of SSI (R/W) */
 
 #endif /* GARCIA_FPGA_H_ */

@@ -1,0 +1,4 @@
+#!/bin/sh
+
+/mnt/apps/start_avbd &
+
