@@ -100,6 +100,8 @@ static LIST_HEAD(device_list);
 #define AC_CONTROL4_OFFSET	0x30	/* 6-bit Status/Control Register */
 
 #define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Unused by Master) (R/W) */
+#define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
+#define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
 #define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
 #define AC_CTL_LRCLK_ACTIVE	BIT(12)	/* LRCLK is present (RO) */
 #define AC_CTL_LRCLK_MASTER	BIT(11)	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */
@@ -608,6 +610,39 @@ static ssize_t agdev_r_mute(struct class *class, char *buf)
 
 static CLASS_ATTR(mute, S_IRUGO | S_IWUSR, agdev_r_mute, agdev_w_mute);
 
+static ssize_t agdev_w_diag(struct class *class, const char *buf, size_t count)
+{
+	uint32_t status;
+
+	long int diag;
+	unsigned long flags;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (strict_strtol(buf, 0, &diag) != 0) {
+		return -EINVAL;
+	}
+	diag = (diag << 16) & AC_CTL_DIAG_MASK;
+	if (agctl != NULL) {
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
+		status = (status & ~AC_CTL_DIAG_MASK) | diag;
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
+	}
+	return count;
+}
+
+static ssize_t agdev_r_diag(struct class *class, char *buf)
+{
+	uint32_t diag = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		diag = (agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_DIAG_MASK) >> 16;
+	}
+	return (snprintf(buf, PAGE_SIZE, "%u\n", diag));
+}
+
+static CLASS_ATTR(diagnostic, S_IRUGO | S_IWUSR, agdev_r_diag, agdev_w_diag);
+
 static ssize_t agdev_w_strobe(struct class *class, const char *buf, size_t count)
 {
 	long int val;
@@ -696,6 +731,7 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		status = class_create_file(&agctl->agclass, &class_attr_ssi_ddir);
 		status = class_create_file(&agctl->agclass, &class_attr_reset);
 		status = class_create_file(&agctl->agclass, &class_attr_mute);
+		status = class_create_file(&agctl->agclass, &class_attr_diagnostic);
 		status = class_create_file(&agctl->agclass, &class_attr_strobe);
 	}
 
@@ -750,6 +786,7 @@ static int garcia_control_platform_remove(struct platform_device *pdev)
  		class_remove_file(&agm->chan[i].agclass, &class_attr_ssi_ddir);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_reset);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_mute);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_diagnostic);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_strobe);
  		class_unregister(&agm->chan[i].agclass);
  		users += agm->chan[0].users;
