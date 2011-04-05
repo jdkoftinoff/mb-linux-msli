@@ -3924,6 +3924,10 @@ config USER_SYSUTILS_PS
 	  Show process status
 	  Approx. binary size: 12k
 
+config USER_SYSUTILS_XMD
+	bool "xmd"
+	help
+	  The xmd utilities mrd and mwr.
 
 comment "Procps tools"
 
