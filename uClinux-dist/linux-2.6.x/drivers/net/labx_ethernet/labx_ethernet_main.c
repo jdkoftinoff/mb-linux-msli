@@ -1302,7 +1302,8 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
   /* We have co-opted this self-test ioctl for use as a means to put the
    * PHY into local loopback mode, or into other PHY-supported test modes.
    */
-  if(lp->phy_dev->drv->set_test_mode) {
+  if(lp && lp->phy_dev && lp->phy_dev->drv &&
+        lp->phy_dev->drv->set_test_mode) {
     if(test_info->flags & ETH_TEST_FL_INT_LOOP) {
       phy_test_mode = PHY_TEST_INT_LOOP;
     } else if(test_info->flags & ETH_TEST_FL_EXT_LOOP) {
@@ -1322,13 +1323,15 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
   } else if(test_info->flags != 0) {
     /* Complain if any test mode is selected (not normal mode) */
     printk("%s PHY driver does not support test modes\n",
-           lp->phy_dev->drv->name);
+           (lp && lp->phy_dev && lp->phy_dev->drv && lp->phy_dev->drv->name) ?
+           lp->phy_dev->drv->name : "<Unknown>");
   }
 
   /* Having switched modes, clear the hardware statistics counters,
    * if they exist
    */
-  if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
+  if((InstancePtr->versionReg & (REVISION_MINOR_MASK | REVISION_MAJOR_MASK)) >=
+      RX_CRC_ERRS_MIN_VERSION) {
     labx_eth_WriteReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG, 0);
   }
 }
