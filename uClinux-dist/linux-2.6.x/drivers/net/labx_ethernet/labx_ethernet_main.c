@@ -41,6 +41,11 @@
 #include <linux/vmalloc.h>
 #include <linux/kthread.h>
 
+#ifdef CONFIG_MTD_CFI_OTP_USER
+//for boards with OTP reg
+#include <linux/mtd/cfi_otp.h>
+#endif
+
 #ifdef CONFIG_OF
 // For open firmware.
 #include <linux/of_device.h>
@@ -842,11 +847,71 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
   struct net_local *lp = netdev_priv(dev);
   struct sockaddr * addr = p;
   int err = 0;
+  int i = 0;
 
   if (!is_valid_ether_addr(addr->sa_data))
     return -EINVAL;
 
+  /*printk("dev->dev_addr MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 dev->dev_addr[0], dev->dev_addr[1],
+	 dev->dev_addr[2], dev->dev_addr[3],
+	 dev->dev_addr[4], dev->dev_addr[5]);
+  printk("addr->sa_data MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 addr->sa_data[0], addr->sa_data[1],
+	 addr->sa_data[2], addr->sa_data[3],
+	 addr->sa_data[4], addr->sa_data[5]);*/
   memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+
+#ifdef CONFIG_MTD_CFI_OTP_USER
+  //let's check in the OTP registers for our MAC address
+  //eth0 in REGISTER1, eth1 in REGISTER2...
+  securityword_t otp_mac;
+
+  if(!strcmp(dev->name, "eth0"))
+    {
+      read_otp_reg(REGISTER1, &otp_mac);
+    }
+  else if(!strcmp(dev->name, "eth1"))
+    {
+      read_otp_reg(REGISTER2, &otp_mac);
+    }
+  else if(!strcmp(dev->name, "eth2"))
+    {
+      read_otp_reg(REGISTER3, &otp_mac);
+    }
+   else if(!strcmp(dev->name, "eth3"))
+    {
+      read_otp_reg(REGISTER4, &otp_mac);
+    }
+  /*printk("Retrieved MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 otp_mac[2], otp_mac[3],
+	 otp_mac[4], otp_mac[5],
+	 otp_mac[6], otp_mac[7]);*/
+  //is this a valid mac address?
+  //check to make sure first two bytes are 0's
+  //check to see if next six are all 0's or 1's
+  u8 validflag = 0;
+  if(!(otp_mac[0]) && !(otp_mac[1]))
+    {
+      for(i=2; i<8; i++)
+	{
+	  if((otp_mac[i]) && (otp_mac[i] != 0xff))
+	    {
+	      //one of these is not 0x00 or 0xff
+	      validflag = 1;
+	    } 
+	}
+      if(validflag)
+	{
+	  printk("Valid MAC address retrieved from OTP flash\n");
+	  for(i=0; i<6; i++)
+	    { 
+	      //printk("Write 0x%02X over 0x%02X\n", otp_mac[i+2], dev->dev_addr[i]);
+	      dev->dev_addr[i] = otp_mac[i+2];
+	    }
+	}
+    }
+#endif
 
   _labx_eth_Stop(&lp->Emac);
 
