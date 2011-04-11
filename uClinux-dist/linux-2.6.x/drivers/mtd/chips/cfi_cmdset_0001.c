@@ -2190,6 +2190,9 @@ do_otp_lock(struct map_info *map, struct flchip *chip, u_long offset,
 	return do_write_oneword(map, chip, prot, datum, FL_OTP_WRITE);
 }
 
+//PMC: As of 4/8, this function has been violated as it is not
+// working as expected in calculating offsets
+// Given oodles of free time, this code will be investigated
 static int cfi_intelext_otp_walk(struct mtd_info *mtd, loff_t from, size_t len,
 				 size_t *retlen, u_char *buf,
 				 otp_op_t action, int user_regs)
@@ -2237,21 +2240,23 @@ static int cfi_intelext_otp_walk(struct mtd_info *mtd, loff_t from, size_t len,
 		reg_fact_size = 1 << extp->FactProtRegSize;
 		reg_user_groups = 1;
 		reg_user_size = 1 << extp->UserProtRegSize;
-
+		
 		while (len > 0) {
 			/* flash geometry fixup */
-			data_offset = reg_prot_offset + 1;
-			data_offset *= cfi->interleave * cfi->device_type;
-			reg_prot_offset *= cfi->interleave * cfi->device_type;
+		        //data_offset = reg_prot_offset + 1; 
+		        //data_offset *= cfi->interleave * cfi->device_type; 
+		        reg_prot_offset *= cfi->interleave * cfi->device_type;
 			reg_fact_size *= cfi->interleave;
 			reg_user_size *= cfi->interleave;
+
+			data_offset = from + 0x112;
 
 			if (user_regs) {
 				groups = reg_user_groups;
 				groupsize = reg_user_size;
 				/* skip over factory reg area */
 				groupno = reg_fact_groups;
-				data_offset += reg_fact_groups * reg_fact_size;
+				//data_offset += reg_fact_groups * reg_fact_size;
 			} else {
 				groups = reg_fact_groups;
 				groupsize = reg_fact_size;
@@ -2285,13 +2290,13 @@ static int cfi_intelext_otp_walk(struct mtd_info *mtd, loff_t from, size_t len,
 					from += groupsize;
 					buf += sizeof(*otpinfo);
 					*retlen += sizeof(*otpinfo);
-				} else if (from >= groupsize) {
-					from -= groupsize;
-					data_offset += groupsize;
+					//} else if (from >= groupsize) {
+				        //from -= groupsize;
+				        //data_offset += groupsize;
 				} else {
 					int size = groupsize;
-					data_offset += from;
-					size -= from;
+					//data_offset += from;
+					//size -= from;
 					from = 0;
 					if (size > len)
 						size = len;
@@ -2303,7 +2308,7 @@ static int cfi_intelext_otp_walk(struct mtd_info *mtd, loff_t from, size_t len,
 					buf += size;
 					len -= size;
 					*retlen += size;
-					data_offset += size;
+					//data_offset += size;
 				}
 				groupno++;
 				groups--;
