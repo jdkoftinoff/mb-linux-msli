@@ -105,6 +105,7 @@ static void timer_state_task(unsigned long data) {
         /* Do not permit the RTC to change until userspace permits it, and also
          * reset the lock state
          */
+        ptp->acquiring          = PTP_RTC_ACQUIRING;
         ptp->rtcLockState       = PTP_RTC_UNLOCKED;
         ptp->rtcLockCounter     = 0;
         ptp->rtcChangesAllowed  = FALSE;
@@ -343,6 +344,7 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
        */
       ptp->newMaster          = TRUE;
       ptp->rtcChangesAllowed  = FALSE;
+      ptp->acquiring          = PTP_RTC_ACQUIRING;
       ptp->rtcLockState       = PTP_RTC_UNLOCKED;
       ptp->rtcLockCounter     = 0;
       ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
@@ -804,6 +806,7 @@ void init_state_machines(struct ptp_device *ptp) {
    * in so that it will lock shortly after the lock detection state machine
    * has run for a little bit.
    */
+  ptp->acquiring          = PTP_RTC_ACQUIRING;
   ptp->rtcLastLockState   = PTP_RTC_UNLOCKED;
   ptp->rtcLockState       = PTP_RTC_UNLOCKED;
   ptp->rtcLockCounter     = 0;
