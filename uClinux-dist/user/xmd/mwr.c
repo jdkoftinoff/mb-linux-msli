@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 		usage();
 		return 1;
 	}
-	if (argc < 4 || (count = strtoul(argv[2], &endp, 0)) == 0 || endp == argv[2]) {
+	if (argc < 4 || (count = strtoul(argv[3], &endp, 0)) == 0 || endp == argv[3]) {
 		count = 1;
 	}
 	if ((fd = open("/dev/mem", O_WRONLY)) <= 0) {
