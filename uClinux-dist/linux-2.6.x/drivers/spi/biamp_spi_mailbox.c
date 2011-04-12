@@ -72,7 +72,6 @@ static void enable_mailbox(struct spi_mailbox *mailbox) {
   DBG("Enabling the mailbox\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, CONTROL_REG));
   controlRegister |= MAILBOX_ENABLE;
-  printk("MBOX : Writing 0x%08X to 0x%08X\n", controlRegister, REGISTER_ADDRESS(mailbox, CONTROL_REG));
   XIo_Out32(REGISTER_ADDRESS(mailbox, CONTROL_REG), controlRegister);
 }
 
@@ -120,8 +119,6 @@ static irqreturn_t biamp_spi_mailbox_interrupt(int irq, void *dev_id) {
   maskedFlags = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG));
 
-  printk("MBOX : IRQ, 0x%08X\n", maskedFlags);
-  
   maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), maskedFlags);
 
@@ -195,7 +192,6 @@ static uint32_t read_mailbox_message(struct spi_mailbox *mailbox, uint8_t* mailb
     ((uint32_t*)mailboxMessage)[i] = XIo_In32(MSG_RAM_BASE(mailbox)+(i*4));
   }
   /* Toggle bit in control register to acknowledge message has been picked up */
-  printk("MBOX : Hitting consumed bit\n");
   controlReg = XIo_In32(REGISTER_ADDRESS(mailbox, CONTROL_REG));
   XIo_Out32(REGISTER_ADDRESS(mailbox, CONTROL_REG), (controlReg | HOST_MESSAGE_CONSUMED));
   return(messageLength);
