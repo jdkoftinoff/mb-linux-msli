@@ -397,6 +397,7 @@ dir_$(CONFIG_USER_SYSUTILS_KILL)            += sysutils
 dir_$(CONFIG_USER_SYSUTILS_PS)              += sysutils
 dir_$(CONFIG_USER_SYSUTILS_REBOOT)          += sysutils
 dir_$(CONFIG_USER_SYSUTILS_SHUTDOWN)        += sysutils
+dir_$(CONFIG_USER_SYSUTILS_XMD)             += xmd
 dir_$(CONFIG_USER_TCPBLAST_TCPBLAST)        += tcpblast
 dir_$(CONFIG_USER_TCPWRAP_TCPD)             += tcpwrappers
 dir_$(CONFIG_USER_TCPDUMP_TCPDUMP)          += tcpdump

@@ -50,27 +50,18 @@
  * particular device.
  */
 #define AGCTL_MAJOR			101	/* We assume no Motorola DSP 56xxx board */
-#define N_AGCTL_MINORS		32	/* ... up to 256 */
+#define N_AGCTL_CHANNELS	5
 #define DRIVER_NAME			"agctl"
-#define DRIVER_VERSION		"0.4"
+#define DRIVER_VERSION		"0.5"
 #define AC_BUFSIZE			32		/* Size of shift register buffer */
 #define N_SHIFT_REGISTER_BYTES 18
 //#define AGC_DEBUG_REGIO
 
-static unsigned long	minors[N_AGCTL_MINORS / BITS_PER_LONG];
-
-
 struct agctl_data {
-	void __iomem		*regs;	/* virt. address of the control registers */
-	uint32_t			irq;
 	dev_t				devt;
-	spinlock_t			aglock;
-	struct list_head	device_entry;
 	wait_queue_head_t	wait;
-	char				nodename[32];
 	struct class		agclass;
 	struct fasync_struct *async_queue; /* asynchronous readers */
-	struct mutex		agmutex;
 
 	/* buffer is NULL unless this device is open (users > 0) */
 	uint32_t			saved_status;
@@ -78,9 +69,21 @@ struct agctl_data {
 	uint16_t			transfer_size;
 	uint16_t			irqflags;
 	uint16_t			strobedelay;
+	uint8_t				ctlreg_offs;
+	uint8_t				slot_number;
 	__be32				rxbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
 	__be32				txbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
 };
+
+struct agctl_master {
+	void __iomem		*regs;	/* virt. address of the control registers */
+	uint32_t			irq;
+	struct mutex		agmutex;
+	spinlock_t			aglock;
+	struct agctl_data	chan[N_AGCTL_CHANNELS];
+};
+
+static struct agctl_master *agm_stat = NULL;
 
 static LIST_HEAD(device_list);
 
@@ -89,10 +92,20 @@ static LIST_HEAD(device_list);
 #define AC_SR_8_11_OFFSET	0x08	/* 32-bit Shift Registers 12 - 9 (s:RO, m:R/W) */
 #define AC_SR_4_7_OFFSET	0x0C	/* 32-bit Shift Registers 8 - 5 (s:RO, m:R/W) */
 #define AC_SR_0_3_OFFSET	0x10	/* 32-bit Shift Registers 4 - 1 (s:RO, m:R/W) */
-#define AC_IDREG_OFFSET		0x14	/* 8-bit ID Register (Unused by Master) (R/W) */
-#define AC_CONTROL_OFFSET	0x18	/* 6-bit Status/Control Register */
-#define AC_CLK_COUNT_OFFSET	0x1C	/* 8-bit Clock Count Register (s:RO, m:R/W) */
+#define AC_CLK_COUNT_OFFSET	0x14	/* 8-bit Clock Count Register (s:RO, m:R/W) */
+#define AC_CONTROL0_OFFSET	0x20	/* 6-bit Status/Control Register */
+#define AC_CONTROL1_OFFSET	0x24	/* 6-bit Status/Control Register */
+#define AC_CONTROL2_OFFSET	0x28	/* 6-bit Status/Control Register */
+#define AC_CONTROL3_OFFSET	0x2C	/* 6-bit Status/Control Register */
+#define AC_CONTROL4_OFFSET	0x30	/* 6-bit Status/Control Register */
 
+#define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Unused by Master) (R/W) */
+#define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
+#define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
+#define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
+#define AC_CTL_LRCLK_ACTIVE	BIT(12)	/* LRCLK is present (RO) */
+#define AC_CTL_LRCLK_MASTER	BIT(11)	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */
+#define AC_CTL_BUF_COL_IRQ	BIT(10)	/* IRQ: Buffer collision (w1c) */
 #define AC_CTL_MASTER_MODE	BIT(9)	/* Driver is master (Hub48 emulator) (RO) */
 #define AC_CTL_INT_ENA		BIT(8)	/* Interrupt enabled */
 #define AC_CTL_RESET_IRQ	BIT(7)	/* IRQ: Reset signal has changed state (slave only, w1c) */
@@ -103,108 +116,110 @@ static LIST_HEAD(device_list);
 #define AC_CTL_MUTE_SIG 	BIT(2)	/* Mute signal is asserted (s:in, m:out) */
 #define AC_CTL_STROBE		BIT(1)	/* Strobe signal is asserted (s:in, m:out) */
 #define AC_CTL_SSI_DDIR		BIT(0)	/* Data direction of SSI (R/W) */
+#define AC_CTL_IRQ_MASK		(AC_CTL_BUF_COL_IRQ | AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ | \
+							AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)
 
-inline void agc_regw_be(struct agctl_data *agc, uint32_t offs, __be32 val)
+inline void agc_regw_be(struct agctl_master *agm, uint32_t offs, __be32 val)
 {
-	out_be32(agc->regs + offs, val);
+	out_be32(agm->regs + offs, val);
 	ndelay(100);
 	#ifdef AGC_DEBUG_REGIO
-	printk("%lx=>%p  ", val, agc->regs + offs);
+	printk("%lx=>%p  ", val, agm->regs + offs);
 	#endif
 }
 
-inline void agc_regw(struct agctl_data *agc, uint32_t offs, uint32_t val)
+inline void agc_regw(struct agctl_master *agm, uint32_t offs, uint32_t val)
 {
-	agc_regw_be(agc, offs, cpu_to_be32(val));
+	agc_regw_be(agm_stat, offs, cpu_to_be32(val));
 }
 
-inline __be32 agc_regr_be(struct agctl_data *agc, uint32_t offs)
+inline __be32 agc_regr_be(struct agctl_master *agm, uint32_t offs)
 {
-	__be32 val = in_be32(agc->regs + offs);
+	__be32 val = in_be32(agm->regs + offs);
 	#ifdef AGC_DEBUG_REGIO
-	printk("%lx<=%p  ", val, agc->regs + offs);
+	printk("%lx<=%p  ", val, agm->regs + offs);
 	#endif
 	return val;
 }
 
-inline uint32_t agc_regr(struct agctl_data *agc, uint32_t offs)
+inline uint32_t agc_regr(struct agctl_master *agm, uint32_t offs)
 {
-	return be32_to_cpu(agc_regr_be(agc, offs));
+	return be32_to_cpu(agc_regr_be(agm_stat, offs));
 }
 
 /*-------------------------------------------------------------------------*/
 
-static void agdev_strobe(struct agctl_data *agctl)
+static void agdev_strobe(struct agctl_master *agm, struct agctl_data *agctl)
 {
 	uint32_t status;
 	unsigned long flags;
-	spin_lock_irqsave(&agctl->aglock, flags);
-	status = agc_regr(agctl, AC_CONTROL_OFFSET);
+	spin_lock_irqsave(&agm->aglock, flags);
+	status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 	if ((status & AC_CTL_MASTER_MODE) != 0) {
-		agc_regw(agctl, AC_CONTROL_OFFSET, status | AC_CTL_STROBE);
+		agc_regw(agm_stat, agctl->ctlreg_offs, status | AC_CTL_STROBE);
 		udelay(1);
-		agc_regw(agctl, AC_CONTROL_OFFSET, status & ~AC_CTL_STROBE);
+		agc_regw(agm_stat, agctl->ctlreg_offs, status & ~AC_CTL_STROBE);
 	}
-	spin_unlock_irqrestore(&agctl->aglock, flags);
+	spin_unlock_irqrestore(&agm->aglock, flags);
 	return;
 }
 
 irqreturn_t agc_irq_callback(int irqnum, void *data)
 {
-	struct agctl_data *agctl = (struct agctl_data *)data;
-	uint32_t status = agc_regr(agctl, AC_CONTROL_OFFSET);
-	/* Be careful to preserve big-endianness of receive buffers */
-	/* After this transfer, the byte array representing the shift
-	 * register contents will be in rxbuf, with the most recent
-	 * (newest) bit as the LSB of the byte at offset 0, and increasing
-	 * memory addresses representing older (shifted in first) data.  If
-	 * this is an 18 byte master transaction, Byte 0 will contain the
-	 * slave's first byte transmitted, which will be the ID byte.
-	 */
-	if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
-		agctl->rxbuf[0] = agc_regr_be(agctl, AC_SR_0_3_OFFSET);
-		agctl->rxbuf[1] = agc_regr_be(agctl, AC_SR_4_7_OFFSET);
-		agctl->rxbuf[2] = agc_regr_be(agctl, AC_SR_8_11_OFFSET);
-		agctl->rxbuf[3] = agc_regr_be(agctl, AC_SR_12_15_OFFSET);
-		agctl->rxbuf[4] = agc_regr_be(agctl, AC_SR_16_19_OFFSET);
-		if ((status & AC_CTL_MASTER_MODE) == 0) {
-			agctl->transfer_size = agc_regr(agctl, AC_CLK_COUNT_OFFSET) & 0xFF;
+	struct agctl_master *agm = (struct agctl_master *)data;
+	int chan;
+	for (chan = 0; chan < N_AGCTL_CHANNELS; chan++) {
+		struct agctl_data *agctl = &agm->chan[chan];
+		uint32_t status = agc_regr(agm_stat, agctl->ctlreg_offs);
+		/* Be careful to preserve big-endianness of receive buffers */
+		/* After this transfer, the byte array representing the shift
+		 * register contents will be in rxbuf, with the most recent
+		 * (newest) bit as the LSB of the byte at offset 0, and increasing
+		 * memory addresses representing older (shifted in first) data.  If
+		 * this is an 18 byte master transaction, Byte 0 will contain the
+		 * slave's first byte transmitted, which will be the ID byte.
+		 */
+		if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
+			agctl->rxbuf[0] = agc_regr_be(agm_stat, AC_SR_0_3_OFFSET);
+			agctl->rxbuf[1] = agc_regr_be(agm_stat, AC_SR_4_7_OFFSET);
+			agctl->rxbuf[2] = agc_regr_be(agm_stat, AC_SR_8_11_OFFSET);
+			agctl->rxbuf[3] = agc_regr_be(agm_stat, AC_SR_12_15_OFFSET);
+			agctl->rxbuf[4] = agc_regr_be(agm_stat, AC_SR_16_19_OFFSET);
+			if ((status & AC_CTL_MASTER_MODE) == 0) {
+				agctl->transfer_size = agc_regr(agm_stat, AC_CLK_COUNT_OFFSET) & 0xFF;
+			}
+			if (agctl->async_queue) {
+				kill_fasync(&agctl->async_queue, SIGIO, POLL_IN);
+			}
 		}
-		if (agctl->async_queue) {
-			kill_fasync(&agctl->async_queue, SIGIO, POLL_IN);
-		}
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);	// Clear interrupt
+		agctl->saved_status = status;
+		agctl->irqflags |= ((uint16_t)(status & (AC_CTL_STROBE_IRQ |
+				AC_CTL_TX_COMPL_IRQ | AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ))); // | AC_CTL_BUF_COL_IRQ)));
+		/* signal asynchronous readers */
+		wake_up_interruptible(&agctl->wait);
 	}
-	agc_regw(agctl, AC_CONTROL_OFFSET, status);	// Clear interrupt
-	agctl->saved_status = status;
-	agctl->irqflags |= ((uint16_t)(status & (AC_CTL_STROBE_IRQ |
-			AC_CTL_TX_COMPL_IRQ | AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ)));
-	/* signal asynchronous readers */
-	wake_up_interruptible(&agctl->wait);
 	return IRQ_HANDLED;
 }
 
 static int agctl_open(struct inode *inode, struct file *filp)
 {
-	struct agctl_data	*agctl;
-	int			status = -ENXIO;
+	unsigned int		minor = iminor(inode);
+	int					status;
+	struct agctl_data *agctl = &agm_stat->chan[minor];
+
+	if (minor >= N_AGCTL_CHANNELS) {
+		return -ENXIO;
+	}
 
 	lock_kernel();
 
-	list_for_each_entry(agctl, &device_list, device_entry) {
-		if (agctl->devt == inode->i_rdev) {
-			status = 0;
-			break;
-		}
-	}
-	if (status == 0) {
-		mutex_lock(&agctl->agmutex);
-		agctl->users++;
-		agctl->irqflags = 0;
-		filp->private_data = agctl;
-		nonseekable_open(inode, filp);
-		mutex_unlock(&agctl->agmutex);
-	} else
-		pr_debug("agctl: nothing for minor %d\n", iminor(inode));
+	mutex_lock(&agm_stat->agmutex);
+	agctl->users++;
+	agctl->irqflags = 0;
+	filp->private_data = agctl;
+	status = nonseekable_open(inode, filp);
+	mutex_unlock(&agm_stat->agmutex);
 
 	unlock_kernel();
 	return status;
@@ -219,15 +234,21 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	bool master;
 	uint8_t *regbuf_p;
 	unsigned long flags;
+	__u32 status;
 
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
 
-	mutex_lock(&agctl->agmutex);
-	master = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_MASTER_MODE) != 0);
+	mutex_lock(&agm_stat->agmutex);
+	spin_lock_irqsave(&agm_stat->aglock, flags);
+	status = agc_regr(agm_stat, agctl->ctlreg_offs);
+	master = ((status & AC_CTL_MASTER_MODE) != 0);
+	agc_regw(agm_stat, agctl->ctlreg_offs,
+			(status | AC_CTL_INT_ENA)  & ~AC_CTL_IRQ_MASK);
 	while (!master && (agctl->irqflags & AC_CTL_STROBE_IRQ) == 0) {
-		mutex_unlock(&agctl->agmutex);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
+		mutex_unlock(&agm_stat->agmutex);
 		if (filp->f_flags & O_NONBLOCK) {
 			return -EAGAIN;
 		}
@@ -235,19 +256,19 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 				((agctl->irqflags & AC_CTL_STROBE_IRQ) != 0))) {
 			return -ERESTARTSYS; /* signal: tell the fs layer to handle it */
 		}
-		mutex_lock(&agctl->agmutex);
+		mutex_lock(&agm_stat->agmutex);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
 	}
 	agctl->irqflags &= ~AC_CTL_STROBE_IRQ;
 
-	spin_lock_irqsave(&agctl->aglock, flags);
 	count = min(((agctl->transfer_size + 7) >> 3), N_SHIFT_REGISTER_BYTES);
 	count = min(count, (int)len);
 	regbuf_p = (uint8_t *)(agctl->rxbuf) + (N_SHIFT_REGISTER_BYTES - count);
 	if (copy_to_user(buf, regbuf_p, count) != 0) {
 		count = -EFAULT;
 	}
-	spin_unlock_irqrestore(&agctl->aglock, flags);
-	mutex_unlock(&agctl->agmutex);
+	spin_unlock_irqrestore(&agm_stat->aglock, flags);
+	mutex_unlock(&agm_stat->agmutex);
 	return count;
 }
 
@@ -258,8 +279,10 @@ static ssize_t agctl_write(struct file *filp, const char __user *buf,
 	struct agctl_data *agctl = filp->private_data;
 	bool master;
 	unsigned long flags;
+	__u32 countreg;
+	__u32 status;
 
-	master = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_MASTER_MODE) != 0);
+	master = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_MASTER_MODE) != 0);
 	if ((master && count > N_SHIFT_REGISTER_BYTES) ||
 			(!master && count > 1) || count <= 0) {
 		return -EMSGSIZE;
@@ -271,19 +294,22 @@ static ssize_t agctl_write(struct file *filp, const char __user *buf,
 		return -EFAULT;
 	}
 
-	mutex_lock(&agctl->agmutex);
-	spin_lock_irqsave(&agctl->aglock, flags);
+	mutex_lock(&agm_stat->agmutex);
 	if (master) { // master - start transfer
-		agc_regw_be(agctl, AC_SR_0_3_OFFSET, agctl->txbuf[0]);
-		agc_regw_be(agctl, AC_SR_4_7_OFFSET, agctl->txbuf[1]);
-		agc_regw_be(agctl, AC_SR_8_11_OFFSET, agctl->txbuf[2]);
-		agc_regw_be(agctl, AC_SR_12_15_OFFSET, agctl->txbuf[3]);
-		agc_regw_be(agctl, AC_SR_16_19_OFFSET, agctl->txbuf[4]);
 		agctl->transfer_size = (count << 3) - 1; // Count must be (nbits - 1)
-		agc_regw(agctl, AC_CLK_COUNT_OFFSET, agctl->transfer_size);
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		countreg = agctl->transfer_size | ((uint32_t)(agctl->slot_number & 0x7) << 24);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		agc_regw_be(agm_stat, AC_SR_0_3_OFFSET, agctl->txbuf[0]);
+		agc_regw_be(agm_stat, AC_SR_4_7_OFFSET, agctl->txbuf[1]);
+		agc_regw_be(agm_stat, AC_SR_8_11_OFFSET, agctl->txbuf[2]);
+		agc_regw_be(agm_stat, AC_SR_12_15_OFFSET, agctl->txbuf[3]);
+		agc_regw_be(agm_stat, AC_SR_16_19_OFFSET, agctl->txbuf[4]);
+		agc_regw(agm_stat, agctl->ctlreg_offs,
+				(agc_regr(agm_stat, agctl->ctlreg_offs) | AC_CTL_INT_ENA)  & ~AC_CTL_IRQ_MASK);
+		agc_regw(agm_stat, AC_CLK_COUNT_OFFSET, countreg);
 		while ((agctl->irqflags & AC_CTL_TX_COMPL_IRQ) == 0) {
-			mutex_unlock(&agctl->agmutex);
+			spin_unlock_irqrestore(&agm_stat->aglock, flags);
+			mutex_unlock(&agm_stat->agmutex);
 			if (filp->f_flags & O_NONBLOCK) {
 				return -EAGAIN;
 			}
@@ -291,18 +317,24 @@ static ssize_t agctl_write(struct file *filp, const char __user *buf,
 					((agctl->irqflags & AC_CTL_TX_COMPL_IRQ) != 0))) {
 				return -ERESTARTSYS; /* signal: tell the fs layer to handle it */
 			}
-			mutex_lock(&agctl->agmutex);
+			mutex_lock(&agm_stat->agmutex);
+			spin_lock_irqsave(&agm_stat->aglock, flags);
 		}
 		agctl->irqflags &= ~AC_CTL_TX_COMPL_IRQ;
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 		if (agctl->strobedelay > 0) {
 			mdelay(agctl->strobedelay);
 		}
-		agdev_strobe(agctl);
+		agdev_strobe(agm_stat, agctl);
 	} else {
-		agc_regw(agctl, AC_IDREG_OFFSET, *(uint8_t *)agctl->txbuf);
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs);
+		status = (status & ~(AC_CTL_IDREG_MASK | AC_CTL_IRQ_MASK)) |
+				(((__u32)(*(uint8_t *)agctl->txbuf) << 24) & AC_CTL_IDREG_MASK);
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 	}
-	mutex_unlock(&agctl->agmutex);
+	mutex_unlock(&agm_stat->agmutex);
 	return count;
 }
 
@@ -321,27 +353,39 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 
 	switch (cmd) {
 	case GARCIA_IOC_READ_STATUS:
-		mutex_lock(&agctl->agmutex);
-		while ((agctl->irqflags & (AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ)) == 0 &&
+		mutex_lock(&agm_stat->agmutex);
+		while ((agctl->irqflags & (AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ)) == 0 &&
 				(agctl->saved_status & AC_CTL_MASTER_MODE) == 0) {
-			mutex_unlock(&agctl->agmutex);
+			mutex_unlock(&agm_stat->agmutex);
 			if (filp->f_flags & O_NONBLOCK) {
 				rc = -EAGAIN;
 				break;
 			}
 			if (wait_event_interruptible(agctl->wait, ((agctl->irqflags &
-					(AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ)) != 0))) {
+					(AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ)) != 0))) {
 				rc = -ERESTARTSYS; /* signal: tell the fs layer to handle it */
 			}
-			mutex_lock(&agctl->agmutex);
+			mutex_lock(&agm_stat->agmutex);
 		}
-		mutex_unlock(&agctl->agmutex);
+		mutex_unlock(&agm_stat->agmutex);
 		if (rc != 0) {
 			break;
 		}
 		// Fall through
 	case GARCIA_IOC_READ_STATUS_NB:
-		status = agc_regr(agctl, AC_CONTROL_OFFSET);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs);
+		if ((status & AC_CTL_SERDES_SYNC) != 0) {
+			val |= GARCIA_STATUS_SERDES_SYNC;
+		}
+		if ((status & AC_CTL_LRCLK_ACTIVE) != 0) {
+			val |= GARCIA_STATUS_LRCLK_ACTIVE;
+		}
+		if ((status & AC_CTL_LRCLK_MASTER) != 0) {
+			val |= GARCIA_STATUS_LRCLK_MASTER;
+		}
+		if ((agctl->saved_status & AC_CTL_BUF_COL_IRQ) != 0) {
+			val |= GARCIA_STATUS_BUFFER_COLL;
+		}
 		if ((status & AC_CTL_MASTER_MODE) != 0) {
 			val |= GARCIA_STATUS_MASTER_MODE;
 		}
@@ -363,18 +407,13 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if (put_user(val, p)) {
 			rc = -EFAULT;
 		} else {
-			agctl->irqflags &= ~(AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ);
+			agctl->irqflags &= ~(AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ);
 		}
 		break;
 	case GARCIA_IOC_WRITE_STATUS:
 		get_user(val, p);
-		spin_lock_irqsave(&agctl->aglock, flags);
-		status = agc_regr(agctl, AC_CONTROL_OFFSET);
-		if ((val & GARCIA_STATUS_INT_ENA) == 0) {
-			status &= ~AC_CTL_INT_ENA;
-		} else {
-			status |= AC_CTL_INT_ENA;
-		}
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 		if ((val & GARCIA_STATUS_RESET_SIG) == 0) {
 			status &= ~AC_CTL_RESET_SIG;
 		} else {
@@ -390,10 +429,10 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		} else {
 			status |= AC_CTL_SSI_DDIR;
 		}
-		agc_regw(agctl, AC_CONTROL_OFFSET, status);
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 		if ((val & GARCIA_STATUS_STROBE) != 0) {
-			agdev_strobe(agctl);
+			agdev_strobe(agm_stat, agctl);
 		}
 		break;
 	default:
@@ -407,22 +446,19 @@ static unsigned int agctl_poll(struct file *filp, struct poll_table_struct *wait
 	struct agctl_data	*agctl = filp->private_data;
 	unsigned int mask = 0;
 	bool master;
-	unsigned long flags;
 
-	master = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_MASTER_MODE) != 0);
+	master = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_MASTER_MODE) != 0);
 
 	if (master) {
 		mask = POLLIN;
 	} else {
 		poll_wait(filp, &agctl->wait, wait);
-		spin_lock_irqsave(&agctl->aglock, flags);
 		if ((agctl->irqflags & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
 			mask = POLLIN;	/* readable */
 		}
-		if ((agctl->irqflags & (AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ)) != 0) {
+		if ((agctl->irqflags & (AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ)) != 0) {
 			mask = POLLPRI;	/* ioctl-able */
 		}
-		spin_unlock_irqrestore(&agctl->aglock, flags);
 	}
 	return mask;
 }
@@ -439,12 +475,12 @@ static int agctl_release(struct inode *inode, struct file *filp)
 	int			status = 0;
 
 	agctl = filp->private_data;
-	mutex_lock(&agctl->agmutex);
+	mutex_lock(&agm_stat->agmutex);
 	filp->private_data = NULL;
 
 	/* last close? */
 	agctl->users--;
-	mutex_unlock(&agctl->agmutex);
+	mutex_unlock(&agm_stat->agmutex);
 
 	return status;
 }
@@ -475,15 +511,15 @@ static ssize_t agdev_w_ssi_ddir(struct class *class, const char *buf, size_t cou
 		return -EINVAL;
 	}
 	if (agctl != NULL) {
-		spin_lock_irqsave(&agctl->aglock, flags);
-		status = agc_regr(agctl, AC_CONTROL_OFFSET);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 		if (val == 0) {
 			status &= ~AC_CTL_SSI_DDIR;
 		} else {
 			status |= AC_CTL_SSI_DDIR;
 		}
-		agc_regw(agctl, AC_CONTROL_OFFSET, status);
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 	}
 	return count;
 }
@@ -493,7 +529,7 @@ static ssize_t agdev_r_ssi_ddir(struct class *class, char *buf)
 	uint32_t ddir = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
-		ddir = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_SSI_DDIR) != 0);
+		ddir = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_SSI_DDIR) != 0);
 	}
 	return (snprintf(buf, PAGE_SIZE, "%u\n", ddir));
 }
@@ -510,17 +546,17 @@ static ssize_t agdev_w_reset(struct class *class, const char *buf, size_t count)
 		return -EINVAL;
 	}
 	if (agctl != NULL) {
-		spin_lock_irqsave(&agctl->aglock, flags);
-		status = agc_regr(agctl, AC_CONTROL_OFFSET);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 		if (val == 0) {
 			status &= ~AC_CTL_RESET_SIG;
 		} else {
 			status |= AC_CTL_RESET_SIG;
 		}
 		if ((status & AC_CTL_MASTER_MODE) != 0) {
-			agc_regw(agctl, AC_CONTROL_OFFSET, status);
+			agc_regw(agm_stat, agctl->ctlreg_offs, status);
 		}
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 	}
 	return count;
 }
@@ -530,7 +566,7 @@ static ssize_t agdev_r_reset(struct class *class, char *buf)
 	uint32_t rst = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
-		rst = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_RESET_SIG) != 0);
+		rst = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_RESET_SIG) != 0);
 	}
 	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
 }
@@ -547,17 +583,17 @@ static ssize_t agdev_w_mute(struct class *class, const char *buf, size_t count)
 		return -EINVAL;
 	}
 	if (agctl != NULL) {
-		spin_lock_irqsave(&agctl->aglock, flags);
-		status = agc_regr(agctl, AC_CONTROL_OFFSET);
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 		if (val == 0) {
 			status &= ~AC_CTL_MUTE_SIG;
 		} else {
 			status |= AC_CTL_MUTE_SIG;
 		}
 		if ((status & AC_CTL_MASTER_MODE) != 0) {
-			agc_regw(agctl, AC_CONTROL_OFFSET, status);
+			agc_regw(agm_stat, agctl->ctlreg_offs, status);
 		}
-		spin_unlock_irqrestore(&agctl->aglock, flags);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
 	}
 	return count;
 }
@@ -567,12 +603,45 @@ static ssize_t agdev_r_mute(struct class *class, char *buf)
 	uint32_t rst = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
-		rst = ((agc_regr(agctl, AC_CONTROL_OFFSET) & AC_CTL_MUTE_SIG) != 0);
+		rst = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_MUTE_SIG) != 0);
 	}
 	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
 }
 
 static CLASS_ATTR(mute, S_IRUGO | S_IWUSR, agdev_r_mute, agdev_w_mute);
+
+static ssize_t agdev_w_diag(struct class *class, const char *buf, size_t count)
+{
+	uint32_t status;
+
+	long int diag;
+	unsigned long flags;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (strict_strtol(buf, 0, &diag) != 0) {
+		return -EINVAL;
+	}
+	diag = (diag << 16) & AC_CTL_DIAG_MASK;
+	if (agctl != NULL) {
+		spin_lock_irqsave(&agm_stat->aglock, flags);
+		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
+		status = (status & ~AC_CTL_DIAG_MASK) | diag;
+		agc_regw(agm_stat, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm_stat->aglock, flags);
+	}
+	return count;
+}
+
+static ssize_t agdev_r_diag(struct class *class, char *buf)
+{
+	uint32_t diag = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		diag = (agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_DIAG_MASK) >> 16;
+	}
+	return (snprintf(buf, PAGE_SIZE, "%u\n", diag));
+}
+
+static CLASS_ATTR(diagnostic, S_IRUGO | S_IWUSR, agdev_r_diag, agdev_w_diag);
 
 static ssize_t agdev_w_strobe(struct class *class, const char *buf, size_t count)
 {
@@ -582,7 +651,7 @@ static ssize_t agdev_w_strobe(struct class *class, const char *buf, size_t count
 		return -EINVAL;
 	}
 	if (val < 0) {
-		agdev_strobe(agctl);
+		agdev_strobe(agm_stat, agctl);
 	} else {
 		agctl->strobedelay = (int)val;
 	}
@@ -603,72 +672,71 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		void __iomem *address, uint32_t irq)
 {
 	struct agctl_data *agctl;
+	struct agctl_master *agm;
 	unsigned long minor;
 	int status = 0;
+	char nodename[32];
 
 	/* Allocate driver data */
-	agctl = kzalloc(sizeof(*agctl), GFP_KERNEL);
-	if (!agctl)
+	agm = kzalloc(sizeof(*agm), GFP_KERNEL);
+	if (!agm)
 		return -ENOMEM;
 	/* Initialize the driver data */
-	memset(agctl, 0, sizeof(*agctl));
-	spin_lock_init(&agctl->aglock);
-	mutex_init(&agctl->agmutex);
-
-	INIT_LIST_HEAD(&agctl->device_entry);
+	memset(agm, 0, sizeof(*agm));
+	agm_stat = agm;
+	spin_lock_init(&agm->aglock);
 
 	/* If we can allocate a minor number, hook up this device.
 	 * Reusing minors is fine so long as udev or mdev is working.
 	 */
-	mutex_lock(&agctl->agmutex);
-	minor = find_first_zero_bit(minors, N_AGCTL_MINORS);
-	if (minor < N_AGCTL_MINORS) {
-		printk(KERN_INFO "Probe Garcia control, name \"%s\" devnode %d.%ld, at address %p IRQ %d\n",
-				name, AGCTL_MAJOR, minor, address, irq);
+	printk(KERN_INFO "Probe Garcia control, name \"%s\" at address %p IRQ %d\n",
+				name, address, irq);
+	agm->irq = irq;
+	/* Register for interrupt */
+	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
+	if (status != 0) {
+		dev_warn(&pdev->dev, "irq request failure: %d\n", agm->irq);
+		kfree(agm);
+		return -ENXIO;
+	}
+	mutex_init(&agm_stat->agmutex);
+	agm->regs = address;
+	agm->chan[0].ctlreg_offs = AC_CONTROL0_OFFSET;
+	agm->chan[1].ctlreg_offs = AC_CONTROL1_OFFSET;
+	agm->chan[2].ctlreg_offs = AC_CONTROL2_OFFSET;
+	agm->chan[3].ctlreg_offs = AC_CONTROL3_OFFSET;
+	agm->chan[4].ctlreg_offs = AC_CONTROL4_OFFSET;
+	agc_regw(agm, AC_CLK_COUNT_OFFSET, 0);
+
+	for (minor = 0; minor < N_AGCTL_CHANNELS; minor++) {
+		agctl = &agm->chan[minor];
+		agctl->slot_number = (uint8_t)minor;
 		agctl->devt = MKDEV(AGCTL_MAJOR, minor);
 		init_waitqueue_head(&agctl->wait);
 
-		agctl->irq = irq;
-		/* Register for interrupt */
-		status = request_irq(agctl->irq, agc_irq_callback, 0, name, agctl);
-		if (status != 0) {
-			dev_warn(&pdev->dev, "irq request failure: %d\n", agctl->irq);
-			kfree(agctl);
-			return -ENXIO;
-		}
-
-		agctl->regs = address;
-		snprintf(agctl->nodename, sizeof(agctl->nodename), "agctl-%d.%ld", AGCTL_MAJOR, minor);
-		agc_regw(agctl, AC_CLK_COUNT_OFFSET, 0);
-		agc_regw(agctl, AC_CONTROL_OFFSET, AC_CTL_INT_ENA | AC_CTL_RESET_IRQ |
+		snprintf(nodename, sizeof(nodename), "agctl-%d.%ld", AGCTL_MAJOR, minor);
+		agc_regw(agm, agctl->ctlreg_offs, AC_CTL_BUF_COL_IRQ | AC_CTL_INT_ENA | AC_CTL_RESET_IRQ |
 				AC_CTL_MUTE_IRQ | AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ);
-		agctl->saved_status = agc_regr(agctl, AC_CONTROL_OFFSET);
-		agctl->agclass.name = agctl->nodename;
+		agctl->saved_status = agc_regr(agm, agctl->ctlreg_offs);
+		agctl->agclass.name = nodename;
 		agctl->agclass.owner = THIS_MODULE;
 		agctl->agclass.class_release = NULL;
 		class_register(&agctl->agclass);
 
 		if (IS_ERR(&agctl->agclass)) {
-			printk(KERN_ERR "Unable create sysfs class for %s\n", agctl->nodename);
+			printk(KERN_ERR "Unable create sysfs class for %s\n", nodename);
 			return PTR_ERR(&agctl->agclass);
 		}
 
 		status = class_create_file(&agctl->agclass, &class_attr_ssi_ddir);
 		status = class_create_file(&agctl->agclass, &class_attr_reset);
 		status = class_create_file(&agctl->agclass, &class_attr_mute);
+		status = class_create_file(&agctl->agclass, &class_attr_diagnostic);
 		status = class_create_file(&agctl->agclass, &class_attr_strobe);
-	} else {
-		dev_dbg(&pdev->dev, "no minor number available!\n");
-		status = -ENODEV;
 	}
-	if (status == 0) {
-		set_bit(minor, minors);
-		list_add(&agctl->device_entry, &device_list);
-	}
-	mutex_unlock(&agctl->agmutex);
 
 	if (status != 0)
-		kfree(agctl);
+		kfree(agm);
 
 	return status;
 }
@@ -706,22 +774,29 @@ static int garcia_control_platform_probe(struct platform_device *pdev)
 
 static int garcia_control_platform_remove(struct platform_device *pdev)
 {
-	struct agctl_data *agctl = platform_get_drvdata(pdev);
+	struct agctl_master *agm = platform_get_drvdata(pdev);
+	int users = 0;
+	int i;
 
- 	if (!agctl) {
+ 	if (!agm) {
  		return(-1);
  	}
 	/* prevent new opens */
-	list_del(&agctl->device_entry);
-	class_remove_file(&agctl->agclass, &class_attr_ssi_ddir);
-	class_remove_file(&agctl->agclass, &class_attr_reset);
-	class_remove_file(&agctl->agclass, &class_attr_mute);
-	class_remove_file(&agctl->agclass, &class_attr_strobe);
-	class_unregister(&agctl->agclass);
-	clear_bit(MINOR(agctl->devt), minors);
-	iounmap(agctl->regs);
-	if (agctl->users == 0)
-		kfree(agctl);
+ 	for (i = 0; i < N_AGCTL_CHANNELS; i++) {
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_ssi_ddir);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_reset);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_mute);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_diagnostic);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_strobe);
+ 		class_unregister(&agm->chan[i].agclass);
+ 		users += agm->chan[0].users;
+ 	}
+	iounmap(agm->regs);
+	free_irq(agm->irq, agm);
+	if (users == 0) {
+		agm_stat = NULL;
+		kfree(agm);
+	}
 	return 0;
 }
 
@@ -813,7 +888,6 @@ static int __init agctl_init(void)
 	 * that will key udev/mdev to add/remove /dev nodes.  Last, register
 	 * the driver which manages those device numbers.
 	 */
-	BUILD_BUG_ON(N_AGCTL_MINORS > 256);
 	status = register_chrdev(AGCTL_MAJOR, DRIVER_NAME, &agctl_fops);
 	return status;
 }

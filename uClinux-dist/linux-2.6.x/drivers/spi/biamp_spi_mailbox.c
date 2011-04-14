@@ -118,7 +118,7 @@ static irqreturn_t biamp_spi_mailbox_interrupt(int irq, void *dev_id) {
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, IRQ_MASK_REG));
-  
+
   maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(mailbox, IRQ_FLAGS_REG), maskedFlags);
 
@@ -203,7 +203,7 @@ static void send_message_response(struct spi_mailbox *mailbox,
                                   MessageData *data) {
   int i;
   DBG("Writing response message \n");
-  
+  printk("Sending response\n");
   for(i=0; i < ((data->length + 3)/4); i++) {
     XIo_Out32(MSG_RAM_BASE(mailbox)+(i*4), ((uint32_t*)data->messageContent)[i]);
   }

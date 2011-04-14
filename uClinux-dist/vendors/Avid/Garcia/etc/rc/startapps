@@ -1,0 +1,10 @@
+#!/bin/sh
+SUPPRESS_APPSTART=`cat /sys/class/garcia_fpga/jumper2`
+
+if [ $SUPPRESS_APPSTART -eq 0 ] ; then
+  /mnt/apps/start_avbd &
+else
+  echo "Jumper 2 installed - suppressing application start."
+fi
+
+

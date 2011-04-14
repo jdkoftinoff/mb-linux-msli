@@ -50,7 +50,7 @@
 #define IRQ_MASK_REG      	(0x001)
 #define IRQ_FLAGS_REG     	(0x002)
 #  define NO_IRQS      		(0x00000000)
-#  define IRQ_S2H_MSG_RX     	(0x00000001)
+#  define IRQ_S2H_MSG_RX    (0x00000001)
 #  define IRQ_S2H_MSG_TX  	(0x00000002)
 #  define ALL_IRQS     		(0xFFFFFFFF)
 

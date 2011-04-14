@@ -859,6 +859,7 @@ static int __devexit audio_packetizer_of_remove(struct of_device *dev)
  */
 static struct of_device_id packetizer_of_match[] = {
   { .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
+  { .compatible = "xlnx,labx-audio-packetizer-1.01.a", },
   { /* end of list */ },
 };
 

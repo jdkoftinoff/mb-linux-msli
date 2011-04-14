@@ -33,11 +33,11 @@
 /* Threshold and purely-proportional coefficient to use when in phase
  * acquisition mode
  */
-#define ACQUIRE_THRESHOLD (1000)
+#define ACQUIRE_THRESHOLD (10000)
 #define ACQUIRE_COEFF_P   ((int32_t)0xE0000000)
 
 /* Saturation range limit for the integrator */
-#define INTEGRAL_MAX_ABS  (1000LL)
+#define INTEGRAL_MAX_ABS  (100000LL)
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
@@ -273,7 +273,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     uint32_t newRtcIncrement;
     int64_t coefficient;
     int64_t slaveOffsetExtended;
-    int64_t accumulator;
+    int64_t accumulator = 0;
     int32_t adjustment;
 
     /* Update the servo with the present value; begin with the nominal increment */
@@ -285,15 +285,40 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      * when we're far from the master, and a more complete set of controls once we've
      * narrowed in
      */
-    if((slaveOffset > ACQUIRE_THRESHOLD) | (slaveOffset < -ACQUIRE_THRESHOLD)) {
-      /* Accumulate the proportional coefficient's contribution */
-      coefficient = (int64_t) ACQUIRE_COEFF_P;
-      slaveOffsetExtended = (int64_t) slaveOffset;
-      accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
+    if(ptp->acquiring == PTP_RTC_ACQUIRING) {
+      if((slaveOffset > ACQUIRE_THRESHOLD) | (slaveOffset < -ACQUIRE_THRESHOLD)) {
+        /* Continue in acquiring mode; accumulate the proportional coefficient's contribution */
+        coefficient = (int64_t) ACQUIRE_COEFF_P;
+        slaveOffsetExtended = (int64_t) slaveOffset;
+        accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
+#ifdef SLAVE_OFFSET_DEBUG
+        if(servoCount >= 10) {
+          uint32_t wordChunk;
+
+          wordChunk = (uint32_t) (accumulator >> 32);
+          printk("Acquiring, P contribution = 0x%08X", wordChunk);
+          wordChunk = (uint32_t) accumulator;
+          printk("%08X\n", wordChunk);
+        }
+#endif
+      } else {
+        /* Reached the acquisition band */
+        ptp->acquiring = PTP_RTC_ACQUIRED;
+      }
 
       /* Also dump the integrator for the integral term */
       ptp->integral = 0;
-    } else {
+    }
+
+    /* Now check for "acquired" mode */
+    if(ptp->acquiring == PTP_RTC_ACQUIRED) {
+      /* We are in the acquisition band; see if we've wandered beyond it badly enough to
+       * go back into acquiring mode, producing some hysteresis
+       */
+      if((slaveOffset > (2 * ACQUIRE_THRESHOLD)) | (slaveOffset < (2 * -ACQUIRE_THRESHOLD))) {
+        ptp->acquiring = PTP_RTC_ACQUIRING;
+      }
+
       /* Accumulate the proportional coefficient's contribution */
       slaveOffsetExtended = (int64_t) slaveOffset;
       coefficient = (int64_t) ptp->coefficients.P;
@@ -342,8 +367,8 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     }
 
 #ifdef SLAVE_OFFSET_DEBUG
-    if(++servoCount >= 10) {
-      printk("Slave offset %d, Increment 0x%08X\n", slaveOffset, newRtcIncrement);
+    if(servoCount++ >= 10) {
+      printk("Slave offset %d\n", slaveOffset);
       printk("  syncRxNS %d, syncTxNS %d (%d), MeanPathNS %d\n", (int)ptp->ports[port].syncRxTimestamp.nanoseconds,
         (int)ptp->ports[port].syncTxTimestamp.nanoseconds, (int)difference.nanoseconds, (int)ptp->ports[port].neighborPropDelay);
       printk("RTC increment 0x%08X", newRtcIncrement);

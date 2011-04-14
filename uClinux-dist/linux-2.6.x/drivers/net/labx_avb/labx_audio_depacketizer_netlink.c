@@ -84,6 +84,25 @@ int audio_depacketizer_stream_event(struct audio_depacketizer *depacketizer) {
   returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_STATUS3, XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_3_REG)));
   if(returnValue != 0) goto fail;
 
+  /* Write an attribute identifying the stream which encountered a sequence error,
+   * if there was one.
+   */
+  if(depacketizer->streamSeqError) {
+    /* Write the identity of the stream 
+     * NOTE - No register returns this yet!!!
+     */
+    returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_SEQ_ERROR, 0x00000000);
+    
+    /* Clear the "stream sequence error" flag.  There is a race condition inherent here
+     * with the ISR; however, the delivery of any one sequence error event is already
+     * unreliable due to the way the depacketizer hardware operates.
+     */
+    depacketizer->streamSeqError = 0;
+
+    /* Make sure the clear occurs even if there was a write failure */
+    if(returnValue != 0) goto fail;
+  }
+
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, depacketizer_mcast.id, GFP_ATOMIC);

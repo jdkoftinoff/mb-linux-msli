@@ -54,6 +54,11 @@
 
 #define LOCAL_FEATURE_RX_CSUM   0x01
 
+/* Revision break points at which different features exist */
+
+/* CRC error statistics counter, >= 1.2 */
+#define RX_CRC_ERRS_MIN_VERSION ((1 << REVISION_MAJOR_SHIFT) | 2)
+
 /*
  * Default SEND and RECV buffer descriptors (BD) numbers.
  * BD Space needed is (XTE_SEND_BD_CNT+XTE_RECV_BD_CNT)*Sizeof(XLlDma_Bd).
@@ -1296,9 +1301,9 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
 
   /* We have co-opted this self-test ioctl for use as a means to put the
    * PHY into local loopback mode, or into other PHY-supported test modes.
-   * TODO: Add other test modes...
    */
-  if(lp->phy_dev->drv->set_test_mode) {
+  if(lp && lp->phy_dev && lp->phy_dev->drv &&
+        lp->phy_dev->drv->set_test_mode) {
     if(test_info->flags & ETH_TEST_FL_INT_LOOP) {
       phy_test_mode = PHY_TEST_INT_LOOP;
     } else if(test_info->flags & ETH_TEST_FL_EXT_LOOP) {
@@ -1315,11 +1320,20 @@ labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info,
 
     /* Enter the selected test mode */
     lp->phy_dev->drv->set_test_mode(lp->phy_dev, phy_test_mode);
-  } else printk("%s PHY driver does not support test modes\n",
-                lp->phy_dev->drv->name);
+  } else if(test_info->flags != 0) {
+    /* Complain if any test mode is selected (not normal mode) */
+    printk("%s PHY driver does not support test modes\n",
+           (lp && lp->phy_dev && lp->phy_dev->drv && lp->phy_dev->drv->name) ?
+           lp->phy_dev->drv->name : "<Unknown>");
+  }
 
-  /* Having switched modes, clear the hardware statistics counters */
-  labx_eth_WriteReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG, 0);
+  /* Having switched modes, clear the hardware statistics counters,
+   * if they exist
+   */
+  if((InstancePtr->versionReg & (REVISION_MINOR_MASK | REVISION_MAJOR_MASK)) >=
+      RX_CRC_ERRS_MIN_VERSION) {
+    labx_eth_WriteReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG, 0);
+  }
 }
 
 static void labx_ethtool_get_stats(struct net_device *dev, 
@@ -1332,8 +1346,10 @@ static void labx_ethtool_get_stats(struct net_device *dev,
    * only statistic is hosted directly within a hardware register.
    */
 
-  /* Fetch the CRC count from hardware */
-  data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
+  /* Fetch the CRC count from hardware, if supported */
+  if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
+    data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
+  } else data[RX_CRC_ERRS_INDEX] = 0ULL;
 }
 
 /* ethtool operations structure */
@@ -1543,6 +1559,7 @@ static int xtenet_setup(struct device *dev,
   versionReg = labx_eth_ReadReg(lp->Emac.Config.BaseAddress, REVISION_REG);
   minor = (versionReg & REVISION_MINOR_MASK) >> REVISION_MINOR_SHIFT;
   major = (versionReg & REVISION_MAJOR_MASK) >> REVISION_MAJOR_SHIFT;
+  lp->Emac.versionReg = versionReg;
   lp->Emac.MacMatchUnits = (versionReg & REVISION_MATCH_MASK) >> REVISION_MATCH_SHIFT;
   lp->Emac.dev = ndev;
 
@@ -1833,6 +1850,7 @@ static int __devexit xtenet_of_remove(struct of_device *dev)
 
 static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,labx-ethernet-1.00.a", },
+  { .compatible = "xlnx,labx-ethernet-1.01.a", },
   { /* end of list */ },
 };
 
