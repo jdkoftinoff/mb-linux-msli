@@ -158,7 +158,7 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
    * word within the transmit RAM.
    */
   if(ptp->portWidth == 64) {
-    wordOffset += BYTES_PER_WORD;
+    *wordOffset += BYTES_PER_WORD;
   }
 
   /* Begin with the destination and source MAC addresses.
