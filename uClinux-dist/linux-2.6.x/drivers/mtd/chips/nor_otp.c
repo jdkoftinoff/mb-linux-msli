@@ -55,8 +55,6 @@ struct nor_otp_struct {
 
 static struct nor_otp_struct nor_otp;
 
-
-
 int read_otp_reg(otp_register addr, securityword_t *otp)
 {
   int i = 0;
@@ -158,6 +156,10 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
   size_t retlen = 0;
   short unsigned int lockIndex;
   u_char * lock;
+  securityword_t test;
+  char temp[33];
+  char *tp = temp;
+  char zero[2] = {'0', '0'};
 
   if(!nor_otp.firsttime)
     {
@@ -170,20 +172,45 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
   if(!nor_otp.locks[nor_otp.address])
     {
       hex2bin(inputbuf, buf, (count-1));
+      //write the register
       for(i=0; i<16; i=i+2)
 	{
 	  (*(nor_otp.mtd->write_user_prot_reg))(nor_otp.mtd, 
 						2+i+(nor_otp.address*16), 2,
 						&retlen, (inputbuf+i));
 	}
+      //now read the register back and check the contents
+      read_otp_reg(nor_otp.address, &test);
+      for(i = 0; i < 16; i++)
+	{
+	  tp = pack_hex_byte(tp, test[i]);
+	}
+      *tp = '\0';
+      tp = temp;
+      printk("Compare %s vs %s\n", buf, tp);
+      if(strncmp(tp, buf, 32))
+	{
+	  printk("Address read from %u does not match written\n",
+		 nor_otp.address);
+	  printk("Now attempting to blank out OTP register\n");
+	  
+	  for(i=0; i<16; i=i+2)
+	     {
+	       (*(nor_otp.mtd->write_user_prot_reg))(nor_otp.mtd,
+						     2+i+(nor_otp.address*16), 2,
+						     &retlen, zero); 
+	     }
+	}
+
+      //lock the register
       lockIndex = 1 << nor_otp.address;
       lockIndex = lockIndex ^ 0xffff;
       lock = (u_char *) (&lockIndex);
       (*(nor_otp.mtd->write_user_prot_reg))(nor_otp.mtd, 0, 2,
-					   &retlen,lock); 
+					    &retlen,lock); 
       
-      //simulated sysfs stuff
-      hex2bin(nor_otp.otp[nor_otp.address], buf, (count - 1));
+      //simulated sysfs stuff - used for testing
+      //hex2bin(nor_otp.otp[nor_otp.address], buf, (count - 1));
       nor_otp.locks[nor_otp.address] = 1;
       
       return count;

@@ -179,7 +179,9 @@ config MTD_OTP
 	  in the programming of OTP bits will waste them.
 
 config MTD_CFI_OTP_USER
+       bool "Sysfs interface for OTP registers
        depends on MTD_OTP
+       default n
        help
          Enables direct user access to the OTP registers using a sysfs interface
 
