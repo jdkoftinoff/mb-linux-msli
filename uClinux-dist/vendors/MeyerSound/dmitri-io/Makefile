@@ -167,6 +167,11 @@ DEVICES +=      \
         i2s_gnet0,c,252,0
 endif
 
+ifdef CONFIG_XILINX_MAILBOX
+DEVICES +=      \
+        mailbox0,c,251,0
+endif
+
 I2C_MAJOR = 89
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
