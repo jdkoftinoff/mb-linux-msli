@@ -72,8 +72,12 @@
 			xlnx,addr-tag-bits = <0xe>;
 			xlnx,allow-dcache-wr = <0x1>;
 			xlnx,allow-icache-wr = <0x1>;
+			xlnx,archiver = "0";
 			xlnx,area-optimized = <0x0>;
 			xlnx,cache-byte-size = <0x2000>;
+			xlnx,compiler = "0";
+			xlnx,compiler-flags = "0";
+			xlnx,core-clock-freq-hz = <0x5f5e100>;
 			xlnx,d-lmb = <0x1>;
 			xlnx,d-opb = <0x0>;
 			xlnx,d-plb = <0x1>;
@@ -90,6 +94,7 @@
 			xlnx,dopb-bus-exception = <0x0>;
 			xlnx,dynamic-bus-sizing = <0x1>;
 			xlnx,edge-is-positive = <0x1>;
+			xlnx,extra-compiler-flags = "0";
 			xlnx,family = "virtex5";
 			xlnx,fpu-exception = <0x0>;
 			xlnx,fsl-data-size = <0x20>;
@@ -111,6 +116,7 @@
 			xlnx,mmu-itlb-size = <0x2>;
 			xlnx,mmu-tlb-access = <0x3>;
 			xlnx,mmu-zones = <0x10>;
+			xlnx,multiplier = "false";
 			xlnx,number-of-pc-brk = <0x1>;
 			xlnx,number-of-rd-addr-brk = <0x0>;
 			xlnx,number-of-wr-addr-brk = <0x0>;
@@ -134,6 +140,7 @@
 			xlnx,use-mmu = <0x0>;
 			xlnx,use-msr-instr = <0x1>;
 			xlnx,use-pcmp-instr = <0x1>;
+			xlnx,xmdstub-peripheral = "false";
 		} ;
 	} ;
 	plb_1_0: plb@0 {
@@ -284,6 +291,7 @@
 			reg = < 0x86000000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
+			xlnx,clock-hz = <0x3ef1480>;
 			xlnx,external-xin-clk-hz = <0x17d7840>;
 			xlnx,family = "virtex5";
 			xlnx,has-external-rclk = <0x0>;
@@ -291,10 +299,11 @@
 			xlnx,is-a-16550 = <0x1>;
 		} ;
 		i2s_0: iis2424-g@8e000000 {
-			compatible = "xlnx,iis2424-g-1.00.c";
+			compatible = "xlnx,iis2424-g-1.00.g";
 			reg = < 0x8e000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
+			xlnx,tunnel-only = <0x0>;
 		} ;
 		mpmc@90000000 {
 			#address-cells = <1>;
@@ -348,24 +357,13 @@
 			xlnx,tri-default = <0xffffffff>;
 			xlnx,tri-default-2 = <0xffffffff>;
 		} ;
-		xps_iic_0: i2c@8f000000 {
-			compatible = "xlnx,xps-iic-2.02.a", "xlnx,xps-iic-2.00.a";
-			reg = < 0x8f000000 0x10000 >;
-			xlnx,clk-freq = <0x7735940>;
-			xlnx,family = "virtex5";
-			xlnx,gpo-width = <0x1>;
-			xlnx,iic-freq = <0x9c40>;
-			xlnx,scl-inertial-delay = <0x1>;
-			xlnx,sda-inertial-delay = <0x1>;
-			xlnx,ten-bit-adr = <0x0>;
-		} ;
 		xps_intc_1: interrupt-controller@82000000 {
 			#interrupt-cells = <0x2>;
 			compatible = "xlnx,xps-intc-2.00.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x82000000 0x10000 >;
-			xlnx,kind-of-intr = <0x1e1>;
-			xlnx,num-intr-inputs = <0xa>;
+			xlnx,kind-of-intr = <0x1e3>;
+			xlnx,num-intr-inputs = <0xb>;
 		} ;
 		xps_ll_fifo_1: xps-ll-fifo@84000000 {
 			compatible = "xlnx,xps-ll-fifo-1.02.a";
@@ -417,10 +415,26 @@
 				xlnx,temac-type = <0x0>;
 			} ;
 		} ;
+		xps_mailbox_0: mailbox@80000000 {
+			compatible = "xlnx,xps-mailbox-2.00.b";
+			interrupt-parent = <&xps_intc_1>;
+			interrupts = < 10 2 >;
+			reg = < 0x80000000 0x10000 >;
+			xlnx,async-clks = <0x0>;
+			xlnx,ext-reset-high = <0x1>;
+			xlnx,family = "virtex5";
+			xlnx,fsl-dwidth = <0x20>;
+			xlnx,impl-style = <0x1>;
+			xlnx,interface-0-is-fsl = <0x0>;
+			xlnx,interface-1-is-fsl = <0x0>;
+			xlnx,mailbox-depth = <0x400>;
+			xlnx,read-clock-period-0 = <0x0>;
+			xlnx,read-clock-period-1 = <0x0>;
+		} ;
 		xps_timer_0: timer@88000000 {
 			compatible = "xlnx,xps-timer-1.01.b", "xlnx,xps-timer-1.00.a";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 1 2 >;
+			interrupts = < 1 0 >;
 			reg = < 0x88000000 0x10000 >;
 			xlnx,count-width = <0x20>;
 			xlnx,family = "virtex5";
