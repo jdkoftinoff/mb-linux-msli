@@ -149,6 +149,10 @@
 #define PTP_RTC_UNLOCKED (0)
 #define PTP_RTC_LOCKED   (1)
 
+/* Enumeration for RTC acquisition */
+#define PTP_RTC_ACQUIRED  (0)
+#define PTP_RTC_ACQUIRING (1)
+
 /* Enumeration for flagging valid RTC offsets */
 #define PTP_RTC_OFFSET_INVALID (0)
 #define PTP_RTC_OFFSET_VALID   (1)
@@ -303,6 +307,7 @@ struct ptp_device {
   int32_t  rtcLastOffset;
   uint32_t rtcLastOffsetValid;
   uint32_t rtcLastLockState;
+  uint32_t acquiring;
   uint32_t rtcLockState;
   uint32_t rtcLockCounter;
   uint32_t rtcLockTicks;

@@ -620,7 +620,9 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    */
   recoveryIndex = (clockRecoverySettings->matchUnit & STREAM_INDEX_MASK(depacketizer));
   if(clockDomainSettings->enabled == DOMAIN_ENABLED) {
+    /* Enable both the recovery as well as the phase "nudge" logic */
     recoveryIndex |= RECOVERY_ENABLED(depacketizer);
+    recoveryIndex |= PHASE_NUDGE_ENABLED(depacketizer);
   }
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, RECOVERY_INDEX_REG),
             recoveryIndex);
@@ -698,9 +700,15 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     returnValue = IRQ_HANDLED;
   }
   
-  /* Detect the stream change IRQ */
-  if((maskedFlags & STREAM_IRQ) != 0) {
+  /* Detect the stream change and stream reset IRQs; either one should
+   * simply trigger the netlink thread.
+   */
+  if((maskedFlags & (STREAM_IRQ | SEQ_ERROR_IRQ)) != 0) {
+    /* Increment the status count */
     depacketizer->streamStatusGeneration++;
+
+    /* If this was a sequence error IRQ, leave a flag in place */
+    if((maskedFlags & SEQ_ERROR_IRQ) != 0) depacketizer->streamSeqError = 1;
 
     /* Wake up all threads waiting for a stream status event */
     wake_up_interruptible(&(depacketizer->streamStatusQueue));
@@ -1153,9 +1161,13 @@ static int audio_depacketizer_probe(const char *name,
     goto kthread_fail;
   }
 
-  /* Now that the device is configured, enable interrupts if they are to be used */
+  /* Now that the device is configured, enable interrupts if they are to be used,
+   * clearing IRQ state first
+   */
+  depacketizer->streamStatusGeneration = 0;
+  depacketizer->streamSeqError         = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), SYNC_IRQ | STREAM_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
   }
 
   /* Return success */
@@ -1219,6 +1231,7 @@ static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
 static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.00.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.01.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.02.a", },
 	{ /* end of list */ },
 };
 

@@ -65,9 +65,10 @@
 
 #define IRQ_MASK_REG         (0x008)
 #define IRQ_FLAGS_REG        (0x009)
-#  define NO_IRQS    (0x00000000)
-#  define SYNC_IRQ   (0x00000001)
-#  define STREAM_IRQ (0x00000002)
+#  define NO_IRQS       (0x00000000)
+#  define SYNC_IRQ      (0x00000001)
+#  define STREAM_IRQ    (0x00000002)
+#  define SEQ_ERROR_IRQ (0x00000004)
 
 #define SYNC_REG             (0x00A)
 #  define CANCEL_SYNC      (0x00000000)
@@ -109,9 +110,10 @@
  */
 #define REGS_PER_CLOCK_DOMAIN  16
 #define RECOVERY_INDEX_REG  0x000
-#  define STREAM_INDEX_MASK(device) (device->streamIndexMask)
-#  define RECOVERY_DISABLED  0x00000000
-#  define RECOVERY_ENABLED(device)  (device->streamIndexMask + 1)
+#  define STREAM_INDEX_MASK(device)   (device->streamIndexMask)
+#  define RECOVERY_DISABLED           (0x00000000)
+#  define RECOVERY_ENABLED(device)    (device->streamIndexMask + 1)
+#  define PHASE_NUDGE_ENABLED(device) (RECOVERY_ENABLED(device) << 1)
 
 #define MC_SYT_INTERVAL_REG  0x001
 #define MC_CONTROL_REG       0x002
@@ -236,6 +238,7 @@ struct audio_depacketizer {
   /* Netlink events */
   wait_queue_head_t streamStatusQueue;
   uint32_t streamStatusGeneration;
+  uint32_t streamSeqError;
   uint32_t netlinkSequence;
   struct task_struct *netlinkTask;
 };
