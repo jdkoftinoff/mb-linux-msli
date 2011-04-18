@@ -490,7 +490,13 @@ static void set_sequence_id(struct ptp_device *ptp, uint32_t port, uint32_t txBu
 
   /* Read, modify, and write back the sequence ID */
   bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+
+  /* Locate the sequence ID in the packet, handling 64-bit alignment case */
   wordOffset = SEQUENCE_ID_OFFSET;
+  if(ptp->portWidth == 64) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0x0000FFFF;
   packetWord |= (sequenceId << 16);
@@ -508,7 +514,13 @@ uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection 
   bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
                 (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
                 PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+
+  /* Locate the sequence ID in the packet, handling 64-bit alignment case for Tx */
   wordOffset = SEQUENCE_ID_OFFSET;
+  if((bufferDirection == TRANSMITTED_PACKET) & (ptp->portWidth == 64)) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   return((uint16_t) (read_packet(bufferBase, &wordOffset) >> 16));
 }
 
@@ -522,7 +534,13 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
   bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
                 (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
                 PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+
+  /* Locate the timestamp in the packet, handling 64-bit alignment case for Tx */
   wordOffset = TIMESTAMP_OFFSET;
+  if((bufferDirection == TRANSMITTED_PACKET) & (ptp->portWidth == 64)) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = read_packet(bufferBase, &wordOffset);
   timestamp->secondsUpper = (packetWord >> 16);
   timestamp->secondsLower = (packetWord << 16);
@@ -561,7 +579,13 @@ static void set_timestamp(struct ptp_device *ptp, uint32_t port, uint32_t txBuff
   uint32_t packetWord;
 
   bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+
+  /* Locate the timestamp in the packet, handling 64-bit alignment case */
   wordOffset = TIMESTAMP_OFFSET;
+  if(ptp->portWidth == 64) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = ((((uint32_t) timestamp->secondsUpper) << 16) | 
                 (timestamp->secondsLower >> 16));
   write_packet(bufferBase, &wordOffset, packetWord);
@@ -582,7 +606,13 @@ static void update_correction_field(struct ptp_device *ptp, uint32_t port, uint3
   uint32_t packetWord;
 
   bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+
+  /* Locate the correction field in the packet, handling 64-bit alignment case */
   wordOffset = CORRECTION_FIELD_OFFSET;
+  if(ptp->portWidth == 64) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0xFFFF0000;
   packetWord |= (uint32_t) (correctionField >> 48);
@@ -605,7 +635,13 @@ static void set_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint32
   uint32_t packetWord;
 
   bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+
+  /* Locate the requesting port ID in the packet, handling 64-bit alignment case */
   wordOffset = REQ_PORT_ID_OFFSET;
+  if(ptp->portWidth == 64) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0xFFFF0000;
   packetWord |= ((requestPortId[0] << 8) | requestPortId[1]);
@@ -1031,7 +1067,13 @@ void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection b
   bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
                 (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
                 PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+
+  /* Locate the source port ID in the packet, handling 64-bit alignment case for Tx */
   wordOffset = SOURCE_PORT_ID_OFFSET;
+  if((bufferDirection == TRANSMITTED_PACKET) & (ptp->portWidth == 64)) {
+    wordOffset += BYTES_PER_WORD;
+  }
+
   packetWord = read_packet(bufferBase, &wordOffset);
   sourcePortId[0] = ((packetWord >> 8) & 0x0FF);
   sourcePortId[1] = (packetWord & 0x0FF);
@@ -1159,4 +1201,3 @@ int32_t compare_port_ids(const uint8_t *portIdA, const uint8_t *portIdB) {
   }
   return(comparisonResult);
 }
-
