@@ -112,9 +112,10 @@ static void timer_state_task(unsigned long data) {
         ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
         ptp->rtcLastOffset      = 0;
 
-        /* Set the RTC back to its nominal increment */
-        /* TODO - Don't do this!  Wait for an ioctl() which says it's okay! */
-        set_rtc_increment(ptp, &ptp->nominalIncrement);
+        /* Don't set the RTC back to its nominal increment; we will notify
+         * userspace of the Grandmaster change and then wait for an ioctl()
+         * which says it's okay to do so.
+         */
 
         /* Update stats */
         for (i=0; i<ptp->numPorts; i++) {
