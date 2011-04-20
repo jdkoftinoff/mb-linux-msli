@@ -1130,5 +1130,10 @@ config I2S_GNET
 	help
 	  I2S Interface for GNET audio support.
 
+config XILINX_MAILBOX
+	tristate "Xilinx mailbox device"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Xilinx mailbox device for interprocessor communication"
 endmenu
 
