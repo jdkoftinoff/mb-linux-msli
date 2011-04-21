@@ -328,7 +328,8 @@ int32_t labx_dma_probe(struct labx_dma *dma,
                        uint32_t deviceMinor, 
                        const char *name, 
                        int32_t microcodeWords, 
-                       int32_t irq) {
+                       int32_t irq,
+                       struct labx_dma_callbacks *dmaCallbacks) {
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
@@ -343,6 +344,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   dma->name       = name;
   dma->deviceNode = MKDEV(deviceMajor, deviceMinor);
   dma->irq        = irq;
+  dma->callbacks  = dmaCallbacks;
   
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -425,8 +427,10 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     return(-EIO);
   }
 
-  /* Request the IRQ if one was supplied */
-  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+  /* Call the irq setup function or request the IRQ if one was supplied */
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqSetup)) {
+    dma->callbacks->irqSetup(dma);
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     uint32_t irqMask;
 
     /* Permit the IRQ to be shared with an enclosing hardware module */
@@ -465,7 +469,9 @@ int32_t labx_dma_probe(struct labx_dma *dma,
          ((dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) ? "has" : "no"));
 
   /* Make a note if the instance has a status FIFO but no IRQ was supplied */
-  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqSetup)) {
+    printk(KERN_INFO "  Using supplied IRQ setup.\n\n");
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     printk(KERN_INFO "  IRQ %d\n\n", dma->irq);
   } else if(dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) {
     printk(KERN_WARNING "  Status FIFO services are unavailable due to lack of an IRQ\n\n");
@@ -751,6 +757,16 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
   return(returnValue);
 }
 EXPORT_SYMBOL(labx_dma_ioctl);
+
+int32_t labx_dma_remove(struct labx_dma *dma) {
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqTeardown)) {
+    dma->callbacks->irqTeardown(dma);
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+    free_irq(dma->irq, dma);
+  }
+  return(0);
+}
+EXPORT_SYMBOL(labx_dma_remove);
 
 /* Driver initialization and exit */
 static int __init labx_dma_driver_init(void) {

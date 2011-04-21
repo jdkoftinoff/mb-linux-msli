@@ -25,6 +25,7 @@
 
 #include <linux/autoconf.h>
 #include "labx_audio_depacketizer.h"
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
@@ -71,6 +72,17 @@ static uint32_t instanceCount;
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DBG(f, x...)
+#endif
+
+/* Number of milliseconds to wait before permitting consecutive events from
+ * being propagated up to userspace
+ */
+#define EVENT_THROTTLE_MSECS (250)
+
+#ifndef DMA_CALLBACKS
+#define DMA_CALLBACKS NULL
+#else
+DMA_CALLBACKS_EXTERN
 #endif
 
 /* Disables the passed instance */
@@ -686,11 +698,13 @@ static void reset_depacketizer(struct audio_depacketizer *depacketizer) {
 static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
+  uint32_t irqMask;
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
-  maskedFlags &= XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
+  irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
+  maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG), maskedFlags);
 
   /* Detect the timer IRQ */
@@ -710,6 +724,13 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     /* If this was a sequence error IRQ, leave a flag in place */
     if((maskedFlags & SEQ_ERROR_IRQ) != 0) depacketizer->streamSeqError = 1;
 
+    /* Disarm both event interrupts while the status thread handles the present
+     * event(s).  This permits the status thread to limit the rate at which events
+     * are accepted and propagated up to userspace.
+     */
+    irqMask &= ~(STREAM_IRQ | SEQ_ERROR_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
+
     /* Wake up all threads waiting for a stream status event */
     wake_up_interruptible(&(depacketizer->streamStatusQueue));
     returnValue = IRQ_HANDLED;
@@ -723,6 +744,7 @@ static int netlink_thread(void *data)
 {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)data;
   uint32_t streamStatusGeneration = depacketizer->streamStatusGeneration;
+  uint32_t irqMask;
 
   __set_current_state(TASK_RUNNING);
 
@@ -738,6 +760,21 @@ static int netlink_thread(void *data)
 
     audio_depacketizer_stream_event(depacketizer);
 
+    /* Before returning to waiting, optionally sleep a little bit and then
+     * re-enable the IRQs which trigger us.  There should be no need to disable
+     * interrupts to prevent a race condition since the only part of the ISR
+     * which modifies the IRQ mask is the servicing of the IRQs which are at
+     * present disabled.
+     *
+     * Inserting a delay here, in conjunction with the disabling of the event
+     * IRQ flags by the ISR, effectively limits the rate at which events can
+     * be generated and sent up to user space.  Using an ISR / waitqueue is,
+     * however, more responsive to occasional events than straight-up polling.
+     */
+    msleep(EVENT_THROTTLE_MSECS);
+    irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
+    irqMask |= (STREAM_IRQ | SEQ_ERROR_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
   } while (!kthread_should_stop());
 
   return 0;
@@ -796,6 +833,7 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
   depacketizer->opened = false;
   spin_unlock_irqrestore(&depacketizer->mutex, flags);
   preempt_enable();
+
   return(0);
 }
 
@@ -1117,7 +1155,8 @@ static int audio_depacketizer_probe(const char *name,
                    depacketizer->instanceNumber,
                    depacketizer->name, 
                    DMA_UCODE_SIZE_UNKNOWN, 
-                   dmaIrqParam); 
+                   dmaIrqParam,
+                   DMA_CALLBACKS); 
 #else
     /* The interface type specified by the platform involves a DMA instance,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the
@@ -1288,6 +1327,15 @@ static int audio_depacketizer_platform_remove(struct platform_device *pdev)
   /* Get a handle to the packetizer and begin shutting it down */
   depacketizer = platform_get_drvdata(pdev);
   if(!depacketizer) return(-1);
+
+  if (depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_remove(&depacketizer->dma);
+  }
+
+  /* Release the IRQ */
+  if (depacketizer->irq != NO_IRQ_SUPPLIED) {
+    free_irq(depacketizer->irq, depacketizer);
+  }
 
   kthread_stop(depacketizer->netlinkTask);
   cdev_del(&depacketizer->cdev);

@@ -178,6 +178,13 @@ config MTD_OTP
 	  This feature should therefore be used with extreme care. Any mistake
 	  in the programming of OTP bits will waste them.
 
+config MTD_CFI_OTP_USER
+       bool "Sysfs interface for OTP registers
+       depends on MTD_OTP
+       default n
+       help
+         Enables direct user access to the OTP registers using a sysfs interface
+
 config MTD_CFI_INTELEXT
 	tristate "Support for Intel/Sharp flash chips"
 	depends on MTD_GEN_PROBE

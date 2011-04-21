@@ -291,7 +291,8 @@ static int labx_dma_pdev_probe(struct platform_device *pdev)
                    dma_pdev->miscdev.minor,
                    dma_pdev->name, 
                    DMA_UCODE_SIZE_UNKNOWN, 
-                   irqParam);
+                   irqParam,
+                   NULL);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)
 	{

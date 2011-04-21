@@ -488,7 +488,9 @@ static int legacy_bridge_ioctl(struct inode *inode,
         phyTestMode = PHY_TEST_NONE;
       }
 
-      bridge->phy_dev->drv->set_test_mode(bridge->phy_dev, phyTestMode);
+      if(bridge->phy_dev) {
+        bridge->phy_dev->drv->set_test_mode(bridge->phy_dev, phyTestMode);
+      }
     }
     break;
     
