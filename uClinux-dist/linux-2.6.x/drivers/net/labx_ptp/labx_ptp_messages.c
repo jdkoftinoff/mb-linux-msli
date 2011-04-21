@@ -91,6 +91,14 @@
 
 #define TX_DATA_OFFSET(ptp) ((ptp->portWidth == 8) ? TX_DATA_OFFSET_X8 : TX_DATA_OFFSET_X64)
 
+/* Amount to be decremented from a packet length to form the length word
+ * expected by the transmit hardware as the first word of each Tx buffer
+ */
+#define TX_LENGTH_SUB_X8  (1)
+#define TX_LENGTH_SUB_X64 (8)
+
+#define TX_LENGTH_SUB(ptp) ((ptp->portWidth == 8) ? TX_LENGTH_SUB_X8 : TX_LENGTH_SUB_X64)
+
 /* Length, in bytes, of each packet type we transmit */
 #define PTP_ANNOUNCE_LENGTH         (64)
 #define PTP_SYNC_LENGTH             (44)
@@ -147,11 +155,12 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
   PtpPortProperties *portProperties = &ptp->ports[port].portProperties;
 
   /* Locate the requested buffer and begin with the packet's transmit length 
-   * word (transmit length minus one.)
+   * word.  This length word is always the length of the packet, in bytes,
+   * minus one full port word, in bytes (which differs between 100M/1G and 10G).
    */
   *wordOffset = 0; 
   bufferBase = PTP_TX_PACKET_BUFFER(ptp, port, txBuffer);
-  write_packet(bufferBase, wordOffset, (ETH_HEADER_BYTES + messageLength - 1));
+  write_packet(bufferBase, wordOffset, (ETH_HEADER_BYTES + messageLength - TX_LENGTH_SUB(ptp)));
 
   /* Now begin at the Tx data base, which differs based upon port width */
   *wordOffset = 0;
