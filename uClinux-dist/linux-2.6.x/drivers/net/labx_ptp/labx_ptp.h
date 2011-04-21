@@ -377,7 +377,7 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port);
 void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer);
 void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port);
 void print_packet_buffer(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                         uint32_t packetBuffer);
+                         uint32_t packetBuffer, uint32_t packetWords);
 uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                          uint32_t packetBuffer);
 void get_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
