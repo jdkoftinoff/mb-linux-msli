@@ -49,6 +49,8 @@
 #define DMA_STATUS_IDLE      (0)
 #define DMA_NEW_STATUS_READY (1)
 
+struct labx_dma_callbacks;
+
 /* DMA structure (for use inside other drivers that include DMA) */
 struct labx_dma {
   /* Virtual address pointer for the memory-mapped hardware */
@@ -78,6 +80,9 @@ struct labx_dma {
   /* Interrupt request number */
   int32_t irq;
 
+  /* Callbacks used for overriding some functionality */
+  struct labx_dma_callbacks *callbacks;
+
   /* Circular buffer of status packets */
   uint32_t statusIndex;
   DMAStatusPacket *statusHead;
@@ -103,6 +108,12 @@ struct labx_dma_pdev {
   struct labx_dma dma;
 };
 
+/* Callback functions for a DMA instance */
+struct labx_dma_callbacks {
+  void (*irqSetup)(struct labx_dma *dma);
+  void (*irqTeardown)(struct labx_dma *dma);
+};
+
 /**
  * DMA device probe function
  *
@@ -120,13 +131,15 @@ struct labx_dma_pdev {
  *                         a hardware interrupt is unavailable to the instance.  Some
  *                         capabilities may not be functional without an IRQ (e.g. the
  *                         status FIFO netlink events)
+ * @param dmaCallbacks   - Callback functions for the instance being probed.
  */
 extern int32_t labx_dma_probe(struct labx_dma *dma, 
                               uint32_t deviceMajor,
                               uint32_t deviceMinor,
                               const char *name, 
                               int32_t microcodeWords, 
-                              int32_t irq);
+                              int32_t irq,
+                              struct labx_dma_callbacks *dmaCallbacks);
 
 /* DMA open and release operations */
 extern int32_t labx_dma_open(struct labx_dma *dma);
@@ -134,6 +147,9 @@ extern int32_t labx_dma_release(struct labx_dma *dma);
 
 /* DMA ioctl processing */
 extern int labx_dma_ioctl(struct labx_dma *dma, unsigned int command, unsigned long arg);
+
+/* DMA Remove */
+extern int32_t labx_dma_remove(struct labx_dma *dma);
 
 #define DMA_REGISTER_RANGE 0
 #define DMA_MICROCODE_RANGE 1

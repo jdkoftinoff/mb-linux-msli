@@ -79,6 +79,12 @@ static uint32_t instanceCount;
  */
 #define EVENT_THROTTLE_MSECS (250)
 
+#ifndef DMA_CALLBACKS
+#define DMA_CALLBACKS NULL
+#else
+DMA_CALLBACKS_EXTERN
+#endif
+
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   uint32_t ctrlStatusReg;
@@ -827,6 +833,7 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
   depacketizer->opened = false;
   spin_unlock_irqrestore(&depacketizer->mutex, flags);
   preempt_enable();
+
   return(0);
 }
 
@@ -1148,7 +1155,8 @@ static int audio_depacketizer_probe(const char *name,
                    depacketizer->instanceNumber,
                    depacketizer->name, 
                    DMA_UCODE_SIZE_UNKNOWN, 
-                   dmaIrqParam); 
+                   dmaIrqParam,
+                   DMA_CALLBACKS); 
 #else
     /* The interface type specified by the platform involves a DMA instance,
      * but the driver for the Dma_Coprocessor hasn't been enabled in the
@@ -1319,6 +1327,15 @@ static int audio_depacketizer_platform_remove(struct platform_device *pdev)
   /* Get a handle to the packetizer and begin shutting it down */
   depacketizer = platform_get_drvdata(pdev);
   if(!depacketizer) return(-1);
+
+  if (depacketizer->hasDma == INSTANCE_HAS_DMA) {
+    labx_dma_remove(&depacketizer->dma);
+  }
+
+  /* Release the IRQ */
+  if (depacketizer->irq != NO_IRQ_SUPPLIED) {
+    free_irq(depacketizer->irq, depacketizer);
+  }
 
   kthread_stop(depacketizer->netlinkTask);
   cdev_del(&depacketizer->cdev);
