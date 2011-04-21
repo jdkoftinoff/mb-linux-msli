@@ -76,11 +76,9 @@ int read_otp_reg(otp_register addr, securityword_t *otp)
   
       for(i = 0; i < 16; i=i+2)
 	{
-	  //printk("Iteration with offset %u\n", 2+i+(addr*16));
 	  (*(nor_otp.mtd->read_user_prot_reg))(nor_otp.mtd, 2+i+(addr*16), 2, 
 					       &retlen, ((u_char *)otp)+(i));
 	}
-
       return 1;
     }
 }
@@ -128,18 +126,7 @@ static uint8_t hex_to_bin(char ch)
 
 static void hex2bin(uint8_t *dst, const char *src, size_t count)
 {
-  size_t ncount;
-
-  if(count & 1)
-    {
-      *dst = hex_to_bin(*src++);
-      dst++;
-      ncount = (count-1) >> 1;
-    }
-  else
-    {
-      ncount = count >> 1;
-    }
+  size_t ncount = count;
 
   while (ncount--) 
     {
@@ -159,8 +146,7 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
   securityword_t test;
   char temp[33];
   char *tp = temp;
-  char zero[2] = {'0', '0'};
-
+ 
   if(!nor_otp.firsttime)
     {
       nor_otp.mtd = NULL;
@@ -187,19 +173,10 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
 	}
       *tp = '\0';
       tp = temp;
-      printk("Compare %s vs %s\n", buf, tp);
-      if(strncmp(tp, buf, 32))
+      if(strncasecmp(tp, buf, 32))
 	{
-	  printk("Address read from %u does not match written\n",
+	  printk("OTP driver: Address read from %lu does not match written\n",
 		 nor_otp.address);
-	  printk("Now attempting to blank out OTP register\n");
-	  
-	  for(i=0; i<16; i=i+2)
-	     {
-	       (*(nor_otp.mtd->write_user_prot_reg))(nor_otp.mtd,
-						     2+i+(nor_otp.address*16), 2,
-						     &retlen, zero); 
-	     }
 	}
 
       //lock the register
