@@ -33,4 +33,4 @@ iperf_SOURCES = \
 		stdio.c \
 		tcp_window_size.c
 
-iperf_LDADD = $(LIBCOMPAT_LDADDS)
+iperf_LDADD = $(LIBCOMPAT_LDADDS) $(PTHREAD_LIBS)

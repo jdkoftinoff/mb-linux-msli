@@ -26,6 +26,7 @@
 /* System headers */
 #include <asm/uaccess.h>
 #include <linux/types.h>
+#include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/kdev_t.h>
 #include <linux/kthread.h>
@@ -49,6 +50,11 @@
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
+/* Number of milliseconds to wait before permitting consecutive events from
+ * being propagated up to userspace
+ */
+#define EVENT_THROTTLE_MSECS (100)
+
 /* Interrupt service routine for the instance */
 static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
   struct labx_dma *dma = (struct labx_dma*) dev_id;
@@ -71,6 +77,13 @@ static irqreturn_t labx_dma_interrupt(int irq, void *dev_id) {
 
   /* Detect the status ready IRQ */
   if((maskedFlags & DMA_STAT_READY_IRQ) != 0) {
+    /* Disarm the status FIFO interrupt while the status thread handles the present
+     * event(s).  This permits the status thread to limit the rate at which events
+     * are accepted and propagated up to userspace.
+     */
+    irqMask &= ~DMA_STAT_READY_IRQ;
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), irqMask);
+
     /* Wake up the Netlink thread to consume status data */
     dma->statusReady = DMA_NEW_STATUS_READY;
     wake_up_interruptible(&(dma->statusFifoQueue));
@@ -222,6 +235,7 @@ static int netlink_thread(void *data) {
   uint32_t fifoDataWord;
   uint32_t addToPacket;
   uint32_t finishPacket;
+  uint32_t irqMask;
   DMAStatusPacket *nextStatusHead;
 
   /* Use the "__" version to avoid using a memory barrier, no need since
@@ -318,6 +332,22 @@ static int netlink_thread(void *data) {
      * packet if there are any complete status packets to be sent.
      */
     tx_netlink_status(dma);
+
+    /* Before returning to waiting, optionally sleep a little bit and then
+     * re-enable the IRQs which trigger us.  There should be no need to disable
+     * interrupts to prevent a race condition since the only part of the ISR
+     * which modifies the IRQ mask is the servicing of the IRQs which are at
+     * present disabled.
+     *
+     * Inserting a delay here, in conjunction with the disabling of the event
+     * IRQ flags by the ISR, effectively limits the rate at which events can
+     * be generated and sent up to user space.  Using an ISR / waitqueue is,
+     * however, more responsive to occasional events than straight-up polling.
+     */
+    msleep(EVENT_THROTTLE_MSECS);
+    irqMask = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG));
+    irqMask |= DMA_STAT_READY_IRQ;
+    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_IRQ_ENABLE_REG), irqMask);
   } while(!kthread_should_stop());
 
   return(0);
@@ -328,7 +358,8 @@ int32_t labx_dma_probe(struct labx_dma *dma,
                        uint32_t deviceMinor, 
                        const char *name, 
                        int32_t microcodeWords, 
-                       int32_t irq) {
+                       int32_t irq,
+                       struct labx_dma_callbacks *dmaCallbacks) {
   uint32_t capsWord;
   uint32_t versionWord;
   uint32_t versionMajor;
@@ -343,6 +374,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   dma->name       = name;
   dma->deviceNode = MKDEV(deviceMajor, deviceMinor);
   dma->irq        = irq;
+  dma->callbacks  = dmaCallbacks;
   
   /* Read the capabilities word to determine how many of the lowest
    * address bits are used to index into the microcode RAM, and therefore how
@@ -425,8 +457,10 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     return(-EIO);
   }
 
-  /* Request the IRQ if one was supplied */
-  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+  /* Call the irq setup function or request the IRQ if one was supplied */
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqSetup)) {
+    dma->callbacks->irqSetup(dma);
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     uint32_t irqMask;
 
     /* Permit the IRQ to be shared with an enclosing hardware module */
@@ -465,7 +499,9 @@ int32_t labx_dma_probe(struct labx_dma *dma,
          ((dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) ? "has" : "no"));
 
   /* Make a note if the instance has a status FIFO but no IRQ was supplied */
-  if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqSetup)) {
+    printk(KERN_INFO "  Using supplied IRQ setup.\n\n");
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
     printk(KERN_INFO "  IRQ %d\n\n", dma->irq);
   } else if(dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) {
     printk(KERN_WARNING "  Status FIFO services are unavailable due to lack of an IRQ\n\n");
@@ -751,6 +787,16 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
   return(returnValue);
 }
 EXPORT_SYMBOL(labx_dma_ioctl);
+
+int32_t labx_dma_remove(struct labx_dma *dma) {
+  if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqTeardown)) {
+    dma->callbacks->irqTeardown(dma);
+  } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {
+    free_irq(dma->irq, dma);
+  }
+  return(0);
+}
+EXPORT_SYMBOL(labx_dma_remove);
 
 /* Driver initialization and exit */
 static int __init labx_dma_driver_init(void) {

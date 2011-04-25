@@ -280,7 +280,8 @@ int labx_local_audio_probe(const char *name,
                  local_audio_pdev->miscdev.minor,
                  local_audio_pdev->name, 
                  DMA_UCODE_SIZE_UNKNOWN, 
-                 DMA_NO_IRQ_SUPPLIED);
+                 DMA_NO_IRQ_SUPPLIED,
+                 NULL);
 
   for (dmaIndex = 0; dmaIndex < MAX_DMA_DEVICES; dmaIndex++) {
     if (NULL == devices[dmaIndex]) {

@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
-# Tue Feb  8 12:15:35 2011
+# Tue Apr 12 10:24:23 2011
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -300,6 +300,7 @@ CONFIG_MTD_CMDLINE_PARTS=y
 # User Modules And Translation Layers
 #
 CONFIG_MTD_CHAR=y
+CONFIG_HAVE_MTD_OTP=y
 CONFIG_MTD_BLKDEVS=y
 CONFIG_MTD_BLOCK=y
 # CONFIG_FTL is not set
