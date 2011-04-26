@@ -176,7 +176,8 @@ static int labx_dma_of_probe(struct of_device *ofdev, const struct of_device_id 
                    dma_pdev->miscdev.minor,
                    dma_pdev->name, 
                    microcodeWords, 
-                   irqParam);
+                   irqParam,
+                   NULL);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++) {
       if (NULL == devices[i]) {
