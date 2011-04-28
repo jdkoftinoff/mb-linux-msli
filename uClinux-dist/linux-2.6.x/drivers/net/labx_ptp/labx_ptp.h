@@ -192,7 +192,9 @@ struct ptp_port {
   PtpTime syncTxTimestamp;
   uint32_t syncTimestampsValid;
   PtpTime delayReqTxTimestampTemp;
+  PtpTime delayReqTxLocalTimestampTemp;
   PtpTime delayReqTxTimestamp;
+  PtpTime delayReqTxLocalTimestamp;
   PtpTime delayReqRxTimestamp;
   uint32_t delayReqTimestampsValid;
 
@@ -298,6 +300,8 @@ struct ptp_device {
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
   PtpCoefficients coefficients;
+  uint32_t masterRateRatio;
+  uint32_t masterRateRatioValid;
 
   /* RTC control loop persistent values */
   int64_t  integral;
