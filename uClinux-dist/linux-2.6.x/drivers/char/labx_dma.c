@@ -585,6 +585,7 @@ static int32_t load_descriptor(struct labx_dma *dma, ConfigWords *descriptor) {
 }
 
 /* Buffer for storing configuration words */
+#define MAX_CONFIG_WORDS 1024
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
@@ -682,17 +683,36 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 
   case DMA_IOC_LOAD_DESCRIPTOR:
     {
-      ConfigWords descriptor;
+      ConfigWords userDescriptor;
+      ConfigWords localDescriptor;
 
-      if(copy_from_user(&descriptor, (void __user*)arg, sizeof(descriptor)) != 0) {
+      if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      if(copy_from_user(configWords, (void __user*)descriptor.configWords, 
-                        (descriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+
+      /* Sanity-check the number of words against our maximum */
+      if(userDescriptor.numWords > dma->capabilities.microcodeWords) {
+        return(-EINVAL);
       }
-      descriptor.configWords = configWords;
-      returnValue = load_descriptor(dma, &descriptor);
+
+      localDescriptor.offset          = userDescriptor.offset;
+      localDescriptor.interlockedLoad = userDescriptor.interlockedLoad;
+      localDescriptor.loadFlags       = userDescriptor.loadFlags;
+      localDescriptor.configWords     = configWords;
+      while(userDescriptor.numWords > 0) {
+        /* Load in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ?
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        if(copy_from_user(configWords, (void __user*)userDescriptor.configWords, 
+                          (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        returnValue                 = load_descriptor(dma, &localDescriptor);
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
+        if(returnValue < 0) break;
+      }
     }
     break;
 
@@ -705,13 +725,26 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
       if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      localDescriptor.offset = userDescriptor.offset;
-      localDescriptor.numWords = userDescriptor.numWords;
+
+      /* Sanity-check the number of words against our maximum */
+      if(userDescriptor.numWords > dma->capabilities.microcodeWords) {
+        return(-EINVAL);
+      }
+
+      localDescriptor.offset      = userDescriptor.offset;
       localDescriptor.configWords = configWords;
-      copy_descriptor(dma, &localDescriptor);
-      if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
-                      (userDescriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+      while(userDescriptor.numWords > 0) {
+        /* Transfer in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ? 
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        copy_descriptor(dma, &localDescriptor);
+        if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
+                        (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
       }
     }
     break;

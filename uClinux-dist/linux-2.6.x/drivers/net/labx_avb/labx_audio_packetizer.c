@@ -475,6 +475,7 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
 }
 
 /* Buffer for storing configuration words */
+#define MAX_CONFIG_WORDS 1024
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
