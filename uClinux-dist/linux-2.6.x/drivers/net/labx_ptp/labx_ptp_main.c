@@ -229,7 +229,7 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
 }
 
 /* Stops the PTP service */
-static void ptp_stop_service(struct ptp_device *ptp) {
+void ptp_stop_service(struct ptp_device *ptp) {
   int i;
 
   /* Stopping the service is as simple as disabling all the interrupts */
@@ -238,11 +238,11 @@ static void ptp_stop_service(struct ptp_device *ptp) {
   }
 
   /* Also stop the RTC */
-  disable_rtc(ptp);
+  // disable_rtc(ptp);
 }
 
 /* Starts the PTP service */
-static void ptp_start_service(struct ptp_device *ptp) {
+void ptp_start_service(struct ptp_device *ptp) {
   uint32_t irqMask;
   int i;
 

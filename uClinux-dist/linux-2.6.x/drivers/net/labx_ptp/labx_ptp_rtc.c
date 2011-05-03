@@ -36,6 +36,10 @@
 #define ACQUIRE_THRESHOLD (10000)
 #define ACQUIRE_COEFF_P   ((int32_t)0xE0000000)
 
+/* Rate ratio limits that are considered to be reasonable */
+#define RATE_RATIO_MAX ((uint32_t)0x80100000)
+#define RATE_RATIO_MIN ((uint32_t)0x7FF00000)
+
 /* Saturation range limit for the integrator */
 #define INTEGRAL_MAX_ABS  (100000LL)
 
@@ -215,6 +219,74 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
 static uint32_t servoCount = 0;
 #endif
 
+/* Calculate the rate ratio from the master. Note that we reuse the neighbor rate ratio 
+   fields from PDELAY but it is really the master we are talking to here. */
+static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
+{
+  if (ptp->ports[port].initPdelayRespReceived == FALSE)
+  {
+    /* Capture the initial DELAY response */
+    ptp->ports[port].initPdelayRespReceived = TRUE;
+    ptp->ports[port].pdelayRespTxTimestampI = ptp->ports[port].delayReqTxLocalTimestamp;
+    ptp->ports[port].pdelayRespRxTimestampI = ptp->ports[port].delayReqRxTimestamp;
+  }
+  else
+  {
+    PtpTime difference;
+    PtpTime difference2;
+    uint64_t nsResponder;
+    uint64_t nsRequester;
+    uint64_t rateRatio;
+    int shift;
+
+    timestamp_difference(&ptp->ports[port].delayReqTxLocalTimestamp, &ptp->ports[port].pdelayRespTxTimestampI, &difference2);
+    timestamp_difference(&ptp->ports[port].delayReqRxTimestamp, &ptp->ports[port].pdelayRespRxTimestampI, &difference);
+
+    /* The raw differences have been computed; sanity-check the peer delay timestamps; if the 
+     * initial Tx or Rx timestamp is later than the present one, the initial ones are bogus and
+     * must be replaced.
+     */
+    if((difference.secondsUpper & 0x8000000000000000ULL) |
+       (difference2.secondsUpper & 0x8000000000000000ULL)) {
+      ptp->ports[port].initPdelayRespReceived = FALSE;
+      ptp->ports[port].neighborRateRatioValid = FALSE;
+      ptp->masterRateRatioValid = FALSE;
+    } else {
+      nsResponder = ((uint64_t)difference.secondsLower) * 1000000000ULL + (uint64_t)difference.nanoseconds;
+      nsRequester = ((uint64_t)difference2.secondsLower) * 1000000000ULL + (uint64_t)difference2.nanoseconds;
+
+      for (shift = 0; shift < 31; shift++)
+        {
+          if (nsResponder & (1ULL<<(63-shift))) break;
+        }
+
+      rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
+      if (((uint32_t)rateRatio < RATE_RATIO_MAX) && ((uint32_t)rateRatio > RATE_RATIO_MIN)) {
+        ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
+
+        ptp->ports[port].neighborRateRatioValid = TRUE;
+
+        /* Master rate is the same for E2E mode */
+        ptp->masterRateRatio = (uint32_t)rateRatio;
+        ptp->masterRateRatioValid = TRUE;
+      } else {
+        /* If we are outside the acceptable range, assume our initial values are bad and grab new ones */
+        ptp->ports[port].initPdelayRespReceived = FALSE;
+        ptp->ports[port].neighborRateRatioValid = FALSE;
+        ptp->masterRateRatioValid = FALSE;
+      }
+
+#ifdef PATH_DELAY_DEBUG
+      printk("Responder delta: %08X%08X.%08X (%llu ns)\n", difference.secondsUpper,
+             difference.secondsLower, difference.nanoseconds, nsResponder);
+      printk("Requester delta: %08X%08X.%08X (%llu ns)\n", difference2.secondsUpper,
+             difference2.secondsLower, difference2.nanoseconds, nsRequester);
+      printk("Rate ratio: %08X (shift %d)\n", ptp->ports[port].neighborRateRatio, shift);
+#endif
+    } /* if(differences are sane) */
+  }
+}
+
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
   int32_t slaveOffset       = 0;
   uint32_t slaveOffsetValid = PTP_RTC_OFFSET_INVALID;
@@ -227,7 +299,9 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      */
     if(ptp->ports[port].syncTimestampsValid && ptp->ports[port].delayReqTimestampsValid) {
       PtpTime difference2;
-      
+    
+      computeDelayRateRatio(ptp, port);
+
       /* The core of the algorithm is the calculation of the slave's offset from the
        * master, eliminating the network delay from the equation:
        *
@@ -250,7 +324,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       slaveOffsetValid = PTP_RTC_OFFSET_VALID;
 
       /* Save the delay in the same spot as P2P mode does for consistency. */
-      ptp->ports[port].neighborPropDelay = (-difference2.nanoseconds) - slaveOffset;
+      ptp->ports[port].neighborPropDelay = (-difference2.nanoseconds) + slaveOffset;
     }
   } else {
     /* The peer delay mechanism uses the SYNC->FUP messages, but relies upon the
@@ -276,17 +350,28 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     int64_t accumulator = 0;
     int32_t adjustment;
 
-    /* Update the servo with the present value; begin with the nominal increment */
-    newRtcIncrement = (ptp->nominalIncrement.mantissa & RTC_MANTISSA_MASK);
-    newRtcIncrement <<= RTC_MANTISSA_SHIFT;
-    newRtcIncrement |= (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
+    /* Update the servo with the present value; begin with the master rate ratio
+     * if it is available, otherwise start with the nominal increment */
+    if (ptp->masterRateRatioValid) {
+      newRtcIncrement = ptp->masterRateRatio >> 1;
+
+      /* If we crossed the midpoint, dump the integral */
+      if (((slaveOffset < 0) && (ptp->previousOffset > 0)) ||
+          ((slaveOffset > 0) && (ptp->previousOffset < 0))) {
+        ptp->integral = 0;
+      }
+    } else {
+      newRtcIncrement = (ptp->nominalIncrement.mantissa & RTC_MANTISSA_MASK);
+      newRtcIncrement <<= RTC_MANTISSA_SHIFT;
+      newRtcIncrement |= (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
+    }
     
     /* Operate in two distinct modes; a high-gain, purely-proportional control loop
      * when we're far from the master, and a more complete set of controls once we've
      * narrowed in
      */
     if(ptp->acquiring == PTP_RTC_ACQUIRING) {
-      if((slaveOffset > ACQUIRE_THRESHOLD) | (slaveOffset < -ACQUIRE_THRESHOLD)) {
+      if((slaveOffset > ACQUIRE_THRESHOLD) || (slaveOffset < -ACQUIRE_THRESHOLD)) {
         /* Continue in acquiring mode; accumulate the proportional coefficient's contribution */
         coefficient = (int64_t) ACQUIRE_COEFF_P;
         slaveOffsetExtended = (int64_t) slaveOffset;
@@ -315,7 +400,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       /* We are in the acquisition band; see if we've wandered beyond it badly enough to
        * go back into acquiring mode, producing some hysteresis
        */
-      if((slaveOffset > (2 * ACQUIRE_THRESHOLD)) | (slaveOffset < (2 * -ACQUIRE_THRESHOLD))) {
+      if((slaveOffset > (8 * ACQUIRE_THRESHOLD)) || (slaveOffset < (8 * -ACQUIRE_THRESHOLD))) {
         ptp->acquiring = PTP_RTC_ACQUIRING;
       }
 
@@ -323,6 +408,15 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       slaveOffsetExtended = (int64_t) slaveOffset;
       coefficient = (int64_t) ptp->coefficients.P;
       accumulator = ((coefficient * slaveOffsetExtended) >> COEFF_PRODUCT_SHIFT);
+
+#if 0
+      /* Force proportional contribution of at least +- 128 to make sure small proportions still do something when in close */
+      if (slaveOffset > 0) {
+        accumulator = -128;
+      } else {
+        accumulator = +128;
+      }
+#endif
 
       /* Accumulate the integral coefficient's contribution, clamping the integrated
        * error to its bounds.
@@ -341,14 +435,16 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       ptp->derivative += (slaveOffset - ptp->previousOffset); /* TODO: Scale based on the time between syncs? */
       accumulator += ((coefficient * (int64_t)ptp->derivative) >> COEFF_PRODUCT_SHIFT);
       ptp->previousOffset = slaveOffset;
+
     }
-    
+
     /* Clamp the new increment to within +/- one nanosecond of nominal */
-    adjustment = (int32_t) accumulator;
-    if(adjustment > INCREMENT_DELTA_MAX) {
+    if(accumulator > (int64_t)INCREMENT_DELTA_MAX) {
       adjustment = INCREMENT_DELTA_MAX;
-    } else if(adjustment < INCREMENT_DELTA_MIN) {
+    } else if(accumulator < (int64_t)INCREMENT_DELTA_MIN) {
       adjustment = INCREMENT_DELTA_MIN;
+    } else {
+      adjustment = (int32_t) accumulator;
     }
     newRtcIncrement += adjustment;
     

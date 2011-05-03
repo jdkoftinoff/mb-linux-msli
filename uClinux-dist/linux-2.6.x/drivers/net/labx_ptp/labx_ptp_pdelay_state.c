@@ -58,7 +58,7 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
     if((difference.secondsUpper & 0x8000000000000000ULL) |
        (difference2.secondsUpper & 0x8000000000000000ULL)) {
       ptp->ports[port].initPdelayRespReceived = FALSE;
-      ptp->ports[port].neighborRateRatioValid = TRUE;
+      ptp->ports[port].neighborRateRatioValid = FALSE;
     } else {
       nsResponder = ((uint64_t)difference.secondsLower) * 1000000000ULL + (uint64_t)difference.nanoseconds;
       nsRequester = ((uint64_t)difference2.secondsLower) * 1000000000ULL + (uint64_t)difference2.nanoseconds;
