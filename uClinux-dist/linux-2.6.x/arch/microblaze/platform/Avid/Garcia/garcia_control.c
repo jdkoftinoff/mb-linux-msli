@@ -99,7 +99,7 @@ static LIST_HEAD(device_list);
 #define AC_CONTROL3_OFFSET	0x2C	/* 6-bit Status/Control Register */
 #define AC_CONTROL4_OFFSET	0x30	/* 6-bit Status/Control Register */
 
-#define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Unused by Master) (R/W) */
+#define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Informational only for Master) (R/W) */
 #define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
 #define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
 #define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
@@ -174,10 +174,11 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 		/* Be careful to preserve big-endianness of receive buffers */
 		/* After this transfer, the byte array representing the shift
 		 * register contents will be in rxbuf, with the most recent
-		 * (newest) bit as the LSB of the byte at offset 0, and increasing
-		 * memory addresses representing older (shifted in first) data.  If
-		 * this is an 18 byte master transaction, Byte 0 will contain the
-		 * slave's first byte transmitted, which will be the ID byte.
+		 * (newest) bit as the LSB of the byte at offset
+		 * <N_SHIFT_REGISTER_BYTES - transfer_size_bytes>, and increasing
+		 * memory addresses representing older (shifted in first) data.
+		 * Byte [N_SHIFT_REGISTER_BYTES-1] will contain the slave's
+		 * first byte transmitted, which will be the ID byte.
 		 */
 		if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
 			agctl->rxbuf[0] = agc_regr_be(agm_stat, AC_SR_0_3_OFFSET);
@@ -187,6 +188,10 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 			agctl->rxbuf[4] = agc_regr_be(agm_stat, AC_SR_16_19_OFFSET);
 			if ((status & AC_CTL_MASTER_MODE) == 0) {
 				agctl->transfer_size = agc_regr(agm_stat, AC_CLK_COUNT_OFFSET) & 0xFF;
+			} else {
+				uint8_t cardId = *(uint8_t *)(agctl->rxbuf) + (N_SHIFT_REGISTER_BYTES - 1);
+				status = (status & ~AC_CTL_IDREG_MASK) |
+					(((uint32_t)cardId << 24 ) & AC_CTL_IDREG_MASK);
 			}
 			if (agctl->async_queue) {
 				kill_fasync(&agctl->async_queue, SIGIO, POLL_IN);
@@ -343,7 +348,7 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 	struct agctl_data *agctl = filp->private_data;
 	__u32 val = 0;
 	__u32 status;
-	__u32 __user *p = (__u32 __user *)arg;
+	__u32 __user *p32 = (__u32 __user *)arg;
 	unsigned long flags;
 	int rc = 0;
 
@@ -404,14 +409,14 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_SSI_DDIR) != 0) {
 			val |= GARCIA_STATUS_SSI_DDIR;
 		}
-		if (put_user(val, p)) {
+		if (put_user(val, p32)) {
 			rc = -EFAULT;
 		} else {
 			agctl->irqflags &= ~(AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ);
 		}
 		break;
 	case GARCIA_IOC_WRITE_STATUS:
-		get_user(val, p);
+		get_user(val, p32);
 		spin_lock_irqsave(&agm_stat->aglock, flags);
 		status = agc_regr(agm_stat, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
 		if ((val & GARCIA_STATUS_RESET_SIG) == 0) {
@@ -526,12 +531,12 @@ static ssize_t agdev_w_ssi_ddir(struct class *class, const char *buf, size_t cou
 
 static ssize_t agdev_r_ssi_ddir(struct class *class, char *buf)
 {
-	uint32_t ddir = 0;
+	int ddir = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
 		ddir = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_SSI_DDIR) != 0);
 	}
-	return (snprintf(buf, PAGE_SIZE, "%u\n", ddir));
+	return (snprintf(buf, PAGE_SIZE, "%d\n", ddir));
 }
 
 static CLASS_ATTR(ssi_ddir, S_IRUGO | S_IWUSR, agdev_r_ssi_ddir, agdev_w_ssi_ddir);
@@ -563,12 +568,12 @@ static ssize_t agdev_w_reset(struct class *class, const char *buf, size_t count)
 
 static ssize_t agdev_r_reset(struct class *class, char *buf)
 {
-	uint32_t rst = 0;
+	int rst = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
 		rst = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_RESET_SIG) != 0);
 	}
-	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
+	return (snprintf(buf, PAGE_SIZE, "%d\n", rst));
 }
 
 static CLASS_ATTR(reset, S_IRUGO | S_IWUSR, agdev_r_reset, agdev_w_reset);
@@ -600,12 +605,12 @@ static ssize_t agdev_w_mute(struct class *class, const char *buf, size_t count)
 
 static ssize_t agdev_r_mute(struct class *class, char *buf)
 {
-	uint32_t rst = 0;
+	int mute = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
-		rst = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_MUTE_SIG) != 0);
+		mute = ((agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_MUTE_SIG) != 0);
 	}
-	return (snprintf(buf, PAGE_SIZE, "%u\n", rst));
+	return (snprintf(buf, PAGE_SIZE, "%d\n", mute));
 }
 
 static CLASS_ATTR(mute, S_IRUGO | S_IWUSR, agdev_r_mute, agdev_w_mute);
@@ -638,7 +643,7 @@ static ssize_t agdev_r_diag(struct class *class, char *buf)
 	if (agctl != NULL) {
 		diag = (agc_regr(agm_stat, agctl->ctlreg_offs) & AC_CTL_DIAG_MASK) >> 16;
 	}
-	return (snprintf(buf, PAGE_SIZE, "%u\n", diag));
+	return (snprintf(buf, PAGE_SIZE, "%lu\n", (long unsigned int)diag));
 }
 
 static CLASS_ATTR(diagnostic, S_IRUGO | S_IWUSR, agdev_r_diag, agdev_w_diag);
@@ -661,10 +666,34 @@ static ssize_t agdev_w_strobe(struct class *class, const char *buf, size_t count
 static ssize_t agdev_r_strobe(struct class *class, char *buf)
 {
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
-	return (snprintf(buf, PAGE_SIZE, "%u\n", abs(agctl->strobedelay)));
+	return (snprintf(buf, PAGE_SIZE, "%lu\n", (long unsigned int)abs(agctl->strobedelay)));
 }
 
 static CLASS_ATTR(strobe, S_IRUGO | S_IWUSR, agdev_r_strobe, agdev_w_strobe);
+
+static ssize_t agdev_r_cardid(struct class *class, char *buf)
+{
+	uint32_t id = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		id = (agc_regr(agm_stat, agctl->ctlreg_offs) >> 24) & 0xFF;
+	}
+	return (snprintf(buf, PAGE_SIZE, "%02lX\n", (long unsigned int)id));
+}
+
+static CLASS_ATTR(cardid, S_IRUGO, agdev_r_cardid, NULL);
+
+static ssize_t agdev_r_status(struct class *class, char *buf)
+{
+	uint32_t status = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		status = agc_regr(agm_stat, agctl->ctlreg_offs);
+	}
+	return (snprintf(buf, PAGE_SIZE, "0x%08lX\n", (long unsigned int)status));
+}
+
+static CLASS_ATTR(status, S_IRUGO, agdev_r_status, NULL);
 
 /*-------------------------------------------------------------------------*/
 
@@ -692,13 +721,6 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 	printk(KERN_INFO "Probe Garcia control, name \"%s\" at address %p IRQ %d\n",
 				name, address, irq);
 	agm->irq = irq;
-	/* Register for interrupt */
-	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
-	if (status != 0) {
-		dev_warn(&pdev->dev, "irq request failure: %d\n", agm->irq);
-		kfree(agm);
-		return -ENXIO;
-	}
 	mutex_init(&agm_stat->agmutex);
 	agm->regs = address;
 	agm->chan[0].ctlreg_offs = AC_CONTROL0_OFFSET;
@@ -733,6 +755,15 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		status = class_create_file(&agctl->agclass, &class_attr_mute);
 		status = class_create_file(&agctl->agclass, &class_attr_diagnostic);
 		status = class_create_file(&agctl->agclass, &class_attr_strobe);
+		status = class_create_file(&agctl->agclass, &class_attr_cardid);
+		status = class_create_file(&agctl->agclass, &class_attr_status);
+	}
+	/* Register for interrupt */
+	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
+	if (status != 0) {
+		dev_warn(&pdev->dev, "irq request failure: %d\n", agm->irq);
+		kfree(agm);
+		return -ENXIO;
 	}
 
 	if (status != 0)
@@ -788,6 +819,8 @@ static int garcia_control_platform_remove(struct platform_device *pdev)
  		class_remove_file(&agm->chan[i].agclass, &class_attr_mute);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_diagnostic);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_strobe);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_cardid);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_status);
  		class_unregister(&agm->chan[i].agclass);
  		users += agm->chan[0].users;
  	}
