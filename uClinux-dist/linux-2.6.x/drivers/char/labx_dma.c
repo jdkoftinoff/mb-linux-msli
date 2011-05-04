@@ -691,8 +691,8 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
       }
 
       /* Sanity-check the number of words against our maximum */
-      if(userDescriptor.numWords > dma->capabilities.microcodeWords) {
-        return(-EINVAL);
+      if((userDescriptor.offset + userDescriptor.numWords) > dma->capabilities.microcodeWords) {
+        return(-ERANGE);
       }
 
       localDescriptor.offset          = userDescriptor.offset;
@@ -727,8 +727,8 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
       }
 
       /* Sanity-check the number of words against our maximum */
-      if(userDescriptor.numWords > dma->capabilities.microcodeWords) {
-        return(-EINVAL);
+      if((userDescriptor.offset + userDescriptor.numWords) > dma->capabilities.microcodeWords) {
+        return(-ERANGE);
       }
 
       localDescriptor.offset      = userDescriptor.offset;

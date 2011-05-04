@@ -497,17 +497,37 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
 
   case IOC_LOAD_DESCRIPTOR:
     {
-      ConfigWords descriptor;
+      ConfigWords userDescriptor;
+      ConfigWords localDescriptor;
 
-      if(copy_from_user(&descriptor, (void __user*)arg, sizeof(descriptor)) != 0) {
+      if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      if(copy_from_user(configWords, (void __user*)descriptor.configWords, 
-                        (descriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         packetizer->capabilities.maxInstructions) {
+        return(-ERANGE);
       }
-      descriptor.configWords = configWords;
-      returnValue = load_descriptor(packetizer, &descriptor);
+
+      localDescriptor.offset          = userDescriptor.offset;
+      localDescriptor.interlockedLoad = userDescriptor.interlockedLoad;
+      localDescriptor.loadFlags       = userDescriptor.loadFlags;
+      localDescriptor.configWords     = configWords;
+      while(userDescriptor.numWords > 0) {
+        /* Load in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ?
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        if(copy_from_user(configWords, (void __user*)userDescriptor.configWords, 
+                          (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        returnValue                 = load_descriptor(packetizer, &localDescriptor);
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
+        if(returnValue < 0) break;
+      }
     }
     break;
 
@@ -520,13 +540,27 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      localDescriptor.offset = userDescriptor.offset;
-      localDescriptor.numWords = userDescriptor.numWords;
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         packetizer->capabilities.maxInstructions) {
+        return(-ERANGE);
+      }
+
+      localDescriptor.offset      = userDescriptor.offset;
       localDescriptor.configWords = configWords;
-      copy_descriptor(packetizer, &localDescriptor);
-      if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
-                      (userDescriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+      while(userDescriptor.numWords > 0) {
+        /* Transfer in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ? 
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        copy_descriptor(packetizer, &localDescriptor);
+        if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
+                        (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
       }
     }
     break;
