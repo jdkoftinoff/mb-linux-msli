@@ -528,7 +528,7 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
   /* printk(KERN_INFO "%s: labx_ethernet: Options: 0x%x\n", dev->name, Options); */
 
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
-		       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
+                       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
 
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
@@ -577,14 +577,17 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       struct list_head *cur_lp;
       spin_lock_irqsave(&receivedQueueSpin, flags);
       list_for_each(cur_lp, &receivedQueue) {
-	if (cur_lp == &(lp->rcv)) {
-	  break;
-	}
+        if (cur_lp == &(lp->rcv)) {
+          break;
+        }
       }
       if (cur_lp != &(lp->rcv)) {
-	list_add_tail(&lp->rcv, &receivedQueue);
-	fifo_int_disable(lp, FIFO_INT_ALL_MASK);
-	tasklet_schedule(&FifoRecvBH);
+        /* Add the device to the queue to be serviced and disable Rx interrupts
+         * in the meantime; the tasklet will re-enable them after servicing us.
+         */
+        list_add_tail(&lp->rcv, &receivedQueue);
+        fifo_int_disable(lp, (FIFO_INT_RC_MASK | FIFO_INT_RXERROR_MASK));
+        tasklet_schedule(&FifoRecvBH);
       }
       spin_unlock_irqrestore(&receivedQueueSpin, flags);
       irq_status &= ~FIFO_INT_RC_MASK;
@@ -754,7 +757,7 @@ static int xenet_open(struct net_device *dev)
 
   /* Enable FIFO interrupts  - no polled mode */
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
-		       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
+                       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
 
   /* Start TEMAC device */
   _labx_eth_Start(&lp->Emac);
@@ -852,7 +855,6 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
   struct net_local *lp = netdev_priv(dev);
   struct sockaddr * addr = p;
   int err = 0;
-  int i = 0;
 
   if (!is_valid_ether_addr(addr->sa_data))
     return -EINVAL;
@@ -868,54 +870,57 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
   memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
 
 #ifdef CONFIG_MTD_CFI_OTP_USER
-  //let's check in the OTP registers for our MAC address
-  //eth0 in REGISTER1, eth1 in REGISTER2...
-  securityword_t otp_mac;
+  {
+    //let's check in the OTP registers for our MAC address
+    //eth0 in REGISTER1, eth1 in REGISTER2...
+    securityword_t otp_mac;
+    int i = 0;
 
-  if(!strcmp(dev->name, "eth0"))
-    {
-      read_otp_reg(REGISTER1, &otp_mac);
-    }
-  else if(!strcmp(dev->name, "eth1"))
-    {
-      read_otp_reg(REGISTER2, &otp_mac);
-    }
-  else if(!strcmp(dev->name, "eth2"))
-    {
-      read_otp_reg(REGISTER3, &otp_mac);
-    }
-   else if(!strcmp(dev->name, "eth3"))
-    {
-      read_otp_reg(REGISTER4, &otp_mac);
-    }
-  /*printk("Retrieved MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
-	 otp_mac[2], otp_mac[3],
-	 otp_mac[4], otp_mac[5],
-	 otp_mac[6], otp_mac[7]);*/
-  //is this a valid mac address?
-  //check to make sure first two bytes are 0's
-  //check to see if next six are all 0's or 1's
-  u8 validflag = 0;
-  if(!(otp_mac[0]) && !(otp_mac[1]))
-    {
-      for(i=2; i<8; i++)
-	{
-	  if((otp_mac[i]) && (otp_mac[i] != 0xff))
-	    {
-	      //one of these is not 0x00 or 0xff
-	      validflag = 1;
-	    } 
-	}
-      if(validflag)
-	{
-	  printk("Valid MAC address retrieved from OTP flash\n");
-	  for(i=0; i<6; i++)
-	    { 
-	      //printk("Write 0x%02X over 0x%02X\n", otp_mac[i+2], dev->dev_addr[i]);
-	      dev->dev_addr[i] = otp_mac[i+2];
-	    }
-	}
-    }
+    if(!strcmp(dev->name, "eth0"))
+      {
+        read_otp_reg(REGISTER1, &otp_mac);
+      }
+    else if(!strcmp(dev->name, "eth1"))
+      {
+        read_otp_reg(REGISTER2, &otp_mac);
+      }
+    else if(!strcmp(dev->name, "eth2"))
+      {
+        read_otp_reg(REGISTER3, &otp_mac);
+      }
+    else if(!strcmp(dev->name, "eth3"))
+      {
+        read_otp_reg(REGISTER4, &otp_mac);
+      }
+    /*printk("Retrieved MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+      otp_mac[2], otp_mac[3],
+      otp_mac[4], otp_mac[5],
+      otp_mac[6], otp_mac[7]);*/
+    //is this a valid mac address?
+    //check to make sure first two bytes are 0's
+    //check to see if next six are all 0's or 1's
+    u8 validflag = 0;
+    if(!(otp_mac[0]) && !(otp_mac[1]))
+      {
+        for(i=2; i<8; i++)
+          {
+            if((otp_mac[i]) && (otp_mac[i] != 0xff))
+              {
+                //one of these is not 0x00 or 0xff
+                validflag = 1;
+              } 
+          }
+        if(validflag)
+          {
+            printk("Valid MAC address retrieved from OTP flash\n");
+            for(i=0; i<6; i++)
+              { 
+                //printk("Write 0x%02X over 0x%02X\n", otp_mac[i+2], dev->dev_addr[i]);
+                dev->dev_addr[i] = otp_mac[i+2];
+              }
+          }
+      }
+  }
 #endif
 
   _labx_eth_Stop(&lp->Emac);
@@ -981,7 +986,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   if (fifo_free_bytes < total_len) {
     netif_stop_queue(dev);	/* stop send queue */
     lp->deferred_skb = skb;	/* buffer the sk_buffer and will send
-				   it in interrupt context */
+                               it in interrupt context */
     spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
     return 0;
   }
@@ -1066,7 +1071,7 @@ static void FifoSendHandler(struct net_device *dev)
       word_len = ((frag->size + 3) >> 2);
       buf_ptr = (u32*) (page_address(frag->page) + frag->page_offset);
       for(word_index = 0; word_index < word_len; word_index++) {
-	Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
+        Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
       }
     }
 
@@ -1137,63 +1142,79 @@ static void FifoRecvHandler(unsigned long p)
   u32 word_len;
   u32 word_index;
   u32 *buf_ptr;
-
   struct net_device *dev;
   unsigned long flags;
-  spin_lock_irqsave(&receivedQueueSpin, flags);
-  if (list_empty(&receivedQueue)) {
-    spin_unlock_irqrestore(&receivedQueueSpin, flags);
-    return;
-  }
-  lp = list_entry(receivedQueue.next, struct net_local, rcv);
 
-  list_del_init(&(lp->rcv));
-  spin_unlock_irqrestore(&receivedQueueSpin, flags);
-  dev = lp->ndev;
-
-  /* The Rx FIFO occupancy always reflects whether there is packet data to
-   * be consumed still
+  /* More than one port may queue up for Rx servicing while the tasklet runs,
+   * so loop until no more are ready
    */
-  while(Read_Fifo32(lp->Emac, FIFO_RDFO_OFFSET) != 0) {
-    /* Read the Rx length register to get the length and "lock in" the packet */
-    len = Read_Fifo32(lp->Emac, FIFO_RLF_OFFSET);
-    word_len = ((len + 3) >> 2);
-
-    if (!(skb = alloc_skb(len + ALIGNMENT_RECV, GFP_ATOMIC))) {
-      /* Couldn't get memory. */
-      lp->ndev->stats.rx_dropped++;
-      printk(KERN_ERR
-	     "%s: labx_ethernet: could not allocate receive buffer.\n",
-	     dev->name);
-	    
-      /* Consume the packet data anyways to keep the FIFO coherent */
-      for(word_index = 0; word_index < word_len; word_index++) {
-	Read_Fifo32(lp->Emac, FIFO_RDFD_OFFSET);
-      }
-      break;
+  while(1) {
+    /* Get a pointer to the next device requiring Rx servicing */
+    spin_lock_irqsave(&receivedQueueSpin, flags);
+    if (list_empty(&receivedQueue)) {
+      /* No more ports enqueued, if another one enqueues after the spinlock
+       * is released, it will re-schedule us anyways.
+       */
+      spin_unlock_irqrestore(&receivedQueueSpin, flags);
+      return;
     }
+    lp = list_entry(receivedQueue.next, struct net_local, rcv);
 
-    /* Read the packet data; the occupancy register has already been
-     * tested; now read the packet length and then the corresponding
-     * number of words.
+    list_del_init(&(lp->rcv));
+    spin_unlock_irqrestore(&receivedQueueSpin, flags);
+    dev = lp->ndev;
+
+    /* The Rx FIFO occupancy always reflects whether there is packet data to
+     * be consumed still
      */
-    buf_ptr = (u32*) skb->data;
-    for(word_index = 0; word_index < word_len; word_index++) {
-      *buf_ptr++ = ntohl(Read_Fifo32(lp->Emac, FIFO_RDFD_OFFSET));
+    while(Read_Fifo32(lp->Emac, FIFO_RDFO_OFFSET) != 0) {
+      /* There is another, new packet available; clear the Rx complete flag bit
+       * as we are guaranteed to return here to receive any additional packets.
+       * We can safely do this as long as we haven't completely drained the FIFO
+       * yet, and it will avoid spurious interrupts from firing when we re-enable
+       * the Rx complete interrupt.
+       */
+      Write_Fifo32(lp->Emac, FIFO_ISR_OFFSET, FIFO_INT_RC_MASK);
+
+      /* Read the Rx length register to get the length and "lock in" the packet */
+      len = Read_Fifo32(lp->Emac, FIFO_RLF_OFFSET);
+      word_len = ((len + 3) >> 2);
+
+      if (!(skb = alloc_skb(len + ALIGNMENT_RECV, GFP_ATOMIC))) {
+        /* Couldn't get memory. */
+        lp->ndev->stats.rx_dropped++;
+        printk(KERN_ERR
+               "%s: labx_ethernet: could not allocate receive buffer.\n",
+               dev->name);
+	    
+        /* Consume the packet data anyways to keep the FIFO coherent */
+        for(word_index = 0; word_index < word_len; word_index++) {
+          Read_Fifo32(lp->Emac, FIFO_RDFD_OFFSET);
+        }
+        break;
+      }
+
+      /* Read the packet data; the occupancy register has already been
+       * tested; now read the packet length and then the corresponding
+       * number of words.
+       */
+      buf_ptr = (u32*) skb->data;
+      for(word_index = 0; word_index < word_len; word_index++) {
+        *buf_ptr++ = ntohl(Read_Fifo32(lp->Emac, FIFO_RDFD_OFFSET));
+      }
+      lp->ndev->stats.rx_packets++;
+      lp->ndev->stats.rx_bytes += len;
+
+      skb_put(skb, len);	/* Tell the skb how much data we got. */
+      skb->dev = dev;		/* Fill out required meta-data. */
+      skb->protocol = eth_type_trans(skb, dev);
+      skb->ip_summed = CHECKSUM_UNNECESSARY;
+      netif_rx(skb);		/* Send the packet upstream. */
     }
-    lp->ndev->stats.rx_packets++;
-    lp->ndev->stats.rx_bytes += len;
 
-    skb_put(skb, len);	/* Tell the skb how much data we got. */
-    skb->dev = dev;		/* Fill out required meta-data. */
-    skb->protocol = eth_type_trans(skb, dev);
-    skb->ip_summed = CHECKSUM_UNNECESSARY;
-    netif_rx(skb);		/* Send the packet upstream. */
-  }
-  
-  fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK |
-		       FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
-
+    /* Re-enable the Rx interrupts for the device */
+    fifo_int_enable(lp, (FIFO_INT_RC_MASK | FIFO_INT_RXERROR_MASK));
+  } /* while(1) */
 }
 
 static int
