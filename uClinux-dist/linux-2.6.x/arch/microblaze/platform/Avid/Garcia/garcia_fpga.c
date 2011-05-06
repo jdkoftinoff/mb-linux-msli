@@ -194,6 +194,38 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 	return count;
 }
 
+static ssize_t garcia_r_packetizer_ena(struct class *c,char *buf)
+{
+	int count = 0;
+	int val = 0;
+	if ((fpga_gpio.shadow_value & GARCIA_FPGA_PACKETIZER_01_ENA) != 0) {
+		val |= 1;
+	}
+	if ((fpga_gpio.shadow_value & GARCIA_FPGA_PACKETIZER_23_ENA) != 0) {
+		val |= 2;
+	}
+	count = snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return count;
+}
+
+static ssize_t garcia_w_packetizer_ena(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		fpga_gpio.shadow_value &= ~(GARCIA_FPGA_PACKETIZER_01_ENA | GARCIA_FPGA_PACKETIZER_23_ENA);
+		if ((val & 1) != 0) {
+			fpga_gpio.shadow_value |= GARCIA_FPGA_PACKETIZER_01_ENA;
+		}
+		if ((val & 2) != 0) {
+			fpga_gpio.shadow_value |= GARCIA_FPGA_PACKETIZER_23_ENA;
+		}
+		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+	}
+	return count;
+}
+
 static ssize_t garcia_r_inputs(struct class *c, char *buf)
 {
 	return (snprintf(buf, PAGE_SIZE, "%lx\n",
@@ -234,6 +266,7 @@ static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
 
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
+	__ATTR(packetizer_ena, S_IRUGO | S_IWUGO, garcia_r_packetizer_ena, garcia_w_packetizer_ena),
 	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
 	__ATTR(selector, S_IRUGO, garcia_r_selector, NULL),
 	__ATTR(pushbutton, S_IRUGO, garcia_r_pushbutton, NULL),
