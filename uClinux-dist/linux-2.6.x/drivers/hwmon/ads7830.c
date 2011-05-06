@@ -120,7 +120,8 @@ static struct ads7830_data *ads7830_update_device(struct device *dev)
 }
 #endif
 
-/* sysfs callback function */
+/* sysfs callback functions */
+
 static ssize_t show_in(struct device *dev, struct device_attribute *da,
 	char *buf)
 {
@@ -139,9 +140,34 @@ static ssize_t show_in(struct device *dev, struct device_attribute *da,
 	return sprintf(buf, "%d\n", ((val *	ads7830_lsb_resol) + 512) >> 10);
 }
 
+static ssize_t show_all(struct device *dev, struct device_attribute *da, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct ads7830_data *data = i2c_get_clientdata(client);
+	u8 val[8];
+	u8 cmd;
+	int index;
+	int buf_offset = 0;
+
+	mutex_lock(&data->update_lock);
+	for (index = 0; index < 8; index++) {
+		cmd = channel_cmd_byte(index);
+		val[index] = ads7830_read_value(client, cmd);
+	}
+	mutex_unlock(&data->update_lock);
+
+	/* Print values (in mV as specified in sysfs-interface documentation) */
+	for (index = 0; index < 8; index++) {
+		buf_offset += sprintf(buf + buf_offset, "%d ",
+				((val[index] * ads7830_lsb_resol) + 512) >> 10);
+	}
+	buf[buf_offset++] = '\n';
+	buf[buf_offset++] = '\0';
+	return buf_offset;
+}
+
 #define in_reg(offset)\
-static SENSOR_DEVICE_ATTR(in##offset##_input, S_IRUGO, show_in,\
-	NULL, offset)
+static SENSOR_DEVICE_ATTR(in##offset##_input, S_IRUGO, show_in, NULL, offset)
 
 in_reg(0);
 in_reg(1);
@@ -152,6 +178,8 @@ in_reg(5);
 in_reg(6);
 in_reg(7);
 
+static SENSOR_DEVICE_ATTR(all_input, S_IRUGO, show_all, NULL, 0);
+
 static struct attribute *ads7830_attributes[] = {
 	&sensor_dev_attr_in0_input.dev_attr.attr,
 	&sensor_dev_attr_in1_input.dev_attr.attr,
@@ -161,6 +189,7 @@ static struct attribute *ads7830_attributes[] = {
 	&sensor_dev_attr_in5_input.dev_attr.attr,
 	&sensor_dev_attr_in6_input.dev_attr.attr,
 	&sensor_dev_attr_in7_input.dev_attr.attr,
+	&sensor_dev_attr_all_input.dev_attr.attr,
 	NULL
 };
 
@@ -267,7 +296,7 @@ static int __init sensors_ads7830_init(void)
 		ADS7830_CMD_PD3 : ADS7830_CMD_PD1;
 
 	/* Calculate the LSB resolution */
-	ads7830_lsb_resol = (vref_mv*1024)/256;
+	ads7830_lsb_resol = (vref_mv*1024)/255;
 
 	return i2c_add_driver(&ads7830_driver);
 }
