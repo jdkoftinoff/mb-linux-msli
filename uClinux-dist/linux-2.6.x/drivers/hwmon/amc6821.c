@@ -74,6 +74,8 @@ module_param(init, int, S_IRUGO);
 #define AMC6821_REG_RTEMP_LIMIT_MAX 0x18
 #define AMC6821_REG_LTEMP_CRIT 0x1B
 #define AMC6821_REG_RTEMP_CRIT 0x1D
+#define AMC6821_REG_TSET_LOW 0x1E
+#define AMC6821_REG_TSET_HI 0x1F
 #define AMC6821_REG_PSV_TEMP 0x1C
 #define AMC6821_REG_DCY 0x22
 #define AMC6821_REG_LTEMP_FAN_CTRL 0x24
@@ -126,32 +128,34 @@ module_param(init, int, S_IRUGO);
 #define AMC6821_STAT2_L_THERM 0x40
 #define AMC6821_STAT2_THERM_IN 0x80
 
-enum {IDX_TEMP1_INPUT = 0, IDX_TEMP1_MIN, IDX_TEMP1_MAX,
-	IDX_TEMP1_CRIT, IDX_TEMP2_INPUT, IDX_TEMP2_MIN,
-	IDX_TEMP2_MAX, IDX_TEMP2_CRIT, IDX_TEMP12_LOW,
-	TEMP_IDX_LEN, };
+enum {IDX_TEMP12_LOW = 0, IDX_TEMP1_INPUT,
+	IDX_TEMP2_INPUT, IDX_TEMP1_MIN, IDX_TEMP1_MAX,
+	IDX_TEMP1_CRIT, IDX_TEMP2_MIN, IDX_TEMP2_MAX,
+	IDX_TEMP2_CRIT, TEMP_IDX_LEN, };
 
-static const u8 temp_reg[] = {AMC6821_REG_LTEMP_HI,
+static const u8 temp_reg[] = {AMC6821_REG_LRTEMP_LOW,
+			AMC6821_REG_LTEMP_HI,
+			AMC6821_REG_RTEMP_HI,
 			AMC6821_REG_LTEMP_LIMIT_MIN,
 			AMC6821_REG_LTEMP_LIMIT_MAX,
 			AMC6821_REG_LTEMP_CRIT,
-			AMC6821_REG_RTEMP_HI,
 			AMC6821_REG_RTEMP_LIMIT_MIN,
 			AMC6821_REG_RTEMP_LIMIT_MAX,
-			AMC6821_REG_RTEMP_CRIT,
-			AMC6821_REG_LRTEMP_LOW, };
+			AMC6821_REG_RTEMP_CRIT, };
 
-enum {IDX_FAN1_INPUT = 0, IDX_FAN1_MIN, IDX_FAN1_MAX,
+enum {IDX_FAN1_INPUT = 0, IDX_FAN1_MIN, IDX_FAN1_MAX, IDX_FAN1_SET,
 	FAN1_IDX_LEN, };
 
 static const u8 fan_reg_low[] = {AMC6821_REG_TDATA_LOW,
 			AMC6821_REG_TACH_LLIMITL,
-			AMC6821_REG_TACH_HLIMITL, };
+			AMC6821_REG_TACH_HLIMITL,
+			AMC6821_REG_TSET_LOW, };
 
 
 static const u8 fan_reg_hi[] = {AMC6821_REG_TDATA_HI,
 			AMC6821_REG_TACH_LLIMITH,
-			AMC6821_REG_TACH_HLIMITH, };
+			AMC6821_REG_TACH_HLIMITH,
+			AMC6821_REG_TSET_HI, };
 
 static int amc6821_probe(
 		struct i2c_client *client,
@@ -387,6 +391,10 @@ static ssize_t set_pwm1_enable(
 		config |= AMC6821_CONF1_FDRC0;
 		config |= AMC6821_CONF1_FDRC1;
 		break;
+	case 4:
+		config |= AMC6821_CONF1_FDRC0;
+		config &= ~AMC6821_CONF1_FDRC1;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -619,8 +627,6 @@ static ssize_t get_fan1_fault(
 		return sprintf(buf, "0");
 }
 
-
-
 static ssize_t set_fan(
 		struct device *dev,
 		struct device_attribute *attr,
@@ -634,6 +640,9 @@ static ssize_t set_fan(
 	if (ret)
 		return ret;
 	val = 1 > val ? 0xFFFF : 6000000/val;
+	if (ix == IDX_FAN1_INPUT) {
+		ix =IDX_FAN1_SET;
+	}
 
 	mutex_lock(&data->update_lock);
 	data->fan[ix] = (u16) SENSORS_LIMIT(val, 1, 0xFFFF);
@@ -707,7 +716,6 @@ EXIT:
 }
 
 
-
 static SENSOR_DEVICE_ATTR(temp1_input, S_IRUGO,
 	get_temp, NULL, IDX_TEMP1_INPUT);
 static SENSOR_DEVICE_ATTR(temp1_min, S_IRUGO | S_IWUSR, get_temp,
@@ -738,7 +746,8 @@ static SENSOR_DEVICE_ATTR(temp2_max_alarm, S_IRUGO,
 	get_temp_alarm, NULL, IDX_TEMP2_MAX);
 static SENSOR_DEVICE_ATTR(temp2_crit_alarm, S_IRUGO,
 	get_temp_alarm, NULL, IDX_TEMP2_CRIT);
-static SENSOR_DEVICE_ATTR(fan1_input, S_IRUGO, get_fan, NULL, IDX_FAN1_INPUT);
+static SENSOR_DEVICE_ATTR(fan1_input, S_IRUGO | S_IWUSR,
+	get_fan, set_fan, IDX_FAN1_INPUT);
 static SENSOR_DEVICE_ATTR(fan1_min, S_IRUGO | S_IWUSR,
 	get_fan, set_fan, IDX_FAN1_MIN);
 static SENSOR_DEVICE_ATTR(fan1_max, S_IRUGO | S_IWUSR,
@@ -966,6 +975,7 @@ static int amc6821_init_client(struct i2c_client *client)
 		config &= ~AMC6821_CONF2_RTFIE;
 		config &= ~AMC6821_CONF2_LTOIE;
 		config &= ~AMC6821_CONF2_RTOIE;
+		config |= AMC6821_CONF2_TACH_EN;
 		if (i2c_smbus_write_byte_data(client,
 				AMC6821_REG_CONF2, config)) {
 			dev_err(&client->dev,
@@ -1087,11 +1097,9 @@ static struct amc6821_data *amc6821_update_device(struct device *dev)
 			data->pwm1_auto_channels_temp = 3;
 			data->pwm1_enable = 3;
 			break;
-		case 1: /*semi-open loop: software sets rpm, chip controls pwm1,
-			  *currently not implemented
-			  */
-			data->pwm1_auto_channels_temp = 0;
-			data->pwm1_enable = 0;
+		case 1: /*semi-open loop: software sets rpm, chip controls pwm1 */
+			data->pwm1_auto_channels_temp = 1;
+			data->pwm1_enable = 4;
 			break;
 		}
 
