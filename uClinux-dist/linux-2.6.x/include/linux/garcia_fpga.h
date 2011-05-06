@@ -39,6 +39,8 @@ enum {
 #define GARCIA_FPGA_STATUS_LED_A BIT(2)
 #define GARCIA_FPGA_STATUS_LED_B BIT(3)
 #define GARCIA_FPGA_SLOT_BUF_NOE BIT(4)
+#define GARCIA_FPGA_PACKETIZER_01_ENA BIT(5)
+#define GARCIA_FPGA_PACKETIZER_23_ENA BIT(6)
 #define GARCIA_FPGA_GENERAL_DIR BIT(10)
 
 int garcia_led_set(int led, int value);
