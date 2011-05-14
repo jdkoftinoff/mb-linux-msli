@@ -846,6 +846,7 @@ static struct of_device_id ptp_of_match[] = {
 	{ .compatible = "xlnx,labx-ptp-1.00.a", },
 	{ .compatible = "xlnx,labx-ptp-1.01.a", },
 	{ .compatible = "xlnx,labx-ptp-1.03.a", },
+    { .compatible = "xlnx,labx-ptp-1.04.a", },
 	{ /* end of list */ },
 };
 

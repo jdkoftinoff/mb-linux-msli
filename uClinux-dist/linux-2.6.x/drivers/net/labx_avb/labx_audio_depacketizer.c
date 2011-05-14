@@ -1306,6 +1306,7 @@ static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.00.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.01.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.02.a", },
+    { .compatible = "xlnx,labx-audio-depacketizer-1.04.a", },
 	{ /* end of list */ },
 };
 

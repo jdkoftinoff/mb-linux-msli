@@ -266,7 +266,6 @@ else
 	$(ROMFSINST) $(COMMON)/etc/inittab.sh /etc/inittab
 endif
 endif
-	$(ROMFSINST) -s /mnt/config/avb_audio_start /etc/rc.d/S99avb_audio_start
 
 
 ############################################

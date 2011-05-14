@@ -1925,6 +1925,7 @@ static int __devexit xtenet_of_remove(struct of_device *dev)
 static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,labx-ethernet-1.00.a", },
   { .compatible = "xlnx,labx-ethernet-1.01.a", },
+  { .compatible = "xlnx,labx-ethernet-1.02.a", },
   { /* end of list */ },
 };
 
