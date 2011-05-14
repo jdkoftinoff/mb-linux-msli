@@ -55,8 +55,13 @@ int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
 #define GARCIA_IOC_READ_STATUS_NB _IOR(GARCIA_IOC_MAGIC, 1, __u32)
 #define GARCIA_IOC_WRITE_STATUS   _IOW(GARCIA_IOC_MAGIC, 2, __u32)
 
+#define GARCIA_MUTE_CONTROLLER_MASK 0x00F00000 /* Mask of mute control depacketizer stream assignment */
+#define GARCIA_MUTE_CONTROLLER_SHIFT   20   /* Bit shift of mute control depacketizer stream assignment */
 #define GARCIA_STATUS_ENA_UNMUTE    0x800   /* If set, and GARCIA_STATUS_MUTE_FORCE is clear, force unmute */
 #define GARCIA_STATUS_MUTE_FORCE    0x400   /* If set, slot is forced to be muted */
+#define GARCIA_STATUS_MUTE_ON       (GARCIA_STATUS_MUTE_FORCE & ~GARCIA_STATUS_ENA_UNMUTE)
+#define GARCIA_STATUS_MUTE_OFF      (~GARCIA_STATUS_MUTE_FORCE & GARCIA_STATUS_ENA_UNMUTE)
+#define GARCIA_STATUS_MUTE_AUTO     (GARCIA_STATUS_MUTE_FORCE & GARCIA_STATUS_ENA_UNMUTE)
 #define GARCIA_STATUS_SERDES_SYNC	0x200	/* SERDES/buffers are synced (RO) */
 #define GARCIA_STATUS_LRCLK_ACTIVE	0x100	/* LRCLK is present (RO) */
 #define GARCIA_STATUS_LRCLK_MASTER	 0x80	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */

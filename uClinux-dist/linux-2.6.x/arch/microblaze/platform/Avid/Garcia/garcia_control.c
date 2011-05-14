@@ -210,7 +210,7 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 					do_wake = 1;
 				}
 			} else {
-				uint8_t cardId = *(uint8_t *)(agctl->rxbuf) + (N_SHIFT_REGISTER_BYTES - 1);
+				uint8_t cardId = (uint8_t)((be32_to_cpu(agctl->rxbuf[4]) >> 16) & 0xFF);
 				status = (status & ~AC_CTL_IDREG_MASK) |
 					(((uint32_t)cardId << 24 ) & AC_CTL_IDREG_MASK);
 				agctl->irqflags |= ((uint16_t)(status & AC_CTL_TX_COMPL_IRQ));
@@ -450,12 +450,16 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_SSI_DDIR) != 0) {
 			val |= GARCIA_STATUS_SSI_DDIR;
 		}
-		if ((status & AC_CTL_MUTE_FORCE) == 0) {
-			val |= GARCIA_STATUS_MUTE_FORCE;
-		}
-		if ((status & AC_CTL_ENA_UNMUTE) == 0) {
+		if ((status & AC_CTL_MUTE_FORCE) == 0 &&
+				(status & AC_CTL_ENA_UNMUTE) != 0) {
 			val |= GARCIA_STATUS_ENA_UNMUTE;
+		} else if ((status & AC_CTL_MUTE_FORCE) != 0) {
+			val |= GARCIA_STATUS_MUTE_FORCE;
+		} else if ((status & AC_CTL_MUTE_FORCE) == 0 &&
+				(status & AC_CTL_ENA_UNMUTE) == 0) {
+			val |= (status & GARCIA_MUTE_CONTROLLER_MASK);
 		}
+
 		if (put_user(val, p32)) {
 			rc = -EFAULT;
 		} else {
@@ -481,16 +485,22 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		} else {
 			status |= AC_CTL_SSI_DDIR;
 		}
-		if ((val & GARCIA_STATUS_MUTE_FORCE) == 0) {
-			status &= ~AC_CTL_MUTE_FORCE;
-		} else {
-			status |= AC_CTL_MUTE_FORCE;
-		}
-		if ((val & GARCIA_STATUS_ENA_UNMUTE) == 0) {
-			status &= ~AC_CTL_ENA_UNMUTE;
-		} else {
+		if ((val & GARCIA_STATUS_MUTE_FORCE) == 0 &&
+				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
+			status &= ~(AC_CTL_MUTE_FORCE);
 			status |= AC_CTL_ENA_UNMUTE;
+		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
+				(val & GARCIA_STATUS_ENA_UNMUTE) == 0) {
+			status |= AC_CTL_MUTE_FORCE;
+			status &= ~AC_CTL_ENA_UNMUTE;
+		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
+				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
+			status &= ~ AC_CTL_MUTE_FORCE;
+			status &= ~AC_CTL_ENA_UNMUTE;
+			status |= (val & GARCIA_MUTE_CONTROLLER_MASK);
 		}
+//printk("\nOffs %x status now %08x from val %08x\n", agctl->ctlreg_offs, status, val);
+
 		agc_regw(agm, agctl->ctlreg_offs, status);
 		spin_unlock_irqrestore(&agm->aglock, flags);
 		if ((val & GARCIA_STATUS_STROBE) != 0) {
@@ -768,6 +778,62 @@ static ssize_t agdev_r_status(struct class *class, char *buf)
 
 static CLASS_ATTR(status, S_IRUGO, agdev_r_status, NULL);
 
+static ssize_t agdev_w_avbmute(struct class *class, const char *buf, size_t count)
+{
+	uint32_t status = 0;
+
+	long int val;
+	unsigned long flags;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (strncmp(buf, "on", 2) == 0) {
+		val = -1;
+	} else if (strncmp(buf, "off", 3) == 0) {
+		val = -2;
+	} else if (strict_strtol(buf, 0, &val) != 0 || val < 0 || val > 0xF) {
+		return -EINVAL;
+	}
+	if (agctl != NULL) {
+		struct agctl_master *agm = agctl->agm;
+		spin_lock_irqsave(&agm->aglock, flags);
+		status = agc_regr(agm, agctl->ctlreg_offs);
+		if (val == -1) {
+			status |= AC_CTL_MUTE_FORCE;
+			status &= ~(AC_CTL_ENA_UNMUTE | AC_CTL_MUTESTREAM_MASK);
+		} else if (val == -2) {
+			status |= AC_CTL_ENA_UNMUTE;
+			status &= ~(AC_CTL_MUTE_FORCE | AC_CTL_MUTESTREAM_MASK);
+		} else {
+			status = (status & ~(AC_CTL_MUTESTREAM_MASK | AC_CTL_ENA_UNMUTE | AC_CTL_MUTE_FORCE)) |
+					((val << 20) & AC_CTL_MUTESTREAM_MASK);
+		}
+		agc_regw(agm, agctl->ctlreg_offs, status);
+		spin_unlock_irqrestore(&agm->aglock, flags);
+	}
+	return count;
+}
+
+static ssize_t agdev_r_avbmute(struct class *class, char *buf)
+{
+	uint32_t status = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		struct agctl_master *agm = agctl->agm;
+		status = agc_regr(agm, agctl->ctlreg_offs);
+		if ((status & AC_CTL_MUTE_FORCE) == 0 && (status & AC_CTL_ENA_UNMUTE) != 0) {
+			strncpy(buf, "off\n", PAGE_SIZE);
+		} else if ((status & AC_CTL_MUTE_FORCE) != 0 && (status & AC_CTL_ENA_UNMUTE) == 0) {
+			strncpy(buf, "on\n", PAGE_SIZE);
+		} else {
+			snprintf(buf, PAGE_SIZE, "%u\n", (unsigned int)((status >> 20) & 0xF));
+		}
+	} else {
+		strncpy(buf, "-1\n", PAGE_SIZE);
+	}
+	return (strlen(buf));
+}
+
+static CLASS_ATTR(avbmute, S_IRUGO | S_IWUSR, agdev_r_avbmute, agdev_w_avbmute);
+
 /*-------------------------------------------------------------------------*/
 
 static int garcia_control_probe(const char *name, struct platform_device *pdev,
@@ -831,6 +897,7 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		status = class_create_file(&agctl->agclass, &class_attr_strobe);
 		status = class_create_file(&agctl->agclass, &class_attr_cardid);
 		status = class_create_file(&agctl->agclass, &class_attr_status);
+		status = class_create_file(&agctl->agclass, &class_attr_avbmute);
 	}
 	/* Register for interrupt */
 	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
@@ -895,6 +962,7 @@ static int garcia_control_platform_remove(struct platform_device *pdev)
  		class_remove_file(&agm->chan[i].agclass, &class_attr_strobe);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_cardid);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_status);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_avbmute);
  		class_unregister(&agm->chan[i].agclass);
  		users += agm->chan[0].users;
  	}
