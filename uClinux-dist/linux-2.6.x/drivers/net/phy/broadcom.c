@@ -285,6 +285,10 @@ error:
 	return err;
 }
 
+static int bcom_led_default[4] = {BC_PHY_LED_OFF, BC_PHY_LED_OFF, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT};
+module_param_array(bcom_led_default, int, NULL, 0);
+MODULE_PARM_DESC(bcom_led_default, "Broadcom PHY LEDs default behavior");
+
 void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL val)
 {
 	u16 reg;
@@ -374,6 +378,10 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		++i;
 	if (i >= 0 && i < MAX_LED_PHYS) {
 		aPhys[i] = phydev;
+		bc_phy_led_set(i, BC_PHY_LED1, bcom_led_default[0]);
+		bc_phy_led_set(i, BC_PHY_LED2, bcom_led_default[1]);
+		bc_phy_led_set(i, BC_PHY_LED3, bcom_led_default[2]);
+		bc_phy_led_set(i, BC_PHY_LED4, bcom_led_default[3]);
 	}
 
 	return 0;
