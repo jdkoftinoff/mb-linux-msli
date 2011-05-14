@@ -1135,5 +1135,11 @@ config XILINX_MAILBOX
 	depends on OF && (PPC_OF || MICROBLAZE)
 	help
 	  Xilinx mailbox device for interprocessor communication"
+
+config MEYER_SMPTE
+	tristate "Meyer Sound SMPTE interface"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Meyer Sound SMPTE interface"
 endmenu
 
