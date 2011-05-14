@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/leds.h>
+#include <linux/timer.h>
 #include <linux/err.h>
 #include <linux/garcia_fpga.h>
 #include <linux/broadcom_leds.h>
@@ -127,23 +128,43 @@ static struct led_classdev garcia_power_led = {
 	.name		= "power",
 	.brightness_set	= garcia_power_led_set,
 	.flags		= LED_CORE_SUSPENDRESUME,
+	.default_trigger = "timer"
 };
+
+static struct timer_list timer;
 
 static void garcia_status_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
 	garcia_led_set(STATUS_LED, value);
+	del_timer_sync(&timer);
 }
+
 
 static struct led_classdev garcia_status_led = {
 	.name		= "status",
 	.brightness_set	= garcia_status_led_set,
 	.flags		= LED_CORE_SUSPENDRESUME,
+	.default_trigger = "timer"
 };
+
+static void led_init_failed_set(unsigned long data)
+{
+	struct timer_list *tp = (struct timer_list *)data;
+	garcia_led_set(STATUS_LED, 1);
+	printk("Garcia LEDs: init failed\n");
+	del_timer_sync(tp);
+	return;
+}
 
 static int __init garcia_led_init(void)
 {
 	int status;
+	init_timer(&timer);
+	timer.function = led_init_failed_set;
+	timer.data = (long int)&timer;
+	mod_timer(&timer, jiffies + 30*HZ);
+
 	status = led_classdev_register(0, &garcia_eth0_act_led);
 	status |= led_classdev_register(0, &garcia_eth0_stat_led);
 	status |= led_classdev_register(0, &garcia_eth1_act_led);
