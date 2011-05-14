@@ -172,6 +172,11 @@ DEVICES +=      \
         mailbox0,c,251,0
 endif
 
+ifdef CONFIG_MEYER_SMPTE
+DEVICES +=      \
+        smpte0,c,250,0
+endif
+
 I2C_MAJOR = 89
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD

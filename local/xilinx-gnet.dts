@@ -43,8 +43,7 @@
 		serial0 = &RS232;
 		serial1 = &RS232_Atmel;
 		serial2 = &MIDI;
-		serial3 = &uart_internal_mb1;
-		serial4 = &RS232_DGPIO;
+		serial3 = &RS232_DGPIO;
 	} ;
 	chosen {
 		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00";
@@ -272,7 +271,7 @@
 			current-speed = <62500>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 6 0 >;
+			interrupts = < 7 0 >;
 			port-number = <1>;
 			reg = < 0x8b000000 0x10000 >;
 			xlnx,baudrate = <0xf424>;
@@ -327,20 +326,13 @@
 				reg = <0x0>;
 			} ;
 		} ;
-		uart_internal_mb1: serial@8d000000 {
-			clock-frequency = <125000000>;
-			compatible = "xlnx,xps-uartlite-1.01.a", "xlnx,xps-uartlite-1.00.a";
-			current-speed = <38400>;
-			device_type = "serial";
+		smpte_decoder_0: smpte-decoder@87000000 {
+			compatible = "xlnx,smpte-decoder-1.00.a";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 7 0 >;
-			port-number = <3>;
-			reg = < 0x8d000000 0x10 >;
-			xlnx,baudrate = <0x9600>;
-			xlnx,data-bits = <0x8>;
+			interrupts = < 6 0 >;
+			reg = < 0x87000000 0x10000 >;
 			xlnx,family = "virtex5";
-			xlnx,odd-parity = <0x1>;
-			xlnx,use-parity = <0x0>;
+			xlnx,include-dphase-timer = <0x1>;
 		} ;
 		xps_gpio_0: gpio@81000000 {
 			compatible = "xlnx,xps-gpio-2.00.a", "xlnx,xps-gpio-1.00.a";
