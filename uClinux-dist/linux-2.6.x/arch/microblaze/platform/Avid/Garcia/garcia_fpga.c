@@ -282,6 +282,11 @@ static struct class garcia_fpga_class = {
 	.class_attrs =	garcia_fpga_class_attrs,
 };
 
+static int garcia_led_default[2] = {2, 3};
+module_param_array(garcia_led_default, int, NULL, 0);
+MODULE_PARM_DESC(garcia_led_default, "Garcia LEDs default state");
+
+
 static int __devinit garcia_fpga_probe(struct device *dev)
 {
 	int rc;
@@ -316,8 +321,12 @@ static int __devinit garcia_fpga_probe(struct device *dev)
 		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_IPIER, GARCIA_FPGA_GPIO_IPIE);
 	}
 
-	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio();
-	fpga_gpio.shadow_value = (fpga_gpio.last_gpio_irq & ~GARCIA_GPIO_INPUTS_MASK) | GARCIA_FPGA_SLOT_BUF_NOE;
+	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_MASK;
+	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				GARCIA_FPGA_SLOT_BUF_NOE;
+	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
+	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
+	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
 	rc = class_register(&garcia_fpga_class);
 
 	return rc;
@@ -359,6 +368,8 @@ static int __devinit garcia_fpga_of_probe(struct of_device *ofdev, const struct 
 	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
 			GARCIA_FPGA_SLOT_BUF_NOE;
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
+	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
+	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
 	rc |= class_register(&garcia_fpga_class);
 
 	return rc;
