@@ -47,7 +47,7 @@ struct labx_local_audio_pdev {
   uint32_t numChannels;
 
   /* DMA structure */
-  struct labx_dma dma;
+  struct labx_dma *dma;
 
   /* File operations and private data for a polymorphic
    * driver to use
@@ -110,12 +110,13 @@ struct labx_local_audio_pdev {
 
 /* Function prototypes for use by derived drivers */
 int labx_local_audio_probe(const char *name, 
-			   struct platform_device *pdev,
-			   struct resource *addressRange,
-			   u32 numChannels,
-			   struct file_operations *derivedFops,
-			   void *derivedData,
-			   struct labx_local_audio_pdev **newInstance);
+                           struct platform_device *pdev,
+                           struct resource *addressRange,
+                           const char *interfaceType,
+                           u32 numChannels,
+                           struct file_operations *derivedFops,
+                           void *derivedData,
+                           struct labx_local_audio_pdev **newInstance);
 
 int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev);
 
