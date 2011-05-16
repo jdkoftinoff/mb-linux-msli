@@ -1,0 +1,22 @@
+#!/bin/sh
+
+echo "Launching AVB daemon..."
+
+# Look for config file in jffs file system first, then fall back to romfs
+XMLFILE=/mnt/config/AvbPlatform.xml
+if [ ! -f $XMLFILE ] ; then
+  echo "Using platform configuration from ROMfs"
+  XMLFILE=/mnt/apps/AvbPlatform.xml
+else
+  echo "Using platform configuration from JFFS2"
+fi
+
+AVBDFILE=/mnt/config/avbd
+if [ ! -f $AVBDFILE ] ; then
+  echo "Using avbd application from ROMfs"
+  AVBDFILE=/mnt/apps/avbd
+else
+  echo "Using avbd application from JFFS2"
+fi
+
+$AVBDFILE platformType=FpgaPlatform platformFile=$XMLFILE &
