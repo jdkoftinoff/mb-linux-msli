@@ -233,47 +233,16 @@ static struct class nor_otp_class = {
   .class_attrs = nor_otp_class_attrs,
 };
 
-static int __devinit nor_otp_probe(void)
-{
-  int rc;
-  int i, j;
-  
-  nor_otp.firsttime = 0;
-  for(i = 0; i < 17; i++)
-    {
-      for(j = 0; j < 16; j++)
-	{
-	  nor_otp.otp[i][j] = 0;
-	}
-    }
-  rc = class_register(&nor_otp_class);
-
-  return rc;
-}
-
-static int nor_otp_remove(struct device *dev)
-{
-  memset(&nor_otp, 0, sizeof(nor_otp));
-  return 0;
-}
-
-static struct device_driver nor_otp_driver = {
-  .name = DRIVER_NAME,
-  .bus = &platform_bus_type,
-
-  .probe = nor_otp_probe,
-  .remove = nor_otp_remove,
-};
-
 static int __init nor_otp_init(void)
 {
-  nor_otp_probe();
-  return 0;
+	memset(&nor_otp, 0, sizeof(nor_otp));
+	return (class_register(&nor_otp_class));
 }
 
 static void __exit nor_otp_exit(void)
 {
-  driver_unregister(&nor_otp_driver);
+	class_unregister(&nor_otp_class);
+	return;
 }
 
 MODULE_AUTHOR("Peter McLoone <peter.mcloone@labxtechnologies.com>");
