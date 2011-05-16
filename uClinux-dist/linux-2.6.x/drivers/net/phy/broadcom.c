@@ -370,19 +370,19 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 	if (i >= 0 && i < MAX_LED_PHYS) {
 		aPhys[i] = phydev;
 		if (led_default[0] < 0) {
-			led_default[0] = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) & 0xF;
+			led_default[0] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) & 0xF) | 0x10;
 		}
 		bc_phy_led_set(i, BC_PHY_LED1, led_default[0]);
 		if (led_default[1] < 0) {
-			led_default[1] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) >> 4) & 0xF;
+			led_default[1] = ((bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) >> 4) & 0xF) | 0x10;
 		}
 		bc_phy_led_set(i, BC_PHY_LED2, led_default[1]);
 		if (led_default[2] < 0) {
-			led_default[2] = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) & 0xF;
+			led_default[2] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) & 0xF) | 0x10;
 		}
 		bc_phy_led_set(i, BC_PHY_LED3, led_default[2]);
 		if (led_default[3] < 0) {
-			led_default[3] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) >> 4) & 0xF;
+			led_default[3] = ((bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) >> 4) & 0xF) | 0x10;
 		}
 		bc_phy_led_set(i, BC_PHY_LED4, led_default[3]);
 	}
