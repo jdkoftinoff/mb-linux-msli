@@ -285,9 +285,13 @@ error:
 	return err;
 }
 
-static int bcom_led_default[4] = {BC_PHY_LED_OFF, BC_PHY_LED_OFF, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT};
-module_param_array(bcom_led_default, int, NULL, 0);
-MODULE_PARM_DESC(bcom_led_default, "Broadcom PHY LEDs default behavior");
+/* Specify LED default behavior in kernel boot arguments with something like "broadcom.led_default=19,0,1,-1",
+ * where the (exactly) four array values 19,0,1,-1 correspond to the desired default behavior of the LEDs
+ * in broadcom_leds.h (in this case LED1 <= BC_PHY_LED_ACTIVITY, LED2 <= OFF, LED3 <= ON, LED4 <= default).
+ */
+static int led_default[4] = {BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT};
+module_param_array(led_default, int, NULL, 0);
+MODULE_PARM_DESC(led_default, "Broadcom PHY LEDs default behavior");
 
 void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL val)
 {
@@ -378,10 +382,10 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		++i;
 	if (i >= 0 && i < MAX_LED_PHYS) {
 		aPhys[i] = phydev;
-		bc_phy_led_set(i, BC_PHY_LED1, bcom_led_default[0]);
-		bc_phy_led_set(i, BC_PHY_LED2, bcom_led_default[1]);
-		bc_phy_led_set(i, BC_PHY_LED3, bcom_led_default[2]);
-		bc_phy_led_set(i, BC_PHY_LED4, bcom_led_default[3]);
+		bc_phy_led_set(i, BC_PHY_LED1, led_default[0]);
+		bc_phy_led_set(i, BC_PHY_LED2, led_default[1]);
+		bc_phy_led_set(i, BC_PHY_LED3, led_default[2]);
+		bc_phy_led_set(i, BC_PHY_LED4, led_default[3]);
 	}
 
 	return 0;
