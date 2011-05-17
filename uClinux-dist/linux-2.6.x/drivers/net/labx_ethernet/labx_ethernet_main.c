@@ -1518,20 +1518,18 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
 }
 
 #ifdef CONFIG_MTD_CFI_OTP_USER
+static int base_otp_reg = REGISTER1;
+module_param(base_otp_reg, int, 0);
+MODULE_PARM_DESC(base_otp_reg, "OTP base register (register containing address for eth0)");
 static int otp_assign_mac_address(void *private_data)
 {
 	struct net_device *ndev = (struct net_device *)private_data;
     securityword_t otp_mac;
     struct sockaddr addr;
+    int otpIndex;
 
-	if (strcmp(ndev->name, "eth0") == 0) {
-		read_otp_reg(REGISTER1, &otp_mac);
-	} else if (strcmp(ndev->name, "eth1") == 0) {
-		read_otp_reg(REGISTER2, &otp_mac);
-	} else if (strcmp(ndev->name, "eth2") == 0) {
-		read_otp_reg(REGISTER3, &otp_mac);
-	} else if (strcmp(ndev->name, "eth3") == 0) {
-		read_otp_reg(REGISTER4, &otp_mac);
+    if (sscanf(ndev->name, "eth%d", &otpIndex) == 1) {
+    	read_otp_reg(base_otp_reg + otpIndex, &otp_mac);
 	} else {
 	    otp_mac[0] = 0xff;
 	}
