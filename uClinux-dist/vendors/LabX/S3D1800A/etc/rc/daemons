@@ -19,4 +19,4 @@ else
   echo "Using avbd application from JFFS2"
 fi
 
-$AVBDFILE platformType=FpgaPlatform platformFile=$XMLFILE &
+$AVBDFILE platformFile=$XMLFILE &
