@@ -869,60 +869,6 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
 	 addr->sa_data[4], addr->sa_data[5]);*/
   memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
 
-#ifdef CONFIG_MTD_CFI_OTP_USER
-  {
-    //let's check in the OTP registers for our MAC address
-    //eth0 in REGISTER1, eth1 in REGISTER2...
-    securityword_t otp_mac;
-    int i = 0;
-
-    if(!strcmp(dev->name, "eth0"))
-      {
-        read_otp_reg(REGISTER1, &otp_mac);
-      }
-    else if(!strcmp(dev->name, "eth1"))
-      {
-        read_otp_reg(REGISTER2, &otp_mac);
-      }
-    else if(!strcmp(dev->name, "eth2"))
-      {
-        read_otp_reg(REGISTER3, &otp_mac);
-      }
-    else if(!strcmp(dev->name, "eth3"))
-      {
-        read_otp_reg(REGISTER4, &otp_mac);
-      }
-    /*printk("Retrieved MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
-      otp_mac[2], otp_mac[3],
-      otp_mac[4], otp_mac[5],
-      otp_mac[6], otp_mac[7]);*/
-    //is this a valid mac address?
-    //check to make sure first two bytes are 0's
-    //check to see if next six are all 0's or 1's
-    u8 validflag = 0;
-    if(!(otp_mac[0]) && !(otp_mac[1]))
-      {
-        for(i=2; i<8; i++)
-          {
-            if((otp_mac[i]) && (otp_mac[i] != 0xff))
-              {
-                //one of these is not 0x00 or 0xff
-                validflag = 1;
-              } 
-          }
-        if(validflag)
-          {
-            printk("Valid MAC address retrieved from OTP flash\n");
-            for(i=0; i<6; i++)
-              { 
-                //printk("Write 0x%02X over 0x%02X\n", otp_mac[i+2], dev->dev_addr[i]);
-                dev->dev_addr[i] = otp_mac[i+2];
-              }
-          }
-      }
-  }
-#endif
-
   _labx_eth_Stop(&lp->Emac);
 
   if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
@@ -1571,6 +1517,47 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
   return(IRQ_HANDLED);
 }
 
+#ifdef CONFIG_MTD_CFI_OTP_USER
+static int otp_assign_mac_address(void *private_data)
+{
+	struct net_device *ndev = (struct net_device *)private_data;
+    securityword_t otp_mac;
+    struct sockaddr addr;
+
+	if (strcmp(ndev->name, "eth0") == 0) {
+		read_otp_reg(REGISTER1, &otp_mac);
+	} else if (strcmp(ndev->name, "eth1") == 0) {
+		read_otp_reg(REGISTER2, &otp_mac);
+	} else if (strcmp(ndev->name, "eth2") == 0) {
+		read_otp_reg(REGISTER3, &otp_mac);
+	} else if (strcmp(ndev->name, "eth3") == 0) {
+		read_otp_reg(REGISTER4, &otp_mac);
+	} else {
+	    otp_mac[0] = 0xff;
+	}
+	if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
+			((otp_mac[2] != 0 && otp_mac[2] != 0xFF) ||
+			(otp_mac[3] != 0 && otp_mac[3] != 0xFF) ||
+			(otp_mac[4] != 0 && otp_mac[4] != 0xFF) ||
+			(otp_mac[5] != 0 && otp_mac[5] != 0xFF) ||
+			(otp_mac[6] != 0 && otp_mac[6] != 0xFF) ||
+			(otp_mac[7] != 0 && otp_mac[7] != 0xFF) )) {
+		addr.sa_data[0] = otp_mac[2];
+		addr.sa_data[1] = otp_mac[3];
+		addr.sa_data[2] = otp_mac[4];
+		addr.sa_data[3] = otp_mac[5];
+		addr.sa_data[4] = otp_mac[6];
+		addr.sa_data[5] = otp_mac[7];
+        printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from OTP flash\n",
+            ndev->name, (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
+            (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
+            (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
+    	xenet_set_mac_address(ndev, &addr);
+    }
+	return 0;
+}
+
+#endif
 /** Shared device initialization code */
 static int xtenet_setup(struct device *dev,
                         struct resource *r_mem,
@@ -1658,8 +1645,8 @@ static int xtenet_setup(struct device *dev,
     for (i = 0; i < 6; i++)
       ndev->dev_addr[i] = macaddr[i];
     macaddr[5]++;
-  }
-  else {
+
+  } else {
     /* Use the platform assigned MAC if none specified */
     memcpy(ndev->dev_addr, pdata->mac_addr, 6);
   }
@@ -1671,6 +1658,12 @@ static int xtenet_setup(struct device *dev,
     goto error;
   }
 
+#ifdef CONFIG_MTD_CFI_OTP_USER
+  /* Run otp_assign_mac_address() as a thread, because we may not have the OTP
+   * Flash initialized by the time we get here, and the thread can just wait for it.
+   */
+  kthread_run(otp_assign_mac_address, ndev, "otp_assign_mac_address thread");
+#endif
   /*printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
 	 ndev->name,
 	 pdata->mac_addr[0], pdata->mac_addr[1],
