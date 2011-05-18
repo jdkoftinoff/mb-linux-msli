@@ -170,7 +170,7 @@ static void hex2bin(uint8_t *dst, const char *src, size_t count)
 {
 	while (count--) {
 		*dst = h2b(*src++) << 4;
-		*dst++ = h2b(*src++);
+		*dst++ += h2b(*src++);
     }
 }
 
@@ -215,8 +215,6 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
 		(*(mtd->write_user_prot_reg))(mtd, 0, 2,
 					    &retlen,lock); 
       
-		//simulated sysfs stuff - used for testing
-		//hex2bin(nor_otp.otp[nor_otp.address], buf, (count - 1));
 		nor_otp.locks[nor_otp.address] = 1;
 	}
 	return count;
