@@ -61,6 +61,36 @@ struct garcia_fpga_gpio_struct {
 
 static struct garcia_fpga_gpio_struct fpga_gpio;
 
+uint32_t garcia_gpio_clear(uint32_t clearmask) {
+	uint32_t val = fpga_gpio.shadow_value & ~clearmask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_clear);
+
+uint32_t garcia_gpio_set(uint32_t setmask) {
+	uint32_t val = fpga_gpio.shadow_value | setmask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_set);
+
+uint32_t garcia_gpio_toggle(uint32_t xormask) {
+	uint32_t val = fpga_gpio.shadow_value ^ xormask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_toggle);
+
 int garcia_led_set(int led, int value)
 {
 	uint32_t val;
