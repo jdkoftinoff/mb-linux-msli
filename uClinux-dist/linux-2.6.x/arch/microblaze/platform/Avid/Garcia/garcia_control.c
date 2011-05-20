@@ -52,7 +52,7 @@
 #define AGCTL_MAJOR			101	/* We assume no Motorola DSP 56xxx board */
 #define N_AGCTL_CHANNELS	5
 #define DRIVER_NAME			"agctl"
-#define DRIVER_VERSION		"0.5"
+#define DRIVER_VERSION		"0.9"
 #define AC_BUFSIZE			32		/* Size of shift register buffer */
 #define N_SHIFT_REGISTER_BYTES 18
 //#define AGC_DEBUG_REGIO
@@ -176,6 +176,7 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 	struct agctl_master *agm = (struct agctl_master *)data;
 	int chan;
 	int do_wake;
+	uint32_t clkcount;
 	for (chan = 0; chan < N_AGCTL_CHANNELS; chan++) {
 		struct agctl_data *agctl = &agm->chan[chan];
 		uint32_t status = agc_regr(agm, agctl->ctlreg_offs);
@@ -194,23 +195,32 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 		 * first byte transmitted, which will be the ID byte.
 		 */
 		if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
-			agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
-			agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
-			agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
-			agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
-			agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
 			if ((status & AC_CTL_MASTER_MODE) == 0) {
-				uint32_t clkcount = agc_regr(agm, AC_CLK_COUNT_OFFSET);
+				clkcount = agc_regr(agm, AC_CLK_COUNT_OFFSET);
+				/* Ignore transfers with overflow, transfers in reset,
+				 *  and transfers of 0 or 1 bytes
+				 */
 				if ((clkcount & AC_CLK_OVF_MASK) != 0) {
 					printk("Channel %d Control message write overflow\n", chan);
-				}
-				if ((status & AC_CTL_RESET_SIG) == 0) {
-					agctl->transfer_size = clkcount & AC_CLK_COUNT_MASK;
+				} else if ((status & AC_CTL_RESET_SIG) == 0 && clkcount > 15) {
+					agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
+					agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
+					agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
+					agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
+					agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
+					agctl->transfer_size = clkcount;
 					agctl->irqflags |= ((uint16_t)(status & AC_CTL_STROBE_IRQ));
 					do_wake = 1;
 				}
 			} else {
-				uint8_t cardId = (uint8_t)((be32_to_cpu(agctl->rxbuf[4]) >> 16) & 0xFF);
+				uint8_t cardId;
+				agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
+				agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
+				agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
+				agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
+				agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
+				cardId = *(((uint8_t *)(agctl->rxbuf)) +
+						((N_SHIFT_REGISTER_BYTES-1) - (agctl->transfer_size >> 3)));
 				status = (status & ~AC_CTL_IDREG_MASK) |
 					(((uint32_t)cardId << 24 ) & AC_CTL_IDREG_MASK);
 				agctl->irqflags |= ((uint16_t)(status & AC_CTL_TX_COMPL_IRQ));
@@ -297,7 +307,7 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	}
 	agctl->irqflags &= ~AC_CTL_STROBE_IRQ;
 
-	if ((agctl->transfer_size & 7) != 0) {
+	if ((agctl->transfer_size & 7) != (master ? 7 : 0)) {
 		printk(KERN_WARNING "Chan %ld, read transfer_size %u\n", agctl - agm->chan, agctl->transfer_size);
 	}
 	count = min(((agctl->transfer_size + 7) >> 3), N_SHIFT_REGISTER_BYTES);
@@ -495,12 +505,10 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 			status &= ~AC_CTL_ENA_UNMUTE;
 		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
 				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
-			status &= ~ AC_CTL_MUTE_FORCE;
+			status &= ~AC_CTL_MUTE_FORCE;
 			status &= ~AC_CTL_ENA_UNMUTE;
 			status |= (val & GARCIA_MUTE_CONTROLLER_MASK);
 		}
-//printk("\nOffs %x status now %08x from val %08x\n", agctl->ctlreg_offs, status, val);
-
 		agc_regw(agm, agctl->ctlreg_offs, status);
 		spin_unlock_irqrestore(&agm->aglock, flags);
 		if ((val & GARCIA_STATUS_STROBE) != 0) {
