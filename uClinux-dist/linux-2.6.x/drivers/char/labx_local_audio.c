@@ -53,9 +53,6 @@
 #define MAX_DMA_DEVICES 16
 static struct labx_local_audio_pdev* devices[MAX_DMA_DEVICES] = {};
 
-/* Interface type corresponding to an external DMA */
-#define EXTERNAL_DMA_INTERFACE "DMA_EXT"
-
 static int labx_local_audio_open(struct inode *inode, struct file *filp) {
   int i;
   struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
@@ -250,7 +247,7 @@ int labx_local_audio_probe(const char *name,
   //printk("DMA Physical %08X\n", local_audio_pdev->physicalAddress);
 
   /* Allocate and probe for a DMA if the hardware contains one */
-  if(strcmp(interfaceType, EXTERNAL_DMA_INTERFACE) != 0) {
+  if(strcmp(interfaceType, LA_DMA_INTERFACE_EXTERNAL) != 0) {
     local_audio_pdev->dma = (struct labx_dma*) kzalloc(sizeof(struct labx_dma), GFP_KERNEL);
     local_audio_pdev->dma->virtualAddress = 
       (void*) ioremap_nocache(local_audio_pdev->physicalAddress, local_audio_pdev->addressRangeSize);

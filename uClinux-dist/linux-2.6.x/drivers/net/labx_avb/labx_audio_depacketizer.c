@@ -38,10 +38,10 @@
 #endif // CONFIG_OF
 
 
-/* Driver name and the revision of hardware expected (1.1 - 1.6) */
+/* Driver name and the revision of hardware expected (1.1 - 1.7) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x16
+#define DRIVER_VERSION_MAX  0x17
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
