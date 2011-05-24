@@ -456,8 +456,29 @@ typedef struct {
 /* Instruction field constant definitions */
 #define DEPACKETIZER_OPCODE_SHIFT       (24)
 #define DEPACKETIZER_SAMPLE_SIZE_MASK   (0x07)
-#define DEPACKETIZER_PACKET_SLOT_MASK   (0x03F)
+#define DEPACKETIZER_PACKET_SLOT_MASK(depacketizerCaps) \
+  ((depacketizerCaps.maxStreamSlots <=  2) ? 0x001 :    \
+   (depacketizerCaps.maxStreamSlots <=  4) ? 0x003 :    \
+   (depacketizerCaps.maxStreamSlots <=  8) ? 0x007 :    \
+   (depacketizerCaps.maxStreamSlots <= 16) ? 0x00F :    \
+   (depacketizerCaps.maxStreamSlots <= 32) ? 0x01F :    \
+                                             0x03F)
 #define DEPACKETIZER_PACKET_SLOT_SHIFT  (3)
+#define DEPACKETIZER_PACKET_SLOT_BITS(depacketizerCaps) \
+  ((depacketizerCaps.maxStreamSlots <=  2) ? 1 :    \
+   (depacketizerCaps.maxStreamSlots <=  4) ? 2 :    \
+   (depacketizerCaps.maxStreamSlots <=  8) ? 3 :    \
+   (depacketizerCaps.maxStreamSlots <= 16) ? 4 :    \
+   (depacketizerCaps.maxStreamSlots <= 32) ? 5 :    \
+                                             6)
+#define DEPACKETIZER_ROTATE_COUNT_SHIFT(depacketizerCaps) \
+  (DEPACKETIZER_PACKET_SLOT_SHIFT + DEPACKETIZER_PACKET_SLOT_BITS(depacketizerCaps))
+#define DEPACKETIZER_ROTATE_COUNT_MASK  (0x03)
+#define DEPACKETIZER_NULL_BYTE_SHIFT(depacketizerCaps) \
+  (DEPACKETIZER_ROTATE_COUNT_SHIFT(depacketizerCaps) + 2)
+#define DEPACKETIZER_NULL_BYTE_MASK     (0x03)
+#define DEPACKETIZER_NULL_FLAG(depacketizerCaps) \
+  (0x01 << (DEPACKETIZER_NULL_BYTE_SHIFT(depacketizerCaps) + 2))
 
 #define DEPACKETIZER_PARAM_SOURCE_FALSE        (0x00)
 #define DEPACKETIZER_PARAM_SOURCE_TRUE         (0x01)
@@ -479,12 +500,22 @@ typedef struct {
 /* Returns an AUDIO_SAMPLES instruction, looping through the number of available 
  * samples in the packet.
  *
- * @param sampleSize  - Size, in bytes, of each sample
- * @param numChannels - Number of channels in the stream
+ * @param depacketizerCaps - Capabilities structure for the depacketizer
+ * @param sampleSize       - Size, in bytes, of each sample
+ * @param numChannels      - Number of channels in the stream
+ * @param rotateCount      - Number of positions to "rotate" each sample's bytes within their cache words
+ * @param nullActive       - Flag controlling whether a byte of each sample is to be replaced by a
+ *                           null (0x00) byte
+ * @param nullIndex        - Index of the byte to be replaced with a null byte
  */
-#define DEPACKETIZER_AUDIO_SAMPLES(sampleSize, numChannels)                                              \
-  ((uint32_t) ((DEPACKETIZER_OPCODE_AUDIO_SAMPLES << DEPACKETIZER_OPCODE_SHIFT)                        | \
-               (((numChannels - 1) & DEPACKETIZER_PACKET_SLOT_MASK) << DEPACKETIZER_PACKET_SLOT_SHIFT) | \
+#define DEPACKETIZER_NULL_INACTIVE (0)
+#define DEPACKETIZER_NULL_ACTIVE   (1)
+#define DEPACKETIZER_AUDIO_SAMPLES(depacketizerCaps, sampleSize, numChannels, rotateCount, nullActive, nullIndex)           \
+  ((uint32_t) ((DEPACKETIZER_OPCODE_AUDIO_SAMPLES << DEPACKETIZER_OPCODE_SHIFT)                                           | \
+               (nullActive ? DEPACKETIZER_NULL_FLAG(depacketizerCaps) : 0x00000000)                                       | \
+               ((nullIndex & DEPACKETIZER_NULL_BYTE_MASK) << DEPACKETIZER_NULL_BYTE_SHIFT(depacketizerCaps))              | \
+               ((rotateCount & DEPACKETIZER_ROTATE_COUNT_MASK) << DEPACKETIZER_ROTATE_COUNT_SHIFT(depacketizerCaps))      | \
+               (((numChannels - 1) & DEPACKETIZER_PACKET_SLOT_MASK(depacketizerCaps)) << DEPACKETIZER_PACKET_SLOT_SHIFT)  | \
                ((sampleSize - 1) & DEPACKETIZER_SAMPLE_SIZE_MASK)))
 
 /* Returns a CHECK_SEQUENCE instruction
