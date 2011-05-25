@@ -55,7 +55,7 @@
 			d-cache-size = <0x2000>;
 			device_type = "cpu";
 			i-cache-baseaddr = <0x88000000>;
-			i-cache-highaddr = <0x8fffffff>;
+			i-cache-highaddr = <0x8bffffff>;
 			i-cache-line-size = <0x10>;
 			i-cache-size = <0x2000>;
 			model = "microblaze,8.10.a";
