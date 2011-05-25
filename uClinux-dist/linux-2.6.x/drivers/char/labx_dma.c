@@ -413,7 +413,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
    * or sanity check the specified amount against the same.
    */
   maxMicrocodeWords = (0x01 << dma->capabilities.codeAddressBits);
-  if(microcodeWords < 0) {
+  if(microcodeWords <= 0) {
     /* Encapsulating device doesn't know the exact microcode size, assume that
      * the full microcode address space is available for use.
      */
@@ -495,7 +495,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
          dma->capabilities.parameterAddressBits,
          dma->capabilities.codeAddressBits, 
          dma->capabilities.microcodeWords,
-         ((microcodeWords < 0) ? " (INFERRED)" : ""),
+         ((microcodeWords <= 0) ? " (INFERRED)" : ""),
          ((dma->capabilities.hasStatusFifo == DMA_HAS_STATUS_FIFO) ? "has" : "no"));
 
   /* Make a note if the instance has a status FIFO but no IRQ was supplied */
@@ -692,6 +692,7 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 
       /* Sanity-check the number of words against our maximum */
       if((userDescriptor.offset + userDescriptor.numWords) > dma->capabilities.microcodeWords) {
+    	  printk("Attempted load @ 0x%08X of %d words, DMA has %d total\n", userDescriptor.offset, userDescriptor.numWords, dma->capabilities.microcodeWords);
         return(-ERANGE);
       }
 
