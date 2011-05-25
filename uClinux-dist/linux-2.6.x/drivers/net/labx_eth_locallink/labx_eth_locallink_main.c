@@ -58,6 +58,9 @@ the hardened Temac works, the driver needs to communicate
 
 #define LOCAL_FEATURE_RX_CSUM   0x01
 
+/* CRC error statistics counter, >= 1.2 */
+#define RX_CRC_ERRS_MIN_VERSION ((1 << REVISION_MAJOR_SHIFT) | 2)
+
 /* MDIO divisor which should be "safe" for the hard TEMAC; we don't
  * actually use this hardware but it does need to be configured.
  */
@@ -238,18 +241,7 @@ static spinlock_t XTE_spinlock = SPIN_LOCK_UNLOCKED;
 static spinlock_t XTE_tx_spinlock = SPIN_LOCK_UNLOCKED;
 static spinlock_t XTE_rx_spinlock = SPIN_LOCK_UNLOCKED;
 
-/*
- * ethtool has a status reporting feature where we can report any sort of
- * status information we'd like. This is the list of strings used for that
- * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
- */
-static char xenet_ethtool_gstrings_stats[][ETH_GSTRING_LEN] = {
-	"txpkts", "txdropped", "txerr", "txfifoerr",
-	"rxpkts", "rxdropped", "rxerr", "rxfifoerr",
-	"rxrejerr", "max_frags", "tx_hw_csums", "rx_hw_csums",
-};
 
-#define XENET_STATS_LEN sizeof(xenet_ethtool_gstrings_stats) / ETH_GSTRING_LEN
 
 /* Helper function to determine if a given XLlTemac error warrants a reset. */
 extern inline int status_requires_reset(int s)
@@ -368,11 +360,9 @@ static inline u16 _XLlTemac_GetOperatingSpeed(XLlTemac *InstancePtr)
 {
 	u16 speed;
 	unsigned long flags;
-
 	spin_lock_irqsave(&XTE_spinlock, flags);
 	speed = labx_XLlTemac_GetOperatingSpeed(InstancePtr);
 	spin_unlock_irqrestore(&XTE_spinlock, flags);
-
 	return speed;
 }
 
@@ -990,9 +980,9 @@ static void xenet_set_multicast_list(struct net_device *dev)
 
 	u32 Options = labx_XLlTemac_GetOptions(&lp->Emac);
 
-        if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
-        {
-                dev->flags |= IFF_PROMISC;
+  if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 6)
+  {
+    dev->flags |= IFF_PROMISC;
 		Options |= XTE_PROMISC_OPTION;
 	}
 	else
@@ -1004,15 +994,18 @@ static void xenet_set_multicast_list(struct net_device *dev)
 	_XLlTemac_Stop(&lp->Emac);
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
-
+  
+  labx_eth_UpdateMacFilters(&lp->Emac);
+  
 	if (dev->mc_count > 0 && dev->mc_count <= 6)
 	{
 		// TODO: Program multicast filters
 	}
 
 	if (dev->flags & IFF_UP)
-	{
+	{ 
 		_XLlTemac_Start(&lp->Emac);
+
 	}
 }
 
@@ -1069,7 +1062,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 	skb_frag_t *frag;
 	int i;
 	void *virt_addr;
-
+	
 	total_len = skb_headlen(skb);
 
 	frag = &skb_shinfo(skb)->frags[0];
@@ -1122,6 +1115,7 @@ static void FifoSendHandler(struct net_device *dev)
 
 	spin_lock_irqsave(&XTE_tx_spinlock, flags);
 	lp = netdev_priv(dev);
+	if (lp->cur_speed == 10000) printk("Yi Cao: tx packets: %d \n", lp->stats.tx_packets);
 	lp->stats.tx_packets++;
 
 	/*Send out the deferred skb and wake up send queue if a deferred skb exists */
@@ -1144,6 +1138,8 @@ static void FifoSendHandler(struct net_device *dev)
 
 		fifo_free_bytes = XLlFifo_TxVacancy(&lp->Fifo) * 4;
 		if (fifo_free_bytes < total_len) {
+  		
+  		if(lp->cur_speed == 10000) printk("Yi Cao: fifo_free_bytes < total_len.....\n");
 			/* If still no room for the deferred packet, return */
 			spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 			return;
@@ -1165,6 +1161,7 @@ static void FifoSendHandler(struct net_device *dev)
 		dev_kfree_skb(skb);	/* free skb */
 		lp->deferred_skb = NULL;
 		lp->stats.tx_packets++;
+		if(lp->cur_speed == 10000) printk("Yi Cao: tx packets at the end: %d\n", lp->stats.tx_packets);
 		lp->stats.tx_bytes += total_len;
 		dev->trans_start = jiffies;
 		netif_wake_queue(dev);	/* wake up send queue */
@@ -1531,6 +1528,7 @@ static void FifoRecvHandler(unsigned long p)
 
 		/* Read the packet data */
 		XLlFifo_Read(&lp->Fifo, skb->data, len);
+		if(lp->cur_speed == 10000) printk("Yi Cao: rx packets: %d\n", lp->stats.rx_packets);
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
 
@@ -1545,6 +1543,250 @@ static void FifoRecvHandler(unsigned long p)
 
 }
 
+
+static int
+labx_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+{
+  struct net_local *lp = netdev_priv(dev);
+  u32 mac_options;
+  u16 gmii_cmd, gmii_status, gmii_advControl;
+
+  memset(ecmd, 0, sizeof(struct ethtool_cmd));
+
+  /* Check to be sure we found a PHY */
+  if (NULL == lp->phy_dev) {
+    return -ENODEV;
+  }
+
+  mac_options = labx_XLlTemac_GetOptions(&(lp->Emac));
+  gmii_cmd = phy_read(lp->phy_dev, MII_BMCR);
+  gmii_status = phy_read(lp->phy_dev, MII_BMSR);
+  gmii_advControl = phy_read(lp->phy_dev, MII_ADVERTISE);
+
+  ecmd->duplex = DUPLEX_FULL;
+
+  ecmd->supported |= SUPPORTED_MII;
+  ecmd->supported |= SUPPORTED_100baseT_Full;
+  ecmd->supported |= SUPPORTED_1000baseT_Full;
+  ecmd->supported |= SUPPORTED_Autoneg;
+
+  ecmd->port = PORT_MII;
+
+  ecmd->speed = lp->cur_speed;
+
+  if (gmii_status & BMSR_ANEGCAPABLE) {
+    ecmd->supported |= SUPPORTED_Autoneg;
+  }
+  if (gmii_status & BMSR_ANEGCOMPLETE) {
+    ecmd->autoneg = AUTONEG_ENABLE;
+    ecmd->advertising |= ADVERTISED_Autoneg;
+  }
+  else {
+    ecmd->autoneg = AUTONEG_DISABLE;
+  }
+  ecmd->phy_address = lp->Emac.Config.BaseAddress;
+  ecmd->transceiver = XCVR_INTERNAL;
+  ecmd->supported |= SUPPORTED_10baseT_Full | SUPPORTED_100baseT_Full |
+    SUPPORTED_1000baseT_Full | SUPPORTED_Autoneg;
+
+  return 0;
+}
+
+static int
+labx_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+{
+  struct net_local *lp = netdev_priv(dev);
+
+  if ((ecmd->duplex != DUPLEX_FULL) ||
+      (ecmd->transceiver != XCVR_INTERNAL) ||
+      (ecmd->phy_address &&
+       (ecmd->phy_address != lp->Emac.Config.BaseAddress))) {
+    return -EOPNOTSUPP;
+  }
+
+  if ((ecmd->speed != 1000) && (ecmd->speed != 100) &&
+      (ecmd->speed != 10)) {
+    printk(KERN_ERR
+	   "%s: labx_ethernet: labx_ethtool_set_settings speed not supported: %d\n",
+	   dev->name, ecmd->speed);
+    return -EOPNOTSUPP;
+  }
+
+  return 0;
+}
+
+#define EMAC_REGS_N 32
+struct mac_regsDump {
+  struct ethtool_regs hd;
+  u16 data[EMAC_REGS_N];
+};
+
+static void
+labx_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
+		      void *ret)
+{
+  struct net_local *lp = netdev_priv(dev);
+  struct mac_regsDump *dump = (struct mac_regsDump *) regs;
+  int i;
+
+  if (NULL == lp->phy_dev) {
+    *(int*)ret = -ENODEV;
+    return;
+  }
+
+  dump->hd.version = 0;
+  dump->hd.len = sizeof(dump->data);
+  memset(dump->data, 0, sizeof(dump->data));
+
+  for (i = 0; i < EMAC_REGS_N; i++) {
+    dump->data[i] = phy_read(lp->phy_dev, i);
+  }
+
+  *(int *) ret = 0;
+}
+
+static void
+labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
+{
+  memset(ed, 0, sizeof(struct ethtool_drvinfo));
+  strncpy(ed->driver, DRIVER_NAME, sizeof(ed->driver) - 1);
+  strncpy(ed->version, DRIVER_VERSION, sizeof(ed->version) - 1);
+
+  /* Also tell how much memory is needed for dumping register values */
+  ed->regdump_len = sizeof(u16) * EMAC_REGS_N;
+}
+
+/* Array defining all of the statistics we can return */
+/*
+ * ethtool has a status reporting feature where we can report any sort of
+ * status information we'd like. This is the list of strings used for that
+ * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
+ */
+#define RX_CRC_ERRS_INDEX  (0)
+static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
+  "RxCrcErrors",
+};
+
+#define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
+
+/* Array defining the test modes we support */
+static const char labx_ethernet_gstrings_test[][ETH_GSTRING_LEN] = {
+  "Local_Loopback"
+};
+
+#define LABX_ETHERNET_TEST_LEN	ARRAY_SIZE(labx_ethernet_gstrings_test)
+
+static int labx_ethtool_get_sset_count(struct net_device *dev, int sset) {
+  switch (sset) {
+  case ETH_SS_TEST:
+    return LABX_ETHERNET_TEST_LEN;
+  case ETH_SS_STATS:
+    return LABX_ETHERNET_STATS_LEN;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
+
+static void
+labx_ethtool_get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+  switch (stringset) {
+  case ETH_SS_TEST:
+    memcpy(data, *labx_ethernet_gstrings_test,
+	   (LABX_ETHERNET_TEST_LEN * ETH_GSTRING_LEN));
+    break;
+  case ETH_SS_STATS:
+    memcpy(data, *labx_ethernet_gstrings_stats,
+	   (LABX_ETHERNET_STATS_LEN * ETH_GSTRING_LEN));
+    break;
+  }
+}
+
+static void
+labx_ethtool_self_test(struct net_device *dev, struct ethtool_test *test_info, 
+		       u64 *test_results) {
+  struct net_local *lp = netdev_priv(dev);
+  XLlTemac *InstancePtr = (XLlTemac *) &lp->Emac;
+  u32 phy_test_mode;
+
+  /* Clear the test results */
+  memset(test_results, 0, (sizeof(uint64_t) * LABX_ETHERNET_TEST_LEN));
+
+  /* We have co-opted this self-test ioctl for use as a means to put the
+   * PHY into local loopback mode, or into other PHY-supported test modes.
+   */
+  if(lp && lp->phy_dev && lp->phy_dev->drv &&
+        lp->phy_dev->drv->set_test_mode) {
+    if(test_info->flags & ETH_TEST_FL_INT_LOOP) {
+      phy_test_mode = PHY_TEST_INT_LOOP;
+    } else if(test_info->flags & ETH_TEST_FL_EXT_LOOP) {
+      phy_test_mode = PHY_TEST_EXT_LOOP;
+    } else if(test_info->flags & ETH_TEST_FL_TX_WAVEFORM) {
+      phy_test_mode = PHY_TEST_TX_WAVEFORM;
+    } else if(test_info->flags & ETH_TEST_FL_MASTER_JITTER) {
+      phy_test_mode = PHY_TEST_MASTER_JITTER;
+    } else if(test_info->flags & ETH_TEST_FL_SLAVE_JITTER) {
+      phy_test_mode = PHY_TEST_SLAVE_JITTER;
+    } else if(test_info->flags & ETH_TEST_FL_TX_DISTORTION) {
+      phy_test_mode = PHY_TEST_TX_DISTORTION;
+    } else phy_test_mode = PHY_TEST_NONE;
+
+    /* Enter the selected test mode */
+    lp->phy_dev->drv->set_test_mode(lp->phy_dev, phy_test_mode);
+  } else if(test_info->flags != 0) {
+    /* Complain if any test mode is selected (not normal mode) */
+    printk("%s PHY driver does not support test modes\n",
+           (lp && lp->phy_dev && lp->phy_dev->drv && lp->phy_dev->drv->name) ?
+           lp->phy_dev->drv->name : "<Unknown>");
+  }
+
+  /* Having switched modes, clear the hardware statistics counters,
+   * if they exist
+   */
+  if((InstancePtr->versionReg & (REVISION_MINOR_MASK | REVISION_MAJOR_MASK)) >=
+      RX_CRC_ERRS_MIN_VERSION) {
+    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG, 0);
+  }
+}
+
+static void labx_ethtool_get_stats(struct net_device *dev, 
+                                   struct ethtool_stats *stats, 
+                                   u64 *data) {
+  struct net_local *lp = netdev_priv(dev);
+  XLlTemac *InstancePtr = (XLlTemac *) &lp->Emac;
+
+  /* Copy each statistic into the data location for it.  At the moment, the
+   * only statistic is hosted directly within a hardware register.
+   */
+
+  /* Fetch the CRC count from hardware, if supported */
+  if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
+    data[RX_CRC_ERRS_INDEX] = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
+  } else data[RX_CRC_ERRS_INDEX] = 0ULL;
+}
+
+/* ethtool operations structure */
+static const struct ethtool_ops labx_ethtool_ops = {
+  .get_settings      = labx_ethtool_get_settings,
+  .set_settings      = labx_ethtool_set_settings,
+  .get_drvinfo       = labx_ethtool_get_drvinfo,
+  .get_regs          = labx_ethtool_get_regs,
+  .self_test         = labx_ethtool_self_test,
+  .get_sset_count    = labx_ethtool_get_sset_count,
+  .get_strings       = labx_ethtool_get_strings,
+  .get_ethtool_stats = labx_ethtool_get_stats,
+#if 0
+  .get_link = ethtool_op_get_link,
+  .nway_reset = labx_ethtool_nwayreset,
+  .get_msglevel = labx_ethtool_getmsglevel,
+  .set_msglevel = labx_ethtool_setmsglevel,
+  .get_regs_len = labx_ethtool_getregslen,
+  .get_regs = labx_ethtool_getregs,
+  .get_eeprom_len = labx_ethtool_get_eeprom_len,
+  .get_eeprom = labx_ethtool_get_eeprom,
+  .set_eeprom = labx_ethtool_set_eeprom,
+#endif
+};
 
 /*
  * _xenet_DmaSetupRecvBuffers allocates as many socket buffers (sk_buff's) as it
@@ -1967,104 +2209,7 @@ static void free_descriptor_skb(struct net_device *dev)
 #endif
 }
 
-static int
-xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
-{
-	struct net_local *lp = netdev_priv(dev);
-	u32 mac_options;
-	u32 threshold, timer;
-	u16 gmii_cmd, gmii_status, gmii_advControl;
 
-	memset(ecmd, 0, sizeof(struct ethtool_cmd));
-
-	/* Check to be sure we found a PHY */
-	if (NULL == lp->phy_dev) {
-		return -ENODEV;
-	}
-
-	mac_options = labx_XLlTemac_GetOptions(&(lp->Emac));
-	gmii_cmd = phy_read(lp->phy_dev, MII_BMCR);
-	gmii_status = phy_read(lp->phy_dev, MII_BMSR);
-	gmii_advControl = phy_read(lp->phy_dev, MII_ADVERTISE);
-
-	ecmd->duplex = DUPLEX_FULL;
-
-	ecmd->supported |= SUPPORTED_MII;
-
-	ecmd->port = PORT_MII;
-
-	ecmd->speed = lp->cur_speed;
-
-	if (gmii_status & BMSR_ANEGCAPABLE) {
-		ecmd->supported |= SUPPORTED_Autoneg;
-	}
-	if (gmii_status & BMSR_ANEGCOMPLETE) {
-		ecmd->autoneg = AUTONEG_ENABLE;
-		ecmd->advertising |= ADVERTISED_Autoneg;
-	}
-	else {
-		ecmd->autoneg = AUTONEG_DISABLE;
-	}
-	ecmd->phy_address = lp->Emac.Config.BaseAddress;
-	ecmd->transceiver = XCVR_INTERNAL;
-	if (XLlTemac_IsDma(&lp->Emac)) {
-		/* get TX threshold */
-
-		XLlDma_BdRingGetCoalesce(&lp->Dma.TxBdRing, &threshold, &timer);
-		ecmd->maxtxpkt = threshold;
-
-		/* get RX threshold */
-		XLlDma_BdRingGetCoalesce(&lp->Dma.RxBdRing, &threshold, &timer);
-		ecmd->maxrxpkt = threshold;
-	}
-
-	ecmd->supported |= SUPPORTED_10baseT_Full | SUPPORTED_100baseT_Full |
-		SUPPORTED_1000baseT_Full | SUPPORTED_Autoneg;
-
-	return 0;
-}
-
-static int
-xenet_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
-{
-	struct net_local *lp = netdev_priv(dev);
-
-	if ((ecmd->duplex != DUPLEX_FULL) ||
-	    (ecmd->transceiver != XCVR_INTERNAL) ||
-	    (ecmd->phy_address &&
-	     (ecmd->phy_address != lp->Emac.Config.BaseAddress))) {
-		return -EOPNOTSUPP;
-	}
-
-	if ((ecmd->speed != 1000) && (ecmd->speed != 100) &&
-	    (ecmd->speed != 10)) {
-		printk(KERN_ERR
-		       "%s: labx_eth_llink: xenet_ethtool_set_settings speed not supported: %d\n",
-		       dev->name, ecmd->speed);
-		return -EOPNOTSUPP;
-	}
-
-	return 0;
-}
-
-static int
-xenet_ethtool_get_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
-{
-	struct net_local *lp = netdev_priv(dev);
-	u32 threshold, waitbound;
-
-	memset(ec, 0, sizeof(struct ethtool_coalesce));
-
-	XLlDma_BdRingGetCoalesce(&lp->Dma.RxBdRing, &threshold, &waitbound);
-	ec->rx_max_coalesced_frames = threshold;
-	ec->rx_coalesce_usecs = waitbound;
-
-	XLlDma_BdRingGetCoalesce(&lp->Dma.TxBdRing, &threshold, &waitbound);
-	ec->tx_max_coalesced_frames = threshold;
-	ec->tx_coalesce_usecs = waitbound;
-
-	return 0;
-}
 
 static void disp_bd_ring(XLlDma_BdRing *bd_ring)
 {
@@ -2127,360 +2272,8 @@ static void disp_bd_ring(XLlDma_BdRing *bd_ring)
 	printk("------------------------------------------------------------------------------\n");
 }
 
-static int
-xenet_ethtool_set_coalesce(struct net_device *dev, struct ethtool_coalesce *ec)
-{
-	int ret;
-	struct net_local *lp = netdev_priv(dev);
 
-	if (ec->rx_coalesce_usecs == 0) {
-		ec->rx_coalesce_usecs = 1;
-		dma_rx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-	}
-	if ((ret = XLlDma_BdRingSetCoalesce(&lp->Dma.RxBdRing,
-			(u16) (ec->rx_max_coalesced_frames),
-			(u16) (ec->rx_coalesce_usecs))) != XST_SUCCESS) {
-		printk(KERN_ERR "%s: XLlDma: BdRingSetCoalesce error %d\n",
-		       dev->name, ret);
-		return -EIO;
-	}
-	XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
 
-	if (ec->tx_coalesce_usecs == 0) {
-		ec->tx_coalesce_usecs = 1;
-		dma_tx_int_mask = XLLDMA_CR_IRQ_ALL_EN_MASK & ~XLLDMA_CR_IRQ_DELAY_EN_MASK;
-	}
-	if ((ret = XLlDma_BdRingSetCoalesce(&lp->Dma.TxBdRing,
-			(u16) (ec->tx_max_coalesced_frames),
-			(u16) (ec->tx_coalesce_usecs))) != XST_SUCCESS) {
-		printk(KERN_ERR "%s: XLlDma: BdRingSetCoalesce error %d\n",
-		       dev->name, ret);
-		return -EIO;
-	}
-	XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-
-	return 0;
-}
-
-static int
-xenet_ethtool_get_ringparam(struct net_device *dev,
-			    struct ethtool_ringparam *erp)
-{
-	memset(erp, 0, sizeof(struct ethtool_ringparam));
-
-	erp->rx_max_pending = XTE_RECV_BD_CNT;
-	erp->tx_max_pending = XTE_SEND_BD_CNT;
-	erp->rx_pending = XTE_RECV_BD_CNT;
-	erp->tx_pending = XTE_SEND_BD_CNT;
-	return 0;
-}
-
-#define EMAC_REGS_N 32
-struct mac_regsDump {
-	struct ethtool_regs hd;
-	u16 data[EMAC_REGS_N];
-};
-
-static void
-xenet_ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
-		       void *ret)
-{
-	struct net_local *lp = netdev_priv(dev);
-	struct mac_regsDump *dump = (struct mac_regsDump *) regs;
-	int i;
-
-	if (NULL == lp->phy_dev) {
-		*(int*)ret = -ENODEV;
-		return;
-	}
-
-	dump->hd.version = 0;
-	dump->hd.len = sizeof(dump->data);
-	memset(dump->data, 0, sizeof(dump->data));
-
-	for (i = 0; i < EMAC_REGS_N; i++) {
-		dump->data[i] = phy_read(lp->phy_dev, i);
-	}
-
-	*(int *) ret = 0;
-}
-
-static int
-xenet_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
-{
-	memset(ed, 0, sizeof(struct ethtool_drvinfo));
-	strncpy(ed->driver, DRIVER_NAME, sizeof(ed->driver) - 1);
-	strncpy(ed->version, DRIVER_VERSION, sizeof(ed->version) - 1);
-	/* Also tell how much memory is needed for dumping register values */
-	ed->regdump_len = sizeof(u16) * EMAC_REGS_N;
-	return 0;
-}
-
-static int xenet_do_ethtool_ioctl(struct net_device *dev, struct ifreq *rq)
-{
-	struct net_local *lp = netdev_priv(dev);
-	struct ethtool_cmd ecmd;
-	struct ethtool_coalesce eco;
-	struct ethtool_drvinfo edrv;
-	struct ethtool_ringparam erp;
-	struct ethtool_pauseparam epp;
-	struct mac_regsDump regs;
-	int ret = -EOPNOTSUPP;
-	u32 Options;
-
-	if (copy_from_user(&ecmd, rq->ifr_data, sizeof(ecmd)))
-		return -EFAULT;
-	switch (ecmd.cmd) {
-	case ETHTOOL_GSET:	/* Get setting. No command option needed w/ ethtool */
-		ret = xenet_ethtool_get_settings(dev, &ecmd);
-		if (ret < 0)
-			return -EIO;
-		if (copy_to_user(rq->ifr_data, &ecmd, sizeof(ecmd)))
-			return -EFAULT;
-		ret = 0;
-		break;
-	case ETHTOOL_SSET:	/* Change setting. Use "-s" command option w/ ethtool */
-		ret = xenet_ethtool_set_settings(dev, &ecmd);
-		break;
-	case ETHTOOL_GPAUSEPARAM:	/* Get pause parameter information. Use "-a" w/ ethtool */
-		ret = xenet_ethtool_get_settings(dev, &ecmd);
-		if (ret < 0)
-			return ret;
-		epp.cmd = ecmd.cmd;
-		epp.autoneg = ecmd.autoneg;
-		Options = labx_XLlTemac_GetOptions(&lp->Emac);
-		if (Options & XTE_FCS_INSERT_OPTION) {
-			epp.rx_pause = 1;
-			epp.tx_pause = 1;
-		}
-		else {
-			epp.rx_pause = 0;
-			epp.tx_pause = 0;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &epp, sizeof(struct ethtool_pauseparam)))
-			return -EFAULT;
-		ret = 0;
-		break;
-	case ETHTOOL_SPAUSEPARAM:	/* Set pause parameter. Use "-A" w/ ethtool */
-		return -EOPNOTSUPP;	/* TODO: To support in next version */
-	case ETHTOOL_GRXCSUM:{	/* Get rx csum offload info. Use "-k" w/ ethtool */
-			struct ethtool_value edata = { ETHTOOL_GRXCSUM };
-
-			edata.data =
-				(lp->local_features & LOCAL_FEATURE_RX_CSUM) !=
-				0;
-			if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-				return -EFAULT;
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_SRXCSUM:{	/* Set rx csum offload info. Use "-K" w/ ethtool */
-			struct ethtool_value edata;
-
-			if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-				return -EFAULT;
-
-			if (edata.data) {
-				if (XLlTemac_IsRxCsum(&lp->Emac) == TRUE) {
-					lp->local_features |=
-						LOCAL_FEATURE_RX_CSUM;
-				}
-			}
-			else {
-				lp->local_features &= ~LOCAL_FEATURE_RX_CSUM;
-			}
-
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_GTXCSUM:{	/* Get tx csum offload info. Use "-k" w/ ethtool */
-			struct ethtool_value edata = { ETHTOOL_GTXCSUM };
-
-			edata.data = (dev->features & NETIF_F_IP_CSUM) != 0;
-			if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-				return -EFAULT;
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_STXCSUM:{	/* Set tx csum offload info. Use "-K" w/ ethtool */
-			struct ethtool_value edata;
-
-			if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-				return -EFAULT;
-
-			if (edata.data) {
-				if (XLlTemac_IsTxCsum(&lp->Emac) == TRUE) {
-					dev->features |= NETIF_F_IP_CSUM;
-				}
-			}
-			else {
-				dev->features &= ~NETIF_F_IP_CSUM;
-			}
-
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_GSG:{	/* Get ScatterGather info. Use "-k" w/ ethtool */
-			struct ethtool_value edata = { ETHTOOL_GSG };
-
-			edata.data = (dev->features & NETIF_F_SG) != 0;
-			if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-				return -EFAULT;
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_SSG:{	/* Set ScatterGather info. Use "-K" w/ ethtool */
-			struct ethtool_value edata;
-
-			if (copy_from_user(&edata, rq->ifr_data, sizeof(edata)))
-				return -EFAULT;
-
-			if (edata.data) {
-				if (XLlTemac_IsDma(&lp->Emac)) {
-					dev->features |=
-						NETIF_F_SG | NETIF_F_FRAGLIST;
-				}
-			}
-			else {
-				dev->features &=
-					~(NETIF_F_SG | NETIF_F_FRAGLIST);
-			}
-
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_GCOALESCE:	/* Get coalescing info. Use "-c" w/ ethtool */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			break;
-		eco.cmd = ecmd.cmd;
-		ret = xenet_ethtool_get_coalesce(dev, &eco);
-		if (ret < 0) {
-			return -EIO;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &eco, sizeof(struct ethtool_coalesce))) {
-			return -EFAULT;
-		}
-		ret = 0;
-		break;
-	case ETHTOOL_SCOALESCE:	/* Set coalescing info. Use "-C" w/ ethtool */
-		if (!(XLlTemac_IsDma(&lp->Emac)))
-			break;
-		if (copy_from_user
-		    (&eco, rq->ifr_data, sizeof(struct ethtool_coalesce)))
-			return -EFAULT;
-		ret = xenet_ethtool_set_coalesce(dev, &eco);
-		break;
-	case ETHTOOL_GDRVINFO:	/* Get driver information. Use "-i" w/ ethtool */
-		edrv.cmd = edrv.cmd;
-		ret = xenet_ethtool_get_drvinfo(dev, &edrv);
-		if (ret < 0) {
-			return -EIO;
-		}
-		edrv.n_stats = XENET_STATS_LEN;
-		if (copy_to_user
-		    (rq->ifr_data, &edrv, sizeof(struct ethtool_drvinfo))) {
-			return -EFAULT;
-		}
-		ret = 0;
-		break;
-	case ETHTOOL_GREGS:	/* Get register values. Use "-d" with ethtool */
-		regs.hd.cmd = edrv.cmd;
-		xenet_ethtool_get_regs(dev, &(regs.hd), &ret);
-		if (ret < 0) {
-			return ret;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &regs, sizeof(struct mac_regsDump))) {
-			return -EFAULT;
-		}
-		ret = 0;
-		break;
-	case ETHTOOL_GRINGPARAM:	/* Get RX/TX ring parameters. Use "-g" w/ ethtool */
-		erp.cmd = edrv.cmd;
-		ret = xenet_ethtool_get_ringparam(dev, &(erp));
-		if (ret < 0) {
-			return ret;
-		}
-		if (copy_to_user
-		    (rq->ifr_data, &erp, sizeof(struct ethtool_ringparam))) {
-			return -EFAULT;
-		}
-		ret = 0;
-		break;
-	case ETHTOOL_NWAY_RST:	/* Restart auto negotiation if enabled. Use "-r" w/ ethtool */
-		return -EOPNOTSUPP;	/* TODO: To support in next version */
-	case ETHTOOL_GSTRINGS:{
-			struct ethtool_gstrings gstrings = { ETHTOOL_GSTRINGS };
-			void *addr = rq->ifr_data;
-			char *strings = NULL;
-
-			if (copy_from_user(&gstrings, addr, sizeof(gstrings))) {
-				return -EFAULT;
-			}
-			switch (gstrings.string_set) {
-			case ETH_SS_STATS:
-				gstrings.len = XENET_STATS_LEN;
-				strings = *xenet_ethtool_gstrings_stats;
-				break;
-			default:
-				return -EOPNOTSUPP;
-			}
-			if (copy_to_user(addr, &gstrings, sizeof(gstrings))) {
-				return -EFAULT;
-			}
-			addr += offsetof(struct ethtool_gstrings, data);
-			if (copy_to_user
-			    (addr, strings, gstrings.len * ETH_GSTRING_LEN)) {
-				return -EFAULT;
-			}
-			ret = 0;
-			break;
-		}
-	case ETHTOOL_GSTATS:{
-			struct {
-				struct ethtool_stats cmd;
-				uint64_t data[XENET_STATS_LEN];
-			} stats = { {
-			ETHTOOL_GSTATS, XENET_STATS_LEN}};
-
-			stats.data[0] = lp->stats.tx_packets;
-			stats.data[1] = lp->stats.tx_dropped;
-			stats.data[2] = lp->stats.tx_errors;
-			stats.data[3] = lp->stats.tx_fifo_errors;
-			stats.data[4] = lp->stats.rx_packets;
-			stats.data[5] = lp->stats.rx_dropped;
-			stats.data[6] = lp->stats.rx_errors;
-			stats.data[7] = lp->stats.rx_fifo_errors;
-			stats.data[8] = lp->stats.rx_crc_errors;
-			stats.data[9] = lp->max_frags_in_a_packet;
-			stats.data[10] = lp->tx_hw_csums;
-			stats.data[11] = lp->rx_hw_csums;
-
-			if (copy_to_user(rq->ifr_data, &stats, sizeof(stats))) {
-				return -EFAULT;
-			}
-			ret = 0;
-			break;
-		}
-
-	case ETHTOOL_GLINK:{
-			struct ethtool_value edata = { ETHTOOL_GLINK };
-
-			edata.data = (netif_carrier_ok(dev) == 0) ? 0 : 1;
-
-			if (copy_to_user(rq->ifr_data, &edata, sizeof(edata)))
-				return -EFAULT;
-			ret = 0;
-			break;
-		}
-
-	default:
-		return -EOPNOTSUPP;	/* All other operations not supported */
-	}
-	return ret;
-}
 
 static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
@@ -2503,9 +2296,7 @@ static int xenet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	u32 *dma_int_mask_ptr;
 
 	switch (cmd) {
-	case SIOCETHTOOL:
-		return xenet_do_ethtool_ioctl(dev, rq);
-
+  	
 	case SIOCGMIIPHY:	/* Get address of GMII PHY in use. */
 	case SIOCGMIIREG:	/* Read GMII PHY register. */
 	case SIOCSMIIREG:	/* Write GMII PHY register. */
@@ -2745,7 +2536,7 @@ static int xtenet_setup(
 	Temac_Config.LLDevBaseAddress = pdata->ll_dev_baseaddress;
 	Temac_Config.PhyType = pdata->phy_type;
 	Temac_Config.PhyAddr = pdata->phy_addr;
-
+  Temac_Config.MacWidth = pdata->mac_width;
 	/* Get the virtual base address for the device */
 	virt_baddr = (u32) ioremap(r_mem->start, r_mem->end - r_mem->start + 1);
 	if (0 == virt_baddr) {
@@ -2890,7 +2681,8 @@ static int xtenet_setup(
 	ndev->do_ioctl = xenet_ioctl;
 	ndev->tx_timeout = xenet_tx_timeout;
 	ndev->watchdog_timeo = TX_TIMEOUT;
-
+  ndev->ethtool_ops = &labx_ethtool_ops;
+  
 	/* init the stats */
 	lp->max_frags_in_a_packet = 0;
 	lp->tx_hw_csums = 0;
@@ -3079,9 +2871,10 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 
 	pdata_struct.tx_csum  = get_u32(ofdev, "xlnx,txcsum");
 	pdata_struct.rx_csum  = get_u32(ofdev, "xlnx,rxcsum");
-
+  pdata_struct.mac_width = get_u32(ofdev, "xlnx,mac-port-width");
 	/* Connected PHY information */
 	pdata_struct.phy_type = get_u32(ofdev, "xlnx,phy-type");
+	pdata_struct.phy_addr = get_u32(ofdev, "xlnx,phy-addr"); //Yi: why don't we have this before?
 	phy_addr              = get_u32(ofdev, "xlnx,phy-addr");
 
 	pdata->phy_name[0] = '\0';
@@ -3220,6 +3013,7 @@ static int __devexit xtenet_of_remove(struct of_device *dev)
 
 static struct of_device_id xtenet_of_match[] = {
 	{ .compatible = "xlnx,labx-eth-locallink-1.00.a", },
+	{ .compatible = "xlnx,labx-eth-locallink-1.02.a", },
 	{ /* end of list */ },
 };
 

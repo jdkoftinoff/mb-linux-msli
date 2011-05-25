@@ -419,6 +419,8 @@ typedef struct {
 			  *  multiple phys are on the same MDIO. 0 == autodetect
 			  */ 
 	u8 TemacIntr;	/**< TEMAC interrupt ID */
+	
+	u8 MacWidth;
 
 	u8 LLFifoIntr;	/**< LL FIFO interrupt ID */
   u8 MacAddress[6];  /** TEMPORARY software cache of MAC address */

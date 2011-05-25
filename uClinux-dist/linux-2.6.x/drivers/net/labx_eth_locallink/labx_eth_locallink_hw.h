@@ -95,6 +95,11 @@ extern "C" {
 #  define PHY_ADDR_SHIFT      (5)
 #  define PHY_MDIO_READ       (0x0400)
 #  define PHY_MDIO_WRITE      (0x0000)
+#  define PHY_10G_MDIO_WRITE  (0x0400)
+#  define PHY_10G_MDIO_READ   (0x0C00)
+#  define PHY_10G_MDIO_ADDR   (0x0000)
+#  define PHY_10G_MDIO_RINC   (0x0800)
+#define PHY_10G_DEVTYPE_MASK  (0x01F)
 #define MDIO_DATA_REG         (0x00000004)
 #  define PHY_DATA_MASK       (0x0000FFFF)
 #define INT_MASK_REG          (0x00000008)
@@ -104,6 +109,23 @@ extern "C" {
 #  define NO_IRQS             (0x00000000)
 #  define MDIO_IRQ_MASK       (0x00000001)
 #  define PHY_IRQ_MASK        (0x00000002)
+
+#define VLAN_MASK_REG         (0x00000010)
+#define MAC_SELECT_REG        (0x00000014)
+#define MAC_CONTROL_REG       (0x00000018)
+#define   MAC_ADDRESS_LOAD_ACTIVE 0x00000100
+#define   MAC_ADDRESS_LOAD_LAST   0x00000200
+#define MAC_LOAD_REG          (0x0000001C)
+#define BAD_PACKET_REG        (0x00000020)
+#define REVISION_REG          (0x0000003C)
+#  define REVISION_MINOR_MASK  0x0000000F
+#  define REVISION_MINOR_SHIFT 0
+#  define REVISION_MAJOR_MASK  0x000000F0
+#  define REVISION_MAJOR_SHIFT 4
+#  define REVISION_MATCH_MASK  0x0000FF00
+#  define REVISION_MATCH_SHIFT 8
+
+
 #define LABX_MAC_REGS_BASE    (0x00000200)
 
 /* Timeout for any MDIO operation */

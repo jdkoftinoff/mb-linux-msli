@@ -114,11 +114,12 @@ static int marvell_config_intr(struct phy_device *phydev)
 
 static int marvell_config_aneg(struct phy_device *phydev)
 {
-	int err;
+	int err = 0;
 
 	/* The Marvell PHY has an errata which requires
 	 * that certain registers get written in order
 	 * to restart autonegotiation */
+
 	err = phy_write(phydev, MII_BMCR, BMCR_RESET);
 
 	if (err < 0)
@@ -155,8 +156,23 @@ static int marvell_config_aneg(struct phy_device *phydev)
 		return err;
 
 	err = genphy_config_aneg(phydev);
+	if (err < 0)
+	  return err;
+	  
+	if (phydev -> autoneg != AUTONEG_ENABLE)
+	{
+  	int bmcr;
+  	bmcr = phy_read(phydev, MII_BMCR);
+  	if (bmcr < 0)
+  	  return bmcr;
+  	
+  	err = phy_write(phydev, MII_BMCR, bmcr | BMCR_RESET);
+  	if (err < 0)
+  	  return err;
+   }
 
 	return err;
+
 }
 
 static int m88e1121_config_aneg(struct phy_device *phydev)
