@@ -196,6 +196,13 @@ typedef struct {
 #define PACKETIZER_SAMPLE_SIZE_BITS  (3)
 #define PACKETIZER_SAMPLE_SIZE_MASK  (0x07)
 
+#define PACKETIZER_SAMPLE_BYTE_BITS  (2)
+
+#define PACKETIZER_TAG_BYTE_BITS     (8)
+#define PACKETIZER_TAG_BYTE_SHIFT    (PACKETIZER_PARAM_STACK_BITS - PACKETIZER_TAG_BYTE_BITS)
+#define PACKETIZER_TAG_INDEX_SHIFT   (PACKETIZER_TAG_BYTE_SHIFT - PACKETIZER_SAMPLE_BYTE_BITS)
+#define PACKETIZER_TAG_ACTIVE_SHIFT  (PACKETIZER_TAG_INDEX_SHIFT - 1)
+
 /* Returns an instruction word containing a clock domain specifier
  * @param clockDomain - Zero-based clock domain the stream descriptor belongs to
  */
@@ -296,6 +303,23 @@ typedef struct {
   ((uint32_t) ((overheadBytes << (PACKETIZER_SAMPLE_SIZE_BITS + slotBits)) | \
                (dataBlockSize & blockSizeMask)))
 
+/* Returns a parameter word with data properly formatted to push for an upcoming PACKETIZER_TEMPLATE
+ * instruction making use of the stack address.  This also carries parameters required for tag byte
+ * insertion.
+ * @param tagValue        - Byte value to be used for sample tagging
+ * @param tagIndex        - Index of the byte to be replaced with a tag byte
+ * @param tagActive       - Flag controlling whether a byte of each sample is to be replaced by the
+ *                          specified tag byte
+ * @param templateAddress - Natural value for the template address
+ */
+#define PACKETIZER_TAG_INACTIVE (0)
+#define PACKETIZER_TAG_ACTIVE   (1)
+#define PACKETIZER_TEMPLATE_TAG_PARAMS(tagValue, tagIndex, tagActive, templateAddress)   \
+  ((uint32_t) ((tagValue << PACKETIZER_TAG_BYTE_SHIFT)                                 | \
+               (tagIndex << PACKETIZER_TAG_INDEX_SHIFT)                                | \
+               (tagActive ? (0x01 << PACKETIZER_TAG_ACTIVE_SHIFT) : 0x00)              | \
+               templateAddress))
+                                          
 /* Returns an INSERT_PAYLOAD_SIZE instruction, which implicitly makes use of the present
  * number of samples captured within the packet's clock domain.  The data block size and 
  * overhead bytes must already be pushed onto the parameter stack, which will be popped as 
@@ -326,11 +350,13 @@ typedef struct {
 /* Returns a parameter word propertly formatted to push for an upcoming AUDIO_SAMPLES 
  * instruction.
  * @param numChannels - Number of channels in the stream
+ * @param rotateCount - Number of positions to "rotate" each sample's bytes within their cache words
  * @param mapAddress  - Address of the audio channel map to be encoded
  * @param slotBits    - Number of bits for packet slot count
  */
-#define PACKETIZER_AUDIO_PARAMS(numChannels, mapAddress, slotBits)               \
-  ((uint32_t) (((numChannels - 1) << (PACKETIZER_PARAM_STACK_BITS - slotBits)) | \
+#define PACKETIZER_AUDIO_PARAMS(numChannels, rotateCount, mapAddress, slotBits)              \
+  ((uint32_t) (((numChannels - 1) << (PACKETIZER_PARAM_STACK_BITS - slotBits))             | \
+   (rotateCount << (PACKETIZER_PARAM_STACK_BITS - slotBits - PACKETIZER_SAMPLE_BYTE_BITS)) | \
                mapAddress))
                                     
 /* Returns an AUDIO_SAMPLES instruction, which implicitly makes use of the present 

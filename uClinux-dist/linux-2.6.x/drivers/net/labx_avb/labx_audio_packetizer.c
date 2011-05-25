@@ -36,11 +36,11 @@
 
 
 /* Driver name and the revision range of hardware expected.
- * This driver will work with revision 1.1 only.
+ * This driver will work with revisions 1.3 - 1.4 only.
  */
 #define DRIVER_NAME "labx_audio_packetizer"
 #define DRIVER_VERSION_MIN  0x13
-#define DRIVER_VERSION_MAX  0x13
+#define DRIVER_VERSION_MAX  0x14
 
 /* Instances before the extended capabilities version typically had
  * 32 stream slots maximum
