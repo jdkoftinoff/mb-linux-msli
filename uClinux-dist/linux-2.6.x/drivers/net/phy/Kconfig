@@ -130,4 +130,8 @@ config MDIO_GPIO
 	  To compile this driver as a module, choose M here: the module
 	  will be called mdio-gpio.
 
+config NETLOGIC_PHY
+	bool "Phy Driver for Netlogic AEL2005 10G"
+	
+	 
 endif # PHYLIB

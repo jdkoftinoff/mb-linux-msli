@@ -222,8 +222,9 @@ struct phy_device * get_phy_device(struct mii_bus *bus, int addr)
 	struct phy_device *dev = NULL;
 	u32 phy_id;
 	int r;
-
 	r = get_phy_id(bus, addr, &phy_id);
+	
+	
 	if (r)
 		return ERR_PTR(r);
 
@@ -626,14 +627,15 @@ int genphy_read_status(struct phy_device *phydev)
 	int err;
 	int lpa;
 	int lpagb = 0;
-
+ 
 	/* Update the link, but return if there
 	 * was an error */
 	err = genphy_update_link(phydev);
 	if (err)
 		return err;
-
+	
 	if (AUTONEG_ENABLE == phydev->autoneg) {
+ 
 		if (phydev->supported & (SUPPORTED_1000baseT_Half
 					| SUPPORTED_1000baseT_Full)) {
 			lpagb = phy_read(phydev, MII_STAT1000);
@@ -650,15 +652,15 @@ int genphy_read_status(struct phy_device *phydev)
 		}
 
 		lpa = phy_read(phydev, MII_LPA);
-
 		if (lpa < 0)
+		{
 			return lpa;
-
+    }
 		adv = phy_read(phydev, MII_ADVERTISE);
-
 		if (adv < 0)
+		{
 			return adv;
-
+    }
 		lpa &= adv;
 
 		phydev->speed = SPEED_10;

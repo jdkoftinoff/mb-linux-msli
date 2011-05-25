@@ -62,7 +62,7 @@ struct labx_ll_eth_platform_data {
   
   /* Default MAC address for the port */
   uint8_t mac_addr[6];
-
+  uint8_t mac_width;
   /* PHY type, address, and name. The PHY name is of the format PHY_ID_FMT.
    * These values are for the PHY connected to this instance.
    */
@@ -91,7 +91,7 @@ struct labx_eth_platform_data {
   uint8_t tx_csum;
   uint8_t rx_csum;
   uint8_t dcr_host;
-
+  uint8_t mac_width;
   /* FIFO IRQ */
   uint32_t fifo_irq;
   

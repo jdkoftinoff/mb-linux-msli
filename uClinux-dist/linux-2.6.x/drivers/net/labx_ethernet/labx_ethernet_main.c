@@ -940,7 +940,9 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Write frame data to FIFO, starting with the header and following
    * up with each of the fragments
    */
+
   word_len = ((skb_headlen(skb) + 3) >> 2);
+
   buf_ptr = (u32*) skb->data;
   for(word_index = 0; word_index < word_len; word_index++) {
     Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
@@ -949,6 +951,7 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   frag = &skb_shinfo(skb)->frags[0];
   for (i = 1; i < total_frags; i++, frag++) {
     word_len = ((frag->size + 3) >> 2);
+
     buf_ptr = (u32*) (page_address(frag->page) + frag->page_offset);
     for(word_index = 0; word_index < word_len; word_index++) {
       Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
@@ -986,7 +989,7 @@ static void FifoSendHandler(struct net_device *dev)
     int word_index;
     u32 word_len;
     u32 *buf_ptr;
-
+    
     skb = lp->deferred_skb;
     total_frags = skb_shinfo(skb)->nr_frags + 1;
     total_len = skb_headlen(skb);
@@ -1006,7 +1009,9 @@ static void FifoSendHandler(struct net_device *dev)
     /* Write frame data to FIFO, starting with the header and following
      * up with each of the fragments
      */
-    word_len = ((skb_headlen(skb) + 3) >> 2);
+
+    word_len = ((skb_headlen(skb) + 3) >> 2);    
+
     buf_ptr = (u32*) skb->data;
     for(word_index = 0; word_index < word_len; word_index++) {
       Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
@@ -1015,12 +1020,13 @@ static void FifoSendHandler(struct net_device *dev)
     frag = &skb_shinfo(skb)->frags[0];
     for (i = 1; i < total_frags; i++, frag++) {
       word_len = ((frag->size + 3) >> 2);
+
       buf_ptr = (u32*) (page_address(frag->page) + frag->page_offset);
       for(word_index = 0; word_index < word_len; word_index++) {
         Write_Fifo32(lp->Emac, FIFO_TDFD_OFFSET, htonl(*buf_ptr++));
       }
     }
-
+    
     /* Initiate transmit */
     Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
 
@@ -1604,7 +1610,7 @@ static int xtenet_setup(struct device *dev,
   Temac_Config.RxCsum = pdata->rx_csum;
   Temac_Config.PhyType = pdata->phy_type;
   Temac_Config.PhyAddr = pdata->phy_addr;
-
+  Temac_Config.MacWidth = pdata->mac_width;
   /* Request the memory range for the device */
   address_size = (r_mem->end - r_mem->start + 1);
   if(request_mem_region(r_mem->start, address_size, "labx-ethernet") == NULL) {
@@ -1864,9 +1870,10 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
 
   pdata_struct.tx_csum  = get_u32(ofdev, "xlnx,txcsum");
   pdata_struct.rx_csum  = get_u32(ofdev, "xlnx,rxcsum");
-
+  pdata_struct.mac_width = get_u32(ofdev, "xlnx,mac-port-width");
   /* Connected PHY information */
   pdata_struct.phy_type = get_u32(ofdev, "xlnx,phy-type");
+  pdata_struct.phy_addr = get_u32(ofdev, "xlnx,phy-addr"); //Yi: why don't we have this before?
   phy_addr              = get_u32(ofdev, "xlnx,phy-addr");
 
   pdata->phy_name[0] = '\0';
