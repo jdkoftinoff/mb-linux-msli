@@ -175,7 +175,7 @@ typedef struct {
 
 /* Instruction field constant definitions */
 #define PACKETIZER_OPCODE_SHIFT          (24)
-#define PACKETIZER_USE_STACK_BIT         (0x00800000)
+#define PACKETIZER_TEMPLATE_RELATIVE_BIT (0x00800000)
 #define PACKETIZER_TEMPLATE_COUNT_MASK   (0x01F)
 #define PACKETIZER_TEMPLATE_COUNT_SHIFT  (18)
 
@@ -220,22 +220,21 @@ typedef struct {
 #  define PACKETIZER_LINK_VALID    (0x80000000)
 
 /* Symbolic definitions for the PACKETIZER_TEMPLATE macro */
-#define USE_CODED_ADDRESS       (0x00)
-#define USE_STACK_ADDRESS       (0x01)
-#define DUMMY_TEMPLATE_ADDRESS  (0)
+#define PACKETIZER_ABSOLUTE_ADDRESS (0x00)
+#define PACKETIZER_RELATIVE_ADDRESS (0x01)
 
 /* Returns a TEMPLATE instruction
- * @param useStackAddress - If true, the address parameter is popped from the 
- *                          parameter stack.  If false, the address encoded in
- *                          the instruction is used instead.
+ * @param relativeAddress - If true, the template address is computed relative to
+ *                          the template offset which was popped from the parameter
+ *                          stack as a result of a JUMP instruction.
  * @param templateAddress - Address of the first byte in the template RAM to emit
  * @param byteCount       - Number of template bytes to emit
  */
-#define PACKETIZER_TEMPLATE(useStackAddress, templateAddress, byteCount) \
-  ((uint32_t) ((PACKETIZER_OPCODE_TEMPLATE << PACKETIZER_OPCODE_SHIFT) | \
-               ((useStackAddress != 0) ? PACKETIZER_USE_STACK_BIT : 0) | \
-               (((byteCount - 1) & PACKETIZER_TEMPLATE_COUNT_MASK) <<    \
-                PACKETIZER_TEMPLATE_COUNT_SHIFT)                       | \
+#define PACKETIZER_TEMPLATE(relativeAddress, templateAddress, byteCount)         \
+  ((uint32_t) ((PACKETIZER_OPCODE_TEMPLATE << PACKETIZER_OPCODE_SHIFT)         | \
+               ((relativeAddress != 0) ? PACKETIZER_TEMPLATE_RELATIVE_BIT : 0) | \
+               (((byteCount - 1) & PACKETIZER_TEMPLATE_COUNT_MASK) <<            \
+                PACKETIZER_TEMPLATE_COUNT_SHIFT)                               | \
                templateAddress))
 
 /* Returns a LOAD_ACCUMULATOR instruction.  The accumulator is loaded a cycle
