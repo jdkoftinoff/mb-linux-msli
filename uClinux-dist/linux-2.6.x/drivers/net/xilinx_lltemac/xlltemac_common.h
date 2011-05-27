@@ -5,6 +5,7 @@
 extern spinlock_t XTE_spinlock;
 
 #define XTE_AUTOSTRIPPING 1
+#define PHY_USE_RESET_FLAG 1
 
 /*
  * Our private per device data.  When a net_device is allocated we will
