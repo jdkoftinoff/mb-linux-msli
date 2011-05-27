@@ -311,20 +311,28 @@ void xlltemac_phy_setup_marvell(struct xlltemac_net_local *lp)
   _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
   
   Register |= BMCR_ANENABLE;
+#ifdef PHY_USE_RESET_FLAG
   if(lp->reset_flag)
     {
+#if 0
       printk(KERN_INFO
 	     "%s: XLlTemac: Autonegotiation on, Reset\n",
 	     lp->ndev->name);
+#endif
+#endif
       Register |= BMCR_RESET;
+#ifdef PHY_USE_RESET_FLAG
     }
   else
     {
+#if 0
       printk(KERN_INFO
 	     "%s: XLlTemac: Autonegotiation on\n",
 	     lp->ndev->name);
+#endif
       lp->reset_flag=1;
     }
+#endif
   _XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
 
 #ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII  
