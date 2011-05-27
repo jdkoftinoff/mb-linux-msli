@@ -640,8 +640,23 @@ static void poll_gmii(unsigned long data)
       printk(KERN_INFO "%s: XLlTemac: PHY Link carrier lost.\n",
 	     dev->name);
       netif_carrier_off(dev);
+      lp->poll_reset_time=jiffies + 6 * HZ;
     }
   }
+
+  if(!phy_carrier)
+    {
+      if(time_after_eq(jiffies,lp->poll_reset_time))
+	{
+#if 0
+	  printk(KERN_INFO "%s: XLlTemac: Carrier is still off, PHY reset.\n",
+		 dev->name);
+#endif
+	  xlltemac_phy_setup(lp);
+	  lp->poll_reset_time=jiffies + 6 * HZ;
+	}
+    }
+
 #ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII
   xlltemac_leds_initialize(lp,lp->gmii_addr,
 			   netif_carrier_ok(dev)?
@@ -1078,6 +1093,7 @@ static int xenet_open(struct net_device *dev)
 
   /* Initially carrier is assumed to be off */
   netif_carrier_off(dev);
+  lp->poll_reset_time=jiffies + 6 * HZ;
   
   /* We're ready to go. */
   netif_start_queue(dev);
@@ -3026,7 +3042,9 @@ static int xtenet_setup(
   init_timer(&lp->phy_timer);
   lp->phy_timer.function = NULL;
   lp->led_blink = 0;
+#ifdef PHY_USE_RESET_FLAG
   lp->reset_flag = 0;
+#endif
   lp->ndev = ndev;
   lp->dma_irq_r = pdata->ll_dev_dma_rx_irq;
   lp->dma_irq_s = pdata->ll_dev_dma_tx_irq;
