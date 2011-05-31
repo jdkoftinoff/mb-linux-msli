@@ -149,11 +149,11 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 7), \
                                           uint32_t)
 
-#  define OUTPUT_A  0
-#  define OUTPUT_B  1
+#  define PACKETIZER_OUTPUT_A  0
+#  define PACKETIZER_OUTPUT_B  1
 
-#  define OUTPUT_DISABLE  0
-#  define OUTPUT_ENABLE   1
+#  define PACKETIZER_OUTPUT_DISABLE  0
+#  define PACKETIZER_OUTPUT_ENABLE   1
 
 /* Type definitions and macros for packetizer microcode */
 
@@ -209,22 +209,25 @@ typedef struct {
  */
 #define PACKETIZER_DOMAIN_FIELD(clockDomain)  ((uint32_t) (0x01 << clockDomain))
 
+/* Constants for use with the PACKETIZER_LINK_ADDRESS macro */
+#  define PACKETIZER_LINK_INVALID       (0x00000000)
+#  define PACKETIZER_LINK_VALID         (0x80000000)
+#  define PACKETIZER_DISABLE_OUTPUT_A   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_A    (0x40000000)
+#  define PACKETIZER_DISABLE_OUTPUT_B   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_B    (0x20000000)
+#  define PACKETIZER_OUTPUT_ENABLE_MASK (0x60000000)
+#  define PACKETIZER_DUMMY_OUTPUT_MASK  (0x00000000)
+
 /* Returns an instruction word containing a link address and validity
- * @param linkValid   - True if the link address points to a valid descriptor, 
- *                      false if this is the last
- * @param enablePortA - True if the stream is enabled for Port A of a dual-headed instance 
- * @param enablePortB - True if the stream is enabled for Port B of a dual-headed instance 
- * @param linkAddress - Address of the next stream descriptor, if linkValid is
- *                      true.  Ignored if linkValid is false.
+ * @param linkValid        - True if the link address points to a valid descriptor, 
+ *                          false if this is the last
+ * @param outputEnableMask - Bit mask containing the outputs for which the stream is enabled
+ * @param linkAddress      - Address of the next stream descriptor, if linkValid is
+ *                           true.  Ignored if linkValid is false.
  */
-#define PACKETIZER_LINK_ADDRESS(linkValid, enablePortA, enablePortB, linkAddress) \
-  ((uint32_t) (linkValid | enablePortA | enablePortB | linkAddress))
-#  define PACKETIZER_LINK_INVALID     (0x00000000)
-#  define PACKETIZER_LINK_VALID       (0x80000000)
-#  define PACKETIZER_DISABLE_OUTPUT_A (0x00000000)
-#  define PACKETIZER_ENABLE_OUTPUT_A  (0x40000000)
-#  define PACKETIZER_DISABLE_OUTPUT_B (0x00000000)
-#  define PACKETIZER_ENABLE_OUTPUT_B  (0x20000000)
+#define PACKETIZER_LINK_ADDRESS(linkValid, outputEnableMask, linkAddress) \
+  ((uint32_t) (linkValid | (outputEnableMask & PACKETIZER_OUTPUT_ENABLE_MASK) | linkAddress))
 
 /* Symbolic definitions for the PACKETIZER_TEMPLATE macro */
 #define PACKETIZER_ABSOLUTE_ADDRESS (0x00)

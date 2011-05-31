@@ -105,7 +105,7 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
   /* Enable or disable the requested output in the control register */
   outputMask = (OUTPUT_A_ENABLE << whichOutput);
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
-  if(enable == OUTPUT_ENABLE) {
+  if(enable == PACKETIZER_OUTPUT_ENABLE) {
     controlRegister |= outputMask;
   } else controlRegister &= ~outputMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
@@ -155,8 +155,8 @@ static void reset_packetizer(struct audio_packetizer *packetizer) {
 
   /* Disable the instance, and wipe its registers */
   disable_packetizer(packetizer);
-  set_output_enabled(packetizer, OUTPUT_A, false);
-  set_output_enabled(packetizer, OUTPUT_B, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_A, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_B, false);
 
   /* Disable all of the clock domains */
   clockDomainSettings.enabled = false;
