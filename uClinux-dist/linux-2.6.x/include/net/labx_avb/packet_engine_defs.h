@@ -122,6 +122,7 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 4), \
                                           PacketizerCaps)
 
+/* TODO - This ioctl() is deprecated! */
 #define IOC_SET_PRESENTATION_OFFSET  _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 5), \
                                           uint32_t)
@@ -211,13 +212,19 @@ typedef struct {
 /* Returns an instruction word containing a link address and validity
  * @param linkValid   - True if the link address points to a valid descriptor, 
  *                      false if this is the last
+ * @param enablePortA - True if the stream is enabled for Port A of a dual-headed instance 
+ * @param enablePortB - True if the stream is enabled for Port B of a dual-headed instance 
  * @param linkAddress - Address of the next stream descriptor, if linkValid is
  *                      true.  Ignored if linkValid is false.
  */
-#define PACKETIZER_LINK_ADDRESS(linkValid, linkAddress) \
-  ((uint32_t) (linkValid | linkAddress))
-#  define PACKETIZER_LINK_INVALID  (0x00000000)
-#  define PACKETIZER_LINK_VALID    (0x80000000)
+#define PACKETIZER_LINK_ADDRESS(linkValid, enablePortA, enablePortB, linkAddress) \
+  ((uint32_t) (linkValid | enablePortA | enablePortB | linkAddress))
+#  define PACKETIZER_LINK_INVALID     (0x00000000)
+#  define PACKETIZER_LINK_VALID       (0x80000000)
+#  define PACKETIZER_DISABLE_OUTPUT_A (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_A  (0x40000000)
+#  define PACKETIZER_DISABLE_OUTPUT_B (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_B  (0x20000000)
 
 /* Symbolic definitions for the PACKETIZER_TEMPLATE macro */
 #define PACKETIZER_ABSOLUTE_ADDRESS (0x00)
@@ -385,6 +392,12 @@ typedef struct {
 #define PACKETIZER_PUSH_PARAM(paramData) \
   ((uint32_t) ((PACKETIZER_OPCODE_PUSH_PARAM << PACKETIZER_OPCODE_SHIFT) | \
                (paramData & PACKETIZER_PARAM_STACK_MASK)))
+
+/* Dynamic range and associate bit mask for a nanosecond-based presentation
+ * time offset
+ */
+#define MAX_PRESENTATION_OFFSET_NS    (2000000)
+#define PACKETIZER_TS_OFFSET_MASK  (0x001FFFFF)
   
 /*
  * Depacketizer definitions
