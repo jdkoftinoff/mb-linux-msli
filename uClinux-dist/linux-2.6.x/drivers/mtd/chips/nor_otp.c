@@ -203,11 +203,7 @@ static ssize_t otp_w_data_reg(struct class *c, const char * buf, size_t count)
 		}
 		*tp = '\0';
 		tp = temp;
-		if(strncasecmp(tp, buf, 32)) {
-			printk("OTP driver: Address read from %lu does not match written\n",
-					nor_otp.address);
-		}
-
+		
 		//lock the register
 		lockIndex = 1 << nor_otp.address;
 		lockIndex = lockIndex ^ 0xffff;

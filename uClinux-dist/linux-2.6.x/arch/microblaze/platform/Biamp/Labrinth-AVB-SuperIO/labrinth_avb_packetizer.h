@@ -54,4 +54,6 @@ typedef struct {
 
 #define IOC_CONFIG_GENERATOR  _IOR('l', 0x01, GeneratorConfig)
 
+#define IOC_GET_LATENCY _IOW('l', 0x02, uint32_t)
+
 #endif

@@ -36,11 +36,11 @@
 
 
 /* Driver name and the revision range of hardware expected.
- * This driver will work with revisions 1.3 - 1.4 only.
+ * This driver will work with revisions 1.3 - 1.5 only.
  */
 #define DRIVER_NAME "labx_audio_packetizer"
 #define DRIVER_VERSION_MIN  0x13
-#define DRIVER_VERSION_MAX  0x14
+#define DRIVER_VERSION_MAX  0x15
 
 /* Instances before the extended capabilities version typically had
  * 32 stream slots maximum
@@ -105,7 +105,7 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
   /* Enable or disable the requested output in the control register */
   outputMask = (OUTPUT_A_ENABLE << whichOutput);
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
-  if(enable == OUTPUT_ENABLE) {
+  if(enable == PACKETIZER_OUTPUT_ENABLE) {
     controlRegister |= outputMask;
   } else controlRegister &= ~outputMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
@@ -155,8 +155,8 @@ static void reset_packetizer(struct audio_packetizer *packetizer) {
 
   /* Disable the instance, and wipe its registers */
   disable_packetizer(packetizer);
-  set_output_enabled(packetizer, OUTPUT_A, false);
-  set_output_enabled(packetizer, OUTPUT_B, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_A, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_B, false);
 
   /* Disable all of the clock domains */
   clockDomainSettings.enabled = false;
@@ -634,6 +634,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     {
       uint32_t presentationOffset;
 
+      printk("Warning: labx_audio_packetizer.IOC_SET_PRESENTATION_OFFSET is deprecated!\n");
       if(copy_from_user(&presentationOffset, (void __user*)arg, sizeof(presentationOffset)) != 0) {
         return(-EFAULT);
       }

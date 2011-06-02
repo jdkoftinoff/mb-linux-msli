@@ -122,6 +122,7 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 4), \
                                           PacketizerCaps)
 
+/* TODO - This ioctl() is deprecated! */
 #define IOC_SET_PRESENTATION_OFFSET  _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 5), \
                                           uint32_t)
@@ -148,11 +149,11 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 7), \
                                           uint32_t)
 
-#  define OUTPUT_A  0
-#  define OUTPUT_B  1
+#  define PACKETIZER_OUTPUT_A  0
+#  define PACKETIZER_OUTPUT_B  1
 
-#  define OUTPUT_DISABLE  0
-#  define OUTPUT_ENABLE   1
+#  define PACKETIZER_OUTPUT_DISABLE  0
+#  define PACKETIZER_OUTPUT_ENABLE   1
 
 /* Type definitions and macros for packetizer microcode */
 
@@ -208,16 +209,25 @@ typedef struct {
  */
 #define PACKETIZER_DOMAIN_FIELD(clockDomain)  ((uint32_t) (0x01 << clockDomain))
 
+/* Constants for use with the PACKETIZER_LINK_ADDRESS macro */
+#  define PACKETIZER_LINK_INVALID       (0x00000000)
+#  define PACKETIZER_LINK_VALID         (0x80000000)
+#  define PACKETIZER_DISABLE_OUTPUT_A   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_A    (0x40000000)
+#  define PACKETIZER_DISABLE_OUTPUT_B   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_B    (0x20000000)
+#  define PACKETIZER_OUTPUT_ENABLE_MASK (0x60000000)
+#  define PACKETIZER_DUMMY_OUTPUT_MASK  (0x00000000)
+
 /* Returns an instruction word containing a link address and validity
- * @param linkValid   - True if the link address points to a valid descriptor, 
- *                      false if this is the last
- * @param linkAddress - Address of the next stream descriptor, if linkValid is
- *                      true.  Ignored if linkValid is false.
+ * @param linkValid        - True if the link address points to a valid descriptor, 
+ *                          false if this is the last
+ * @param outputEnableMask - Bit mask containing the outputs for which the stream is enabled
+ * @param linkAddress      - Address of the next stream descriptor, if linkValid is
+ *                           true.  Ignored if linkValid is false.
  */
-#define PACKETIZER_LINK_ADDRESS(linkValid, linkAddress) \
-  ((uint32_t) (linkValid | linkAddress))
-#  define PACKETIZER_LINK_INVALID  (0x00000000)
-#  define PACKETIZER_LINK_VALID    (0x80000000)
+#define PACKETIZER_LINK_ADDRESS(linkValid, outputEnableMask, linkAddress) \
+  ((uint32_t) (linkValid | (outputEnableMask & PACKETIZER_OUTPUT_ENABLE_MASK) | linkAddress))
 
 /* Symbolic definitions for the PACKETIZER_TEMPLATE macro */
 #define PACKETIZER_ABSOLUTE_ADDRESS (0x00)
@@ -385,6 +395,12 @@ typedef struct {
 #define PACKETIZER_PUSH_PARAM(paramData) \
   ((uint32_t) ((PACKETIZER_OPCODE_PUSH_PARAM << PACKETIZER_OPCODE_SHIFT) | \
                (paramData & PACKETIZER_PARAM_STACK_MASK)))
+
+/* Dynamic range and associate bit mask for a nanosecond-based presentation
+ * time offset
+ */
+#define MAX_PRESENTATION_OFFSET_NS    (2000000)
+#define PACKETIZER_TS_OFFSET_MASK  (0x001FFFFF)
   
 /*
  * Depacketizer definitions
