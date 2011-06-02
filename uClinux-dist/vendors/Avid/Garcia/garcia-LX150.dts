@@ -40,7 +40,7 @@
 		serial0 = &serial_port;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 mtdparts=87000000.flash:4224K(fpga),256K(boot),128K(fdt),3712K(image),1920K(rootfs),3968K(romfs),2048K(settingsfs),32K(bootenv) root=mtd4 rootfstype=romfs init=/bin/init broadcom.led_default=0,0,-1,-1";
+		bootargs = "console=ttyUL0 mtdparts=87000000.flash:4224K(fpga),256K(boot),128K(fdt),3712K(image),1920K(rootfs),3968K(romfs),2048K(settingsfs),32K(bootenv) root=mtd4 rootfstype=romfs init=/bin/init broadcom.led_default=0,0,-1,-1 bonding.max_bonds=2 bonding.mode=active-backup bonding.fail_over_mac=1 bonding.miimon=100";
 	} ;
 	cpus {
 		#address-cells = <1>;
