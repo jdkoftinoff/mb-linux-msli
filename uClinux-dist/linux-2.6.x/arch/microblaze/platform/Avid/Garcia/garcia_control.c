@@ -102,6 +102,7 @@ static LIST_HEAD(device_list);
 
 #define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Informational only for Master) (R/W) */
 #define AC_CTL_MUTESTREAM_MASK 0x00F00000 /* 4 bit mute stream select mask */
+#define AC_CTL_DIAG_ERROR   BIT(19) /* Debug error flag (used e.g. for LFSR) (w1c) */
 #define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
 #define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
 #define AC_CTL_ENA_UNMUTE   BIT(15) /* If set, and AC_CTL_MUTE_FORCE is clear, force unmute */
@@ -121,7 +122,7 @@ static LIST_HEAD(device_list);
 #define AC_CTL_STROBE		BIT(1)	/* Strobe signal is asserted (s:in, m:out) */
 #define AC_CTL_SSI_DDIR		BIT(0)	/* Data direction of SSI (R/W) */
 #define AC_CTL_IRQ_MASK		(AC_CTL_BUF_COL_IRQ | AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ | \
-							AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)
+							AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ | AC_CTL_DIAG_ERROR)
 #define AC_CLK_COUNT_MASK   0xFF    /* Clock bit counter */
 #define AC_CLK_OVF_MASK     0x80000000 /* A strobe (transaction latch) has occurred before the
                                           previous transaction was serviced */
