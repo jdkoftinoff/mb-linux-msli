@@ -24,11 +24,12 @@ else
   echo "Jumper 1 installed - forcing stage box configuration"
 fi
 if [ $IS_STAGEBOX -ne 0 ] ; then
-  echo stagebox > /var/tmp/role
   if [ `cat /sys/class/garcia_fpga/selector` -eq 5 ] ; then
+    echo stagebox2 > /var/tmp/role
     ifconfig eth1 $IP_ADDRESS_PREFIX.4.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.3.2
   else
+    echo stagebox1 > /var/tmp/role
     ifconfig eth1 $IP_ADDRESS_PREFIX.2.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.1.2
   fi
