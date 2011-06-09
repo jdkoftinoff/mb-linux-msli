@@ -202,7 +202,7 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 				 *  and transfers of 0 or 1 bytes
 				 */
 				if ((clkcount & AC_CLK_OVF_MASK) != 0) {
-					printk("Channel %d Control message write overflow\n", chan);
+					; // printk("Channel %d Control message write overflow\n", chan);
 				} else if ((status & AC_CTL_RESET_SIG) == 0 && clkcount > 15) {
 					agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
 					agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
