@@ -18,6 +18,7 @@
 #include <linux/xilinx_devices.h>
 #include <asm/io.h>
 #include <linux/vmalloc.h>
+#include <linux/timer.h>
 #include "xbasic_types.h"
 #include "xio.h"
 #include "garcia_fpga_priv.h"
@@ -40,7 +41,8 @@
 	garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_REGISTER, val)
 
 #define DRIVER_NAME "garcia_fpga"
-#define DRIVER_VERSION "0.4"
+#define DRIVER_VERSION "1.0"
+#define PUSHBUTTON_RESET_TIME 5*HZ
 
 #define SLOT_RESET_PULSEWIDTH 3 /* mS */
 #define N_IRQRESP_VECTORS 8
@@ -50,6 +52,7 @@ struct garcia_fpga_gpio_struct {
 	uint32_t gpioaddr;
 	uint32_t shadow_value;
 	uint32_t last_gpio_irq;
+	struct timer_list reset_timer;
 	struct {
 		uint32_t falling_mask;
 		uint32_t rising_mask;
@@ -187,6 +190,11 @@ static irqreturn_t garcia_fpga_irq(int irq, void *data)
 		}
 		gp->last_gpio_irq = value;
 	}
+	if ((value & GARCIA_FPGA_GPIO_PUSHBUTTON) == 0) { // Button is pushed
+		mod_timer(&gp->reset_timer, jiffies + PUSHBUTTON_RESET_TIME);
+	} else {
+		del_timer_sync(&gp->reset_timer);
+	}
 	/* Reset the interrupt */
 	garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR,
 			garcia_fpga_ReadReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR));
@@ -312,6 +320,13 @@ static struct class garcia_fpga_class = {
 	.class_attrs =	garcia_fpga_class_attrs,
 };
 
+static void reset_timer_function(unsigned long data)
+{
+	(void)data;
+	printk("Restarting!\n");
+	machine_restart(NULL);
+}
+
 static int garcia_led_default[2] = {2, 3};
 module_param_array(garcia_led_default, int, NULL, 0);
 MODULE_PARM_DESC(garcia_led_default, "Garcia LEDs default state");
@@ -357,6 +372,9 @@ static int __devinit garcia_fpga_probe(struct device *dev)
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
 	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
 	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
+	init_timer(&fpga_gpio.reset_timer);
+	fpga_gpio.reset_timer.function = reset_timer_function;
+	fpga_gpio.reset_timer.data = 0;
 	rc = class_register(&garcia_fpga_class);
 
 	return rc;
@@ -400,6 +418,9 @@ static int __devinit garcia_fpga_of_probe(struct of_device *ofdev, const struct 
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
 	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
 	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
+	init_timer(&fpga_gpio.reset_timer);
+	fpga_gpio.reset_timer.function = reset_timer_function;
+	fpga_gpio.reset_timer.data = 0;
 	rc |= class_register(&garcia_fpga_class);
 
 	return rc;
