@@ -901,6 +901,13 @@ config XILINX_HWICAP
 
 	  If unsure, say N.
 
+config SPARTAN6_RESET
+        tristate "Spartan-6 ICAP Reset"
+	depends on MICROBLAZE
+	help
+	  This option enables use of the ICAP peripheral's ability only
+	  to reset the system for a Spartan-6 processor. 
+
 config R3964
 	tristate "Siemens R3964 line discipline"
 	---help---

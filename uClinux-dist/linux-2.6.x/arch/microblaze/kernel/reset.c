@@ -145,10 +145,12 @@ static void icap_reset(void)
 void machine_restart(char *cmd)
 {
 	printk(KERN_NOTICE "Machine restart...\n");
-#ifdef CONFIG_XILINX_HWICAP
+#ifdef CONFIG_SPARTAN6_RESET
+	printk(KERN_NOTICE "ICAP reset...\n");
 	icap_reset(); //reboot using ICAP
-#endif
+#else
 	gpio_system_reset();
+#endif
 	dump_stack();
 	while (1)
 		;
