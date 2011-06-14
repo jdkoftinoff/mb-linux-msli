@@ -57,6 +57,10 @@
 #define MII_BCM54XX_SHD_VAL(x)	((x & 0x1f) << 10)
 #define MII_BCM54XX_SHD_DATA(x)	((x & 0x3ff) << 0)
 
+// Control for PHY REG 0x00
+
+#define BCM5481_AUTO_NEGOTIATE_ENABLE           0x1000
+
 /*
  * AUXILIARY CONTROL SHADOW ACCESS REGISTERS.  (PHY REG 0x18)
  */
@@ -66,13 +70,14 @@
 #define MII_BCM54XX_AUXCTL_ACTL_TX_6DB		0x0400
 #define MII_BCM54XX_AUXCTL_ACTL_SMDSP_ENA	0x0800
 
-#define MII_BCM54XX_AUXCTL_MISC_WREN	0x8000
+#define MII_BCM54XX_AUXCTL_MISC_WREN	        0x8000
+#define MII_BCM54XX_AUXCTL_PMII_HPE             0x0040
 #define MII_BCM54XX_AUXCTL_MISC_FORCE_AMDIX	0x0200
 #define MII_BCM54XX_AUXCTL_MISC_RDSEL_MISC	0x7000
 
-#define MII_BCM54XX_AUXCTL_SHDWSEL_MISC 	7
-#define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0
-
+#define MII_BCM54XX_AUXCTL_SHDWSEL_MISC 	0x0007
+#define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0x0000
+#define MII_BCM54XX_AUXCTL_SHDWSEL_PMII         0x0002
 
 /*
  * Broadcom LED source encodings.  These are used in BCM5461, BCM5481,
@@ -336,6 +341,14 @@ void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL v
 }
 EXPORT_SYMBOL(bc_phy_led_set);
 
+static int bc5481_auto_negotiate_enable;
+module_param(bc5481_auto_negotiate_enable, int, 0);
+MODULE_PARM_DESC(bc5481_auto_negotiate_enable, "Enable Broadcom 5481 auto-negotiate behaviour");
+
+static int bc5481_high_performance_enable;
+module_param(bc5481_high_performance_enable, int, 0);
+MODULE_PARM_DESC(bc5481_high_performance_enable, "Enable Broadcom 5481 high-performance behaviour");
+
 static int bcm54xx_config_init(struct phy_device *phydev)
 {
 	int reg, err, i;
@@ -363,6 +376,26 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		err = bcm50610_a0_workaround(phydev);
 		if (err < 0)
 			return err;
+	}
+
+	// Enable auto-negotiation and high-performance modes
+	if (bc5481_auto_negotiate_enable != 0) {
+	        reg = phy_read(phydev, 0x00);
+		reg = reg | BCM5481_AUTO_NEGOTIATE_ENABLE;
+		phy_write(phydev, 0x00, reg);
+		printk("Auto-Negotiate Enable: %d (0x%04X) => %d\n",
+	                ((reg & BCM5481_AUTO_NEGOTIATE_ENABLE) != 0), reg,
+	                ((phy_read(phydev, 0x00) & BCM5481_AUTO_NEGOTIATE_ENABLE) != 0));
+	}
+
+	if (bc5481_high_performance_enable != 0) {
+	        reg = phy_read(phydev, 0x18);
+		reg = reg | MII_BCM54XX_AUXCTL_SHDWSEL_PMII | MII_BCM54XX_SHD_WRITE;
+		reg = reg & ~MII_BCM54XX_AUXCTL_PMII_HPE;
+		phy_write(phydev, 0x18, reg);
+		printk("High-Performance Enable: %d (0x%04X) => %d\n",
+		       ((reg & MII_BCM54XX_AUXCTL_PMII_HPE) != 0), reg,
+		       ((phy_read(phydev, 0x18) & MII_BCM54XX_AUXCTL_PMII_HPE) != 0));
 	}
 
 	for (phyaddr = phydev->addr, i = -1; phyaddr != 0; phyaddr >>= 1)
