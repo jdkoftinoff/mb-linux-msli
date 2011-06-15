@@ -298,7 +298,7 @@
 			xlnx,is-a-16550 = <0x1>;
 		} ;
 		i2s_0: iis2424-g@8e000000 {
-			compatible = "xlnx,iis2424-g-1.00.g";
+			compatible = "xlnx,iis2424-g-1.00.h";
 			reg = < 0x8e000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
