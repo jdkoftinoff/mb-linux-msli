@@ -40,7 +40,7 @@
 #define PDELAY_REQ_INTERVAL       (1000)
 
 /* Maximum error, in nanoseconds, tolerated before the time is reset */
-#define RESET_THRESHOLD_NS  (10000000)
+#define RESET_THRESHOLD_NS  (100000)
 
 /* Enumerated type identifying the results of a BMCA comparison */
 typedef enum {
@@ -474,7 +474,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
       if(ptp->rtcChangesAllowed) {
         printk("Resetting RTC!\n");
         set_rtc_increment(ptp, &ptp->nominalIncrement);
-        set_rtc_time(ptp, &syncTxTimestamp);
+        set_rtc_time_adjusted(ptp, &correctedTimestamp, &ptp->ports[port].syncRxTimestampTemp);
       }
    } else {
       /* Less than a second, leave these timestamps and update the servo */

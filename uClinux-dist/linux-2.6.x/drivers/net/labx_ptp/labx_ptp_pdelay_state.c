@@ -55,8 +55,8 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
      * initial Tx or Rx timestamp is later than the present one, the initial ones are bogus and
      * must be replaced.
      */
-    if((difference.secondsUpper & 0x8000000000000000ULL) |
-       (difference2.secondsUpper & 0x8000000000000000ULL)) {
+    if((difference.secondsUpper & 0x80000000) |
+       (difference2.secondsUpper & 0x80000000)) {
       ptp->ports[port].initPdelayRespReceived = FALSE;
       ptp->ports[port].neighborRateRatioValid = FALSE;
     } else {
@@ -68,10 +68,12 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
           if (nsResponder & (1ULL<<(63-shift))) break;
         }
 
-      rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
-      ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
+      if ((nsRequester >> (31-shift)) != 0) {
+        rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
+        ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
 
-      ptp->ports[port].neighborRateRatioValid = TRUE;
+        ptp->ports[port].neighborRateRatioValid = TRUE;
+      }
 
 #ifdef PATH_DELAY_DEBUG
       printk("Responder delta: %08X%08X.%08X (%llu ns)\n", difference.secondsUpper,

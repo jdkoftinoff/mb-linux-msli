@@ -141,6 +141,26 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
   preempt_enable();
 }
 
+/* Sets a new RTC time from the passed structure */
+void set_rtc_time_adjusted(struct ptp_device *ptp, PtpTime *time, PtpTime *entryTime) {
+  unsigned long flags;
+  PtpTime timeNow;
+  PtpTime timeDifference;
+  PtpTime adjustedTime;
+
+  /* Get the current time and make the adjustment with as little jitter as possible */
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+
+  get_rtc_time(ptp, &timeNow);
+  timestamp_difference(&timeNow, entryTime, &timeDifference);
+  timestamp_sum(time, &timeDifference, &adjustedTime);
+  set_rtc_time(ptp, &adjustedTime);
+
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
+}
+
 /* Updates lock detection metrics */
 void update_rtc_lock_detect(struct ptp_device *ptp) {
   int32_t lockRangeSigned    = (int32_t) ptp->properties.lockRangeNsec;
@@ -246,8 +266,8 @@ static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
      * initial Tx or Rx timestamp is later than the present one, the initial ones are bogus and
      * must be replaced.
      */
-    if((difference.secondsUpper & 0x8000000000000000ULL) |
-       (difference2.secondsUpper & 0x8000000000000000ULL)) {
+    if((difference.secondsUpper & 0x80000000) |
+       (difference2.secondsUpper & 0x80000000)) {
       ptp->ports[port].initPdelayRespReceived = FALSE;
       ptp->ports[port].neighborRateRatioValid = FALSE;
       ptp->masterRateRatioValid = FALSE;
@@ -260,20 +280,22 @@ static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
           if (nsResponder & (1ULL<<(63-shift))) break;
         }
 
-      rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
-      if (((uint32_t)rateRatio < RATE_RATIO_MAX) && ((uint32_t)rateRatio > RATE_RATIO_MIN)) {
-        ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
+      if ((nsRequester >> (31-shift)) != 0) {
+        rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
+        if (((uint32_t)rateRatio < RATE_RATIO_MAX) && ((uint32_t)rateRatio > RATE_RATIO_MIN)) {
+          ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
+ 
+          ptp->ports[port].neighborRateRatioValid = TRUE;
 
-        ptp->ports[port].neighborRateRatioValid = TRUE;
-
-        /* Master rate is the same for E2E mode */
-        ptp->masterRateRatio = (uint32_t)rateRatio;
-        ptp->masterRateRatioValid = TRUE;
-      } else {
-        /* If we are outside the acceptable range, assume our initial values are bad and grab new ones */
-        ptp->ports[port].initPdelayRespReceived = FALSE;
-        ptp->ports[port].neighborRateRatioValid = FALSE;
-        ptp->masterRateRatioValid = FALSE;
+          /* Master rate is the same for E2E mode */
+          ptp->masterRateRatio = (uint32_t)rateRatio;
+          ptp->masterRateRatioValid = TRUE;
+        } else {
+          /* If we are outside the acceptable range, assume our initial values are bad and grab new ones */
+          ptp->ports[port].initPdelayRespReceived = FALSE;
+          ptp->ports[port].neighborRateRatioValid = FALSE;
+          ptp->masterRateRatioValid = FALSE;
+        }
       }
 
 #ifdef PATH_DELAY_DEBUG
@@ -325,6 +347,19 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
 
       /* Save the delay in the same spot as P2P mode does for consistency. */
       ptp->ports[port].neighborPropDelay = (-difference2.nanoseconds) + slaveOffset;
+
+      /* Mark the delay timestamps as invalid so we don't keep using them with their old offset */
+      ptp->ports[port].delayReqTimestampsValid = 0;
+    } else if (ptp->ports[port].syncTimestampsValid) {
+
+      /* Cancel out the link delay with the last computed value.
+       *
+       * [SYNC Rx time - SYNC Tx time] = slave_error + link_delay
+       * slaveOffset = slave_error + link_delay - link delay
+       */
+      timestamp_difference(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncTxTimestamp, &difference);
+      slaveOffset = difference.nanoseconds - ptp->ports[port].neighborPropDelay;
+      slaveOffsetValid = PTP_RTC_OFFSET_VALID;
     }
   } else {
     /* The peer delay mechanism uses the SYNC->FUP messages, but relies upon the

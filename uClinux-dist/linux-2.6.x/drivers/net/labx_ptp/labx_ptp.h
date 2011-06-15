@@ -407,6 +407,7 @@ void get_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void get_local_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
+void set_rtc_time_adjusted(struct ptp_device *ptp, PtpTime *time, PtpTime *entryTime);
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port);
 void update_rtc_lock_detect(struct ptp_device *ptp);
 
