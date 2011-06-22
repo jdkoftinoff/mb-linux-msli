@@ -188,10 +188,10 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
-	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
-	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
-	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S50mountfs
+	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S40mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/daemons /etc/init.d/daemons
+	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S50network
+	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
 	$(ROMFSINST) -s /etc/init.d/daemons /etc/rc.d/S60daemons
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
