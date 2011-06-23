@@ -50,27 +50,35 @@
 
 #define DRIVER_NAME "labx_local_audio"
 
-#define MAX_DMA_DEVICES 16
-static struct labx_local_audio_pdev* devices[MAX_DMA_DEVICES] = {};
+#define MAX_LA_DEVICES 16
+static uint32_t instanceCount;
+static struct labx_local_audio_pdev* devices[MAX_LA_DEVICES] = {};
 
 static int labx_local_audio_open(struct inode *inode, struct file *filp) {
-  int i;
-  struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
-  for (i = 0; i < MAX_DMA_DEVICES; i++) {
-    //    printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));
-    if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode))) {
-      // printk("labx_local_audio_open: found %p\n", devices[i]);
-      filp->private_data = devices[i];
+  int deviceIndex;
+  struct labx_local_audio_pdev *local_audio_pdev;
+
+  /* Search for the device amongst those which successfully were probed */
+  for(deviceIndex = 0; deviceIndex < MAX_LA_DEVICES; deviceIndex++) {
+    if ((devices[deviceIndex] != NULL) && (devices[deviceIndex]->miscdev.minor == iminor(inode))) {
+      /* Retain the device pointer within the file pointer for future navigation */
+      filp->private_data = devices[deviceIndex];
       break;
     }
   }
+
+  /* Ensure the device was actually found */
+  if(deviceIndex >= MAX_LA_DEVICES) {
+    printk(KERN_WARNING DRIVER_NAME ": Could not find device for node (%d, %d)\n",
+           imajor(inode), iminor(inode));
+    return(-ENODEV);
+  }
+
+  /* TODO - Ensure the local audio hardware is reset */
   local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
 
-  /* Ensure the local audio hardware is reset */
-
-
-  /* Also open the DMA instance */
-  labx_dma_open(local_audio_pdev->dma);
+  /* Also open the DMA instance, if there is one */
+  if(local_audio_pdev->dma != NULL) labx_dma_open(local_audio_pdev->dma);
 
   /* Invoke the open() operation on the derived driver, if there is one */
   if((local_audio_pdev->derivedFops != NULL) && 
@@ -90,8 +98,8 @@ static int labx_local_audio_release(struct inode *inode, struct file *filp) {
     local_audio_pdev->derivedFops->release(inode, filp);
   }
 
-  /* Also release the DMA instance */
-  labx_dma_release(local_audio_pdev->dma);
+  /* Also release the DMA instance, if there is one */
+  if(local_audio_pdev->dma != NULL) labx_dma_release(local_audio_pdev->dma);
 
   return(0);
 }
@@ -100,7 +108,7 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
                                        unsigned int command, unsigned long arg)
 {
   struct labx_local_audio_pdev *local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
-  int returnValue;
+  int returnValue = 0;
 
   switch(command) {
   case IOC_LA_SET_CHANNEL_MAPPING:
@@ -116,7 +124,7 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
         return(-EINVAL);
       }
 
-      XIo_Out32(LOCAL_AUDIO_REGISTER_BASE(local_audio_pdev->dma, LOCAL_AUDIO_CHANNEL_REG + mapping.channel),
+      XIo_Out32(LOCAL_AUDIO_REGISTER_BASE(local_audio_pdev, LOCAL_AUDIO_CHANNEL_REG + mapping.channel),
                 mapping.streams);
     }
     break;
@@ -133,7 +141,7 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
         return(-EINVAL);
       }
 			
-      mapping.streams = XIo_In32(LOCAL_AUDIO_REGISTER_BASE(local_audio_pdev->dma, LOCAL_AUDIO_CHANNEL_REG + mapping.channel));
+      mapping.streams = XIo_In32(LOCAL_AUDIO_REGISTER_BASE(local_audio_pdev, LOCAL_AUDIO_CHANNEL_REG + mapping.channel));
 
       if(copy_to_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
         return(-EFAULT);
@@ -178,7 +186,7 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
       value |= (config.stream << LOCAL_AUDIO_INSERTER_STREAM_SHIFT) & LOCAL_AUDIO_INSERTER_STREAM_MASK;
       value |= (config.slot << LOCAL_AUDIO_INSERTER_SLOT_SHIFT) & LOCAL_AUDIO_INSERTER_SLOT_MASK;
       
-      XIo_Out32(LOCAL_AUDIO_INSERTER_BASE(local_audio_pdev->dma, LOCAL_AUDIO_INSERTER_TDM_CTRL_REG),
+      XIo_Out32(LOCAL_AUDIO_INSERTER_BASE(local_audio_pdev, LOCAL_AUDIO_INSERTER_TDM_CTRL_REG),
                 value);
     }
     break;
@@ -227,8 +235,8 @@ int labx_local_audio_probe(const char *name,
                            void *derivedData,
                            struct labx_local_audio_pdev **newInstance) {
   struct labx_local_audio_pdev *local_audio_pdev;
-  int dmaIndex;
-  int ret;
+  uint32_t deviceIndex;
+  int32_t ret;
 
   /* Create and populate a device structure */
   local_audio_pdev = (struct labx_local_audio_pdev*) kzalloc(sizeof(struct labx_local_audio_pdev), GFP_KERNEL);
@@ -237,7 +245,8 @@ int labx_local_audio_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   local_audio_pdev->physicalAddress = addressRange->start;
   local_audio_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(local_audio_pdev->name, NAME_MAX_SIZE, "%s%d", name, pdev->id);
+
+  snprintf(local_audio_pdev->name, NAME_MAX_SIZE, "%s%d", name, instanceCount++);
   local_audio_pdev->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(local_audio_pdev->physicalAddress, local_audio_pdev->addressRangeSize,
                         local_audio_pdev->name) == NULL) {
@@ -246,20 +255,27 @@ int labx_local_audio_probe(const char *name,
   }
   //printk("DMA Physical %08X\n", local_audio_pdev->physicalAddress);
 
+  local_audio_pdev->virtualAddress = 
+    (void*) ioremap_nocache(local_audio_pdev->physicalAddress, local_audio_pdev->addressRangeSize);
+  if(!local_audio_pdev->virtualAddress) {
+    ret = -ENOMEM;
+    goto release;
+  }
+  printk("LA virtualAddress = 0x%08X, phys = 0x%08X, size = 0x%08X\n", 
+         (uint32_t) local_audio_pdev->virtualAddress,
+         (uint32_t) local_audio_pdev->physicalAddress,
+         local_audio_pdev->addressRangeSize);
+
   /* Allocate and probe for a DMA if the hardware contains one */
   if(strcmp(interfaceType, LA_DMA_INTERFACE_EXTERNAL) != 0) {
     local_audio_pdev->dma = (struct labx_dma*) kzalloc(sizeof(struct labx_dma), GFP_KERNEL);
-    local_audio_pdev->dma->virtualAddress = 
-      (void*) ioremap_nocache(local_audio_pdev->physicalAddress, local_audio_pdev->addressRangeSize);
-    if(!local_audio_pdev->dma->virtualAddress) {
-      ret = -ENOMEM;
-      goto release;
-    }
+    local_audio_pdev->dma->virtualAddress = local_audio_pdev->virtualAddress;
     //printk("DMA Virtual %p\n", local_audio_pdev->dma.virtualAddress);
   } else local_audio_pdev->dma = NULL;
   
   local_audio_pdev->numChannels = numChannels;
-  printk("  Local Audio interface found with %d channels, %s DMA\n", 
+  printk("  Local Audio interface found at 0x%08X: %d channels, %s DMA\n", 
+         (uint32_t) local_audio_pdev->physicalAddress,
          local_audio_pdev->numChannels,
          ((local_audio_pdev->dma == NULL) ? "no" : "internal"));
   local_audio_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
@@ -284,21 +300,34 @@ int labx_local_audio_probe(const char *name,
      * does not require one for this application.  Ask the underlying driver
      * code to infer the microcode RAM size for us.
      */
-    labx_dma_probe(local_audio_pdev->dma, 
-                   MISC_MAJOR,
-                   local_audio_pdev->miscdev.minor,
-                   local_audio_pdev->name, 
-                   DMA_UCODE_SIZE_UNKNOWN, 
-                   DMA_NO_IRQ_SUPPLIED,
-                   NULL);
-
-    for (dmaIndex = 0; dmaIndex < MAX_DMA_DEVICES; dmaIndex++) {
-      if (NULL == devices[dmaIndex]) {
-        //printk(DRIVER_NAME ": Device %d = %p\n", i, local_audio_pdev);
-        devices[dmaIndex] = local_audio_pdev;
-        break;
-      }
+    ret = labx_dma_probe(local_audio_pdev->dma, 
+                         MISC_MAJOR,
+                         local_audio_pdev->miscdev.minor,
+                         local_audio_pdev->name, 
+                         DMA_UCODE_SIZE_UNKNOWN, 
+                         DMA_NO_IRQ_SUPPLIED,
+                         NULL);
+    if(ret) {
+      printk(KERN_WARNING DRIVER_NAME ": Probe of encapsulated DMA failed\n");
+      goto unmap;
     }
+  }
+
+  /* Locate and occupy the first available device index for future navigation in
+   * the call to labx_local_audio_open()
+   */
+  for (deviceIndex = 0; deviceIndex < MAX_LA_DEVICES; deviceIndex++) {
+    if (NULL == devices[deviceIndex]) {
+      devices[deviceIndex] = local_audio_pdev;
+      break;
+    }
+  }
+
+  /* Ensure that we haven't been asked to probe for too many devices */
+  if(deviceIndex >= MAX_LA_DEVICES) {
+    printk(KERN_WARNING DRIVER_NAME ": Maximum device count (%d) exceeded during probe\n",
+           MAX_LA_DEVICES);
+    goto unmap;
   }
 
   /* Retain any derived file operations & data to dispatch to */
@@ -310,7 +339,7 @@ int labx_local_audio_probe(const char *name,
   return(0);
 
  unmap:
-  if(local_audio_pdev->dma != NULL) iounmap(local_audio_pdev->dma->virtualAddress);
+  iounmap(local_audio_pdev->virtualAddress);
  release:
   release_mem_region(local_audio_pdev->physicalAddress, 
                      local_audio_pdev->addressRangeSize);
@@ -406,16 +435,16 @@ static int labx_local_audio_pdev_probe(struct platform_device *pdev)
 
 /* This is exported to allow polymorphic drivers to invoke it */
 int labx_local_audio_remove(struct labx_local_audio_pdev *local_audio_pdev) {
-  int dmaIndex;
+  int deviceIndex;
 
   /* Make sure the DMA unit is no longer running */
   labx_dma_release(local_audio_pdev->dma);
 
   misc_deregister(&local_audio_pdev->miscdev);
 
-  for (dmaIndex = 0; dmaIndex < MAX_DMA_DEVICES; dmaIndex++) {
-    if (local_audio_pdev == devices[dmaIndex]) {
-      devices[dmaIndex] = NULL;
+  for (deviceIndex = 0; deviceIndex < MAX_LA_DEVICES; deviceIndex++) {
+    if (local_audio_pdev == devices[deviceIndex]) {
+      devices[deviceIndex] = NULL;
       break;
     }
   }
@@ -449,6 +478,9 @@ static int __init labx_local_audio_driver_init(void)
   returnValue = of_register_platform_driver(&labx_local_audio_of_driver);
 #endif
  
+  /* Initialize the instance counter */
+  instanceCount = 0;
+
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&labx_local_audio_platform_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");

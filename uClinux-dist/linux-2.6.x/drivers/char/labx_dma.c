@@ -394,7 +394,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
 
     printk(KERN_INFO "Found incompatible hardware version %d.%d at %p\n",
            versionMajor, versionMinor, dma->virtualAddress);
-    return(-1);
+    return(-ENODEV);
   }
 
   /* Decode the various bits in the capabilities word */
@@ -423,7 +423,7 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     if(microcodeWords > maxMicrocodeWords) {
       printk(KERN_INFO "(labx-dma, \"%s\") : Microcode size (%d) exceeds maximum of %d words\n",
              dma->name, microcodeWords, maxMicrocodeWords);
-      return(-1);
+      return(-ENODEV);
     }
     dma->capabilities.microcodeWords = microcodeWords;
   }

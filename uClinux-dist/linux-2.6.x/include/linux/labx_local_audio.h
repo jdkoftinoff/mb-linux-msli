@@ -43,6 +43,9 @@ struct labx_local_audio_pdev {
   uint32_t physicalAddress;
   uint32_t addressRangeSize;
 
+  /* Virtual address pointer for the memory-mapped hardware */
+  void __iomem *virtualAddress;
+
   /* Number of audio channels supported in this hardware peripheral */
   uint32_t numChannels;
 
@@ -56,12 +59,20 @@ struct labx_local_audio_pdev {
   void *derivedData;
 };
 
+/* Default region shift to use in the case of an external DMA; this
+ * corresponds to a DMA with 512 words of microcode; twice this amount
+ * of space is mapped by a DMA to also address its register file.
+ */
+#define LOCAL_AUDIO_DEFAULT_REGION_SHIFT (12)
+
 /* Local audio registers come after the DMA microcode */
 #define LOCAL_AUDIO_REGISTER_RANGE 1
 
-#define LOCAL_AUDIO_REGISTER_BASE(dma, reg)                     \
-  ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_REGISTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
+#define LOCAL_AUDIO_REGISTER_BASE(la, reg)                             \
+  ((uintptr_t)(la)->virtualAddress |                                   \
+                  ((LOCAL_AUDIO_REGISTER_RANGE <<                      \
+                    (((la)->dma != NULL) ? ((la)->dma->regionShift + 1) : LOCAL_AUDIO_DEFAULT_REGION_SHIFT)) + \
+                   ((reg)*4)))
 
 /* Register address and control field #defines */
 #define LOCAL_AUDIO_CHANNEL_REG 0x00
@@ -70,9 +81,11 @@ struct labx_local_audio_pdev {
 /* Pattern inserter registers are after local audio registers */
 #define LOCAL_AUDIO_INSERTER_RANGE 2
 
-#define LOCAL_AUDIO_INSERTER_BASE(dma, reg)                     \
-  ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_INSERTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
+#define LOCAL_AUDIO_INSERTER_BASE(la, reg)                             \
+  ((uintptr_t)(la)->virtualAddress |                                    \
+                  ((LOCAL_AUDIO_INSERTER_RANGE <<                       \
+                    (((la)->dma != NULL) ? ((la)->dma->regionShift + 1) : LOCAL_AUDIO_DEFAULT_REGION_SHIFT)) + \
+                   ((reg)*4)))
 
 /* Inserter Registers */
 #define LOCAL_AUDIO_INSERTER_TDM_CTRL_REG 0x00
@@ -89,9 +102,11 @@ struct labx_local_audio_pdev {
 /* Pattern tester registers are after pattern inserter registers */
 #define LOCAL_AUDIO_TESTER_RANGE 3
 
-#define LOCAL_AUDIO_TESTER_BASE(dma, reg)                     \
-  ((uintptr_t)(dma)->virtualAddress |                           \
-   ((LOCAL_AUDIO_TESTER_RANGE << ((dma)->regionShift+1)) + ((reg)*4)))
+#define LOCAL_AUDIO_TESTER_BASE(la, reg)                               \
+  ((uintptr_t)(la)->virtualAddress |                                    \
+                  ((LOCAL_AUDIO_TESTER_RANGE <<                         \
+                    (((la)->dma != NULL) ? ((la)->dma->regionShift + 1) : LOCAL_AUDIO_DEFAULT_REGION_SHIFT)) + \
+                   ((reg)*4)))
 
 /* Tester Registers */
 #define LOCAL_AUDIO_TESTER_TDM_CTRL_REG         0x00
