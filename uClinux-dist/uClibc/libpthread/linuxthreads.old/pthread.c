@@ -382,6 +382,18 @@ struct pthread_functions __pthread_functions =
 
 static int *__libc_multiple_threads_ptr;
 
+/* Force inclusion of functions potentially needed by the toolchain which might be weak references if anything from this is pulled in */
+static void __attribute__((used)) forcesyms(void)
+{
+  pthread_once(NULL, NULL);
+  pthread_setspecific(0, 0);
+  pthread_getspecific(0);
+  pthread_key_create(NULL, NULL);
+  pthread_mutex_lock(NULL);
+  pthread_mutex_unlock(NULL);
+  pthread_cancel(0);
+}
+
  /* Do some minimal initialization which has to be done during the
     startup of the C library.  */
 void __pthread_initialize_minimal(void)
