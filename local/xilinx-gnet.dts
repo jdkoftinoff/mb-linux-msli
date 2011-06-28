@@ -44,6 +44,7 @@
 		serial1 = &RS232_Atmel;
 		serial2 = &MIDI;
 		serial3 = &RS232_DGPIO;
+		serial4 = &RS422_DGPIO;
 	} ;
 	chosen {
 		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00";
@@ -297,6 +298,23 @@
 			xlnx,has-external-xin = <0x0>;
 			xlnx,is-a-16550 = <0x1>;
 		} ;
+		RS422_DGPIO: serial@8f000000 {
+			clock-frequency = <125000000>;
+			compatible = "xlnx,xps-uart16550-3.00.a", "ns16550";
+			current-speed = <9600>;
+			device_type = "serial";
+			interrupt-parent = <&xps_intc_1>;
+			interrupts = < 11 2 >;
+			reg = < 0x8f000000 0x10000 >;
+			reg-offset = <0x1003>;
+			reg-shift = <2>;
+			xlnx,clock-hz = <0x3ef1480>;
+			xlnx,external-xin-clk-hz = <0x17d7840>;
+			xlnx,family = "virtex5";
+			xlnx,has-external-rclk = <0x0>;
+			xlnx,has-external-xin = <0x0>;
+			xlnx,is-a-16550 = <0x1>;
+		} ;
 		i2s_0: iis2424-g@8e000000 {
 			compatible = "xlnx,iis2424-g-1.00.h";
 			reg = < 0x8e000000 0x10000 >;
@@ -355,7 +373,7 @@
 			interrupt-controller ;
 			reg = < 0x82000000 0x10000 >;
 			xlnx,kind-of-intr = <0x1e3>;
-			xlnx,num-intr-inputs = <0xb>;
+			xlnx,num-intr-inputs = <0xc>;
 		} ;
 		xps_ll_fifo_1: xps-ll-fifo@84000000 {
 			compatible = "xlnx,xps-ll-fifo-1.02.a";
