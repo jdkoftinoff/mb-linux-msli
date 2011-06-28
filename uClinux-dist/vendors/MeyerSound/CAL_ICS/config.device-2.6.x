@@ -10,7 +10,7 @@ CONFIG_DEFAULTS_MEYERSOUND=y
 #
 # Select the Product you wish to target
 #
-CONFIG_DEFAULTS_MEYERSOND_CAL_ICS=y
+CONFIG_DEFAULTS_MEYERSOUND_CAL_ICS=y
 
 #
 # Kernel/Library/Defaults Selection
