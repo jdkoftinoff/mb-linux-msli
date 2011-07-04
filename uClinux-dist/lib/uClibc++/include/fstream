@@ -364,7 +364,7 @@ namespace std{
 				fprintf(stderr, "***** Did not write the full buffer out.  Should be: %d, actually: %d\n",
 					 totalChars, retval);
 			}else{
-				basic_streambuf<charT,traits>::pbump(-r);
+				basic_streambuf<charT,traits>::setp(basic_streambuf<charT,traits>::pbase(), basic_streambuf<charT,traits>::epptr());
 			}
 
 			delete [] buffer;
