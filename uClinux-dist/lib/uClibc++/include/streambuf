@@ -151,8 +151,7 @@ namespace std{
 			mpnext+=n;
 		}
 		void setp(char_type* pbeg, char_type* pend){
-			mpbeg = pbeg;
-			mpnext  = pbeg;
+			mpbeg = mpnext = pbeg;
 			mpend = pend;
 		}
 
