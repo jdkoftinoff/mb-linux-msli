@@ -541,6 +541,7 @@ static int __devexit smpte_dev_remove(struct of_device *ofdev)
 static const struct of_device_id smpte_dev_match[] =
   {
     { .compatible = "xlnx,smpte-decoder-1.00.a" },
+    { .compatible = "xlnx,smpte-generator-1.00.a" },
     {}
   };
 
