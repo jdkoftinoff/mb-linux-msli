@@ -242,7 +242,7 @@
 			current-speed = <31250>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 8 0 >;
+			interrupts = < 9 0 >;
 			port-number = <2>;
 			reg = < 0x85000000 0x10000 >;
 			xlnx,baudrate = <0x7a12>;
@@ -272,7 +272,7 @@
 			current-speed = <62500>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 7 0 >;
+			interrupts = < 8 0 >;
 			port-number = <1>;
 			reg = < 0x8b000000 0x10000 >;
 			xlnx,baudrate = <0xf424>;
@@ -287,7 +287,7 @@
 			current-speed = <9600>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 9 2 >;
+			interrupts = < 10 2 >;
 			reg = < 0x86000000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
@@ -304,7 +304,7 @@
 			current-speed = <9600>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 11 2 >;
+			interrupts = < 12 2 >;
 			reg = < 0x8f000000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
@@ -352,6 +352,14 @@
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
 		} ;
+		smpte_generator_0: smpte-generator@8d000000 {
+			compatible = "xlnx,smpte-generator-1.00.a";
+			interrupt-parent = <&xps_intc_1>;
+			interrupts = < 7 0 >;
+			reg = < 0x8d000000 0x10000 >;
+			xlnx,family = "virtex5";
+			xlnx,include-dphase-timer = <0x1>;
+		} ;
 		xps_gpio_0: gpio@81000000 {
 			compatible = "xlnx,xps-gpio-2.00.a", "xlnx,xps-gpio-1.00.a";
 			reg = < 0x81000000 0x10000 >;
@@ -372,7 +380,7 @@
 			compatible = "xlnx,xps-intc-2.00.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x82000000 0x10000 >;
-			xlnx,kind-of-intr = <0x1e3>;
+			xlnx,kind-of-intr = <0x3e3>;
 			xlnx,num-intr-inputs = <0xc>;
 		} ;
 		xps_ll_fifo_1: xps-ll-fifo@84000000 {
@@ -428,7 +436,7 @@
 		xps_mailbox_0: mailbox@80000000 {
 			compatible = "xlnx,xps-mailbox-2.00.b";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 10 2 >;
+			interrupts = < 11 2 >;
 			reg = < 0x80000000 0x10000 >;
 			xlnx,async-clks = <0x0>;
 			xlnx,ext-reset-high = <0x1>;
