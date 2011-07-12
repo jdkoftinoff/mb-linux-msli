@@ -174,7 +174,8 @@ endif
 
 ifdef CONFIG_MEYER_SMPTE
 DEVICES +=      \
-        smpte0,c,250,0
+        smpte0,c,250,0 \
+        smpte1,c,250,1
 endif
 
 I2C_MAJOR = 89

@@ -38,14 +38,36 @@
 #define DEVICES_COUNT 16
 #define SMPTE_DATA_BUF_SIZE 1024
 
-#define SMPTE_REG_CTRL    0x00
-#define SMPTE_REG_T_SEC   0x04
-#define SMPTE_REG_DATA_HI 0x08
-#define SMPTE_REG_DATA_LO 0x0c
-#define SMPTE_REG_T_NSEC  0x10
+/* Control register (RW) */
+#define SMPTE_REG_CTRL        0x00
 
-#define SMPTE_BIT_CTRL_RX 0x80000000
-#define SMPTE_BIT_CTRL_IE 0x40000000
+/* Monitor registers (RO) */
+#define SMPTE_REG_T_SEC       0x04
+#define SMPTE_REG_DATA_HI     0x08
+#define SMPTE_REG_DATA_LO     0x0c
+#define SMPTE_REG_T_NSEC      0x10
+
+/* Generator control registers (WO) */
+#define SMPTE_REG_GEN_OPTS    0x04
+#define SMPTE_REG_GEN_LOAD_HI 0x10
+#define SMPTE_REG_GEN_LOAD_LO 0x14
+
+/* Control register bits */
+#define SMPTE_BIT_CTRL_RX            0x80000000
+#define SMPTE_BIT_CTRL_IE            0x40000000
+
+/* Generator control register bits */
+#define SMPTE_REG_GEN_OPTS_LOAD      0x02000000
+#define SMPTE_REG_GEN_OPTS_TIME_RUN  0x04000000
+#define SMPTE_REG_GEN_OPTS_GEN_RUN   0x08000000
+#define SMPTE_REG_GEN_OPTS_GEN_LEVEL 0x0000ffff
+#define SMPTE_REG_GEN_OPTS_DROP      0x10000000
+#define SMPTE_REG_GEN_OPTS_RATE      0xe0000000
+#define SMPTE_REG_GEN_OPTS_24_00     0x00000000
+#define SMPTE_REG_GEN_OPTS_25_00     0x20000000
+#define SMPTE_REG_GEN_OPTS_30_00     0x40000000
+#define SMPTE_REG_GEN_OPTS_23_97     0x60000000
+#define SMPTE_REG_GEN_OPTS_29_97     0x80000000
 
 static unsigned major=0,ndevs=0;
 static unsigned char minors[DEVICES_COUNT];
@@ -74,6 +96,8 @@ struct smpte_data
   u32 gptp_nsec;
 }__attribute__((packed));
 
+#define SMPTE_WRITE_AREA_SIZE 14
+
 struct smpte_client
 {
   struct smpte_dev *dev;
@@ -84,7 +108,18 @@ struct smpte_client
   int read_index;
   int write_index;
   int read_offset;
+  loff_t wr_offset_start;
+  /* unformatted write area */
+  char wr_buffer[SMPTE_WRITE_AREA_SIZE];
+  /* data from 14-byte write area */
+  u8 wr_opt; /* written to offset 0 */
+  u8 wr_cmd; /* written ro offset 1 */
+  u32 wr_level; /* written to offsets 2-5 */
+  u32 wr_data_hi; /* written to offsets 6-9 */
+  u32 wr_data_lo; /* written to offsets 10-13 */
+  u32 cmd_gen;
 };
+
 
 /* file operations */
 static int smpte_dev_open(struct inode *inode, struct file *filp)
@@ -96,6 +131,7 @@ static int smpte_dev_open(struct inode *inode, struct file *filp)
     return -ENOMEM;
 
   client=(struct smpte_client*)filp->private_data;
+  client->cmd_gen=SMPTE_REG_GEN_OPTS_GEN_LEVEL&0xaaaa;
   client->dev=container_of(inode->i_cdev,struct smpte_dev,cdev);
   init_MUTEX(&client->sem);
   init_waitqueue_head(&client->wait_read_queue);
@@ -315,11 +351,160 @@ static ssize_t smpte_dev_read(struct file *filp, char __user *buf,
   return orig_count-count;
 }
 
+static ssize_t smpte_dev_write(struct file *filp, const char __user *buf,
+			      size_t count,loff_t *offset)
+{
+  unsigned long flags;
+  struct smpte_client *client;
+  size_t curr_count,count_orig;
+  loff_t curr_offset;
+  u32 level;
+
+  if(filp->private_data==NULL)
+    return 0;
+
+  client=(struct smpte_client*)filp->private_data;
+
+  /*
+    this only requires semaphore because it does not affect anything modified
+    in interrupt handler
+  */
+  if(down_interruptible(&client->sem))
+    return -ERESTARTSYS;
+
+  count_orig=count;
+
+  /* determine where writing starts and ends */
+  curr_offset=*offset%SMPTE_WRITE_AREA_SIZE;
+
+  while(count>0)
+    {
+      curr_count=(count<(SMPTE_WRITE_AREA_SIZE-curr_offset))?
+	count:(SMPTE_WRITE_AREA_SIZE-curr_offset);
+
+      if(client->wr_offset_start!=curr_offset)
+	client->wr_offset_start=curr_offset;
+
+      if(copy_from_user(&client->wr_buffer[curr_offset],buf,curr_count))
+	{
+	  client->wr_offset_start=0;
+	  up(&client->sem);
+	  return -EFAULT;
+	}
+
+      curr_offset+=curr_count;
+
+      if(client->wr_offset_start==0&&curr_offset>=1)
+	{
+	  
+	  /* options written */
+	  client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_RATE|SMPTE_REG_GEN_OPTS_DROP);
+	  switch(client->wr_buffer[0])
+	    {
+	    case 8:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+	    case 0:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_24_00;
+	      break;
+	    case 9:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+	    case 1:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_25_00;
+	      break;
+	    case 10:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+	    case 2:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_30_00;
+	      break;
+	    case 11:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+	    case 3:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_23_97;
+	      break;
+	    case 12:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+	    case 4:
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_29_97;
+	      break;
+	    default:
+	      break;
+	    }
+	}
+      if(client->wr_offset_start<=1&&curr_offset>=2)
+	{
+	  /* command written */
+	  switch(client->wr_buffer[1])
+	    {
+	    case 1:
+	      /* start */
+	      client->cmd_gen|=(SMPTE_REG_GEN_OPTS_TIME_RUN
+				|SMPTE_REG_GEN_OPTS_GEN_RUN);
+	      break;
+	    case 2:
+	      /* pause */
+	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_TIME_RUN;
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_RUN;
+	      break;
+	    default:
+	      /* stop */
+	      client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
+			 |SMPTE_REG_GEN_OPTS_GEN_RUN);
+	      break;
+	    }
+	}
+      if(client->wr_offset_start<=2&&curr_offset>=6)
+	{
+	  /* level written */
+	  memcpy(&level,&client->wr_buffer[2],sizeof(level));
+	  client->cmd_gen&=~SMPTE_REG_GEN_OPTS_GEN_LEVEL;
+	  client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_LEVEL&(level>>16);
+	}
+      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_LOAD;
+      if(client->wr_offset_start<=6&&curr_offset>=14)
+	{
+	  /* data written */
+	  memcpy(&client->wr_data_hi,&client->wr_buffer[6],
+		 sizeof(client->wr_data_hi));
+	  memcpy(&client->wr_data_lo,&client->wr_buffer[10],
+		 sizeof(client->wr_data_lo));
+	  client->cmd_gen|=SMPTE_REG_GEN_OPTS_LOAD;
+	}
+
+      /* lock here, to handle I/O */
+      spin_lock_irqsave(client->dev->lock,flags);
+
+      if(client->cmd_gen&SMPTE_REG_GEN_OPTS_LOAD)
+	{
+	  XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_HI,
+		    client->wr_data_hi);
+	  XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_LO,
+		    client->wr_data_lo);
+	}
+      XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_OPTS,
+		client->cmd_gen);
+
+      spin_unlock_irqrestore(client->dev->lock,flags);
+
+      if(curr_offset>=SMPTE_WRITE_AREA_SIZE)
+	{
+	  curr_offset=0;
+	  client->wr_offset_start=0;
+	}
+      count-=curr_count;
+      buf+=curr_count;
+    }
+  
+  *offset=curr_offset;
+  up(&client->sem);
+  return count_orig;
+}
+
 static struct file_operations smpte_dev_fops =
   {
     .owner = THIS_MODULE,
     .poll = smpte_dev_poll,
     .read = smpte_dev_read,
+    .write = smpte_dev_write,
     .open = smpte_dev_open,
     .release = smpte_dev_release,
   };
@@ -466,6 +651,13 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
       return -EIO;
     }
 
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,0);
+
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_HI,0);
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_LO,0);
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_OPTS,
+	    SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
+
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,
 	    /*SMPTE_BIT_CTRL_RX|*/SMPTE_BIT_CTRL_IE);
 
@@ -524,6 +716,10 @@ static int __devexit smpte_dev_remove(struct of_device *ofdev)
   spin_lock_irqsave(&static_dev_lock,flags);
   minors[dev->minor]=0;
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,0);
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_HI,0);
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_LO,0);
+  XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_OPTS,
+	    SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
 
   spin_unlock_irqrestore(&static_dev_lock,flags);
   cdev_del(&dev->cdev);
