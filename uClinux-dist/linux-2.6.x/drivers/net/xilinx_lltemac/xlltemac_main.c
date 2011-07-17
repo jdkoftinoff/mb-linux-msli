@@ -535,7 +535,10 @@ static void reset(struct net_device *dev, u32 line_num)
     
     XLlDma_Reset(&lp->Dma);
   } else {
-    XLlFifo_Reset(&lp->Fifo);
+    if(XLlTemac_IsFifo(&lp->Emac))
+      {
+	XLlFifo_Reset(&lp->Fifo);
+      }
   }
   
   /* now we can reset the device */
@@ -574,10 +577,14 @@ static void reset(struct net_device *dev, u32 line_num)
     }
     XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
     XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-  } else {			/* FIFO interrupt mode */
-    XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
-		      XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
-		      XLLF_INT_TXERROR_MASK);
+  } else {
+    if(XLlTemac_IsFifo(&lp->Emac))
+      {
+			/* FIFO interrupt mode */
+	XLlFifo_IntEnable(&lp->Fifo, XLLF_INT_TC_MASK |
+			  XLLF_INT_RC_MASK | XLLF_INT_RXERROR_MASK |
+			  XLLF_INT_TXERROR_MASK);
+      }
   }
   XLlTemac_IntDisable(&lp->Emac, XTE_INT_ALL_MASK);
   
@@ -1017,20 +1024,23 @@ static int xenet_open(struct net_device *dev)
 	}
       else
 	{
-	  printk(KERN_INFO
-		 "%s: XLlTemac: allocating interrupt %d for fifo mode.\n",
-		 dev->name, lp->fifo_irq);
-	  /* With the way interrupts are issued on the fifo core, this needs to be
-	   * fast interrupt handler.
-	   */
-	  irqval = request_irq(lp->fifo_irq,
-			       &xenet_fifo_interrupt, IRQF_DISABLED, "xilinx_fifo_int", dev);
-	  if (irqval)
+	  if(XLlTemac_IsFifo(&lp->Emac))
 	    {
-	      printk(KERN_ERR
-		     "%s: XLlTemac: could not allocate interrupt %d.\n",
+	      printk(KERN_INFO
+		     "%s: XLlTemac: allocating interrupt %d for fifo mode.\n",
 		     dev->name, lp->fifo_irq);
-	      return irqval;
+	      /* With the way interrupts are issued on the fifo core, this needs to be
+	       * fast interrupt handler.
+	       */
+	      irqval = request_irq(lp->fifo_irq,
+				   &xenet_fifo_interrupt, IRQF_DISABLED, "xilinx_fifo_int", dev);
+	      if (irqval)
+		{
+		  printk(KERN_ERR
+			 "%s: XLlTemac: could not allocate interrupt %d.\n",
+			 dev->name, lp->fifo_irq);
+		  return irqval;
+		}
 	    }
 	}
     }
@@ -1052,10 +1062,11 @@ static int xenet_open(struct net_device *dev)
 			    XLLF_INT_TXERROR_MASK);
 	}
       else
-	{		/* SG DMA mode */
-	  XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
-	  XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
-	}
+	if (XLlTemac_IsDma(&lp->Emac))
+	  {		/* SG DMA mode */
+	    XLlDma_mBdRingIntEnable(&lp->Dma.RxBdRing, dma_rx_int_mask);
+	    XLlDma_mBdRingIntEnable(&lp->Dma.TxBdRing, dma_tx_int_mask);
+	  }
       /*
        * Make sure all temac interrupts are disabled. These
        * interrupts are not data flow releated.
@@ -1148,7 +1159,10 @@ static int xenet_close(struct net_device *dev)
 	}
       else
 	{
-	  free_irq(lp->fifo_irq, dev);
+	  if(XLlTemac_IsFifo(&lp->Emac))
+	    {
+	      free_irq(lp->fifo_irq, dev);
+	    }
 	}
     }
   spin_lock_irqsave(&receivedQueueSpin, flags);
@@ -3199,22 +3213,28 @@ static int xtenet_setup(
     }
   else
     {
-      dev_err(dev,
-	      "XLlTemac: using FIFO direct interrupt driven mode.\n");
-      
-      virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
-      if (0 == virt_baddr)
+      if(XLlTemac_IsFifo(&lp->Emac))
 	{
 	  dev_err(dev,
-		  "XLlTemac: Could not allocate iomem for local link "
-		  "connected device.\n");
-	  rc = -EIO;
-	  goto error;
-	}
-      printk("XLlTemac: Fifo base address: 0x%0x\n", virt_baddr);
-      XLlFifo_Initialize(&lp->Fifo, virt_baddr);
+		  "XLlTemac: using FIFO direct interrupt driven mode.\n");
       
-      ndev->hard_start_xmit = xenet_FifoSend;
+	  virt_baddr = (u32) ioremap(pdata->ll_dev_baseaddress, 4096);
+	  if (0 == virt_baddr)
+	    {
+	      dev_err(dev,
+		      "XLlTemac: Could not allocate iomem for local link "
+		      "connected device.\n");
+	      rc = -EIO;
+	      goto error;
+	    }
+	  printk("XLlTemac: Fifo base address: 0x%0x\n", virt_baddr);
+	  XLlFifo_Initialize(&lp->Fifo, virt_baddr);
+      
+	  ndev->hard_start_xmit = xenet_FifoSend;
+	}
+      else
+	ndev->hard_start_xmit = xenet_DontSend;
+
     }
     }
   else
@@ -3451,7 +3471,22 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
   if(!llink_connected_handle)
     {
       dev_warn(&ofdev->dev, "no Locallink connection found.\n");
-      return rc;
+      pdata_struct.ll_dev_baseaddress	= 0;
+      pdata_struct.ll_dev_type = 0;
+      pdata_struct.ll_dev_dma_rx_irq	= NO_IRQ;
+      pdata_struct.ll_dev_dma_tx_irq	= NO_IRQ;
+      pdata_struct.dcr_host = 0x0;
+      mac_address = of_get_mac_address(ofdev->node);
+      if(mac_address)
+	{
+	  memcpy(pdata_struct.mac_addr, mac_address, 6);
+	}
+      else
+	{
+	  dev_warn(&ofdev->dev, "No MAC address found.\n");
+	}
+      return xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);
+      /*return rc;*/
     }
   
   llink_connected_node =
@@ -3477,6 +3512,8 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
       pdata_struct.ll_dev_type = XPAR_LL_FIFO;
       pdata_struct.ll_dev_dma_rx_irq	= NO_IRQ;
       pdata_struct.ll_dev_dma_tx_irq	= NO_IRQ;
+      pdata_struct.ll_dev_fifo_irq	= NO_IRQ;
+      pdata_struct.dcr_host = 0x0;
       
       rc = of_irq_to_resource(
 			      llink_connected_node,
@@ -3571,6 +3608,7 @@ static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,xps-ll-temac-1.00.b", },
   { .compatible = "xlnx,xps-ll-temac-1.01.a", },
   { .compatible = "xlnx,xps-ll-temac-1.01.b", },
+  { .compatible = "xlnx,xps-ll-temac-clientc-1.00.c", },
   { /* end of list */ },
 };
 
