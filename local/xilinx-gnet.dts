@@ -38,7 +38,7 @@
 		reg = < 0x90000000 0x8000000 >;
 	} ;
 	aliases {
-		ethernet0 = &xps_ll_temac_0;
+		ethernet0 = &xps_ll_temac_clientC_1;
 		ethernet1 = &xps_ll_temac_1;
 		serial0 = &RS232;
 		serial1 = &RS232_Atmel;
@@ -242,7 +242,7 @@
 			current-speed = <31250>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 9 0 >;
+			interrupts = < 8 0 >;
 			port-number = <2>;
 			reg = < 0x85000000 0x10000 >;
 			xlnx,baudrate = <0x7a12>;
@@ -257,7 +257,7 @@
 			current-speed = <115200>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 5 0 >;
+			interrupts = < 4 0 >;
 			port-number = <0>;
 			reg = < 0x8c000000 0x10000 >;
 			xlnx,baudrate = <0x1c200>;
@@ -272,7 +272,7 @@
 			current-speed = <62500>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 8 0 >;
+			interrupts = < 7 0 >;
 			port-number = <1>;
 			reg = < 0x8b000000 0x10000 >;
 			xlnx,baudrate = <0xf424>;
@@ -287,7 +287,7 @@
 			current-speed = <9600>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 10 2 >;
+			interrupts = < 9 2 >;
 			reg = < 0x86000000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
@@ -304,7 +304,7 @@
 			current-speed = <9600>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 12 2 >;
+			interrupts = < 11 2 >;
 			reg = < 0x8f000000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
@@ -316,7 +316,7 @@
 			xlnx,is-a-16550 = <0x1>;
 		} ;
 		i2s_0: iis2424-g@8e000000 {
-			compatible = "xlnx,iis2424-g-1.00.h";
+			compatible = "xlnx,iis2424-g-1.00.m";
 			reg = < 0x8e000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
@@ -330,7 +330,7 @@
 		oled_spi_0: xps-spi@89000000 {
 			compatible = "xlnx,xps-spi-2.01.b", "xlnx,xps-spi-2.00.a";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 4 2 >;
+			interrupts = < 3 2 >;
 			reg = < 0x89000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,fifo-exist = <0x1>;
@@ -347,7 +347,7 @@
 		smpte_decoder_0: smpte-decoder@87000000 {
 			compatible = "xlnx,smpte-decoder-1.00.a";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 6 0 >;
+			interrupts = < 5 0 >;
 			reg = < 0x87000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
@@ -355,7 +355,7 @@
 		smpte_generator_0: smpte-generator@8d000000 {
 			compatible = "xlnx,smpte-generator-1.00.a";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 7 0 >;
+			interrupts = < 6 0 >;
 			reg = < 0x8d000000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
@@ -380,45 +380,58 @@
 			compatible = "xlnx,xps-intc-2.00.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x82000000 0x10000 >;
-			xlnx,kind-of-intr = <0x3e3>;
+			xlnx,kind-of-intr = <0x1f3>;
 			xlnx,num-intr-inputs = <0xc>;
 		} ;
-		xps_ll_fifo_1: xps-ll-fifo@84000000 {
-			compatible = "xlnx,xps-ll-fifo-1.02.a";
-			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 2 2 >;
-			reg = < 0x84000000 0x10000 >;
-			xlnx,family = "virtex5";
-		} ;
-		xps_ll_temac_0: xps-ll-temac@83000000 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "xlnx,compound";
+                xps_ll_temac_clientC_1: xps-ll-temac-clientc@83000000 {
+                        #address-cells = <1>;
+                        #size-cells = <1>;
+                        compatible = "xlnx,compound";
 			ethernet@83000000 {
-				compatible = "xlnx,xps-ll-temac-2.03.z", "xlnx,xps-ll-temac-1.00.a";
-				device_type = "network";
+				compatible = "xlnx,xps-ll-temac-clientc-1.00.c";
 				interrupt-parent = <&xps_intc_1>;
-				interrupts = < 3 2 >;
-				llink-connected = <&xps_ll_fifo_1>;
+				interrupts = < 2 2 >;
 				local-mac-address = [ 00 0a 35 eb 82 00 ];
-				reg = < 0x83000000 0x40 >;
-				xlnx,avb = <0x0>;
+				reg = < 0x83000000 0x80000 >;
 				xlnx,bus2core-clk-ratio = <0x1>;
-				xlnx,mcast-extend = <0x1>;
+				xlnx,family = "virtex5";
+				xlnx,include-io = <0x1>;
+				xlnx,insert-client = <0x1>;
+				xlnx,insert-clientb = <0x0>;
+				xlnx,num-idelayctrl = <0x1>;
 				xlnx,phy-type = <0x4>;
-				xlnx,phyaddr = <0x5>;
-				xlnx,rxcsum = <0x0>;
-				xlnx,rxfifo = <0x1000>;
-				xlnx,rxvlan-strp = <0x0>;
-				xlnx,rxvlan-tag = <0x0>;
-				xlnx,rxvlan-tran = <0x0>;
-				xlnx,stats = <0x0>;
+				xlnx,reserved = <0x0>;
+				xlnx,subfamily = "lx";
 				xlnx,temac-type = <0x0>;
-				xlnx,txcsum = <0x0>;
-				xlnx,txfifo = <0x1000>;
-				xlnx,txvlan-strp = <0x0>;
-				xlnx,txvlan-tag = <0x0>;
-				xlnx,txvlan-tran = <0x0>;
+				xlnx,temac0-avb = <0x0>;
+				xlnx,temac0-mcast-extend = <0x0>;
+				xlnx,temac0-phyaddr = <0x5>;
+				xlnx,temac0-rxcsum = <0x0>;
+				xlnx,temac0-rxfifo = <0x1000>;
+				xlnx,temac0-rxvlan-strp = <0x0>;
+				xlnx,temac0-rxvlan-tag = <0x0>;
+				xlnx,temac0-rxvlan-tran = <0x0>;
+				xlnx,temac0-stats = <0x0>;
+				xlnx,temac0-txcsum = <0x0>;
+				xlnx,temac0-txfifo = <0x1000>;
+				xlnx,temac0-txvlan-strp = <0x0>;
+				xlnx,temac0-txvlan-tag = <0x0>;
+				xlnx,temac0-txvlan-tran = <0x0>;
+				xlnx,temac1-avb = <0x0>;
+				xlnx,temac1-enabled = <0x0>;
+				xlnx,temac1-mcast-extend = <0x0>;
+				xlnx,temac1-phyaddr = <0x2>;
+				xlnx,temac1-rxcsum = <0x0>;
+				xlnx,temac1-rxfifo = <0x1000>;
+				xlnx,temac1-rxvlan-strp = <0x0>;
+				xlnx,temac1-rxvlan-tag = <0x0>;
+				xlnx,temac1-rxvlan-tran = <0x0>;
+				xlnx,temac1-stats = <0x0>;
+				xlnx,temac1-txcsum = <0x0>;
+				xlnx,temac1-txfifo = <0x1000>;
+				xlnx,temac1-txvlan-strp = <0x0>;
+				xlnx,temac1-txvlan-tag = <0x0>;
+				xlnx,temac1-txvlan-tran = <0x0>;
 			} ;
 		} ;
 		xps_ll_temac_1: xps-ll-temac@00000000 {
@@ -436,7 +449,7 @@
 		xps_mailbox_0: mailbox@80000000 {
 			compatible = "xlnx,xps-mailbox-2.00.b";
 			interrupt-parent = <&xps_intc_1>;
-			interrupts = < 11 2 >;
+			interrupts = < 10 2 >;
 			reg = < 0x80000000 0x10000 >;
 			xlnx,async-clks = <0x0>;
 			xlnx,ext-reset-high = <0x1>;
