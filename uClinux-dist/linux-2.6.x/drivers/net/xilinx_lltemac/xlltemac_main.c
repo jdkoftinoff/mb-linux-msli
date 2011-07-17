@@ -963,8 +963,10 @@ static int xenet_open(struct net_device *dev)
     {
       Options &= ~XTE_PROMISC_OPTION;
     }
+#if 0
   Options |= XTE_FLOW_CONTROL_OPTION;
   Options |= XTE_JUMBO_OPTION;
+#endif
   Options |= XTE_TRANSMITTER_ENABLE_OPTION;
   Options |= XTE_RECEIVER_ENABLE_OPTION;
 #if XTE_AUTOSTRIPPING
