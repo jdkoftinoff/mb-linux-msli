@@ -214,7 +214,7 @@
 			xlnx,opcode-0x0-illegal = <0x1>;
 			xlnx,optimization = <0x0>;
 			xlnx,pvr = <0x0>;
-			xlnx,pvr-user1 = <0x6>;
+			xlnx,pvr-user1 = <0x7>;
 			xlnx,pvr-user2 = <0x0>;
 			xlnx,reset-msr = <0x0>;
 			xlnx,s0-axis-data-width = <0x20>;
