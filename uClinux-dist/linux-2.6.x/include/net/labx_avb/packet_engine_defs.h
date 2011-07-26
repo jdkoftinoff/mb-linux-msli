@@ -100,6 +100,7 @@ typedef struct {
 } ClockDomainSettings;
 #  define DOMAIN_DISABLED            (0x00)
 #  define DOMAIN_ENABLED             (0x01)
+#  define DOMAIN_SYNC                (0x02)
 #  define DOMAIN_SAMPLE_EDGE_FALLING (0x00)
 #  define DOMAIN_SAMPLE_EDGE_RISING  (0x01)
 

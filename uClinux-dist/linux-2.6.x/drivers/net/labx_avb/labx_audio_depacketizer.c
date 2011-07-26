@@ -622,6 +622,8 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    */
   controlValue |= (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) ?
                    MC_CONTROL_SAMPLE_EDGE_RISING : MC_CONTROL_SAMPLE_EDGE_FALLING;
+  controlValue |= (clockDomainSettings->enabled == DOMAIN_SYNC) ?
+                   MC_CONTROL_SYNC_EXTERNAL : MC_CONTROL_SYNC_INTERNAL;
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
             controlValue);
 
@@ -666,7 +668,9 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_OFFSET_REG),
             DAC_OFFSET_ZERO);
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
-            ((clockDomainSettings->enabled == DOMAIN_ENABLED) ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
+            (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
+	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
+	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
             ((512 << VCO_LOCK_COUNT_SHIFT) | 0));
 
