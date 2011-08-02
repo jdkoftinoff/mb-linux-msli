@@ -40,7 +40,7 @@
 		serial0 = &serial_port;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 mtdparts=87000000.flash:4224K(fpga),256K(boot),128K(fdt),3712K(image),1920K(rootfs),3968K(romfs),2048K(settingsfs),32K(bootenv) root=mtd4 rootfstype=romfs init=/bin/init broadcom.led_default=0,0,-1,-1 broadcom.bc5481_high_performance_enable=1 broadcom.bc5481_auto_negotiate_enable=1 ";
+		bootargs = "console=ttyUL0 mtdparts=87000000.flash:3328K(fpga_ro),3328K(fpga),256K(boot),3072K(image),1280K(rootfs),3456K(romfs),1536K(settingsfs),32K(bootenv),64K(fdt) root=mtd4 rootfstype=romfs init=/bin/init broadcom.led_default=0,0,-1,-1 broadcom.bc5481_high_performance_enable=1 broadcom.bc5481_auto_negotiate_enable=1 ";
 	} ;
 	cpus {
 		#address-cells = <1>;
