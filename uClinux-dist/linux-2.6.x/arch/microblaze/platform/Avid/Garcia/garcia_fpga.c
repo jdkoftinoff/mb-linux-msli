@@ -224,6 +224,9 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_GENERAL_DIR;
 		if (val != 0) {
 			fpga_gpio.shadow_value |= GARCIA_FPGA_GENERAL_DIR;
+			garcia_control_set_master(1);
+		} else {
+			garcia_control_set_master(0);
 		}
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_SLOT_BUF_NOE;
 		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |

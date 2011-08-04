@@ -54,6 +54,7 @@ int garcia_led_set(int led, int value);
 typedef void (*gpio_irq_callback)(uint32_t gpioval, void *data);
 int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
 		gpio_irq_callback callback, void *data);
+void garcia_control_set_master(int is_master);
 
 /* ioctl commands of Garcia control character device */
 
@@ -64,6 +65,8 @@ int set_gpio_irq_callback(uint32_t falling_edge_mask, uint32_t rising_edge_mask,
 
 #define GARCIA_MUTE_CONTROLLER_MASK 0x00F00000 /* Mask of mute control depacketizer stream assignment */
 #define GARCIA_MUTE_CONTROLLER_SHIFT   20   /* Bit shift of mute control depacketizer stream assignment */
+#define GARCIA_STATUS_MASK_SLOT_POPULATED 0x1000 /* If set, GARCIA_STATUS_SLOT_POPULATED value will be used */
+#define GARCIA_STATUS_SLOT_POPULATED 0x1000 /* Slot is not empty - it proxies for an I/O card */
 #define GARCIA_STATUS_ENA_UNMUTE    0x800   /* If set, and GARCIA_STATUS_MUTE_FORCE is clear, force unmute */
 #define GARCIA_STATUS_MUTE_FORCE    0x400   /* If set, slot is forced to be muted */
 #define GARCIA_STATUS_MUTE_ON       (GARCIA_STATUS_MUTE_FORCE & ~GARCIA_STATUS_ENA_UNMUTE)
