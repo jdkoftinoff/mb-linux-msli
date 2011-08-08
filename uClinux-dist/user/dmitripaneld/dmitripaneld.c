@@ -2,6 +2,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -1056,7 +1057,7 @@ int read_buttons_cmdline(void)
        if(ptr1-ptr0==7&&!memcmp(ptr0,"BUTTONS",7))
 	 {
 	   for(;*ptr1>' '&&(*ptr1<'0'||*ptr1>'9');ptr1++);
-	   sscanf(ptr1,"%i",&n);
+	   sscanf((char*)ptr1,"%i",&n);
 	   return n;
 	 }
        else
@@ -1104,6 +1105,7 @@ int main(int argc, char **argv)
   char strbuffer_line1[256],strbuffer_line2[256],
     ipv4addr_0[47],ipv6addr_0[47],
     ipv4addr_1[47],ipv6addr_1[47];
+  struct stat statbuf;
   struct timeval loop_timer,display_off_timer;
 
   enum{
@@ -1196,7 +1198,8 @@ int main(int argc, char **argv)
 	  ipaddr=my_eth_address("eth0",4);
 	  if(!*ipaddr)
 	    ipaddr=my_eth_address("eth1",4);
-	  if(*ipaddr)
+	  
+	  if(!stat("/var/tmp/status/no-ip-address",&statbuf)||*ipaddr)
 	    {
 	      ipv4addr_0[0]='\0';
 	      ipv6addr_0[0]='\0';
@@ -1403,7 +1406,6 @@ int main(int argc, char **argv)
 		}
 	      else
 		display_state=DISPLAY_ETH1;
-	      
 	      break;
 	    case DISPLAY_ETH1:
 	      if(ipaddr_label_1)
@@ -1430,7 +1432,6 @@ int main(int argc, char **argv)
 		}
 	      else
 		display_state=DISPLAY_ETH0;
-	      
 	      break;
 	    default:
 	      display_state=DISPLAY_ETH0;
@@ -1467,6 +1468,8 @@ int main(int argc, char **argv)
 				msg_r,msg_g,msg_b);
 		  oled_draw_box(16+horiz_shift, 40+4+vert_shift, 2, 1,
 				msg_r,msg_g,msg_b);
+		  break;
+		default:
 		  break;
 		}
 	      prev_display_state=display_state;

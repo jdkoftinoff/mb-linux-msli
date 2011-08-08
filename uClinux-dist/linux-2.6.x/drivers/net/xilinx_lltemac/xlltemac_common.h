@@ -5,6 +5,7 @@
 extern spinlock_t XTE_spinlock;
 
 #define XTE_AUTOSTRIPPING 1
+#define PHY_USE_RESET_FLAG 1
 
 /*
  * Our private per device data.  When a net_device is allocated we will
@@ -27,10 +28,13 @@ struct xlltemac_net_local {
   
   u8 led_blink;           /* slow blink state */
   
+#ifdef PHY_USE_RESET_FLAG
   u8 reset_flag;          /* reset flag -- originally 0,
 			     set to 1 to indicate that subsequent phy
 			     resets will be necessary  */
-  
+#endif
+  unsigned long poll_reset_time;   /* moment when PHY should be reset if it
+				      still didn't get carrier */
   /* The underlying OS independent code needs space as well.  A
    * pointer to the following XLlTemac structure will be passed to
    * any XLlTemac_ function that requires it.  However, we treat the

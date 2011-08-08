@@ -167,6 +167,17 @@ DEVICES +=      \
         i2s_gnet0,c,252,0
 endif
 
+ifdef CONFIG_XILINX_MAILBOX
+DEVICES +=      \
+        mailbox0,c,251,0
+endif
+
+ifdef CONFIG_MEYER_SMPTE
+DEVICES +=      \
+        smpte0,c,250,0 \
+        smpte1,c,250,1
+endif
+
 I2C_MAJOR = 89
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
@@ -219,6 +230,8 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
+	$(ROMFSINST) $(COMMON)/extras/avahi-daemon-loop /bin/avahi-daemon-loop
+	chmod +x $(ROMFSDIR)/bin/avahi-daemon-loop || true
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action

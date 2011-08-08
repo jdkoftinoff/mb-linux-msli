@@ -367,6 +367,9 @@ static const struct of_device_id i2s_gnet_match[] =
     { .compatible = "xlnx,iis2424-g-1.00.a" },
     { .compatible = "xlnx,iis2424-g-1.00.b" },
     { .compatible = "xlnx,iis2424-g-1.00.c" },
+    { .compatible = "xlnx,iis2424-g-1.00.g" },
+    { .compatible = "xlnx,iis2424-g-1.00.h" },
+    { .compatible = "xlnx,iis2424-g-1.00.m" },
     {}
   };
 
