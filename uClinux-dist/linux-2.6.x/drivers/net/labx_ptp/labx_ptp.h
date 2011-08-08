@@ -192,7 +192,9 @@ struct ptp_port {
   PtpTime syncTxTimestamp;
   uint32_t syncTimestampsValid;
   PtpTime delayReqTxTimestampTemp;
+  PtpTime delayReqTxLocalTimestampTemp;
   PtpTime delayReqTxTimestamp;
+  PtpTime delayReqTxLocalTimestamp;
   PtpTime delayReqRxTimestamp;
   uint32_t delayReqTimestampsValid;
 
@@ -298,6 +300,8 @@ struct ptp_device {
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
   PtpCoefficients coefficients;
+  uint32_t masterRateRatio;
+  uint32_t masterRateRatioValid;
 
   /* RTC control loop persistent values */
   int64_t  integral;
@@ -403,6 +407,7 @@ void get_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment);
 void get_rtc_time(struct ptp_device *ptp, PtpTime *time);
 void get_local_time(struct ptp_device *ptp, PtpTime *time);
 void set_rtc_time(struct ptp_device *ptp, PtpTime *time);
+void set_rtc_time_adjusted(struct ptp_device *ptp, PtpTime *time, PtpTime *entryTime);
 void rtc_update_servo(struct ptp_device *ptp, uint32_t port);
 void update_rtc_lock_detect(struct ptp_device *ptp);
 

@@ -40,7 +40,7 @@
 #define PDELAY_REQ_INTERVAL       (1000)
 
 /* Maximum error, in nanoseconds, tolerated before the time is reset */
-#define RESET_THRESHOLD_NS  (10000000)
+#define RESET_THRESHOLD_NS  (100000)
 
 /* Enumerated type identifying the results of a BMCA comparison */
 typedef enum {
@@ -474,7 +474,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
       if(ptp->rtcChangesAllowed) {
         printk("Resetting RTC!\n");
         set_rtc_increment(ptp, &ptp->nominalIncrement);
-        set_rtc_time(ptp, &syncTxTimestamp);
+        set_rtc_time_adjusted(ptp, &correctedTimestamp, &ptp->ports[port].syncRxTimestampTemp);
       }
    } else {
       /* Less than a second, leave these timestamps and update the servo */
@@ -533,6 +533,7 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint32_
      (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == 
       get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER))) {
     PtpTime delayReqRxTimestamp;
+    PtpTime delayReqRxLocalTimestamp;
     PtpTime difference;
     PtpTime absDifference;
 
@@ -553,6 +554,7 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint32_
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       timestamp_copy(&ptp->ports[port].delayReqTxTimestamp, &ptp->ports[port].delayReqTxTimestampTemp);
+      timestamp_copy(&ptp->ports[port].delayReqTxLocalTimestamp, &ptp->ports[port].delayReqTxLocalTimestampTemp);
       timestamp_copy(&ptp->ports[port].delayReqRxTimestamp, &delayReqRxTimestamp);
       ptp->ports[port].delayReqTimestampsValid = 1;
       spin_unlock_irqrestore(&ptp->mutex, flags);
@@ -702,6 +704,9 @@ static void tx_state_task(unsigned long data) {
            */
           get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER, 
                                  &ptp->ports[i].delayReqTxTimestampTemp);
+          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER, 
+                                       &ptp->ports[i].delayReqTxLocalTimestampTemp);
+
         } break;
         
         case PTP_TX_PDELAY_REQ_BUFFER: {
@@ -789,6 +794,10 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->newMaster              = TRUE;
   ptp->rtcChangesAllowed      = TRUE;
   ptp->announceTimeoutCounter = 0;
+
+  ptp->masterRateRatio = 0;
+  ptp->masterRateRatioValid = FALSE;
+
   tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
 
   for(i=0; i<ptp->numPorts; i++) {

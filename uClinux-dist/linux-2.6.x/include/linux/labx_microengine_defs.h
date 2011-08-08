@@ -44,7 +44,6 @@
 #define IOC_START_ENGINE           _IO(ENGINE_IOC_CHAR, 0x01)
 #define IOC_STOP_ENGINE            _IO(ENGINE_IOC_CHAR, 0x02)
 
-#define MAX_CONFIG_WORDS 1024
 typedef struct {
   uint32_t  offset;
   uint32_t  numWords;

@@ -61,6 +61,36 @@ struct garcia_fpga_gpio_struct {
 
 static struct garcia_fpga_gpio_struct fpga_gpio;
 
+uint32_t garcia_gpio_clear(uint32_t clearmask) {
+	uint32_t val = fpga_gpio.shadow_value & ~clearmask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_clear);
+
+uint32_t garcia_gpio_set(uint32_t setmask) {
+	uint32_t val = fpga_gpio.shadow_value | setmask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_set);
+
+uint32_t garcia_gpio_toggle(uint32_t xormask) {
+	uint32_t val = fpga_gpio.shadow_value ^ xormask;
+	fpga_gpio.shadow_value = val;
+	val = ((val & GARCIA_GPIO_INPUTS_MASK) |
+			(garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK));
+	garcia_fpga_write_gpio(val);
+	return val;
+}
+EXPORT_SYMBOL(garcia_gpio_toggle);
+
 int garcia_led_set(int led, int value)
 {
 	uint32_t val;
@@ -194,6 +224,38 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 	return count;
 }
 
+static ssize_t garcia_r_packetizer_ena(struct class *c,char *buf)
+{
+	int count = 0;
+	int val = 0;
+	if ((fpga_gpio.shadow_value & GARCIA_FPGA_PACKETIZER_01_ENA) != 0) {
+		val |= 1;
+	}
+	if ((fpga_gpio.shadow_value & GARCIA_FPGA_PACKETIZER_23_ENA) != 0) {
+		val |= 2;
+	}
+	count = snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return count;
+}
+
+static ssize_t garcia_w_packetizer_ena(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		fpga_gpio.shadow_value &= ~(GARCIA_FPGA_PACKETIZER_01_ENA | GARCIA_FPGA_PACKETIZER_23_ENA);
+		if ((val & 1) != 0) {
+			fpga_gpio.shadow_value |= GARCIA_FPGA_PACKETIZER_01_ENA;
+		}
+		if ((val & 2) != 0) {
+			fpga_gpio.shadow_value |= GARCIA_FPGA_PACKETIZER_23_ENA;
+		}
+		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+	}
+	return count;
+}
+
 static ssize_t garcia_r_inputs(struct class *c, char *buf)
 {
 	return (snprintf(buf, PAGE_SIZE, "%lx\n",
@@ -234,6 +296,7 @@ static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
 
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
+	__ATTR(packetizer_ena, S_IRUGO | S_IWUGO, garcia_r_packetizer_ena, garcia_w_packetizer_ena),
 	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
 	__ATTR(selector, S_IRUGO, garcia_r_selector, NULL),
 	__ATTR(pushbutton, S_IRUGO, garcia_r_pushbutton, NULL),
@@ -248,6 +311,11 @@ static struct class garcia_fpga_class = {
 	.owner =	THIS_MODULE,
 	.class_attrs =	garcia_fpga_class_attrs,
 };
+
+static int garcia_led_default[2] = {2, 3};
+module_param_array(garcia_led_default, int, NULL, 0);
+MODULE_PARM_DESC(garcia_led_default, "Garcia LEDs default state");
+
 
 static int __devinit garcia_fpga_probe(struct device *dev)
 {
@@ -283,8 +351,12 @@ static int __devinit garcia_fpga_probe(struct device *dev)
 		garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_IPIER, GARCIA_FPGA_GPIO_IPIE);
 	}
 
-	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio();
-	fpga_gpio.shadow_value = (fpga_gpio.last_gpio_irq & ~GARCIA_GPIO_INPUTS_MASK) | GARCIA_FPGA_SLOT_BUF_NOE;
+	fpga_gpio.last_gpio_irq = garcia_fpga_read_gpio() & GARCIA_FPGA_GPIO_MASK;
+	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+				GARCIA_FPGA_SLOT_BUF_NOE;
+	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
+	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
+	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
 	rc = class_register(&garcia_fpga_class);
 
 	return rc;
@@ -326,6 +398,8 @@ static int __devinit garcia_fpga_of_probe(struct of_device *ofdev, const struct 
 	fpga_gpio.shadow_value = (garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
 			GARCIA_FPGA_SLOT_BUF_NOE;
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
+	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
+	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
 	rc |= class_register(&garcia_fpga_class);
 
 	return rc;

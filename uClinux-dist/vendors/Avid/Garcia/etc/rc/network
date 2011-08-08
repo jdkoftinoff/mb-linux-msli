@@ -25,28 +25,18 @@ else
 fi
 if [ $IS_STAGEBOX -ne 0 ] ; then
   echo stagebox > /var/tmp/role
-  if [ `cat /sys/class/garcia_fpga/selector` -eq 4 ] ; then
-### CAUTION: TEMPORARY HACK FOR DROP 1 ONLY###
-    ifconfig eth0 hw ether 00:0A:35:71:19:30
-    ifconfig eth1 hw ether 00:0A:35:71:10:31
+  if [ `cat /sys/class/garcia_fpga/selector` -eq 5 ] ; then
     ifconfig eth1 $IP_ADDRESS_PREFIX.4.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.3.2
   else
-### CAUTION: TEMPORARY HACK FOR DROP 1 ONLY###
-    ifconfig eth0 hw ether 00:0A:35:71:19:20
-    ifconfig eth1 hw ether 00:0A:35:71:10:21
     ifconfig eth1 $IP_ADDRESS_PREFIX.2.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.1.2
   fi
-### CAUTION: TEMPORARY HACK FOR DROP 1 ONLY###
-  echo 2 > /sys/class/leds/power/brightness
   ifconfig eth2 down 2>/dev/null
   ifconfig eth3 down 2>/dev/null
 else
   ifconfig eth1 $IP_ADDRESS_PREFIX.2.1
   ifconfig eth0 $IP_ADDRESS_PREFIX.1.1
-### CAUTION: TEMPORARY HACK FOR DROP 1 ONLY###
-  echo 1 > /sys/class/leds/power/brightness
   echo console > /var/tmp/role
 fi
 

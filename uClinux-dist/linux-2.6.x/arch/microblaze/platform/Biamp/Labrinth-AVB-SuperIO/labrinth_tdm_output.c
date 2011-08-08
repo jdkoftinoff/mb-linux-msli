@@ -27,6 +27,7 @@
 #include "labrinth_tdm_output.h"
 #include <asm/uaccess.h>
 #include <linux/labx_local_audio.h>
+#include <linux/labx_local_audio_defs.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -85,8 +86,8 @@
  */
 #define TDM_DEMUX_RANGE  (0x03)
 #define TDM_DEMUX_ADDRESS(device, offset)                    \
-  ((uintptr_t)device->labxLocalAudio->dma.virtualAddress |  \
-   (TDM_DEMUX_RANGE << device->labxLocalAudio->dma.regionShift) | (offset << 2))
+  ((uintptr_t)device->labxLocalAudio->dma->virtualAddress |  \
+   (TDM_DEMUX_RANGE << device->labxLocalAudio->dma->regionShift) | (offset << 2))
 
 /* Buffer for storing stream map entries */
 static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
@@ -348,9 +349,13 @@ int labrinth_tdm_probe(const char *name,
   /* Dispatch to the Lab X local audio driver for most of the setup.
    * We pass it our file operations structure to be invoked polymorphically.
    */
-  returnValue = labx_local_audio_probe(name, pdev, addressRange,
+  returnValue = labx_local_audio_probe(name, 
+                                       pdev, 
+                                       addressRange,
+                                       LA_DMA_INTERFACE_NPI,
                                        LABRINTH_TDM_NUM_CHANNELS,
-                                       &labrinth_tdm_fops, tdmOutput,
+                                       &labrinth_tdm_fops, 
+                                       tdmOutput,
                                        &tdmOutput->labxLocalAudio);
   if(returnValue != 0) goto free;
 

@@ -38,10 +38,10 @@
 #endif // CONFIG_OF
 
 
-/* Driver name and the revision of hardware expected (1.1 - 1.6) */
+/* Driver name and the revision of hardware expected (1.1 - 1.7) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x16
+#define DRIVER_VERSION_MAX  0x17
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
@@ -622,6 +622,8 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    */
   controlValue |= (clockDomainSettings->sampleEdge == DOMAIN_SAMPLE_EDGE_RISING) ?
                    MC_CONTROL_SAMPLE_EDGE_RISING : MC_CONTROL_SAMPLE_EDGE_FALLING;
+  controlValue |= (clockDomainSettings->enabled == DOMAIN_SYNC) ?
+                   MC_CONTROL_SYNC_EXTERNAL : MC_CONTROL_SYNC_INTERNAL;
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
             controlValue);
 
@@ -666,7 +668,9 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_OFFSET_REG),
             DAC_OFFSET_ZERO);
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
-            ((clockDomainSettings->enabled == DOMAIN_ENABLED) ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
+            (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
+	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
+	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
             ((512 << VCO_LOCK_COUNT_SHIFT) | 0));
 
@@ -838,6 +842,7 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 }
 
 /* Buffer for storing configuration words */
+#define MAX_CONFIG_WORDS 1024
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
@@ -859,17 +864,37 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
 
   case IOC_LOAD_DESCRIPTOR:
     {
-      ConfigWords descriptor;
+      ConfigWords userDescriptor;
+      ConfigWords localDescriptor;
 
-      if(copy_from_user(&descriptor, (void __user*)arg, sizeof(descriptor)) != 0) {
+      if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      if(copy_from_user(configWords, (void __user*)descriptor.configWords, 
-                        (descriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         depacketizer->capabilities.maxInstructions) {
+        return(-ERANGE);
       }
-      descriptor.configWords = configWords;
-      returnValue = load_descriptor(depacketizer, &descriptor);
+
+      localDescriptor.offset          = userDescriptor.offset;
+      localDescriptor.interlockedLoad = userDescriptor.interlockedLoad;
+      localDescriptor.loadFlags       = userDescriptor.loadFlags;
+      localDescriptor.configWords     = configWords;
+      while(userDescriptor.numWords > 0) {
+        /* Load in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ?
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        if(copy_from_user(configWords, (void __user*)userDescriptor.configWords, 
+                          (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        returnValue                 = load_descriptor(depacketizer, &localDescriptor);
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
+        if(returnValue < 0) break;
+      }
     }
     break;
 
@@ -882,13 +907,27 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      localDescriptor.offset = userDescriptor.offset;
-      localDescriptor.numWords = userDescriptor.numWords;
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         depacketizer->capabilities.maxInstructions) {
+        return(-ERANGE);
+      }
+
+      localDescriptor.offset      = userDescriptor.offset;
       localDescriptor.configWords = configWords;
-      copy_descriptor(depacketizer, &localDescriptor);
-      if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
-                      (userDescriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+      while(userDescriptor.numWords > 0) {
+        /* Transfer in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ? 
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        copy_descriptor(depacketizer, &localDescriptor);
+        if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
+                        (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
       }
     }
     break;
@@ -1271,6 +1310,8 @@ static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.00.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.01.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.02.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.03.a", },
+    { .compatible = "xlnx,labx-audio-depacketizer-1.04.a", },
 	{ /* end of list */ },
 };
 

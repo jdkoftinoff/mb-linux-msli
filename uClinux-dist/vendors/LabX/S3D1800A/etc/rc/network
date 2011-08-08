@@ -1,17 +1,16 @@
 #!/bin/sh
 
-# For the moment, simply define static IP addresses
-IP_ADDRESS_A=192.168.1.1
-
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
 
-echo "Setting up interface eth0: "
-ifconfig eth0 $IP_ADDRESS_A
-ifconfig eth0 up
+# Call a script located on the read-write Flash filesystem to
+# permit users to easily modify the persistent network settings
+echo "Calling platform-specific network script"
+/mnt/config/scripts/network_config
 
+# Start web server, etc.
 mkdir /var/tmp/dhcpc
 mkdir /var/lib
 mkdir /var/tmp/avahi

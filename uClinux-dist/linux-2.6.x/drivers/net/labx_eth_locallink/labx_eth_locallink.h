@@ -426,6 +426,8 @@ typedef struct {
 			  */ 
 	u8 TemacIntr;	/**< TEMAC interrupt ID */
 
+	u8 MacWidth;
+	
 	int LLDevType;	/**< LLDevType is the type of device attached to the
 			 *   temac's local link interface.
 			 */
@@ -460,6 +462,9 @@ typedef struct XLlTemac {
   wait_queue_head_t PhyWait; /* Wait queue for PHY operations */
   u32 MdioState;             /* MDIO state */
   struct mii_bus *mdio_bus;  /* MDIO bus driver instance */
+  u32 versionReg;            /* Version register */
+  u32 MacMatchUnits;         /* Number of supported MAC filters */
+  struct net_device *dev;    /* Pointer back to the net device */
 } XLlTemac;
 
 
@@ -778,6 +783,9 @@ void labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNu
 		      u16 *PhyDataPtr);
 void labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		       u16 PhyData);
+		       
+void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr);
+
 int labx_XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void labx_XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 int labx_XLlTemac_MulticastClear(XLlTemac *InstancePtr, int Entry);

@@ -41,6 +41,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
+#include <linux/netdevice.h>
 #include "labx_eth_locallink.h"
 
 /************************** Constant Definitions *****************************/
@@ -434,13 +435,208 @@ static void InitHw(XLlTemac *InstancePtr)
 	labx_XLlTemac_SetOptions(InstancePtr, InstancePtr->Options &
 			    ~(XTE_TRANSMITTER_ENABLE_OPTION |
 			      XTE_RECEIVER_ENABLE_OPTION));
-
 	labx_XLlTemac_ClearOptions(InstancePtr, ~InstancePtr->Options);
 
 	/* Set default MDIO divisor */
 	labx_XLlTemac_PhySetMdioDivisor(InstancePtr, XTE_MDIO_DIV_DFT);
 	xdbg_printf(XDBG_DEBUG_GENERAL, "XLlTemac InitHw: done\n");
 }
+
+/* Yi Cao: The following is for the packet filter configuration*/
+
+#define MAC_MATCH_NONE 0
+#define MAC_MATCH_ALL 1
+
+static const u8 MAC_BROADCAST[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const u8 MAC_ZERO[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+#define NUM_SRL16E_CONFIG_WORDS 8
+#define NUM_SRL16E_INSTANCES    12
+
+/* Busy loops until the match unit configuration logic is idle.  The hardware goes 
+ * idle very quickly and deterministically after a configuration word is written, 
+ * so this should not consume very much time at all.
+ */
+static void wait_match_config(XLlTemac *InstancePtr) {
+  uint32_t statusWord;
+  uint32_t timeout = 10000;
+  do {
+    statusWord = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG);
+    if (timeout-- == 0)
+    {
+      printk("depacketizer: wait_match_config timeout!\n");
+      break;
+    }
+  } while(statusWord & MAC_ADDRESS_LOAD_ACTIVE);
+}
+
+/* Selects a set of match units for subsequent configuration loads */
+typedef enum { SELECT_NONE, SELECT_SINGLE, SELECT_ALL } SelectionMode;
+static void select_matchers(XLlTemac *InstancePtr,
+                            SelectionMode selectionMode,
+                            uint32_t matchUnit) {
+
+	switch(selectionMode) {
+		case SELECT_NONE:
+			/* De-select all the match units */
+			//printk("MAC SELECT %08X\n", 0);
+			XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 0);
+			break;
+
+		case SELECT_SINGLE:
+			/* Select a single unit */
+			//printk("MAC SELECT %08X\n", 1 << matchUnit);
+			XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 1 << matchUnit);
+			break;
+
+		default:
+			/* Select all match units at once */
+			//printk("MAC SELECT %08X\n", 0xFFFFFFFF);
+			XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_SELECT_REG, 0xFFFFFFFF);
+			break;
+	}
+}
+
+/* Sets the loading mode for any selected match units.  This revolves around
+ * automatically disabling the match units' outputs while they're being
+ * configured so they don't fire false matches, and re-enabling them as their
+ * last configuration word is loaded.
+ */
+typedef enum { LOADING_MORE_WORDS, LOADING_LAST_WORD } LoadingMode;
+static void set_matcher_loading_mode(XLlTemac *InstancePtr,
+                                     LoadingMode loadingMode) {
+	uint32_t controlWord = XLlTemac_ReadReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG);
+
+	if(loadingMode == LOADING_MORE_WORDS) {
+		/* Clear the "last word" bit to suppress false matches while the units are
+		 * only partially cleared out
+		 */
+		controlWord &= ~MAC_ADDRESS_LOAD_LAST;
+	} else {
+		/* Loading the final word, flag the match unit(s) to enable after the
+		 * next configuration word is loaded.
+		 */
+		controlWord |= MAC_ADDRESS_LOAD_LAST;
+	}
+	//printk("CONTROL WORD %08X\n", controlWord);
+	XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_CONTROL_REG, controlWord);
+}
+
+/* Clears any selected match units, preventing them from matching any packets */
+static void clear_selected_matchers(XLlTemac *InstancePtr) {
+	uint32_t wordIndex;
+
+	/* Ensure the unit(s) disable as the first word is load to prevent erronous
+	 * matches as the units become partially-cleared
+	 */
+	set_matcher_loading_mode(InstancePtr, LOADING_MORE_WORDS);
+
+	for(wordIndex = 0; wordIndex < NUM_SRL16E_CONFIG_WORDS; wordIndex++) {
+		/* Assert the "last word" flag on the last word required to complete the clearing
+		 * of the selected unit(s).
+		 */
+		if(wordIndex == (NUM_SRL16E_CONFIG_WORDS - 1)) {
+			set_matcher_loading_mode(InstancePtr, LOADING_LAST_WORD);
+		}
+		//printk("MAC LOAD %08X\n", 0);
+		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_LOAD_REG, 0);
+	}
+}
+
+/* Loads truth tables into a match unit using the newest, "unified" match
+ * architecture.  This is SRL16E based (not cascaded) due to the efficient
+ * packing of these primitives into Xilinx LUT6-based architectures.
+ */
+static void load_unified_matcher(XLlTemac *InstancePtr,
+                                 const uint8_t matchMac[6]) {
+	int32_t wordIndex;
+	int32_t lutIndex;
+	uint32_t configWord = 0x00000000;
+	uint32_t matchChunk;
+  
+	/* In this architecture, all of the SRL16Es are loaded in parallel, with each
+	 * configuration word supplying two bits to each.  Only one of the two bits can
+	 * ever be set, so there is just an explicit check for one.
+	 */
+	for(wordIndex = (NUM_SRL16E_CONFIG_WORDS - 1); wordIndex >= 0; wordIndex--) {
+		for(lutIndex = (NUM_SRL16E_INSTANCES - 1); lutIndex >= 0; lutIndex--) {
+			matchChunk = ((matchMac[5-(lutIndex/2)] >> ((lutIndex&1) << 2)) & 0x0F);
+			configWord <<= 2;
+			if(matchChunk == (wordIndex << 1)) configWord |= 0x01;
+			if(matchChunk == ((wordIndex << 1) + 1)) configWord |= 0x02;
+		}
+		/* 12 nybbles are packed to the MSB */
+		configWord <<= 8;
+
+		/* Two bits of truth table have been determined for each SRL16E, load the
+		 * word and wait for the configuration to occur.  Be sure to flag the last
+		 * word to automatically re-enable the match unit(s) as the last word completes.
+		 */
+		if(wordIndex == 0) set_matcher_loading_mode(InstancePtr, LOADING_LAST_WORD);
+		//printk("MAC LOAD %08X\n", configWord);
+		XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MAC_LOAD_REG, configWord);
+		wait_match_config(InstancePtr);
+	}
+}
+
+static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[6], int mode)
+{
+	/* Only allow programming up to the supported number of MAC match units */
+	if (unitNum >= InstancePtr->MacMatchUnits) return;
+
+	//printk("CONFIGURE MAC MATCH %d (%d), %02X:%02X:%02X:%02X:%02X:%02X\n", unitNum, mode,
+	//	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+	/* Ascertain that the configuration logic is ready, then select the matcher */
+	wait_match_config(InstancePtr);
+	select_matchers(InstancePtr, SELECT_SINGLE, unitNum);
+
+	if (mode == MAC_MATCH_NONE) {
+		clear_selected_matchers(InstancePtr);
+	} else {
+		/* Set the loading mode to disable as we load the first word */
+		set_matcher_loading_mode(InstancePtr, LOADING_MORE_WORDS);
+      
+		/* Calculate matching truth tables for the LUTs and load them */
+		load_unified_matcher(InstancePtr, mac);
+	}
+
+	/* De-select the match unit */
+	select_matchers(InstancePtr, SELECT_NONE, 0);
+}
+
+void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
+{
+	int i;
+
+	/* Always allow our unicast mac */
+	ConfigureMacFilter(InstancePtr, 0, InstancePtr->Config.MacAddress, MAC_MATCH_ALL);
+
+	/* Allow broadcasts if configured to do so */
+	if (InstancePtr->Options & XTE_BROADCAST_OPTION) {
+		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_ALL);
+	} else {
+		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_NONE);
+	}
+
+	/* Allow multicasts if configured to do so */
+	if (InstancePtr->Options & XTE_MULTICAST_OPTION) {
+		struct dev_mc_list *dmi = InstancePtr->dev->mc_list;
+                int i;
+
+                for (i=2; (i<(InstancePtr->dev->mc_count+2)) && (i<InstancePtr->MacMatchUnits); i++) {
+			ConfigureMacFilter(InstancePtr, i, dmi->da_addr, MAC_MATCH_ALL);
+                        dmi = dmi->next;
+                }
+
+	} else {
+		/* Disable all multicast filters */
+		for (i=2; i<InstancePtr->MacMatchUnits; i++) {
+			ConfigureMacFilter(InstancePtr, i, MAC_ZERO, MAC_MATCH_NONE);
+		}
+	}
+}
+
 
 /*****************************************************************************/
 /**
@@ -1114,7 +1310,7 @@ void labx_XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
-	XASSERT_VOID((Speed == 10) || (Speed == 100) || (Speed == 1000));
+	XASSERT_VOID((Speed == 10) || (Speed == 100) || (Speed == 1000) || (Speed == 10000));
 #if 0
 	/*
 	 * If the mutual exclusion is enforced properly in the calling code, we
@@ -1147,9 +1343,10 @@ void labx_XLlTemac_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 		break;
 
 	case 1000:
+	case 10000:
 		EmmcReg |= XTE_EMMC_LINKSPD_1000;
 		break;
-
+		
 	default:
 		return;
 	}
@@ -1257,15 +1454,43 @@ void labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
       return;
     }
 
+     /* the 802.3ae Clause45 protocol for the 10G PHY */  
+    if(InstancePtr->Config.MacWidth == 64) {
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, RegisterNum);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      //to be deleted
+      
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_ADDR | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK)));  
+      
+      wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+
+      if(InstancePtr->MdioState != MDIO_STATE_READY)
+        printk("MDIO write timeout!\n");
+        
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_READ | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK)));  
+      
+    }
+       /* the 802.3ae Clause22 protocol, the old standard way */
+    else {
     /* Write the control register first to effect the read, wait for the MDIO
      * transfer to complete, and then return the read value.
      */
-    InstancePtr->MdioState = MDIO_STATE_BUSY;
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
-                      (PHY_MDIO_READ | 
-                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
-                       (RegisterNum & PHY_REG_ADDR_MASK)));
-
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                        (PHY_MDIO_READ | 
+                         ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                         (RegisterNum & PHY_REG_ADDR_MASK)));
+    }
     /* The ISR will wake us up when the read completes */
     wait_event_interruptible_timeout(InstancePtr->PhyWait,
                                      (InstancePtr->MdioState == MDIO_STATE_READY),
@@ -1327,21 +1552,50 @@ void labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
       printk("Read issued while PHY busy!\n");
       return;
     }
-
-    /* Write the data first, then the control register */
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
-    InstancePtr->MdioState = MDIO_STATE_BUSY;
-    XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
-                      (PHY_MDIO_WRITE | 
+    
+    /* the 802.3ae Clause45 protocol for the 10G PHY */
+    if(InstancePtr->Config.MacWidth == 64) {
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, RegisterNum);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_ADDR | 
                        ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
-                       (RegisterNum & PHY_REG_ADDR_MASK)));
-
-    /* The ISR will wake us up when the write completes */
-    wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK))); 
+        
+      wait_event_interruptible_timeout(InstancePtr->PhyWait,
                                      (InstancePtr->MdioState == MDIO_STATE_READY),
                                      MDIO_TIMEOUT_JIFFIES);
 
+      if(InstancePtr->MdioState != MDIO_STATE_READY)
+        printk("MDIO write timeout!\n");
+        
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_WRITE | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK))); 
+    }
+    
+    /* The old standard MIDO protocol, Clause 22 */
+    else {
+    /* Write the data first, then the control register */
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      XLlTemac_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                        (PHY_MDIO_WRITE | 
+                         ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                         (RegisterNum & PHY_REG_ADDR_MASK)));
+    }  
+      /* The ISR will wake us up when the write completes */
+    wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+      
     if(InstancePtr->MdioState != MDIO_STATE_READY) {
       printk("MDIO write timeout!\n");
     }
+ 
 }

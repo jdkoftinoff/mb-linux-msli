@@ -29,6 +29,11 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+/* Interface type definitions for use by probing drivers */
+#define LA_DMA_INTERFACE_EXTERNAL "DMA_EXT"
+#define LA_DMA_INTERFACE_NPI      "DMA_NPI"
+#define LA_DMA_INTERFACE_PLB      "DMA_PLB"
+
 struct LocalAudioChannelMapping {
 	uint32_t channel;
 	uint32_t streams;

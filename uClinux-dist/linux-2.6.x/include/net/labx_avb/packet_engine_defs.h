@@ -100,6 +100,7 @@ typedef struct {
 } ClockDomainSettings;
 #  define DOMAIN_DISABLED            (0x00)
 #  define DOMAIN_ENABLED             (0x01)
+#  define DOMAIN_SYNC                (0x02)
 #  define DOMAIN_SAMPLE_EDGE_FALLING (0x00)
 #  define DOMAIN_SAMPLE_EDGE_RISING  (0x01)
 
@@ -122,6 +123,7 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 4), \
                                           PacketizerCaps)
 
+/* TODO - This ioctl() is deprecated! */
 #define IOC_SET_PRESENTATION_OFFSET  _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 5), \
                                           uint32_t)
@@ -148,11 +150,11 @@ typedef struct {
                                           (ENGINE_IOC_CLIENT_START + 7), \
                                           uint32_t)
 
-#  define OUTPUT_A  0
-#  define OUTPUT_B  1
+#  define PACKETIZER_OUTPUT_A  0
+#  define PACKETIZER_OUTPUT_B  1
 
-#  define OUTPUT_DISABLE  0
-#  define OUTPUT_ENABLE   1
+#  define PACKETIZER_OUTPUT_DISABLE  0
+#  define PACKETIZER_OUTPUT_ENABLE   1
 
 /* Type definitions and macros for packetizer microcode */
 
@@ -175,7 +177,7 @@ typedef struct {
 
 /* Instruction field constant definitions */
 #define PACKETIZER_OPCODE_SHIFT          (24)
-#define PACKETIZER_USE_STACK_BIT         (0x00800000)
+#define PACKETIZER_TEMPLATE_RELATIVE_BIT (0x00800000)
 #define PACKETIZER_TEMPLATE_COUNT_MASK   (0x01F)
 #define PACKETIZER_TEMPLATE_COUNT_SHIFT  (18)
 
@@ -196,39 +198,54 @@ typedef struct {
 #define PACKETIZER_SAMPLE_SIZE_BITS  (3)
 #define PACKETIZER_SAMPLE_SIZE_MASK  (0x07)
 
+#define PACKETIZER_SAMPLE_BYTE_BITS  (2)
+
+#define PACKETIZER_TAG_BYTE_BITS     (8)
+#define PACKETIZER_TAG_BYTE_SHIFT    (PACKETIZER_PARAM_STACK_BITS - PACKETIZER_TAG_BYTE_BITS)
+#define PACKETIZER_TAG_INDEX_SHIFT   (PACKETIZER_TAG_BYTE_SHIFT - PACKETIZER_SAMPLE_BYTE_BITS)
+#define PACKETIZER_TAG_ACTIVE_SHIFT  (PACKETIZER_TAG_INDEX_SHIFT - 1)
+
 /* Returns an instruction word containing a clock domain specifier
  * @param clockDomain - Zero-based clock domain the stream descriptor belongs to
  */
 #define PACKETIZER_DOMAIN_FIELD(clockDomain)  ((uint32_t) (0x01 << clockDomain))
 
+/* Constants for use with the PACKETIZER_LINK_ADDRESS macro */
+#  define PACKETIZER_LINK_INVALID       (0x00000000)
+#  define PACKETIZER_LINK_VALID         (0x80000000)
+#  define PACKETIZER_DISABLE_OUTPUT_A   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_A    (0x40000000)
+#  define PACKETIZER_DISABLE_OUTPUT_B   (0x00000000)
+#  define PACKETIZER_ENABLE_OUTPUT_B    (0x20000000)
+#  define PACKETIZER_OUTPUT_ENABLE_MASK (0x60000000)
+#  define PACKETIZER_DUMMY_OUTPUT_MASK  (0x00000000)
+
 /* Returns an instruction word containing a link address and validity
- * @param linkValid   - True if the link address points to a valid descriptor, 
- *                      false if this is the last
- * @param linkAddress - Address of the next stream descriptor, if linkValid is
- *                      true.  Ignored if linkValid is false.
+ * @param linkValid        - True if the link address points to a valid descriptor, 
+ *                          false if this is the last
+ * @param outputEnableMask - Bit mask containing the outputs for which the stream is enabled
+ * @param linkAddress      - Address of the next stream descriptor, if linkValid is
+ *                           true.  Ignored if linkValid is false.
  */
-#define PACKETIZER_LINK_ADDRESS(linkValid, linkAddress) \
-  ((uint32_t) (linkValid | linkAddress))
-#  define PACKETIZER_LINK_INVALID  (0x00000000)
-#  define PACKETIZER_LINK_VALID    (0x80000000)
+#define PACKETIZER_LINK_ADDRESS(linkValid, outputEnableMask, linkAddress) \
+  ((uint32_t) (linkValid | (outputEnableMask & PACKETIZER_OUTPUT_ENABLE_MASK) | linkAddress))
 
 /* Symbolic definitions for the PACKETIZER_TEMPLATE macro */
-#define USE_CODED_ADDRESS       (0x00)
-#define USE_STACK_ADDRESS       (0x01)
-#define DUMMY_TEMPLATE_ADDRESS  (0)
+#define PACKETIZER_ABSOLUTE_ADDRESS (0x00)
+#define PACKETIZER_RELATIVE_ADDRESS (0x01)
 
 /* Returns a TEMPLATE instruction
- * @param useStackAddress - If true, the address parameter is popped from the 
- *                          parameter stack.  If false, the address encoded in
- *                          the instruction is used instead.
+ * @param relativeAddress - If true, the template address is computed relative to
+ *                          the template offset which was popped from the parameter
+ *                          stack as a result of a JUMP instruction.
  * @param templateAddress - Address of the first byte in the template RAM to emit
  * @param byteCount       - Number of template bytes to emit
  */
-#define PACKETIZER_TEMPLATE(useStackAddress, templateAddress, byteCount) \
-  ((uint32_t) ((PACKETIZER_OPCODE_TEMPLATE << PACKETIZER_OPCODE_SHIFT) | \
-               ((useStackAddress != 0) ? PACKETIZER_USE_STACK_BIT : 0) | \
-               (((byteCount - 1) & PACKETIZER_TEMPLATE_COUNT_MASK) <<    \
-                PACKETIZER_TEMPLATE_COUNT_SHIFT)                       | \
+#define PACKETIZER_TEMPLATE(relativeAddress, templateAddress, byteCount)         \
+  ((uint32_t) ((PACKETIZER_OPCODE_TEMPLATE << PACKETIZER_OPCODE_SHIFT)         | \
+               ((relativeAddress != 0) ? PACKETIZER_TEMPLATE_RELATIVE_BIT : 0) | \
+               (((byteCount - 1) & PACKETIZER_TEMPLATE_COUNT_MASK) <<            \
+                PACKETIZER_TEMPLATE_COUNT_SHIFT)                               | \
                templateAddress))
 
 /* Returns a LOAD_ACCUMULATOR instruction.  The accumulator is loaded a cycle
@@ -296,6 +313,23 @@ typedef struct {
   ((uint32_t) ((overheadBytes << (PACKETIZER_SAMPLE_SIZE_BITS + slotBits)) | \
                (dataBlockSize & blockSizeMask)))
 
+/* Returns a parameter word with data properly formatted to push for an upcoming PACKETIZER_TEMPLATE
+ * instruction making use of the stack address.  This also carries parameters required for tag byte
+ * insertion.
+ * @param tagValue        - Byte value to be used for sample tagging
+ * @param tagIndex        - Index of the byte to be replaced with a tag byte
+ * @param tagActive       - Flag controlling whether a byte of each sample is to be replaced by the
+ *                          specified tag byte
+ * @param templateAddress - Natural value for the template address
+ */
+#define PACKETIZER_TAG_INACTIVE (0)
+#define PACKETIZER_TAG_ACTIVE   (1)
+#define PACKETIZER_TEMPLATE_TAG_PARAMS(tagValue, tagIndex, tagActive, templateAddress)   \
+  ((uint32_t) ((tagValue << PACKETIZER_TAG_BYTE_SHIFT)                                 | \
+               (tagIndex << PACKETIZER_TAG_INDEX_SHIFT)                                | \
+               (tagActive ? (0x01 << PACKETIZER_TAG_ACTIVE_SHIFT) : 0x00)              | \
+               templateAddress))
+                                          
 /* Returns an INSERT_PAYLOAD_SIZE instruction, which implicitly makes use of the present
  * number of samples captured within the packet's clock domain.  The data block size and 
  * overhead bytes must already be pushed onto the parameter stack, which will be popped as 
@@ -326,11 +360,13 @@ typedef struct {
 /* Returns a parameter word propertly formatted to push for an upcoming AUDIO_SAMPLES 
  * instruction.
  * @param numChannels - Number of channels in the stream
+ * @param rotateCount - Number of positions to "rotate" each sample's bytes within their cache words
  * @param mapAddress  - Address of the audio channel map to be encoded
  * @param slotBits    - Number of bits for packet slot count
  */
-#define PACKETIZER_AUDIO_PARAMS(numChannels, mapAddress, slotBits)               \
-  ((uint32_t) (((numChannels - 1) << (PACKETIZER_PARAM_STACK_BITS - slotBits)) | \
+#define PACKETIZER_AUDIO_PARAMS(numChannels, rotateCount, mapAddress, slotBits)              \
+  ((uint32_t) (((numChannels - 1) << (PACKETIZER_PARAM_STACK_BITS - slotBits))             | \
+   (rotateCount << (PACKETIZER_PARAM_STACK_BITS - slotBits - PACKETIZER_SAMPLE_BYTE_BITS)) | \
                mapAddress))
                                     
 /* Returns an AUDIO_SAMPLES instruction, which implicitly makes use of the present 
@@ -360,6 +396,12 @@ typedef struct {
 #define PACKETIZER_PUSH_PARAM(paramData) \
   ((uint32_t) ((PACKETIZER_OPCODE_PUSH_PARAM << PACKETIZER_OPCODE_SHIFT) | \
                (paramData & PACKETIZER_PARAM_STACK_MASK)))
+
+/* Dynamic range and associate bit mask for a nanosecond-based presentation
+ * time offset
+ */
+#define MAX_PRESENTATION_OFFSET_NS    (2000000)
+#define PACKETIZER_TS_OFFSET_MASK  (0x001FFFFF)
   
 /*
  * Depacketizer definitions
@@ -454,10 +496,14 @@ typedef struct {
 #define DEPACKETIZER_OPCODE_STOP               (0x0F)
 
 /* Instruction field constant definitions */
-#define DEPACKETIZER_OPCODE_SHIFT       (24)
-#define DEPACKETIZER_SAMPLE_SIZE_MASK   (0x07)
-#define DEPACKETIZER_PACKET_SLOT_MASK   (0x03F)
-#define DEPACKETIZER_PACKET_SLOT_SHIFT  (3)
+#define DEPACKETIZER_OPCODE_SHIFT                 (24)
+#define DEPACKETIZER_SAMPLE_SIZE_MASK             (0x07)
+#define DEPACKETIZER_PACKET_SLOT_SHIFT            (3)
+#define DEPACKETIZER_ROTATE_COUNT_SHIFT(slotBits) (DEPACKETIZER_PACKET_SLOT_SHIFT + slotBits)
+#define DEPACKETIZER_ROTATE_COUNT_MASK            (0x03)
+#define DEPACKETIZER_NULL_BYTE_SHIFT(slotBits)    (DEPACKETIZER_ROTATE_COUNT_SHIFT(slotBits) + 2)
+#define DEPACKETIZER_NULL_BYTE_MASK               (0x03)
+#define DEPACKETIZER_NULL_FLAG(slotBits)          (0x01 << (DEPACKETIZER_NULL_BYTE_SHIFT(slotBits) + 2))
 
 #define DEPACKETIZER_PARAM_SOURCE_FALSE        (0x00)
 #define DEPACKETIZER_PARAM_SOURCE_TRUE         (0x01)
@@ -479,12 +525,22 @@ typedef struct {
 /* Returns an AUDIO_SAMPLES instruction, looping through the number of available 
  * samples in the packet.
  *
+ * @param slotBits    - Number of bits for packet slot count
  * @param sampleSize  - Size, in bytes, of each sample
  * @param numChannels - Number of channels in the stream
+ * @param rotateCount - Number of positions to "rotate" each sample's bytes within their cache words
+ * @param nullActive  - Flag controlling whether a byte of each sample is to be replaced by a
+ *                      null (0x00) byte
+ * @param nullIndex   - Index of the byte to be replaced with a null byte
  */
-#define DEPACKETIZER_AUDIO_SAMPLES(sampleSize, numChannels)                                              \
-  ((uint32_t) ((DEPACKETIZER_OPCODE_AUDIO_SAMPLES << DEPACKETIZER_OPCODE_SHIFT)                        | \
-               (((numChannels - 1) & DEPACKETIZER_PACKET_SLOT_MASK) << DEPACKETIZER_PACKET_SLOT_SHIFT) | \
+#define DEPACKETIZER_NULL_INACTIVE (0)
+#define DEPACKETIZER_NULL_ACTIVE   (1)
+#define DEPACKETIZER_AUDIO_SAMPLES(slotBits, sampleSize, numChannels, rotateCount, nullActive, nullIndex)      \
+  ((uint32_t) ((DEPACKETIZER_OPCODE_AUDIO_SAMPLES << DEPACKETIZER_OPCODE_SHIFT)                              | \
+               (nullActive ? DEPACKETIZER_NULL_FLAG(slotBits) : 0x00000000)                                  | \
+               ((nullIndex & DEPACKETIZER_NULL_BYTE_MASK) << DEPACKETIZER_NULL_BYTE_SHIFT(slotBits))         | \
+               ((rotateCount & DEPACKETIZER_ROTATE_COUNT_MASK) << DEPACKETIZER_ROTATE_COUNT_SHIFT(slotBits)) | \
+               ((numChannels - 1) << DEPACKETIZER_PACKET_SLOT_SHIFT)                                         | \
                ((sampleSize - 1) & DEPACKETIZER_SAMPLE_SIZE_MASK)))
 
 /* Returns a CHECK_SEQUENCE instruction

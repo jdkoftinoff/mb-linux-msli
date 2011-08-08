@@ -1132,7 +1132,7 @@ void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
-	XASSERT_VOID((Speed == 10) || (Speed == 100) || (Speed == 1000));
+	XASSERT_VOID((Speed == 10) || (Speed == 100) || (Speed == 1000)|| (Speed == 10000));
 #if 0
 	/*
 	 * If the mutual exclusion is enforced properly in the calling code, we
@@ -1165,6 +1165,7 @@ void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 		break;
 
 	case 1000:
+	case 10000:
 		EmmcReg |= XTE_EMMC_LINKSPD_1000;
 		break;
 
@@ -1271,6 +1272,7 @@ void labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
  * suitable for recovery.
  *
  ******************************************************************************/
+/*
 void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
                       u32 RegisterNum, u16 *PhyDataPtr)
 {
@@ -1283,16 +1285,80 @@ void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
       return;
     }
 
-    /* Write the control register first to effect the read, wait for the MDIO
-     * transfer to complete, and then return the read value.
-     */
+    // Write the control register first to effect the read, wait for the MDIO
+    // ransfer to complete, and then return the read value.
+ 
     InstancePtr->MdioState = MDIO_STATE_BUSY;
     labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
                       (PHY_MDIO_READ | 
                        ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
                        (RegisterNum & PHY_REG_ADDR_MASK)));
 
-    /* The ISR will wake us up when the read completes */
+    // The ISR will wake us up when the read completes
+    wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+
+    if(InstancePtr->MdioState == MDIO_STATE_READY) {
+      *PhyDataPtr = (u16) labx_eth_ReadReg(InstancePtr->Config.BaseAddress, 
+                                           MDIO_DATA_REG);
+    } else {
+      printk("MDIO read timeout!\n");
+    }
+}
+*/
+
+void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
+                      u32 RegisterNum, u16 *PhyDataPtr)
+{
+	XASSERT_VOID(InstancePtr != NULL);
+	XASSERT_VOID(PhyDataPtr != NULL);
+
+    if(labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
+       PHY_MDIO_BUSY) {
+      printk("Read issued while PHY busy!\n");
+      return;
+    }
+
+     /* the 802.3ae Clause45 protocol for the 10G PHY */  
+    if(InstancePtr->Config.MacWidth == 64) {
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, RegisterNum);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      //to be deleted
+      
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_ADDR | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK)));  
+      
+      wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+
+      if(InstancePtr->MdioState != MDIO_STATE_READY)
+        printk("MDIO write timeout!\n");
+        
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_READ | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK)));  
+      
+    }
+       /* the 802.3ae Clause22 protocol, the old standard way */
+    else {
+    /* Write the control register first to effect the read, wait for the MDIO
+     * transfer to complete, and then return the read value.
+     */
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                        (PHY_MDIO_READ | 
+                         ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                         (RegisterNum & PHY_REG_ADDR_MASK)));
+    }
+
+    // The ISR will wake us up when the read completes
     wait_event_interruptible_timeout(InstancePtr->PhyWait,
                                      (InstancePtr->MdioState == MDIO_STATE_READY),
                                      MDIO_TIMEOUT_JIFFIES);
@@ -1343,6 +1409,7 @@ void labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
  * suitable for recovery.
  *
  ******************************************************************************/
+/*
 void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
                        u32 RegisterNum, u16 PhyData)
 {
@@ -1354,13 +1421,73 @@ void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
       return;
     }
 
-    /* Write the data first, then the control register */
+    // Write the data first, then the control register 
     labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
     InstancePtr->MdioState = MDIO_STATE_BUSY;
     labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
                       (PHY_MDIO_WRITE | 
                        ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
                        (RegisterNum & PHY_REG_ADDR_MASK)));
+
+    // The ISR will wake us up when the write completes 
+    wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+
+    if(InstancePtr->MdioState != MDIO_STATE_READY) {
+      printk("MDIO write timeout!\n");
+    }
+}
+
+*/
+
+void labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
+                       u32 RegisterNum, u16 PhyData)
+{
+	XASSERT_VOID(InstancePtr != NULL);
+
+    if(labx_eth_ReadReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG) &
+       PHY_MDIO_BUSY) {
+      printk("Read issued while PHY busy!\n");
+      return;
+    }
+
+    /* the 802.3ae Clause45 protocol for the 10G PHY */
+    if(InstancePtr->Config.MacWidth == 64) {
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, RegisterNum);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_ADDR | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK))); 
+        
+      wait_event_interruptible_timeout(InstancePtr->PhyWait,
+                                     (InstancePtr->MdioState == MDIO_STATE_READY),
+                                     MDIO_TIMEOUT_JIFFIES);
+
+      if(InstancePtr->MdioState != MDIO_STATE_READY)
+        printk("MDIO write timeout!\n");
+        
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                      (PHY_10G_MDIO_WRITE | 
+                       ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                       (InstancePtr->Config.PhyType & PHY_10G_DEVTYPE_MASK))); 
+    }
+    
+    /* The old standard MIDO protocol, Clause 22 */
+    else {
+    /* Write the data first, then the control register */
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_DATA_REG, PhyData);
+      InstancePtr->MdioState = MDIO_STATE_BUSY;
+      labx_eth_WriteReg(InstancePtr->Config.BaseAddress, MDIO_CONTROL_REG,
+                        (PHY_MDIO_WRITE | 
+                         ((PhyAddress & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+                         (RegisterNum & PHY_REG_ADDR_MASK)));
+    }  
 
     /* The ISR will wake us up when the write completes */
     wait_event_interruptible_timeout(InstancePtr->PhyWait,

@@ -36,11 +36,11 @@
 
 
 /* Driver name and the revision range of hardware expected.
- * This driver will work with revision 1.1 only.
+ * This driver will work with revisions 1.3 - 1.5 only.
  */
 #define DRIVER_NAME "labx_audio_packetizer"
 #define DRIVER_VERSION_MIN  0x13
-#define DRIVER_VERSION_MAX  0x13
+#define DRIVER_VERSION_MAX  0x15
 
 /* Instances before the extended capabilities version typically had
  * 32 stream slots maximum
@@ -105,7 +105,7 @@ static int32_t set_output_enabled(struct audio_packetizer *packetizer,
   /* Enable or disable the requested output in the control register */
   outputMask = (OUTPUT_A_ENABLE << whichOutput);
   controlRegister = XIo_In32(REGISTER_ADDRESS(packetizer, CONTROL_REG));
-  if(enable == OUTPUT_ENABLE) {
+  if(enable == PACKETIZER_OUTPUT_ENABLE) {
     controlRegister |= outputMask;
   } else controlRegister &= ~outputMask;
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
@@ -155,8 +155,8 @@ static void reset_packetizer(struct audio_packetizer *packetizer) {
 
   /* Disable the instance, and wipe its registers */
   disable_packetizer(packetizer);
-  set_output_enabled(packetizer, OUTPUT_A, false);
-  set_output_enabled(packetizer, OUTPUT_B, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_A, false);
+  set_output_enabled(packetizer, PACKETIZER_OUTPUT_B, false);
 
   /* Disable all of the clock domains */
   clockDomainSettings.enabled = false;
@@ -475,6 +475,7 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
 }
 
 /* Buffer for storing configuration words */
+#define MAX_CONFIG_WORDS 1024
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
@@ -496,17 +497,37 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
 
   case IOC_LOAD_DESCRIPTOR:
     {
-      ConfigWords descriptor;
+      ConfigWords userDescriptor;
+      ConfigWords localDescriptor;
 
-      if(copy_from_user(&descriptor, (void __user*)arg, sizeof(descriptor)) != 0) {
+      if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      if(copy_from_user(configWords, (void __user*)descriptor.configWords, 
-                        (descriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         packetizer->capabilities.maxInstructions) {
+        return(-ERANGE);
       }
-      descriptor.configWords = configWords;
-      returnValue = load_descriptor(packetizer, &descriptor);
+
+      localDescriptor.offset          = userDescriptor.offset;
+      localDescriptor.interlockedLoad = userDescriptor.interlockedLoad;
+      localDescriptor.loadFlags       = userDescriptor.loadFlags;
+      localDescriptor.configWords     = configWords;
+      while(userDescriptor.numWords > 0) {
+        /* Load in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ?
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        if(copy_from_user(configWords, (void __user*)userDescriptor.configWords, 
+                          (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        returnValue                 = load_descriptor(packetizer, &localDescriptor);
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
+        if(returnValue < 0) break;
+      }
     }
     break;
 
@@ -519,13 +540,27 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
       if(copy_from_user(&userDescriptor, (void __user*)arg, sizeof(userDescriptor)) != 0) {
         return(-EFAULT);
       }
-      localDescriptor.offset = userDescriptor.offset;
-      localDescriptor.numWords = userDescriptor.numWords;
+
+      /* Sanity-check the number of words against our maximum */
+      if((userDescriptor.offset + userDescriptor.numWords) > 
+         packetizer->capabilities.maxInstructions) {
+        return(-ERANGE);
+      }
+
+      localDescriptor.offset      = userDescriptor.offset;
       localDescriptor.configWords = configWords;
-      copy_descriptor(packetizer, &localDescriptor);
-      if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
-                      (userDescriptor.numWords * sizeof(uint32_t))) != 0) {
-        return(-EFAULT);
+      while(userDescriptor.numWords > 0) {
+        /* Transfer in chunks, never exceeding our local buffer size */
+        localDescriptor.numWords = ((userDescriptor.numWords > MAX_CONFIG_WORDS) ? 
+                                    MAX_CONFIG_WORDS : userDescriptor.numWords);
+        copy_descriptor(packetizer, &localDescriptor);
+        if(copy_to_user((void __user*)userDescriptor.configWords, configWords, 
+                        (localDescriptor.numWords * sizeof(uint32_t))) != 0) {
+          return(-EFAULT);
+        }
+        userDescriptor.configWords += localDescriptor.numWords;
+        localDescriptor.offset     += localDescriptor.numWords;
+        userDescriptor.numWords    -= localDescriptor.numWords;
       }
     }
     break;
@@ -599,6 +634,7 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     {
       uint32_t presentationOffset;
 
+      printk("Warning: labx_audio_packetizer.IOC_SET_PRESENTATION_OFFSET is deprecated!\n");
       if(copy_from_user(&presentationOffset, (void __user*)arg, sizeof(presentationOffset)) != 0) {
         return(-EFAULT);
       }
@@ -860,6 +896,8 @@ static int __devexit audio_packetizer_of_remove(struct of_device *dev)
 static struct of_device_id packetizer_of_match[] = {
   { .compatible = "xlnx,labx-audio-packetizer-1.00.a", },
   { .compatible = "xlnx,labx-audio-packetizer-1.01.a", },
+  { .compatible = "xlnx,labx-audio-packetizer-1.02.a", },
+  { .compatible = "xlnx,labx-audio-packetizer-1.03.a", },
   { /* end of list */ },
 };
 

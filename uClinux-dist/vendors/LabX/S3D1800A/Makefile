@@ -138,11 +138,9 @@ endif
 # Add the AVB packet engine device nodes
 ifdef CONFIG_LABX_AUDIO_PACKETIZER
 DEVICES += packetizer0,c,230,0
-DEVICES += packetizer1,c,230,1
 endif
 ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
 DEVICES += depacketizer0,c,232,0
-DEVICES += depacketizer1,c,232,1
 endif
 ifdef CONFIG_LABX_PTP
 DEVICES += ptp0,c,233,0
@@ -190,9 +188,11 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
-	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
+	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S40mountfs
+	$(ROMFSINST) $(COMMON)/etc/rc/daemons /etc/init.d/daemons
+	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S50network
 	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
-	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S50mountfs
+	$(ROMFSINST) -s /etc/init.d/daemons /etc/rc.d/S60daemons
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
@@ -266,7 +266,6 @@ else
 	$(ROMFSINST) $(COMMON)/etc/inittab.sh /etc/inittab
 endif
 endif
-	$(ROMFSINST) -s /mnt/config/avb_audio_start /etc/rc.d/S99avb_audio_start
 
 
 ############################################

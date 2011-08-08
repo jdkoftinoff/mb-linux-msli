@@ -285,6 +285,14 @@ error:
 	return err;
 }
 
+/* Specify LED default behavior in kernel boot arguments with something like "broadcom.led_default=19,0,1,-1",
+ * where the (exactly) four array values 19,0,1,-1 correspond to the desired default behavior of the LEDs
+ * in broadcom_leds.h (in this case LED1 <= BC_PHY_LED_ACTIVITY, LED2 <= OFF, LED3 <= ON, LED4 <= default).
+ */
+static int led_default[4] = {BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT, BC_PHY_LED_DEFAULT};
+module_param_array(led_default, int, NULL, 0);
+MODULE_PARM_DESC(led_default, "Broadcom PHY LEDs default behavior");
+
 void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL val)
 {
 	u16 reg;
@@ -298,23 +306,10 @@ void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL v
 		val = BCM_LED_SRC_OFF;
 	} else if (val >= BC_PHY_LED_LINKSPD1 && val <= BC_PHY_LED_SRC_ON) {
 		val &= 0xf;
+	} else if (whichLed >= BC_PHY_LED1 && whichLed <= BC_PHY_LED4) {
+		val = led_default[whichLed - BC_PHY_LED1];
 	} else {
-		switch(whichLed) {
-		case BC_PHY_LED1:
-			val = BCM_LED_SRC_LINKSPD1;
-			break;
-		case BC_PHY_LED2:
-			val = BCM_LED_SRC_LINKSPD2;
-			break;
-		case BC_PHY_LED3:
-			val = BCM_LED_SRC_ACTIVITYLED;
-			break;
-		case BC_PHY_LED4:
-			val = BCM_LED_SRC_INTR;
-			break;
-		default:
-			val = BCM_LED_SRC_OFF;
-		}
+		val = BCM_LED_SRC_OFF;
 	}
 	switch (whichLed) {
 	case BC_PHY_LED1:
@@ -374,6 +369,22 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		++i;
 	if (i >= 0 && i < MAX_LED_PHYS) {
 		aPhys[i] = phydev;
+		if (led_default[0] < 0) {
+			led_default[0] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) & 0xF) | 0x10;
+		}
+		bc_phy_led_set(i, BC_PHY_LED1, led_default[0]);
+		if (led_default[1] < 0) {
+			led_default[1] = ((bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12) >> 4) & 0xF) | 0x10;
+		}
+		bc_phy_led_set(i, BC_PHY_LED2, led_default[1]);
+		if (led_default[2] < 0) {
+			led_default[2] = (bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) & 0xF) | 0x10;
+		}
+		bc_phy_led_set(i, BC_PHY_LED3, led_default[2]);
+		if (led_default[3] < 0) {
+			led_default[3] = ((bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34) >> 4) & 0xF) | 0x10;
+		}
+		bc_phy_led_set(i, BC_PHY_LED4, led_default[3]);
 	}
 
 	return 0;
