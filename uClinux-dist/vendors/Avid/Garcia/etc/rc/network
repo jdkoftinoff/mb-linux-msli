@@ -10,12 +10,12 @@ IP_ADDRESS_PREFIX=192.168
 
 IS_STAGEBOX=`cat /sys/class/garcia_fpga/jumper1`
 if [ $IS_STAGEBOX -eq 0 ] ; then
-  ifconfig eth3 $IP_ADDRESS_PREFIX.4.1
-  if [ $? -ne 0 ] ; then
+  grep -q unknown /sys/class/net/eth3/operstate
+  if [ $? -eq 0 ] ; then
     IS_STAGEBOX=1 ;
   else
-    ifconfig eth2 $IP_ADDRESS_PREFIX.3.1
-    if [ $? -ne 0 ] ; then
+    grep -q unknown /sys/class/net/eth2/operstate
+    if [ $? -eq 0 ] ; then
       IS_STAGEBOX=1 ;
     else
     fi
