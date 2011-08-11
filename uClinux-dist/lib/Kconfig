@@ -17,6 +17,13 @@ config LIB_MICROSUPPORT
       Include the microsupport C library for allocator, network, osc/midi protocols
       see http://github.com/jdkoftinoff/microsupport for more information
 
+config LIB_TC
+    bool "timecode/midi library - libtc"
+    default n
+    help
+      Simple timecode support library
+      see http://github.com/jdkoftinoff/libtc for more information
+
 config LIB_AVDECC
     bool "avdecc ieee1722.1 library"
     default n

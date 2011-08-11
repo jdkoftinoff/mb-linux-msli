@@ -84,6 +84,8 @@ dir_3_$(CONFIG_LIB_BITVECTOR)    += bitvector
 dir_3_$(CONFIG_LIB_NCURSES_FORCE)+= ncurses
 dir_3_$(CONFIG_LIB_NCURSES)      += ncurses
 
+dir_3_$(CONFIG_LIB_MICROSUPPORT) += microsupport
+
 # See Kconfig for the dependencies
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
 dir_4_$(CONFIG_LIB_LIBCURL)      += libcurl
@@ -94,9 +96,9 @@ dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
+dir_4_$(CONFIG_LIB_TC) += libtc
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
-dir_4_$(CONFIG_LIB_MICROSUPPORT) += microsupport
 dir_5_$(CONFIG_LIB_AVDECC)   += avdecc
 
 #

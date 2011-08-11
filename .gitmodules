@@ -16,3 +16,6 @@
 [submodule "uClinux-dist/lib/avdecc"]
 	path = uClinux-dist/lib/avdecc
 	url = ../avdecc.git
+[submodule "uClinux-dist/lib/libtc"]
+	path = uClinux-dist/lib/libtc
+	url = ../libtc

@@ -8,11 +8,6 @@
 
 menu "Core Applications"
 
-config USER_LIBTC
-    bool "libtc - timecode/midi server"
-    help
-      Include the MIDI and Timecode server for Meyer Sound D-Mitri IO modules
-
 config USER_IO_OSC
     bool "io-oscd server - io-osc"
     depends on USER_GSBD
