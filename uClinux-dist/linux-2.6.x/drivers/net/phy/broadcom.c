@@ -305,15 +305,24 @@ void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL v
 	if (phyno >= MAX_LED_PHYS || (phy = aPhys[phyno]) == 0) {
 		return;
 	}
-	if (val == BC_PHY_LED_OFF) {
-		val = BCM_LED_SRC_ON; /* Yes, I know - it's inverted.  Go figure. */
-	} else if (val == BC_PHY_LED_ON) {
+	if (val == BC_PHY_LED_OFF || val == BC_PHY_LED_OFF_INVERTED) {
 		val = BCM_LED_SRC_OFF;
+	} else if (val == BC_PHY_LED_ON || val == BC_PHY_LED_ON_INVERTED) {
+		val = BCM_LED_SRC_ON;
 	} else if (val >= BC_PHY_LED_LINKSPD1 && val <= BC_PHY_LED_SRC_ON) {
 		val &= 0xf;
 	} else if (whichLed >= BC_PHY_LED1 && whichLed <= BC_PHY_LED4) {
 		val = led_default[whichLed - BC_PHY_LED1];
 	} else {
+		val = BCM_LED_SRC_OFF;
+	}
+	if (val == BC_PHY_LED_SRC_OFF &&
+			(led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_OFF_INVERTED ||
+			led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_ON_INVERTED)) {
+		val = BCM_LED_SRC_ON;
+	} else if (val == BC_PHY_LED_SRC_ON &&
+			(led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_OFF_INVERTED ||
+			led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_ON_INVERTED)) {
 		val = BCM_LED_SRC_OFF;
 	}
 	switch (whichLed) {
