@@ -122,15 +122,17 @@ static void icap_reset(void)
         // "run-time" FPGA is #defined as a byte address, but the ICAP needs
         // a 16-bit half-word address, so we shift right by one extra bit.
         putfslx(0x03261, 0, FSL_ATOMIC); // Write GENERAL1
-        putfslx(((RUNTIME_FPGA_BASE >> 1) & 0x0FFFF), 0, FSL_ATOMIC); // Multiboot start address[15:0]
+        putfslx(((BOOT_FPGA_BASE >> 1) & 0x0FFFF), 0, FSL_ATOMIC); // "golden" FPGA start address[15:0]
         putfslx(0x03281, 0, FSL_ATOMIC); // Write GENERAL2
-        putfslx(((RUNTIME_FPGA_BASE >> 17) & 0x0FF), 0, FSL_ATOMIC); // Opcode 0x00 and address[23:16]
+        putfslx(((BOOT_FPGA_BASE >> 17) & 0x0FF), 0, FSL_ATOMIC); // Opcode 0x00 and address[23:16]
 
         // Write the fallback FPGA offset (this image)
         putfslx(0x032A1, 0, FSL_ATOMIC); // Write GENERAL3
         putfslx((BOOT_FPGA_BASE & 0x0FFFF), 0, FSL_ATOMIC);
         putfslx(0x032C1, 0, FSL_ATOMIC); // Write GENERAL4
         putfslx(((BOOT_FPGA_BASE >> 16) & 0x0FF), 0, FSL_ATOMIC);
+        putfslx(0x032E1, 0, FSL_ATOMIC); // Write GENERAL5
+        putfslx(0x01, 0, FSL_ATOMIC); // Value 1 forces u-boot to try firmware update
 
         // Write IPROG command
         putfslx(0x030A1, 0, FSL_ATOMIC); // Write CMD
