@@ -784,7 +784,7 @@ void labx_XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNu
 void labx_XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, u32 RegisterNum,
 		       u16 PhyData);
 		       
-void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr);
+void labx_eth_ll_UpdateMacFilters(XLlTemac *InstancePtr);
 
 int labx_XLlTemac_MulticastAdd(XLlTemac *InstancePtr, void *AddressPtr, int Entry);
 void labx_XLlTemac_MulticastGet(XLlTemac *InstancePtr, void *AddressPtr, int Entry);

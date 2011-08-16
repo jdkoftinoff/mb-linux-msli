@@ -605,7 +605,7 @@ static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[
 	select_matchers(InstancePtr, SELECT_NONE, 0);
 }
 
-void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
+void labx_eth_ll_UpdateMacFilters(XLlTemac *InstancePtr)
 {
 	int i;
 
