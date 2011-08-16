@@ -995,7 +995,7 @@ static void xenet_set_multicast_list(struct net_device *dev)
 	(int) _XLlTemac_SetOptions(&lp->Emac, Options);
 	(int) _XLlTemac_ClearOptions(&lp->Emac, ~Options);
   
-  labx_eth_UpdateMacFilters(&lp->Emac);
+	labx_eth_ll_UpdateMacFilters(&lp->Emac);
   
 	if (dev->mc_count > 0 && dev->mc_count <= 6)
 	{
