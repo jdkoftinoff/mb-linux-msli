@@ -11,7 +11,7 @@ menu "Core Applications"
 config USER_IO_OSC
     bool "io-oscd server - io-osc"
     depends on USER_GSBD
-    depends on USER_LIBTC
+    depends on LIB_TC
     depends on LIB_MICROSUPPORT
     help
       Include the Open Sound Control server for Meyer Sound D-Mitri IO modules
