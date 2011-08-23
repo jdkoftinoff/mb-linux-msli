@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <linux/of_platform.h>
 #include <asm/prom.h>
 #include <microblaze_fsl.h>
@@ -110,7 +111,7 @@ void of_platform_reset_gpio_probe(void)
 }
 #endif
 
-static void icap_reset(void)
+static void icap_reset(u32 val)
 {
         // Synchronize command bytes
         putfslx(0x0FFFF, 0, FSL_ATOMIC); // Pad words
@@ -132,12 +133,15 @@ static void icap_reset(void)
         putfslx(0x032C1, 0, FSL_ATOMIC); // Write GENERAL4
         putfslx(((BOOT_FPGA_BASE >> 16) & 0x0FF), 0, FSL_ATOMIC);
         putfslx(0x032E1, 0, FSL_ATOMIC); // Write GENERAL5
-        putfslx(0x01, 0, FSL_ATOMIC); // Value 1 forces u-boot to try firmware update
+        putfslx(val, 0, FSL_ATOMIC); // Value 1 forces u-boot to try firmware update
 
         // Write IPROG command
         putfslx(0x030A1, 0, FSL_ATOMIC); // Write CMD
         putfslx(0x0000E, 0, FSL_ATOMIC); // IPROG Command
+    	// Add some safety noops
         putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+    	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+    	udelay(1000);
 
         // Trigger the FSL peripheral to drain the FIFO into the ICAP
         putfslx(FINISH_FSL_BIT, 0, FSL_ATOMIC);
@@ -148,8 +152,14 @@ void machine_restart(char *cmd)
 {
 	printk(KERN_NOTICE "Machine restart...\n");
 #ifdef CONFIG_SPARTAN6_RESET
-	printk(KERN_NOTICE "ICAP reset...\n");
-	icap_reset(); //reboot using ICAP
+	{
+		u32 val = 0;
+		if (cmd == NULL || (val = simple_strtoul(cmd, NULL, 0)) > 65536) {
+			val = 0;
+		}
+	printk(KERN_NOTICE "ICAP reset %d ...\n", val);
+	icap_reset(val); //reboot using ICAP
+	}
 #else
 	gpio_system_reset();
 #endif
