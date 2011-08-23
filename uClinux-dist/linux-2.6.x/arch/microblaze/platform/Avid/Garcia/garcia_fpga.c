@@ -22,6 +22,7 @@
 #include "xbasic_types.h"
 #include "xio.h"
 #include "garcia_fpga_priv.h"
+#include <microblaze_fsl.h>
 
 #ifdef CONFIG_OF
 // For open firmware.
@@ -42,7 +43,8 @@
 
 #define DRIVER_NAME "garcia_fpga"
 #define DRIVER_VERSION "1.0"
-#define PUSHBUTTON_RESET_TIME 5*HZ
+#define PUSHBUTTON_UPDATE_TIME 5*HZ
+#define PUSHBUTTON_RESET_TIME HZ/2
 
 #define SLOT_RESET_PULSEWIDTH 3 /* mS */
 #define N_IRQRESP_VECTORS 8
@@ -191,9 +193,16 @@ static irqreturn_t garcia_fpga_irq(int irq, void *data)
 		gp->last_gpio_irq = value;
 	}
 	if ((value & GARCIA_FPGA_GPIO_PUSHBUTTON) == 0) { // Button is pushed
-		mod_timer(&gp->reset_timer, jiffies + PUSHBUTTON_RESET_TIME);
-	} else {
-		del_timer_sync(&gp->reset_timer);
+		mod_timer(&gp->reset_timer, jiffies + PUSHBUTTON_UPDATE_TIME);
+	} else if (timer_pending(&gp->reset_timer)) {
+		if (gp->reset_timer.expires > jiffies +
+				(PUSHBUTTON_UPDATE_TIME - PUSHBUTTON_RESET_TIME)) {
+			del_timer_sync(&gp->reset_timer);
+		} else {
+			del_timer_sync(&gp->reset_timer);
+			printk("Reboot!\n");
+			machine_restart(NULL);
+		}
 	}
 	/* Reset the interrupt */
 	garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR,
@@ -305,6 +314,53 @@ static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
 	return count;
 }
 
+static ssize_t garcia_r_icap5(struct class *c, char *buf)
+{
+	int count = 0;
+	u32 val;
+	// Read the reconfiguration FPGA offset; we only need to read
+	// the upper register and see if it is 0.
+    putfslx(0x0FFFF, 0, FSL_ATOMIC); // Pad words
+    putfslx(0x0FFFF, 0, FSL_ATOMIC);
+    putfslx(0x0AA99, 0, FSL_ATOMIC); // SYNC
+    putfslx(0x05566, 0, FSL_ATOMIC); // SYNC
+	putfslx(0x02AE1, 0, FSL_ATOMIC); // Read GENERAL5
+	// Add some safety noops
+	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+
+	udelay(1000);
+	// Trigger the FSL peripheral to drain the FIFO into the ICAP
+	putfslx(FINISH_FSL_BIT, 0, FSL_ATOMIC);
+	udelay(1000);
+	getfslx(val, 0, FSL_ATOMIC); // Read the ICAP result
+	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
+	return count;
+}
+
+static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+        // Synchronize command bytes
+        putfslx(0x0FFFF, 0, FSL_ATOMIC); // Pad words
+        putfslx(0x0FFFF, 0, FSL_ATOMIC);
+        putfslx(0x0AA99, 0, FSL_ATOMIC); // SYNC
+        putfslx(0x05566, 0, FSL_ATOMIC); // SYNC
+        putfslx(0x032E1, 0, FSL_ATOMIC); // Write GENERAL5
+        putfslx(val, 0, FSL_ATOMIC);     // Insert GENERAL5 value
+    	// Add some safety noops
+    	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+    	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+
+    	udelay(1000);
+        // Trigger the FSL peripheral to drain the FIFO into the ICAP
+        putfslx(FINISH_FSL_BIT, 0, FSL_ATOMIC);
+	}
+	return count;
+}
+
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
 	__ATTR(packetizer_ena, S_IRUGO | S_IWUGO, garcia_r_packetizer_ena, garcia_w_packetizer_ena),
@@ -314,6 +370,7 @@ static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(jumper1, S_IRUGO, garcia_r_jumper1, NULL),
 	__ATTR(jumper2, S_IRUGO, garcia_r_jumper2, NULL),
 	__ATTR(gpioraw, S_IRUGO, garcia_r_gpioraw, NULL),
+	__ATTR(icap5, S_IRUGO | S_IWUGO, garcia_r_icap5, garcia_w_icap5),
 	__ATTR_NULL,
 };
 
@@ -326,8 +383,8 @@ static struct class garcia_fpga_class = {
 static void reset_timer_function(unsigned long data)
 {
 	(void)data;
-	printk("Restarting!\n");
-	machine_restart(NULL);
+	printk("Reload firmware!\n");
+	machine_restart("1");
 }
 
 static int garcia_led_default[2] = {2, 3};
