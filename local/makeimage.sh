@@ -9,7 +9,7 @@ if [ -z "${DMITRI_IO_GNET_DOWNLOAD_BIT}" ]; then
 fi
 
 if [ -z "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]; then
-  DMITRI_IO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA/Synthesis/IO_Link_top_download.bit"
+  DMITRI_IO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA/Synthesis/IO_Link_top.bit"
 fi
 
 if [ -z "${DMITRI_IO_MAINT_DTS}" ]; then
