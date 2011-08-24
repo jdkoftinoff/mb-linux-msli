@@ -316,15 +316,16 @@ void bc_phy_led_set(int phyno, enum BC_PHY_LEDSEL whichLed, enum BC_PHY_LEDVAL v
 	} else {
 		val = BCM_LED_SRC_OFF;
 	}
-	if (val == BC_PHY_LED_SRC_OFF &&
+	if (val == BCM_LED_SRC_OFF &&
 			(led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_OFF_INVERTED ||
 			led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_ON_INVERTED)) {
 		val = BCM_LED_SRC_ON;
-	} else if (val == BC_PHY_LED_SRC_ON &&
+	} else if (val == BCM_LED_SRC_ON &&
 			(led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_OFF_INVERTED ||
 			led_default[whichLed - BC_PHY_LED1] == BC_PHY_LED_ON_INVERTED)) {
 		val = BCM_LED_SRC_OFF;
 	}
+
 	switch (whichLed) {
 	case BC_PHY_LED1:
 		reg = bcm54xx_shadow_read(phy, BCM54XX_SHD_LEDS12);
