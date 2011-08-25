@@ -405,6 +405,7 @@ static int __devexit labx_local_audio_of_remove(struct of_device *dev)
 static struct of_device_id labx_local_audio_of_match[] = {
   { .compatible = "xlnx,labx-local-audio-1.00.a", },
   { .compatible = "xlnx,labx-local-audio-1.01.a", },
+  { .compatible = "xlnx,labx-local-audio-1.02.a", },
   { /* end of list */ },
 };
 
