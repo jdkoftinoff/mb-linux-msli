@@ -285,7 +285,6 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	uint8_t *regbuf_p;
 	unsigned long flags;
 	__u32 status;
-
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
@@ -444,20 +443,30 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_LRCLK_MASTER) != 0) {
 			val |= GARCIA_STATUS_LRCLK_MASTER;
 		}
-		if ((agctl->saved_status & AC_CTL_BUF_COL_IRQ) != 0) {
-			val |= GARCIA_STATUS_BUFFER_COLL;
-		}
 		if (agctl_is_master(agctl)) {
 			val |= GARCIA_STATUS_MASTER_MODE;
+			if ((agctl->saved_status & AC_CTL_BUF_COL_IRQ) != 0) {
+				val |= GARCIA_STATUS_BUFFER_COLL;
+			}
+			if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
+				val |= GARCIA_STATUS_RESET_SIG;
+			}
+			if ((agctl->saved_status & AC_CTL_MUTE_SIG) != 0) {
+				val |= GARCIA_STATUS_MUTE_SIG;
+			}
+		} else {
+			if ((status & AC_CTL_BUF_COL_IRQ) != 0) {
+				val |= GARCIA_STATUS_BUFFER_COLL;
+			}
+			if ((status & AC_CTL_RESET_SIG) != 0) {
+				val |= GARCIA_STATUS_RESET_SIG;
+			}
+			if ((status & AC_CTL_MUTE_SIG) != 0) {
+				val |= GARCIA_STATUS_MUTE_SIG;
+			}
 		}
 		if ((status & AC_CTL_INT_ENA) != 0) {
 			val |= GARCIA_STATUS_INT_ENA;
-		}
-		if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
-			val |= GARCIA_STATUS_RESET_SIG;
-		}
-		if ((agctl->saved_status & AC_CTL_MUTE_SIG) != 0) {
-			val |= GARCIA_STATUS_MUTE_SIG;
 		}
 		if ((status & AC_CTL_STROBE) != 0) {
 			val |= GARCIA_STATUS_STROBE;
