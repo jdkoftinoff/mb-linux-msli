@@ -12,6 +12,7 @@
 #include <asm/thread_info.h>
 #include <linux/errno.h>
 #include <asm/entry.h>
+#include <asm/current.h>
 #include <asm/asm-offsets.h>
 #include <asm/registers.h>
 #include <asm/unistd.h>
@@ -129,16 +130,15 @@ ENTRY(_interrupt)
 ret_from_intr:
 	lwi	r11, r1, PT_MODE
 	bneid	r11, no_intr_resched
-
-	lwi	r6, r31, TS_THREAD_INFO	/* get thread info */
-	lwi	r19, r6, TI_FLAGS	/* get flags in thread info */
-				/* do an extra work if any bits are set */
-
-	andi	r11, r19, _TIF_NEED_RESCHED
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS                /* get flags in thread info */
+	andi	r11, r11, _TIF_NEED_RESCHED
 	beqi	r11, 1f
 	bralid	r15, schedule
 	nop
-1:	andi	r11, r19, _TIF_SIGPENDING
+1:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS                /* get flags in thread info */
+	andi	r11, r11, _TIF_SIGPENDING
 	beqid	r11, no_intr_resched
 	addk	r5, r1, r0
 	addk	r7, r0, r0
@@ -432,17 +432,6 @@ ENTRY(_switch_to)
 	/* get new process' cpu context and restore */
 	addik	r11, r6, TI_CPU_CONTEXT
 
-	/* special purpose registers */
-	lwi	r12, r11, CC_FSR
-	mts	rfsr, r12
-	lwi	r12, r11, CC_ESR
-	mts	resr, r12
-	lwi	r12, r11, CC_EAR
-	mts	rear, r12
-	lwi	r12, r11, CC_MSR
-	mts	rmsr, r12
-	nop
-	
 	/* non-volatile registers */
 	lwi	r30, r11, CC_R30
 	lwi	r29, r11, CC_R29
@@ -467,6 +456,15 @@ ENTRY(_switch_to)
 	lwi	r2, r11, CC_R2
 	lwi	r1, r11, CC_R1
 
+	/* special purpose registers */
+	lwi	r12, r11, CC_FSR
+	mts	rfsr, r12
+	nop
+	lwi	r12, r11, CC_MSR
+	andi	r12, r12, ~MSR_IE
+	mts	rmsr, r12
+	nop
+
 	rtsd	r15, 8
 	nop
 
@@ -484,11 +482,16 @@ ENTRY(ret_from_fork)
 work_pending:
 	enable_irq
 
-	andi	r11, r19, _TIF_NEED_RESCHED
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
+	andi	r11, r11, _TIF_NEED_RESCHED
 	beqi	r11, 1f
 	bralid	r15, schedule
 	nop
-1:	andi	r11, r19, _TIF_SIGPENDING
+
+1:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
+	andi	r11, r11, _TIF_SIGPENDING
 	beqi	r11, no_work_pending
 	addk	r5, r1, r0
 	addik	r7, r0, 1
@@ -502,9 +505,9 @@ ENTRY(ret_to_user)
 	swi	r4, r1, PT_R4		/* return val */
 	swi	r3, r1, PT_R3		/* return val */
 
-	lwi	r6, r31, TS_THREAD_INFO /* get thread info */
-	lwi	r19, r6, TI_FLAGS /* get flags in thread info */
-	bnei	r19, work_pending /* do an extra work if any bits are set */
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
+	bnei	r11, work_pending /* do an extra work if any bits are set */
 no_work_pending:
 	disable_irq
 
