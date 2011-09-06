@@ -1,5 +1,8 @@
 #!/bin/bash
 
+if [ "$MAKE" == "" ]; then 
+  export MAKE=gmake
+fi
 # Check for most likely missing packages and executables
 
 if ! which gcc > /dev/null 2>&1
@@ -107,11 +110,17 @@ echo "Installing both toolchains in tools/"
 mkdir tools 2>/dev/null
 
 rm -rf tools/gcc4
-if [ "`uname -m`" = "x86_64" ]
+
+if [ "`uname -s`" = "Darwin" ]
  then
- LOCALPLATFORM="lin64"
- else
- LOCALPLATFORM="lin"
+ LOCALPLATFORM=""
+else
+ if [ "`uname -m`" = "x86_64" ]
+  then
+  LOCALPLATFORM="lin64"
+  else
+  LOCALPLATFORM="lin"
+ fi
 fi
 
 mv "mb_gnu/release/${LOCALPLATFORM}" tools/gcc4
