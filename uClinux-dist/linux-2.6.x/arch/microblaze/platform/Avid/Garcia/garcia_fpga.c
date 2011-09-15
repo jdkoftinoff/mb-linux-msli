@@ -314,26 +314,30 @@ static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
 	return count;
 }
 
+static unsigned int icapnop = 2;
+static unsigned int icapdelay = 1000;
 static ssize_t garcia_r_icap5(struct class *c, char *buf)
 {
 	int count = 0;
 	u32 val;
 	// Read the reconfiguration FPGA offset; we only need to read
 	// the upper register and see if it is 0.
-    putfslx(0x0FFFF, 0, FSL_ATOMIC); // Pad words
-    putfslx(0x0FFFF, 0, FSL_ATOMIC);
-    putfslx(0x0AA99, 0, FSL_ATOMIC); // SYNC
-    putfslx(0x05566, 0, FSL_ATOMIC); // SYNC
-	putfslx(0x02AE1, 0, FSL_ATOMIC); // Read GENERAL5
+    putfsl(0x0FFFF, 0); // Pad words
+    putfsl(0x0FFFF, 0);
+    putfsl(0x0AA99, 0); // SYNC
+    putfsl(0x05566, 0); // SYNC
+	putfsl(0x02AE1, 0); // Read GENERAL5
 	// Add some safety noops
-	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
-	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+	for (count = 0; count < (int)icapnop; count++) {
+		if (count == (int)icapnop - 1) {
+			putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+		} else {
+			putfsl(0x02000, 0); // Type 1 NOP
+		}
+	}
 
-	udelay(1000);
-	// Trigger the FSL peripheral to drain the FIFO into the ICAP
-	putfslx(FINISH_FSL_BIT, 0, FSL_ATOMIC);
-	udelay(1000);
-	getfslx(val, 0, FSL_ATOMIC); // Read the ICAP result
+	udelay(icapdelay);
+	getfsl(val, 0); // Read the ICAP result
 	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
 	return count;
 }
@@ -344,19 +348,40 @@ static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
         // Synchronize command bytes
-        putfslx(0x0FFFF, 0, FSL_ATOMIC); // Pad words
-        putfslx(0x0FFFF, 0, FSL_ATOMIC);
-        putfslx(0x0AA99, 0, FSL_ATOMIC); // SYNC
-        putfslx(0x05566, 0, FSL_ATOMIC); // SYNC
-        putfslx(0x032E1, 0, FSL_ATOMIC); // Write GENERAL5
-        putfslx(val, 0, FSL_ATOMIC);     // Insert GENERAL5 value
+        putfsl(0x0FFFF, 0); // Pad words
+        putfsl(0x0FFFF, 0);
+        putfsl(0x0AA99, 0); // SYNC
+        putfsl(0x05566, 0); // SYNC
+        putfsl(0x032E1, 0); // Write GENERAL5
+        putfsl(val, 0);     // Insert GENERAL5 value
     	// Add some safety noops
-    	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
-    	putfslx(0x02000, 0, FSL_ATOMIC); // Type 1 NOP
+    	for (count = 0; count < (int)icapnop; count++) {
+    		if (count == (int)icapnop - 1) {
+    			putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+    		} else {
+    			putfsl(0x02000, 0); // Type 1 NOP
+    		}
+    	}
+	}
+	return count;
+}
 
-    	udelay(1000);
-        // Trigger the FSL peripheral to drain the FIFO into the ICAP
-        putfslx(FINISH_FSL_BIT, 0, FSL_ATOMIC);
+static ssize_t garcia_w_icapnop(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		icapnop = val;
+	}
+	return count;
+}
+
+static ssize_t garcia_w_icapdly(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		icapdelay = val;
 	}
 	return count;
 }
@@ -371,6 +396,8 @@ static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(jumper2, S_IRUGO, garcia_r_jumper2, NULL),
 	__ATTR(gpioraw, S_IRUGO, garcia_r_gpioraw, NULL),
 	__ATTR(icap5, S_IRUGO | S_IWUGO, garcia_r_icap5, garcia_w_icap5),
+	__ATTR(icapnop, S_IWUGO, NULL, garcia_w_icapnop),
+	__ATTR(icapdly, S_IWUGO, NULL, garcia_w_icapdly),
 	__ATTR_NULL,
 };
 
