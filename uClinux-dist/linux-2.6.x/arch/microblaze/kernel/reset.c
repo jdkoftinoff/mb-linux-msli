@@ -13,6 +13,14 @@
 #include <asm/prom.h>
 #include <microblaze_fsl.h>
 
+#ifdef CONFIG_PPC
+#  define SYNCHRONIZE_IO __asm__ volatile ("eieio") /* should be 'mbar' ultimately */
+#else
+#  define SYNCHRONIZE_IO
+#endif
+static inline u32 in_32(u32 *InputPtr) { u32 v = (*(volatile u32 *)(InputPtr)); SYNCHRONIZE_IO; return v; }
+static inline void out_32(u32 *OutputPtr, u32 Value) { (*(volatile u32 *)(OutputPtr) = Value); SYNCHRONIZE_IO; return; }
+
 /* Trigger specific functions */
 #ifdef CONFIG_GPIOLIB
 
@@ -111,8 +119,37 @@ void of_platform_reset_gpio_probe(void)
 }
 #endif
 
+#define XPAR_XPS_HWICAP_0_BASEADDR 0x80004000
+/* ICAP peripheral controller */
+#define XPAR_ICAP_CR_ABORT		BIT(4)
+#define XPAR_ICAP_CR_RESET		BIT(3)
+#define XPAR_ICAP_CR_FIFO_CLEAR	BIT(2)
+#define XPAR_ICAP_CR_READ		BIT(1)
+#define XPAR_ICAP_CR_WRITE		BIT(0)
+
+#define XPAR_ICAP_SR_CFGERR		BIT(8)
+#define XPAR_ICAP_SR_DALIGN		BIT(7)
+#define XPAR_ICAP_SR_READ_IP	BIT(6)
+#define XPAR_ICAP_SR_IN_ABORT	BIT(5)
+#define XPAR_ICAP_SR_DONE		BIT(0)
+
+#ifdef XPAR_XPS_HWICAP_0_BASEADDR
+#define	CONFIG_SYS_ICAP_ADDR	XPAR_XPS_HWICAP_0_BASEADDR
+#define	CONFIG_SYS_ICAP_GIE		(CONFIG_SYS_ICAP_ADDR + 0x01C)
+#define	CONFIG_SYS_ICAP_IPISR	(CONFIG_SYS_ICAP_ADDR + 0x020)
+#define	CONFIG_SYS_ICAP_IPIER	(CONFIG_SYS_ICAP_ADDR + 0x028)
+#define	CONFIG_SYS_ICAP_WF		(CONFIG_SYS_ICAP_ADDR + 0x100)
+#define	CONFIG_SYS_ICAP_RF		(CONFIG_SYS_ICAP_ADDR + 0x104)
+#define	CONFIG_SYS_ICAP_SZ		(CONFIG_SYS_ICAP_ADDR + 0x108)
+#define	CONFIG_SYS_ICAP_CR		(CONFIG_SYS_ICAP_ADDR + 0x10C)
+#define	CONFIG_SYS_ICAP_SR		(CONFIG_SYS_ICAP_ADDR + 0x110)
+#define	CONFIG_SYS_ICAP_WFV		(CONFIG_SYS_ICAP_ADDR + 0x114)
+#define	CONFIG_SYS_ICAP_RFO		(CONFIG_SYS_ICAP_ADDR + 0x118)
+#endif
+
 static void icap_reset(u32 val)
 {
+#if 0
         // Synchronize command bytes
         putfsl(0x0FFFF, 0); // Pad words
         putfsl(0x0FFFF, 0);
@@ -141,6 +178,42 @@ static void icap_reset(u32 val)
     	// Add some safety noops
         putfsl(0x02000, 0); // Type 1 NOP
         putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+#endif
+        out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_ABORT);
+    	while ((in_32(CONFIG_SYS_ICAP_CR) & (XPAR_ICAP_CR_ABORT | XPAR_ICAP_CR_RESET |
+    			XPAR_ICAP_CR_FIFO_CLEAR | XPAR_ICAP_CR_READ | XPAR_ICAP_CR_WRITE)) != 0)
+    		;
+    	// Synchronize command bytes
+    	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF); // Pad words
+    	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF);
+    	out_32(CONFIG_SYS_ICAP_WF, 0x0AA99); // SYNC
+    	out_32(CONFIG_SYS_ICAP_WF, 0x05566); // SYNC
+
+        // Write the reconfiguration FPGA offset; the base address of the
+        // "run-time" FPGA is #defined as a byte address, but the ICAP needs
+        // a 16-bit half-word address, so we shift right by one extra bit.
+    	out_32(CONFIG_SYS_ICAP_WF, 0x03261); // Write GENERAL1
+    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
+    	out_32(CONFIG_SYS_ICAP_WF, 0x03281); // Write GENERAL2
+    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
+        // Write the fallback FPGA offset (this image)
+    	out_32(CONFIG_SYS_ICAP_WF, 0x032A1); // Write GENERAL3
+    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
+    	out_32(CONFIG_SYS_ICAP_WF, 0x032C1); // Write GENERAL4
+    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
+    	out_32(CONFIG_SYS_ICAP_WF, 0x032E1); // Write GENERAL5
+    	out_32(CONFIG_SYS_ICAP_WF, val); // Value 0 allows u-boot to use production image
+    	// Write IPROG command
+    	out_32(CONFIG_SYS_ICAP_WF, 0x030A1); // Write CMD
+    	out_32(CONFIG_SYS_ICAP_WF, 0x0000E); // IPROG Command
+    	// Add some safety noops
+    	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
+    	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
+    	// Trigger the FSL peripheral to drain the FIFO into the ICAP
+    	out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_WRITE);
+    	while ((in_32(CONFIG_SYS_ICAP_CR) & XPAR_ICAP_CR_WRITE) != 0)
+    		;
+
 	while(1);
 }
 
