@@ -20,6 +20,5 @@ if [ "$b" = "xps-ll-temac" ]
     /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
     /bin/inetd &
 else
-    /bin/ifconfig eth0 0.0.0.0 promisc
     touch /var/tmp/status/no-ip-address
 fi
