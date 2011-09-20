@@ -311,6 +311,7 @@ void xlltemac_phy_setup_marvell(struct xlltemac_net_local *lp)
   _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
   
   Register |= BMCR_ANENABLE;
+  Register &= ~BMCR_PDOWN;
 #ifdef PHY_USE_RESET_FLAG
   if(lp->reset_flag)
     {
@@ -351,5 +352,44 @@ void xlltemac_phy_setup_marvell(struct xlltemac_net_local *lp)
     Register|=0x0110;
     _XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, 26, Register);
   */
+#endif
+}
+
+/*
+ * Turn off the port
+ */
+void xlltemac_phy_off_marvell(struct xlltemac_net_local *lp)
+{
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII
+  u16 Register;
+  /*
+   * Power down the PHY
+   */
+  _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
+  Register |= BMCR_PDOWN;
+  _XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
+#endif /* CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII */
+  
+#if defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII)		\
+  || defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII)
+  u16 Register;
+#ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII
+  /* LED controls are specific to 88e1112  */
+  xlltemac_leds_initialize(lp, lp->gmii_addr, LED_STATE_OFF);
+#endif
+  
+  /*
+   * Power down, require reset next time it is enabled
+   */
+  _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &Register);
+  
+  Register |= BMCR_PDOWN;
+#ifdef PHY_USE_RESET_FLAG
+  lp->reset_flag=1;
+#endif
+  _XLlTemac_PhyWrite(&lp->Emac, lp->gmii_addr, MII_BMCR, Register);
+  printk(KERN_INFO
+	 "%s: XLlTemac: Power down\n",
+	 lp->ndev->name);
 #endif
 }

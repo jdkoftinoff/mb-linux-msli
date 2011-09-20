@@ -29,5 +29,7 @@ void xlltemac_leds_initialize(struct xlltemac_net_local *lp,int phy_addr,
 
 /* PHY initialization */
 void xlltemac_phy_setup_marvell(struct xlltemac_net_local *lp);
+/* Turn off the port */
+void xlltemac_phy_off_marvell(struct xlltemac_net_local *lp);
 
 #endif

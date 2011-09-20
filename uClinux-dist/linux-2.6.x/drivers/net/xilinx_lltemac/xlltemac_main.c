@@ -651,7 +651,8 @@ static void poll_gmii(unsigned long data)
     }
   }
 
-  if(!phy_carrier)
+  /* only try to reset if this function is set as a timer handler */
+  if(!phy_carrier && lp->phy_timer.function == &poll_gmii)
     {
       if(time_after_eq(jiffies,lp->poll_reset_time))
 	{
@@ -1137,8 +1138,11 @@ static int xenet_close(struct net_device *dev)
   netif_stop_queue(dev);
   
 #ifdef CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII
+  xlltemac_phy_off(lp);
+#if 0
   /* Turn off the LEDs */
   xlltemac_leds_initialize(lp, lp->gmii_addr, LED_STATE_OFF);
+#endif
 #endif
   
   /* Now we could stop the device */
@@ -2214,9 +2218,9 @@ xenet_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
     mac_options = XLlTemac_GetOptions(&(lp->Emac));
   else
     mac_options = 0;
+  
   _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMCR, &gmii_cmd);
   _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_BMSR, &gmii_status);
-  
   _XLlTemac_PhyRead(&lp->Emac, lp->gmii_addr, MII_ADVERTISE, &gmii_advControl);
   
   ecmd->duplex = DUPLEX_FULL;

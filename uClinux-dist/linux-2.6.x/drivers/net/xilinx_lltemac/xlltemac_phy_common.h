@@ -27,6 +27,7 @@ void _XLlTemac_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
 void _XLlTemac_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
 			u32 RegisterNum, u16 PhyData);
 void xlltemac_phy_setup(struct xlltemac_net_local *lp);
+void xlltemac_phy_off(struct xlltemac_net_local *lp);
 
 typedef enum DUPLEX { UNKNOWN_DUPLEX, HALF_DUPLEX, FULL_DUPLEX } DUPLEX;
 

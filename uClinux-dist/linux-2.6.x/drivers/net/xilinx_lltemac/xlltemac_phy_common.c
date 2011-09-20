@@ -635,3 +635,12 @@ int xlltemac_add_phy(struct xlltemac_net_local *lp)
   spin_unlock_irqrestore(&xtenet_phy_bus_spinlock,flags);
   return phy_addr;
 }
+
+void xlltemac_phy_off(struct xlltemac_net_local *lp)
+{
+#if defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII) \
+  || defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII) \
+  || defined(CONFIG_XILINX_LLTEMAC_MARVELL_88E1112_GMII)
+  xlltemac_phy_off_marvell(lp);
+#endif
+}
