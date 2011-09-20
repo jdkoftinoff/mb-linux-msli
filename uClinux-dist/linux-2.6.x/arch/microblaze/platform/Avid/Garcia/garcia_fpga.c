@@ -320,24 +320,38 @@ static ssize_t garcia_r_icap5(struct class *c, char *buf)
 {
 	int count = 0;
 	u32 val;
+	// It has been empirically determined that ICAP FSL doesn't always work
+	// the first time, but if retried enough times it does eventually work.
+	// Thus we keep hammering the operation we want and checking for failure
+	// until we finally succeed.  Somebody please fix ICAP!! <sigh>
+
+	// Abort anything in progress
+	do {
+		putfslx(0x02000, 0, FSL_CONTROL); // Control signal aborts, NOP doesn't matter
+	    udelay(1000);
+	    getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
+
 	// Read the reconfiguration FPGA offset; we only need to read
 	// the upper register and see if it is 0.
-    putfsl(0x0FFFF, 0); // Pad words
-    putfsl(0x0FFFF, 0);
-    putfsl(0x0AA99, 0); // SYNC
-    putfsl(0x05566, 0); // SYNC
-	putfsl(0x02AE1, 0); // Read GENERAL5
-	// Add some safety noops
-	for (count = 0; count < (int)icapnop; count++) {
-		if (count == (int)icapnop - 1) {
-			putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
-		} else {
-			putfsl(0x02000, 0); // Type 1 NOP
+	do {
+		putfsl(0x0FFFF, 0); // Pad words
+		putfsl(0x0FFFF, 0);
+		putfsl(0x0AA99, 0); // SYNC
+		putfsl(0x05566, 0); // SYNC
+		putfsl(0x02AE1, 0); // Read GENERAL5
+		// Add some safety noops
+		for (count = 0; count < (int)icapnop; count++) {
+			if (count == (int)icapnop - 1) {
+				putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+			} else {
+				putfsl(0x02000, 0); // Type 1 NOP
+			}
 		}
-	}
 
-	udelay(icapdelay);
-	getfsl(val, 0); // Read the ICAP result
+		udelay(icapdelay);
+		getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
 	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
 	return count;
 }
@@ -347,21 +361,37 @@ static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 	unsigned long int val;
 
 	if (strict_strtoul(buf, 0, &val) == 0) {
-        // Synchronize command bytes
-        putfsl(0x0FFFF, 0); // Pad words
-        putfsl(0x0FFFF, 0);
-        putfsl(0x0AA99, 0); // SYNC
-        putfsl(0x05566, 0); // SYNC
-        putfsl(0x032E1, 0); // Write GENERAL5
-        putfsl(val, 0);     // Insert GENERAL5 value
-    	// Add some safety noops
-    	for (count = 0; count < (int)icapnop; count++) {
-    		if (count == (int)icapnop - 1) {
-    			putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
-    		} else {
-    			putfsl(0x02000, 0); // Type 1 NOP
-    		}
-    	}
+		// It has been empirically determined that ICAP FSL doesn't always work
+		// the first time, but if retried enough times it does eventually work.
+		// Thus we keep hammering the operation we want and checking for failure
+		// until we finally succeed.  Somebody please fix ICAP!! <sigh>
+
+		// Abort anything in progress
+		do {
+			putfslx(0x02000, 0, FSL_CONTROL); // Control signal aborts, NOP doesn't matter
+		    udelay(1000);
+		    getfsl(val, 0); // Read the ICAP result
+		} while ((val & ICAP_FSL_FAILED) != 0);
+
+		do {
+			// Synchronize command bytes
+			putfsl(0x0FFFF, 0); // Pad words
+			putfsl(0x0FFFF, 0);
+			putfsl(0x0AA99, 0); // SYNC
+			putfsl(0x05566, 0); // SYNC
+			putfsl(0x032E1, 0); // Write GENERAL5
+			putfsl(val, 0);     // Insert GENERAL5 value
+			// Add some safety noops
+			for (count = 0; count < (int)icapnop; count++) {
+				if (count == (int)icapnop - 1) {
+					putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+				} else {
+					putfsl(0x02000, 0); // Type 1 NOP
+				}
+			}
+			udelay(1000);
+			getfsl(val, 0); // Read the ICAP result
+		} while ((val & ICAP_FSL_FAILED) != 0);
 	}
 	return count;
 }

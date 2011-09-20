@@ -119,7 +119,57 @@ void of_platform_reset_gpio_probe(void)
 }
 #endif
 
-#define XPAR_XPS_HWICAP_0_BASEADDR 0x80004000
+static void icap_reset(u32 gp5)
+{
+#if 1
+	// It has been empirically determined that ICAP FSL doesn't always work
+	// the first time, but if retried enough times it does eventually work.
+	// Thus we keep hammering the operation we want and checking for failure
+	// until we finally succeed.  Somebody please fix ICAP!! <sigh>
+	u32 val;
+	// Abort anything in progress
+	do {
+		putfslx(0x02000, 0, FSL_CONTROL); // Control signal aborts, NOP doesn't matter
+	    udelay(1000);
+	    getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
+
+	// Synchronize command bytes
+	do {
+		putfsl(0x0FFFF, 0); // Pad words
+		putfsl(0x0FFFF, 0);
+		putfsl(0x0AA99, 0); // SYNC
+		putfsl(0x05566, 0); // SYNC
+
+		// Write the reconfiguration FPGA offset; the base address of the
+		// "run-time" FPGA is #defined as a byte address, but the ICAP needs
+		// a 16-bit half-word address, so we shift right by one extra bit.
+		putfsl(0x03261, 0); // Write GENERAL1
+		putfsl(((BOOT_FPGA_BASE >> 1) & 0x0FFFF), 0); // "golden" FPGA start address[15:0]
+		putfsl(0x03281, 0); // Write GENERAL2
+		putfsl(((BOOT_FPGA_BASE >> 17) & 0x0FF), 0); // Opcode 0x00 and address[23:16]
+
+		// Write the fallback FPGA offset (this image)
+		putfsl(0x032A1, 0); // Write GENERAL3
+		putfsl((BOOT_FPGA_BASE & 0x0FFFF), 0);
+		putfsl(0x032C1, 0); // Write GENERAL4
+		putfsl(((BOOT_FPGA_BASE >> 16) & 0x0FF), 0);
+		putfsl(0x032E1, 0); // Write GENERAL5
+		putfsl(gp5, 0); // Value 1 forces u-boot to try firmware update
+
+		// Write IPROG command
+		putfsl(0x030A1, 0); // Write CMD
+		putfsl(0x0000E, 0); // IPROG Command
+		// Add some safety noops
+		putfsl(0x02000, 0); // Type 1 NOP
+		putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+		udelay(1000);
+		getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
+
+#else
+
+#define XPAR_XPS_HWICAP_0_BASEADDR 0x80004000 // TODO: Get this from device tree
 /* ICAP peripheral controller */
 #define XPAR_ICAP_CR_ABORT		BIT(4)
 #define XPAR_ICAP_CR_RESET		BIT(3)
@@ -133,7 +183,6 @@ void of_platform_reset_gpio_probe(void)
 #define XPAR_ICAP_SR_IN_ABORT	BIT(5)
 #define XPAR_ICAP_SR_DONE		BIT(0)
 
-#ifdef XPAR_XPS_HWICAP_0_BASEADDR
 #define	CONFIG_SYS_ICAP_ADDR	XPAR_XPS_HWICAP_0_BASEADDR
 #define	CONFIG_SYS_ICAP_GIE		(CONFIG_SYS_ICAP_ADDR + 0x01C)
 #define	CONFIG_SYS_ICAP_IPISR	(CONFIG_SYS_ICAP_ADDR + 0x020)
@@ -145,75 +194,42 @@ void of_platform_reset_gpio_probe(void)
 #define	CONFIG_SYS_ICAP_SR		(CONFIG_SYS_ICAP_ADDR + 0x110)
 #define	CONFIG_SYS_ICAP_WFV		(CONFIG_SYS_ICAP_ADDR + 0x114)
 #define	CONFIG_SYS_ICAP_RFO		(CONFIG_SYS_ICAP_ADDR + 0x118)
-#endif
 
-static void icap_reset(u32 val)
-{
-#if 0
-        // Synchronize command bytes
-        putfsl(0x0FFFF, 0); // Pad words
-        putfsl(0x0FFFF, 0);
-        putfsl(0x0AA99, 0); // SYNC
-        putfsl(0x05566, 0); // SYNC
-
-        // Write the reconfiguration FPGA offset; the base address of the
-        // "run-time" FPGA is #defined as a byte address, but the ICAP needs
-        // a 16-bit half-word address, so we shift right by one extra bit.
-        putfsl(0x03261, 0); // Write GENERAL1
-        putfsl(((BOOT_FPGA_BASE >> 1) & 0x0FFFF), 0); // "golden" FPGA start address[15:0]
-        putfsl(0x03281, 0); // Write GENERAL2
-        putfsl(((BOOT_FPGA_BASE >> 17) & 0x0FF), 0); // Opcode 0x00 and address[23:16]
-
-        // Write the fallback FPGA offset (this image)
-        putfsl(0x032A1, 0); // Write GENERAL3
-        putfsl((BOOT_FPGA_BASE & 0x0FFFF), 0);
-        putfsl(0x032C1, 0); // Write GENERAL4
-        putfsl(((BOOT_FPGA_BASE >> 16) & 0x0FF), 0);
-        putfsl(0x032E1, 0); // Write GENERAL5
-        putfsl(val, 0); // Value 1 forces u-boot to try firmware update
-
-        // Write IPROG command
-        putfsl(0x030A1, 0); // Write CMD
-        putfsl(0x0000E, 0); // IPROG Command
-    	// Add some safety noops
-        putfsl(0x02000, 0); // Type 1 NOP
-        putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
-#endif
-        out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_ABORT);
-    	while ((in_32(CONFIG_SYS_ICAP_CR) & (XPAR_ICAP_CR_ABORT | XPAR_ICAP_CR_RESET |
+	out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_ABORT);
+	while ((in_32(CONFIG_SYS_ICAP_CR) & (XPAR_ICAP_CR_ABORT | XPAR_ICAP_CR_RESET |
     			XPAR_ICAP_CR_FIFO_CLEAR | XPAR_ICAP_CR_READ | XPAR_ICAP_CR_WRITE)) != 0)
-    		;
-    	// Synchronize command bytes
-    	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF); // Pad words
-    	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF);
-    	out_32(CONFIG_SYS_ICAP_WF, 0x0AA99); // SYNC
-    	out_32(CONFIG_SYS_ICAP_WF, 0x05566); // SYNC
+		;
+	// Synchronize command bytes
+	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF); // Pad words
+	out_32(CONFIG_SYS_ICAP_WF, 0x0FFFF);
+	out_32(CONFIG_SYS_ICAP_WF, 0x0AA99); // SYNC
+	out_32(CONFIG_SYS_ICAP_WF, 0x05566); // SYNC
 
-        // Write the reconfiguration FPGA offset; the base address of the
-        // "run-time" FPGA is #defined as a byte address, but the ICAP needs
-        // a 16-bit half-word address, so we shift right by one extra bit.
-    	out_32(CONFIG_SYS_ICAP_WF, 0x03261); // Write GENERAL1
-    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
-    	out_32(CONFIG_SYS_ICAP_WF, 0x03281); // Write GENERAL2
-    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
-        // Write the fallback FPGA offset (this image)
-    	out_32(CONFIG_SYS_ICAP_WF, 0x032A1); // Write GENERAL3
-    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
-    	out_32(CONFIG_SYS_ICAP_WF, 0x032C1); // Write GENERAL4
-    	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
-    	out_32(CONFIG_SYS_ICAP_WF, 0x032E1); // Write GENERAL5
-    	out_32(CONFIG_SYS_ICAP_WF, val); // Value 0 allows u-boot to use production image
-    	// Write IPROG command
-    	out_32(CONFIG_SYS_ICAP_WF, 0x030A1); // Write CMD
-    	out_32(CONFIG_SYS_ICAP_WF, 0x0000E); // IPROG Command
-    	// Add some safety noops
-    	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
-    	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
-    	// Trigger the FSL peripheral to drain the FIFO into the ICAP
-    	out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_WRITE);
-    	while ((in_32(CONFIG_SYS_ICAP_CR) & XPAR_ICAP_CR_WRITE) != 0)
-    		;
-
+	// Write the reconfiguration FPGA offset; the base address of the
+	// "run-time" FPGA is #defined as a byte address, but the ICAP needs
+	// a 16-bit half-word address, so we shift right by one extra bit.
+	out_32(CONFIG_SYS_ICAP_WF, 0x03261); // Write GENERAL1
+	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
+	out_32(CONFIG_SYS_ICAP_WF, 0x03281); // Write GENERAL2
+	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
+	// Write the fallback FPGA offset (this image)
+	out_32(CONFIG_SYS_ICAP_WF, 0x032A1); // Write GENERAL3
+	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 1) & 0x0FFFF)); // Multiboot start address[15:0]
+	out_32(CONFIG_SYS_ICAP_WF, 0x032C1); // Write GENERAL4
+	out_32(CONFIG_SYS_ICAP_WF, ((BOOT_FPGA_BASE >> 17) & 0x0FF)); // Opcode 0x00 and address[23:16]
+	out_32(CONFIG_SYS_ICAP_WF, 0x032E1); // Write GENERAL5
+	out_32(CONFIG_SYS_ICAP_WF, val); // Value 0 allows u-boot to use production image
+	// Write IPROG command
+	out_32(CONFIG_SYS_ICAP_WF, 0x030A1); // Write CMD
+	out_32(CONFIG_SYS_ICAP_WF, 0x0000E); // IPROG Command
+	// Add some safety noops
+	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
+	out_32(CONFIG_SYS_ICAP_WF, 0x02000); // Type 1 NOP
+	// Trigger the FSL peripheral to drain the FIFO into the ICAP
+	out_32(CONFIG_SYS_ICAP_CR, XPAR_ICAP_CR_WRITE);
+	while ((in_32(CONFIG_SYS_ICAP_CR) & XPAR_ICAP_CR_WRITE) != 0)
+		;
+#endif
 	while(1);
 }
 
