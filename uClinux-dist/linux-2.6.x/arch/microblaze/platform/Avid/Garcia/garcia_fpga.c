@@ -327,7 +327,7 @@ static ssize_t garcia_r_icap5(struct class *c, char *buf)
 
 	// Abort anything in progress
 	do {
-		putfslx(0x02000, 0, FSL_CONTROL); // Control signal aborts, NOP doesn't matter
+		putfslx(0x0FFFF, 0, FSL_CONTROL); // Control signal aborts, data doesn't matter
 	    udelay(1000);
 	    getfsl(val, 0); // Read the ICAP result
 	} while ((val & ICAP_FSL_FAILED) != 0);
@@ -359,8 +359,9 @@ static ssize_t garcia_r_icap5(struct class *c, char *buf)
 static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 {
 	unsigned long int val;
+	unsigned long int arg;
 
-	if (strict_strtoul(buf, 0, &val) == 0) {
+	if (strict_strtoul(buf, 0, &arg) == 0) {
 		// It has been empirically determined that ICAP FSL doesn't always work
 		// the first time, but if retried enough times it does eventually work.
 		// Thus we keep hammering the operation we want and checking for failure
@@ -368,7 +369,7 @@ static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 
 		// Abort anything in progress
 		do {
-			putfslx(0x02000, 0, FSL_CONTROL); // Control signal aborts, NOP doesn't matter
+			putfslx(0x0FFFF, 0, FSL_CONTROL); // Control signal aborts, data doesn't matter
 		    udelay(1000);
 		    getfsl(val, 0); // Read the ICAP result
 		} while ((val & ICAP_FSL_FAILED) != 0);
@@ -380,7 +381,7 @@ static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 			putfsl(0x0AA99, 0); // SYNC
 			putfsl(0x05566, 0); // SYNC
 			putfsl(0x032E1, 0); // Write GENERAL5
-			putfsl(val, 0);     // Insert GENERAL5 value
+			putfsl(arg, 0);     // Insert GENERAL5 value
 			// Add some safety noops
 			for (count = 0; count < (int)icapnop; count++) {
 				if (count == (int)icapnop - 1) {
@@ -389,7 +390,7 @@ static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
 					putfsl(0x02000, 0); // Type 1 NOP
 				}
 			}
-			udelay(1000);
+			udelay(icapdelay);
 			getfsl(val, 0); // Read the ICAP result
 		} while ((val & ICAP_FSL_FAILED) != 0);
 	}
