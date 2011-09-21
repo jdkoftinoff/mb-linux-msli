@@ -121,6 +121,8 @@ void of_platform_reset_gpio_probe(void)
 
 static void icap_reset(u32 gp5)
 {
+	// ICAP behavior is described (poorly) in Xilinx specification UG380.  Brave
+	// souls may look there for detailed guidance on what is being done here.
 #if 1
 	// It has been empirically determined that ICAP FSL doesn't always work
 	// the first time, but if retried enough times it does eventually work.
@@ -141,6 +143,11 @@ static void icap_reset(u32 gp5)
 		putfsl(0x0AA99, 0); // SYNC
 		putfsl(0x05566, 0); // SYNC
 
+        // Set the Mode register so that fallback images will be manipulated
+        // correctly.  Use bitstream mode instead of physical mode (required
+        // for configuration fallback) and set boot mode for BPI
+        putfsl(0x03301, 0); // Write MODE_REG
+        putfsl(0x02000, 0); // Value 0 allows u-boot to use production image
 		// Write the reconfiguration FPGA offset; the base address of the
 		// "run-time" FPGA is #defined as a byte address, but the ICAP needs
 		// a 16-bit half-word address, so we shift right by one extra bit.
