@@ -19,10 +19,11 @@ CFLAGS = -Wall -g -Os -Wpointer-arith -Wcast-qual -I$(LIBFDT_srcdir)
 
 FLTFLAGS += -s 65536
 
-all: mbbl-imagetool
+all: mbbl-imagetool mtd-lock
 
 romfs:
 	$(ROMFSINST) /bin/mbbl-imagetool
+	$(ROMFSINST) /bin/mtd-lock
 
 #
 # Rules for libfdt
@@ -99,6 +100,10 @@ mbbl-imagetool: mbbl-imagetool.o $(LIBFDT_archive)
 	@$(VECHO) LD "mbbl-imagetool"
 	$(CC) $(LDFLAGS) -o $@ $^
 
+mtd-lock: mtd-lock.o
+	@$(VECHO) LD "mtd-lock"
+	$(CC) $(LDFLAGS) -o $@ $^
+
 clean: libfdt_clean
-	@$(VECHO) CLEAN "(mbbl-imagetool)"
-	$(RM) mbbl-imagetool mbbl-imagetool.gdb $(STD_CLEANFILES)
+	@$(VECHO) CLEAN "(mbbl-imagetool mtd-lock)"
+	$(RM) mbbl-imagetool mtd-lock mbbl-imagetool.gdb mtd-lock.gdb $(STD_CLEANFILES)
