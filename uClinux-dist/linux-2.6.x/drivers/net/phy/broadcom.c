@@ -604,8 +604,6 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 				bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC));
 	}
 	#endif
-	printk("BCM5481 shadow AUXCTL is %04x",
-		bcm54xx_auxctl_read(phydev,MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL));
 	return ret;
 }
 
