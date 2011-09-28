@@ -13,6 +13,11 @@ config USER_TI_SRC4392
 	help
 	  Include the CAL panel server.
 	  
+config USER_CAL_OLED
+	bool "CAL OLED button daemon - CAL"
+	help
+	  Include the CAL panel server.
+	  	  
 config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"
 	help
