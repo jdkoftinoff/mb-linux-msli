@@ -8,7 +8,7 @@ clean:
 mrd:	mrd.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-mrd:	mrd.c
+mwr:	mwr.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 romfs:
