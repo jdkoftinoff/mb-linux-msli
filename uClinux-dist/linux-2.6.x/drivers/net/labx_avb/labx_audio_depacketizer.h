@@ -139,9 +139,9 @@
 
 #define LOCK_COUNT_REG       0x00A
 #  define VCO_UNLOCK_COUNT_MASK   0x0FFF
-#  define VCO_UNLOCK_COUNT_SHIFT  0
+#  define VCO_UNLOCK_COUNT_SHIFT  12
 #  define VCO_LOCK_COUNT_MASK     0x0FFF
-#  define VCO_LOCK_COUNT_SHIFT    12
+#  define VCO_LOCK_COUNT_SHIFT    0
 
 #define REGISTER_ADDRESS(device, offset) \
   ((uintptr_t)device->virtualAddress |                       \
