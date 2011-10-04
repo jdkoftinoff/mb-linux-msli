@@ -65,13 +65,14 @@ void garcia_control_set_master(int is_master);
 
 #define GARCIA_MUTE_CONTROLLER_MASK 0x00F00000 /* Mask of mute control depacketizer stream assignment */
 #define GARCIA_MUTE_CONTROLLER_SHIFT   20   /* Bit shift of mute control depacketizer stream assignment */
+#define GARCIA_STATUS_MUTE_STREAM_SET 0x4000 /* If set, GARCIA_MUTE_CONTROLLER_MASK bits will be assigned to set mute control stream */
 #define GARCIA_STATUS_MASK_SLOT_POPULATED 0x2000 /* If set, GARCIA_STATUS_SLOT_POPULATED value will be used */
 #define GARCIA_STATUS_SLOT_POPULATED 0x1000 /* Slot is not empty - it proxies for an I/O card */
-#define GARCIA_STATUS_ENA_UNMUTE    0x800   /* If set, and GARCIA_STATUS_MUTE_FORCE is clear, force unmute */
-#define GARCIA_STATUS_MUTE_FORCE    0x400   /* If set, slot is forced to be muted */
-#define GARCIA_STATUS_MUTE_ON       (GARCIA_STATUS_MUTE_FORCE & ~GARCIA_STATUS_ENA_UNMUTE)
-#define GARCIA_STATUS_MUTE_OFF      (~GARCIA_STATUS_MUTE_FORCE & GARCIA_STATUS_ENA_UNMUTE)
-#define GARCIA_STATUS_MUTE_AUTO     (GARCIA_STATUS_MUTE_FORCE | GARCIA_STATUS_ENA_UNMUTE)
+#define GARCIA_STATUS_MUTE_SET_1    0x800   /* States - 0,0 : do nothing;   0,1 : force mute; */
+#define GARCIA_STATUS_MUTE_SET_0    0x400   /*          1,0 : force unmute; 1,1 : cancel forcing */
+#define GARCIA_STATUS_MUTE_OFF      (GARCIA_STATUS_MUTE_SET_1 & ~GARCIA_STATUS_MUTE_SET_0)
+#define GARCIA_STATUS_MUTE_ON       (~GARCIA_STATUS_MUTE_SET_1 & GARCIA_STATUS_MUTE_SET_0)
+#define GARCIA_STATUS_MUTE_CANCEL   (GARCIA_STATUS_MUTE_SET_1 | GARCIA_STATUS_MUTE_SET_0)
 #define GARCIA_STATUS_SERDES_SYNC	0x200	/* SERDES/buffers are synced (RO) */
 #define GARCIA_STATUS_LRCLK_ACTIVE	0x100	/* LRCLK is present (RO) */
 #define GARCIA_STATUS_LRCLK_MASTER	 0x80	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */

@@ -106,11 +106,12 @@ static LIST_HEAD(device_list);
 
 #define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Informational only for Master) (R/W) */
 #define AC_CTL_MUTESTREAM_MASK 0x00F00000 /* 4 bit mute stream select mask */
+#define AC_CTL_MUTESTREAM_SHIFT 20  /* Bit shift of mute stream assignment */
 #define AC_CTL_DIAG_ERROR   BIT(19) /* Debug error flag (used e.g. for LFSR) (w1c) */
 #define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
 #define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
-#define AC_CTL_ENA_UNMUTE   BIT(15) /* If set, and AC_CTL_MUTE_FORCE is clear, force unmute */
-#define AC_CTL_MUTE_FORCE   BIT(14) /* If set, slot is forced to be muted */
+#define AC_CTL_ENA_MUTE_FORCE BIT(15) /* If set, force muting to follow AC_CTL_MUTE (Bit 14) */
+#define AC_CTL_MUTE         BIT(14) /* If set, slot is forced to be muted */
 #define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
 #define AC_CTL_LRCLK_ACTIVE	BIT(12)	/* LRCLK is present (RO) */
 #define AC_CTL_LRCLK_MASTER	BIT(11)	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */
@@ -474,18 +475,16 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_SSI_DDIR) != 0) {
 			val |= GARCIA_STATUS_SSI_DDIR;
 		}
-		if ((status & AC_CTL_MUTE_FORCE) == 0 &&
-				(status & AC_CTL_ENA_UNMUTE) != 0) {
-			val |= GARCIA_STATUS_ENA_UNMUTE;
-		} else if ((status & AC_CTL_MUTE_FORCE) != 0) {
-			val |= GARCIA_STATUS_MUTE_FORCE;
-		} else if ((status & AC_CTL_MUTE_FORCE) == 0 &&
-				(status & AC_CTL_ENA_UNMUTE) == 0) {
-			val |= (status & GARCIA_MUTE_CONTROLLER_MASK);
+		if ((status & AC_CTL_MUTE) != 0) {
+			val |= GARCIA_STATUS_MUTE_SET_0;
+		} else if ((status & AC_CTL_ENA_MUTE_FORCE) != 0) {
+			val |= GARCIA_STATUS_MUTE_SET_1;
 		}
 		if ((status & AC_CTL_POPULATED) != 0) {
 			val |= GARCIA_STATUS_SLOT_POPULATED;
 		}
+		val |= (((status & AC_CTL_MUTESTREAM_MASK) >> AC_CTL_MUTESTREAM_SHIFT) <<
+				GARCIA_MUTE_CONTROLLER_SHIFT) & GARCIA_MUTE_CONTROLLER_MASK;
 
 		if (put_user(val, p32)) {
 			rc = -EFAULT;
@@ -512,19 +511,24 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		} else {
 			status |= AC_CTL_SSI_DDIR;
 		}
-		if ((val & GARCIA_STATUS_MUTE_FORCE) == 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
-			status &= ~(AC_CTL_MUTE_FORCE);
-			status |= AC_CTL_ENA_UNMUTE;
-		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) == 0) {
-			status |= AC_CTL_MUTE_FORCE;
-			status &= ~AC_CTL_ENA_UNMUTE;
-		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
-			status &= ~AC_CTL_MUTE_FORCE;
-			status &= ~AC_CTL_ENA_UNMUTE;
-			status |= (val & GARCIA_MUTE_CONTROLLER_MASK);
+		if ((val & GARCIA_STATUS_MUTE_SET_1) == 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) != 0) {
+			status |= AC_CTL_MUTE;
+			status |= AC_CTL_ENA_MUTE_FORCE;
+		} else if ((val & GARCIA_STATUS_MUTE_SET_1) != 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) == 0) {
+			status &= ~AC_CTL_MUTE;
+			status |= AC_CTL_ENA_MUTE_FORCE;
+		} else if ((val & GARCIA_STATUS_MUTE_SET_1) != 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) != 0) {
+			status &= ~AC_CTL_MUTE;
+			status &= ~AC_CTL_ENA_MUTE_FORCE;
+		}
+		if ((val & GARCIA_STATUS_MUTE_STREAM_SET) != 0) {
+			status = (status & ~AC_CTL_MUTESTREAM_MASK) |
+					((((val & GARCIA_MUTE_CONTROLLER_MASK) >> GARCIA_MUTE_CONTROLLER_SHIFT) <<
+					AC_CTL_MUTESTREAM_SHIFT) & AC_CTL_MUTESTREAM_MASK);
+
 		}
 		if ((val & GARCIA_STATUS_MASK_SLOT_POPULATED) != 0) {
 			if ((val & GARCIA_STATUS_SLOT_POPULATED) != 0) {
@@ -819,6 +823,8 @@ static ssize_t agdev_w_avbmute(struct class *class, const char *buf, size_t coun
 		val = -1;
 	} else if (strncmp(buf, "off", 3) == 0) {
 		val = -2;
+	} else if (strncmp(buf, "auto", 4) == 0 || strncmp(buf, "cancel", 6) == 0) {
+		val = -3;
 	} else if (strict_strtol(buf, 0, &val) != 0 || val < 0 || val > 0xF) {
 		return -EINVAL;
 	}
@@ -827,14 +833,15 @@ static ssize_t agdev_w_avbmute(struct class *class, const char *buf, size_t coun
 		spin_lock_irqsave(&agm->aglock, flags);
 		status = agc_regr(agm, agctl->ctlreg_offs);
 		if (val == -1) {
-			status |= AC_CTL_MUTE_FORCE;
-			status &= ~(AC_CTL_ENA_UNMUTE | AC_CTL_MUTESTREAM_MASK);
+			status |= (AC_CTL_MUTE | AC_CTL_ENA_MUTE_FORCE);
 		} else if (val == -2) {
-			status |= AC_CTL_ENA_UNMUTE;
-			status &= ~(AC_CTL_MUTE_FORCE | AC_CTL_MUTESTREAM_MASK);
+			status |= AC_CTL_ENA_MUTE_FORCE;
+			status &= ~AC_CTL_MUTE;
+		} else if (val == -3) {
+			status &= ~(AC_CTL_MUTE | AC_CTL_ENA_MUTE_FORCE);
 		} else {
-			status = (status & ~(AC_CTL_MUTESTREAM_MASK | AC_CTL_ENA_UNMUTE | AC_CTL_MUTE_FORCE)) |
-					((val << 20) & AC_CTL_MUTESTREAM_MASK);
+			status = (status & ~AC_CTL_MUTESTREAM_MASK) |
+					((val << AC_CTL_MUTESTREAM_SHIFT) & AC_CTL_MUTESTREAM_MASK);
 		}
 		agc_regw(agm, agctl->ctlreg_offs, status);
 		spin_unlock_irqrestore(&agm->aglock, flags);
@@ -849,12 +856,12 @@ static ssize_t agdev_r_avbmute(struct class *class, char *buf)
 	if (agctl != NULL) {
 		struct agctl_master *agm = agctl->agm;
 		status = agc_regr(agm, agctl->ctlreg_offs);
-		if ((status & AC_CTL_MUTE_FORCE) == 0 && (status & AC_CTL_ENA_UNMUTE) != 0) {
-			strncpy(buf, "off\n", PAGE_SIZE);
-		} else if ((status & AC_CTL_MUTE_FORCE) != 0 && (status & AC_CTL_ENA_UNMUTE) == 0) {
+		if ((status & AC_CTL_MUTE) != 0) {
 			strncpy(buf, "on\n", PAGE_SIZE);
+		} else if ((status & AC_CTL_ENA_MUTE_FORCE) != 0) {
+			strncpy(buf, "off\n", PAGE_SIZE);
 		} else {
-			snprintf(buf, PAGE_SIZE, "%u\n", (unsigned int)((status >> 20) & 0xF));
+			snprintf(buf, PAGE_SIZE, "%u\n", (unsigned int)((status & AC_CTL_MUTESTREAM_MASK) >> AC_CTL_MUTESTREAM_SHIFT));
 		}
 	} else {
 		strncpy(buf, "-1\n", PAGE_SIZE);
