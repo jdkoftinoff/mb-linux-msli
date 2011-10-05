@@ -6,17 +6,22 @@ echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
 
 # Call a script located on the read-write Flash filesystem to
-# permit users to easily modify the persistent network settings
-echo "Calling platform-specific network script"
-/mnt/config/scripts/network_config
+# permit users to easily modify the persistent network settings,
+# if one exists
+NETSCRIPT=/mnt/config/scripts/network_config
+if [ -f $NETSCRIPT ] ; then
+  echo "Calling platform-specific network script"
+  $NETSCRIPT
+else
+  echo "No platform-specific network script found"
+fi
 
-mkdir /var/tmp/dhcpc
-mkdir /var/lib
-mkdir /var/tmp/avahi
-mkdir /var/tmp/avahi/services
+mkdir -p /var/tmp/dhcpc
+mkdir -p /var/lib
+mkdir -p /var/tmp/avahi
+mkdir -p /var/tmp/avahi/services
 /bin/cp /etc/avahi.orig/avahi-daemon.conf /etc/avahi.orig/avahi-autoipd.action  /var/tmp/avahi
 /bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
 /bin/avahi-daemon >/dev/null 2>&1 &
-/bin/dhcpcd -t0 eth0 &
 /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
 /bin/inetd &
