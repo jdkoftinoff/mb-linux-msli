@@ -14,6 +14,8 @@ if [ -f $NETSCRIPT ] ; then
   $NETSCRIPT
 else
   echo "No platform-specific network script found"
+  ifconfig eth0 up
+  ifconfig eth1 up
 fi
 
 mkdir -p /var/tmp/dhcpc
