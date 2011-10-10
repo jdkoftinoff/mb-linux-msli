@@ -608,9 +608,13 @@ static ssize_t get_fan(
 {
 	struct amc6821_data *data = amc6821_update_device(dev);
 	int ix = to_sensor_dev_attr(devattr)->index;
-	if (0 == data->fan[ix])
-		return sprintf(buf, "0");
-	return sprintf(buf, "%d\n", (int)(6000000 / data->fan[ix]));
+	if (0 == data->fan[ix]) {
+		return sprintf(buf, "6000000\n");
+	} else if (65217 < data->fan[ix]) {
+		return sprintf(buf, "0\n");
+	} else {
+		return sprintf(buf, "%d\n", (int)(6000000 / data->fan[ix]));
+	}
 }
 
 
@@ -975,6 +979,7 @@ static int amc6821_init_client(struct i2c_client *client)
 		config &= ~AMC6821_CONF2_RTFIE;
 		config &= ~AMC6821_CONF2_LTOIE;
 		config &= ~AMC6821_CONF2_RTOIE;
+		config &= ~AMC6821_CONF2_TACH_MODE;
 		config |= AMC6821_CONF2_TACH_EN;
 		if (i2c_smbus_write_byte_data(client,
 				AMC6821_REG_CONF2, config)) {
@@ -1035,12 +1040,7 @@ static struct amc6821_data *amc6821_update_device(struct device *dev)
 		data->pwm1 = i2c_smbus_read_byte_data(client,
 			AMC6821_REG_DCY);
 		for (i = 0; i < FAN1_IDX_LEN; i++) {
-			data->fan[i] = i2c_smbus_read_byte_data(
-					client,
-					fan_reg_low[i]);
-			data->fan[i] += i2c_smbus_read_byte_data(
-					client,
-					fan_reg_hi[i]) << 8;
+			data->fan[i] = i2c_smbus_read_word_data(client, fan_reg_low[i]);
 		}
 		data->fan1_div = i2c_smbus_read_byte_data(client,
 			AMC6821_REG_CONF4);

@@ -214,9 +214,14 @@ romfs:
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S50mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/startapps /etc/init.d/startapps
 	$(ROMFSINST) -s /etc/init.d/startapps /etc/rc.d/S90startapps
+	$(ROMFSINST) $(COMMON)/etc/rc/boa /etc/init.d/boa
+        # Uncomment to autostart the BOA web server
+	# $(ROMFSINST) -s /etc/init.d/boa /etc/rc.d/S60boa
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
+	$(ROMFSINST) $(COMMON)/etc/boa.conf /etc/boa.conf
+	$(ROMFSINST) $(COMMON)/etc/mime.types /etc/mime.types
 
 	# Symbolic link for fstab into configurable area
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \
@@ -258,6 +263,9 @@ endif
 
 	$(ROMFSINST) -A "^root:" -a "root:${CRYPT_PASSWD}:0:0::/:/bin/sh" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^root:" -a "root:x:0:root" $(ETCDIR)/group
+
+	$(ROMFSINST) -A "^nobody:" -a "nobody:x:65534:65534::/var/tmp:/bin/sh" $(ETCDIR)/passwd
+	$(ROMFSINST) -A "^nogroup:" -a "nogroup:x:65534:nobody" $(ETCDIR)/group
 
 	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:200:Avahi Daemon:/:/bin/false" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:avahi" $(ETCDIR)/group

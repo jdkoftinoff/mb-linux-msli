@@ -68,6 +68,7 @@ extern "C" {
 #define RUNTIME_FPGA_BASE (0x00000000)
 #define BOOT_FPGA_BASE (0x00000000)
 #define FINISH_FSL_BIT (0x80000000)
+#define ICAP_FSL_FAILED (0x80000000)
 
 /* Extended FSL macros. These now replace all of the previous FSL macros */
 #define FSL_NONBLOCKING                          n

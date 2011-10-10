@@ -672,7 +672,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
 	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
 	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
-            ((512 << VCO_LOCK_COUNT_SHIFT) | 0));
+            ((512 << VCO_LOCK_COUNT_SHIFT) | (8 << VCO_UNLOCK_COUNT_SHIFT)));
 
   /* TODO: Need to introduce some locked status and interrupt mask / flag bits in the hardware!
    *       Once they exist, a lock detection kernel event mechanism can be added to the driver

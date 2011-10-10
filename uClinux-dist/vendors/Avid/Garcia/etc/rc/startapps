@@ -1,5 +1,8 @@
 #!/bin/sh
 
-/mnt/apps/start_avbd &
-
+if [ -x "/mnt/config/start_avbd" ] ; then
+  /mnt/config/start_avbd &
+else
+  /mnt/apps/start_avbd &
+fi
 
