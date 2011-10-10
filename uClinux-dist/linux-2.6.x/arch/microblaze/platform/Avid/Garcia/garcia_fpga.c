@@ -18,9 +18,11 @@
 #include <linux/xilinx_devices.h>
 #include <asm/io.h>
 #include <linux/vmalloc.h>
+#include <linux/timer.h>
 #include "xbasic_types.h"
 #include "xio.h"
 #include "garcia_fpga_priv.h"
+#include <microblaze_fsl.h>
 
 #ifdef CONFIG_OF
 // For open firmware.
@@ -40,7 +42,9 @@
 	garcia_fpga_WriteReg(fpga_gpio.gpioaddr, GARCIA_FPGA_GPIO_REGISTER, val)
 
 #define DRIVER_NAME "garcia_fpga"
-#define DRIVER_VERSION "0.4"
+#define DRIVER_VERSION "1.0"
+#define PUSHBUTTON_UPDATE_TIME 5*HZ
+#define PUSHBUTTON_RESET_TIME HZ/2
 
 #define SLOT_RESET_PULSEWIDTH 3 /* mS */
 #define N_IRQRESP_VECTORS 8
@@ -50,6 +54,7 @@ struct garcia_fpga_gpio_struct {
 	uint32_t gpioaddr;
 	uint32_t shadow_value;
 	uint32_t last_gpio_irq;
+	struct timer_list reset_timer;
 	struct {
 		uint32_t falling_mask;
 		uint32_t rising_mask;
@@ -187,6 +192,18 @@ static irqreturn_t garcia_fpga_irq(int irq, void *data)
 		}
 		gp->last_gpio_irq = value;
 	}
+	if ((value & GARCIA_FPGA_GPIO_PUSHBUTTON) == 0) { // Button is pushed
+		mod_timer(&gp->reset_timer, jiffies + PUSHBUTTON_UPDATE_TIME);
+	} else if (timer_pending(&gp->reset_timer)) {
+		if (gp->reset_timer.expires > jiffies +
+				(PUSHBUTTON_UPDATE_TIME - PUSHBUTTON_RESET_TIME)) {
+			del_timer_sync(&gp->reset_timer);
+		} else {
+			del_timer_sync(&gp->reset_timer);
+			printk("Reboot!\n");
+			machine_restart(NULL);
+		}
+	}
 	/* Reset the interrupt */
 	garcia_fpga_WriteReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR,
 			garcia_fpga_ReadReg(gp->gpioaddr, GARCIA_FPGA_GPIO_IPISR));
@@ -216,6 +233,9 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_GENERAL_DIR;
 		if (val != 0) {
 			fpga_gpio.shadow_value |= GARCIA_FPGA_GENERAL_DIR;
+			garcia_control_set_master(1);
+		} else {
+			garcia_control_set_master(0);
 		}
 		fpga_gpio.shadow_value &= ~GARCIA_FPGA_SLOT_BUF_NOE;
 		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
@@ -294,6 +314,109 @@ static ssize_t garcia_r_gpioraw(struct class *c, char *buf)
 	return count;
 }
 
+static unsigned int icapnop = 2;
+static unsigned int icapdelay = 1000;
+static ssize_t garcia_r_icap5(struct class *c, char *buf)
+{
+	int count = 0;
+	u32 val;
+	// It has been empirically determined that ICAP FSL doesn't always work
+	// the first time, but if retried enough times it does eventually work.
+	// Thus we keep hammering the operation we want and checking for failure
+	// until we finally succeed.  Somebody please fix ICAP!! <sigh>
+
+	// Abort anything in progress
+	do {
+		putfslx(0x0FFFF, 0, FSL_CONTROL); // Control signal aborts, data doesn't matter
+	    udelay(1000);
+	    getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
+
+	// Read the reconfiguration FPGA offset; we only need to read
+	// the upper register and see if it is 0.
+	do {
+		putfsl(0x0FFFF, 0); // Pad words
+		putfsl(0x0FFFF, 0);
+		putfsl(0x0AA99, 0); // SYNC
+		putfsl(0x05566, 0); // SYNC
+		putfsl(0x02AE1, 0); // Read GENERAL5
+		// Add some safety noops
+		for (count = 0; count < (int)icapnop; count++) {
+			if (count == (int)icapnop - 1) {
+				putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+			} else {
+				putfsl(0x02000, 0); // Type 1 NOP
+			}
+		}
+
+		udelay(icapdelay);
+		getfsl(val, 0); // Read the ICAP result
+	} while ((val & ICAP_FSL_FAILED) != 0);
+	count = snprintf(buf, PAGE_SIZE, "%x\n", val);
+	return count;
+}
+
+static ssize_t garcia_w_icap5(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+	unsigned long int arg;
+
+	if (strict_strtoul(buf, 0, &arg) == 0) {
+		// It has been empirically determined that ICAP FSL doesn't always work
+		// the first time, but if retried enough times it does eventually work.
+		// Thus we keep hammering the operation we want and checking for failure
+		// until we finally succeed.  Somebody please fix ICAP!! <sigh>
+
+		// Abort anything in progress
+		do {
+			putfslx(0x0FFFF, 0, FSL_CONTROL); // Control signal aborts, data doesn't matter
+		    udelay(1000);
+		    getfsl(val, 0); // Read the ICAP result
+		} while ((val & ICAP_FSL_FAILED) != 0);
+
+		do {
+			// Synchronize command bytes
+			putfsl(0x0FFFF, 0); // Pad words
+			putfsl(0x0FFFF, 0);
+			putfsl(0x0AA99, 0); // SYNC
+			putfsl(0x05566, 0); // SYNC
+			putfsl(0x032E1, 0); // Write GENERAL5
+			putfsl(arg, 0);     // Insert GENERAL5 value
+			// Add some safety noops
+			for (count = 0; count < (int)icapnop; count++) {
+				if (count == (int)icapnop - 1) {
+					putfsl(FINISH_FSL_BIT | 0x02000, 0); // Type 1 NOP, and Trigger the FSL peripheral to drain the FIFO into the ICAP
+				} else {
+					putfsl(0x02000, 0); // Type 1 NOP
+				}
+			}
+			udelay(icapdelay);
+			getfsl(val, 0); // Read the ICAP result
+		} while ((val & ICAP_FSL_FAILED) != 0);
+	}
+	return count;
+}
+
+static ssize_t garcia_w_icapnop(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		icapnop = val;
+	}
+	return count;
+}
+
+static ssize_t garcia_w_icapdly(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		icapdelay = val;
+	}
+	return count;
+}
+
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
 	__ATTR(packetizer_ena, S_IRUGO | S_IWUGO, garcia_r_packetizer_ena, garcia_w_packetizer_ena),
@@ -303,6 +426,9 @@ static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(jumper1, S_IRUGO, garcia_r_jumper1, NULL),
 	__ATTR(jumper2, S_IRUGO, garcia_r_jumper2, NULL),
 	__ATTR(gpioraw, S_IRUGO, garcia_r_gpioraw, NULL),
+	__ATTR(icap5, S_IRUGO | S_IWUGO, garcia_r_icap5, garcia_w_icap5),
+	__ATTR(icapnop, S_IWUGO, NULL, garcia_w_icapnop),
+	__ATTR(icapdly, S_IWUGO, NULL, garcia_w_icapdly),
 	__ATTR_NULL,
 };
 
@@ -311,6 +437,13 @@ static struct class garcia_fpga_class = {
 	.owner =	THIS_MODULE,
 	.class_attrs =	garcia_fpga_class_attrs,
 };
+
+static void reset_timer_function(unsigned long data)
+{
+	(void)data;
+	printk("Reload firmware!\n");
+	machine_restart("1");
+}
 
 static int garcia_led_default[2] = {2, 3};
 module_param_array(garcia_led_default, int, NULL, 0);
@@ -357,6 +490,9 @@ static int __devinit garcia_fpga_probe(struct device *dev)
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
 	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
 	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
+	init_timer(&fpga_gpio.reset_timer);
+	fpga_gpio.reset_timer.function = reset_timer_function;
+	fpga_gpio.reset_timer.data = 0;
 	rc = class_register(&garcia_fpga_class);
 
 	return rc;
@@ -400,6 +536,9 @@ static int __devinit garcia_fpga_of_probe(struct of_device *ofdev, const struct 
 	garcia_fpga_write_gpio(fpga_gpio.shadow_value);
 	garcia_led_set(POWER_LED, garcia_led_default[POWER_LED]);
 	garcia_led_set(STATUS_LED, garcia_led_default[STATUS_LED]);
+	init_timer(&fpga_gpio.reset_timer);
+	fpga_gpio.reset_timer.function = reset_timer_function;
+	fpga_gpio.reset_timer.data = 0;
 	rc |= class_register(&garcia_fpga_class);
 
 	return rc;

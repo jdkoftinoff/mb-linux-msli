@@ -71,10 +71,14 @@ struct agctl_data {
 	uint16_t			irqflags;
 	uint16_t			strobedelay;
 	uint8_t				ctlreg_offs;
-	uint8_t				slot_number;
+	uint8_t				flags;           // Slot number and master/slave status
 	__be32				rxbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
 	__be32				txbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
 };
+#define AGCTL_FLAG_SLOTMASK 7
+#define agctl_slot_number(d) ((d)->flags & AGCTL_FLAG_SLOTMASK) // Get slot number
+#define AGCTL_FLAG_MASTER BIT(3)
+#define agctl_is_master(d) (((d)->flags & AGCTL_FLAG_MASTER) != 0) // Test for driver is master
 
 struct agctl_master {
 	void __iomem		*regs;	/* virt. address of the control registers */
@@ -102,16 +106,17 @@ static LIST_HEAD(device_list);
 
 #define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Informational only for Master) (R/W) */
 #define AC_CTL_MUTESTREAM_MASK 0x00F00000 /* 4 bit mute stream select mask */
+#define AC_CTL_MUTESTREAM_SHIFT 20  /* Bit shift of mute stream assignment */
 #define AC_CTL_DIAG_ERROR   BIT(19) /* Debug error flag (used e.g. for LFSR) (w1c) */
 #define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
 #define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
-#define AC_CTL_ENA_UNMUTE   BIT(15) /* If set, and AC_CTL_MUTE_FORCE is clear, force unmute */
-#define AC_CTL_MUTE_FORCE   BIT(14) /* If set, slot is forced to be muted */
+#define AC_CTL_ENA_MUTE_FORCE BIT(15) /* If set, force muting to follow AC_CTL_MUTE (Bit 14) */
+#define AC_CTL_MUTE         BIT(14) /* If set, slot is forced to be muted */
 #define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
 #define AC_CTL_LRCLK_ACTIVE	BIT(12)	/* LRCLK is present (RO) */
 #define AC_CTL_LRCLK_MASTER	BIT(11)	/* This slot is providing the master LRCLK for the AVB subsystem (RO) */
 #define AC_CTL_BUF_COL_IRQ	BIT(10)	/* IRQ: Buffer collision (w1c) */
-#define AC_CTL_MASTER_MODE	BIT(9)	/* Driver is master (Hub48 emulator) (RO) */
+#define AC_CTL_POPULATED	BIT(9)	/* An I/O card is proxied by this slot (slave only) */
 #define AC_CTL_INT_ENA		BIT(8)	/* Interrupt enabled */
 #define AC_CTL_RESET_IRQ	BIT(7)	/* IRQ: Reset signal has changed state (slave only, w1c) */
 #define AC_CTL_MUTE_IRQ 	BIT(6)	/* IRQ: Mute signal has changed state (slave only, w1c) */
@@ -163,7 +168,7 @@ static void agdev_strobe(struct agctl_master *agm, struct agctl_data *agctl)
 	unsigned long flags;
 	spin_lock_irqsave(&agm->aglock, flags);
 	status = agc_regr(agm, agctl->ctlreg_offs) & ~AC_CTL_IRQ_MASK;
-	if ((status & AC_CTL_MASTER_MODE) != 0) {
+	if (agctl_is_master(agctl)) {
 		agc_regw(agm, agctl->ctlreg_offs, status | AC_CTL_STROBE);
 		udelay(1);
 		agc_regw(agm, agctl->ctlreg_offs, status & ~AC_CTL_STROBE);
@@ -196,13 +201,13 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 		 * first byte transmitted, which will be the ID byte.
 		 */
 		if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
-			if ((status & AC_CTL_MASTER_MODE) == 0) {
+			if (!agctl_is_master(agctl)) {
 				clkcount = agc_regr(agm, AC_CLK_COUNT_OFFSET);
 				/* Ignore transfers with overflow, transfers in reset,
 				 *  and transfers of 0 or 1 bytes
 				 */
 				if ((clkcount & AC_CLK_OVF_MASK) != 0) {
-					printk("Channel %d Control message write overflow\n", chan);
+					; // printk("Channel %d Control message write overflow\n", chan);
 				} else if ((status & AC_CTL_RESET_SIG) == 0 && clkcount > 15) {
 					agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
 					agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
@@ -281,7 +286,6 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	uint8_t *regbuf_p;
 	unsigned long flags;
 	__u32 status;
-
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
@@ -290,7 +294,7 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	mutex_lock(&agm->agmutex);
 	spin_lock_irqsave(&agm->aglock, flags);
 	status = agc_regr(agm, agctl->ctlreg_offs);
-	master = ((status & AC_CTL_MASTER_MODE) != 0);
+	master = agctl_is_master(agctl);
 	agc_regw(agm, agctl->ctlreg_offs,
 			(status | AC_CTL_INT_ENA)  & ~AC_CTL_IRQ_MASK);
 	while (!master && (agctl->irqflags & AC_CTL_STROBE_IRQ) == 0) {
@@ -337,7 +341,7 @@ static ssize_t agctl_write(struct file *filp, const char __user *buf,
 		return -ESHUTDOWN;
 	}
 	agm = agctl->agm;
-	master = ((agc_regr(agm, agctl->ctlreg_offs) & AC_CTL_MASTER_MODE) != 0);
+	master = agctl_is_master(agctl);
 	if ((master && count > N_SHIFT_REGISTER_BYTES) ||
 			(!master && count > 1) || count <= 0) {
 		return -EMSGSIZE;
@@ -349,7 +353,7 @@ static ssize_t agctl_write(struct file *filp, const char __user *buf,
 	mutex_lock(&agm->agmutex);
 	if (master) { // master - start transfer
 		agctl->transfer_size = (count << 3) - 1; // Count must be (nbits - 1)
-		countreg = agctl->transfer_size | ((uint32_t)(agctl->slot_number & 0x7) << 24);
+		countreg = agctl->transfer_size | ((uint32_t)(agctl_slot_number(agctl)) << 24);
 		spin_lock_irqsave(&agm->aglock, flags);
 		agc_regw_be(agm, AC_SR_0_3_OFFSET, agctl->txbuf[0]);
 		agc_regw_be(agm, AC_SR_4_7_OFFSET, agctl->txbuf[1]);
@@ -412,7 +416,7 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 	case GARCIA_IOC_READ_STATUS:
 		mutex_lock(&agm->agmutex);
 		while ((agctl->irqflags & (AC_CTL_MUTE_IRQ | AC_CTL_RESET_IRQ | AC_CTL_BUF_COL_IRQ)) == 0 &&
-				(agctl->saved_status & AC_CTL_MASTER_MODE) == 0) {
+				!agctl_is_master(agctl)) {
 			mutex_unlock(&agm->agmutex);
 			if (filp->f_flags & O_NONBLOCK) {
 				rc = -EAGAIN;
@@ -440,20 +444,30 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_LRCLK_MASTER) != 0) {
 			val |= GARCIA_STATUS_LRCLK_MASTER;
 		}
-		if ((agctl->saved_status & AC_CTL_BUF_COL_IRQ) != 0) {
-			val |= GARCIA_STATUS_BUFFER_COLL;
-		}
-		if ((status & AC_CTL_MASTER_MODE) != 0) {
+		if (agctl_is_master(agctl)) {
 			val |= GARCIA_STATUS_MASTER_MODE;
+			if ((agctl->saved_status & AC_CTL_BUF_COL_IRQ) != 0) {
+				val |= GARCIA_STATUS_BUFFER_COLL;
+			}
+			if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
+				val |= GARCIA_STATUS_RESET_SIG;
+			}
+			if ((agctl->saved_status & AC_CTL_MUTE_SIG) != 0) {
+				val |= GARCIA_STATUS_MUTE_SIG;
+			}
+		} else {
+			if ((status & AC_CTL_BUF_COL_IRQ) != 0) {
+				val |= GARCIA_STATUS_BUFFER_COLL;
+			}
+			if ((status & AC_CTL_RESET_SIG) != 0) {
+				val |= GARCIA_STATUS_RESET_SIG;
+			}
+			if ((status & AC_CTL_MUTE_SIG) != 0) {
+				val |= GARCIA_STATUS_MUTE_SIG;
+			}
 		}
 		if ((status & AC_CTL_INT_ENA) != 0) {
 			val |= GARCIA_STATUS_INT_ENA;
-		}
-		if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
-			val |= GARCIA_STATUS_RESET_SIG;
-		}
-		if ((agctl->saved_status & AC_CTL_MUTE_SIG) != 0) {
-			val |= GARCIA_STATUS_MUTE_SIG;
 		}
 		if ((status & AC_CTL_STROBE) != 0) {
 			val |= GARCIA_STATUS_STROBE;
@@ -461,15 +475,16 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		if ((status & AC_CTL_SSI_DDIR) != 0) {
 			val |= GARCIA_STATUS_SSI_DDIR;
 		}
-		if ((status & AC_CTL_MUTE_FORCE) == 0 &&
-				(status & AC_CTL_ENA_UNMUTE) != 0) {
-			val |= GARCIA_STATUS_ENA_UNMUTE;
-		} else if ((status & AC_CTL_MUTE_FORCE) != 0) {
-			val |= GARCIA_STATUS_MUTE_FORCE;
-		} else if ((status & AC_CTL_MUTE_FORCE) == 0 &&
-				(status & AC_CTL_ENA_UNMUTE) == 0) {
-			val |= (status & GARCIA_MUTE_CONTROLLER_MASK);
+		if ((status & AC_CTL_MUTE) != 0) {
+			val |= GARCIA_STATUS_MUTE_SET_0;
+		} else if ((status & AC_CTL_ENA_MUTE_FORCE) != 0) {
+			val |= GARCIA_STATUS_MUTE_SET_1;
 		}
+		if ((status & AC_CTL_POPULATED) != 0) {
+			val |= GARCIA_STATUS_SLOT_POPULATED;
+		}
+		val |= (((status & AC_CTL_MUTESTREAM_MASK) >> AC_CTL_MUTESTREAM_SHIFT) <<
+				GARCIA_MUTE_CONTROLLER_SHIFT) & GARCIA_MUTE_CONTROLLER_MASK;
 
 		if (put_user(val, p32)) {
 			rc = -EFAULT;
@@ -496,19 +511,31 @@ static int agctl_ioctl(struct inode *ino, struct file *filp, unsigned int cmd, u
 		} else {
 			status |= AC_CTL_SSI_DDIR;
 		}
-		if ((val & GARCIA_STATUS_MUTE_FORCE) == 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
-			status &= ~(AC_CTL_MUTE_FORCE);
-			status |= AC_CTL_ENA_UNMUTE;
-		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) == 0) {
-			status |= AC_CTL_MUTE_FORCE;
-			status &= ~AC_CTL_ENA_UNMUTE;
-		} else if ((val & GARCIA_STATUS_MUTE_FORCE) != 0 &&
-				(val & GARCIA_STATUS_ENA_UNMUTE) != 0) {
-			status &= ~AC_CTL_MUTE_FORCE;
-			status &= ~AC_CTL_ENA_UNMUTE;
-			status |= (val & GARCIA_MUTE_CONTROLLER_MASK);
+		if ((val & GARCIA_STATUS_MUTE_SET_1) == 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) != 0) {
+			status |= AC_CTL_MUTE;
+			status |= AC_CTL_ENA_MUTE_FORCE;
+		} else if ((val & GARCIA_STATUS_MUTE_SET_1) != 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) == 0) {
+			status &= ~AC_CTL_MUTE;
+			status |= AC_CTL_ENA_MUTE_FORCE;
+		} else if ((val & GARCIA_STATUS_MUTE_SET_1) != 0 &&
+				(val & GARCIA_STATUS_MUTE_SET_0) != 0) {
+			status &= ~AC_CTL_MUTE;
+			status &= ~AC_CTL_ENA_MUTE_FORCE;
+		}
+		if ((val & GARCIA_STATUS_MUTE_STREAM_SET) != 0) {
+			status = (status & ~AC_CTL_MUTESTREAM_MASK) |
+					((((val & GARCIA_MUTE_CONTROLLER_MASK) >> GARCIA_MUTE_CONTROLLER_SHIFT) <<
+					AC_CTL_MUTESTREAM_SHIFT) & AC_CTL_MUTESTREAM_MASK);
+
+		}
+		if ((val & GARCIA_STATUS_MASK_SLOT_POPULATED) != 0) {
+			if ((val & GARCIA_STATUS_SLOT_POPULATED) != 0) {
+				status |= AC_CTL_POPULATED;
+			} else {
+				status &= ~AC_CTL_POPULATED;
+			}
 		}
 		agc_regw(agm, agctl->ctlreg_offs, status);
 		spin_unlock_irqrestore(&agm->aglock, flags);
@@ -526,14 +553,12 @@ static unsigned int agctl_poll(struct file *filp, struct poll_table_struct *wait
 {
 	struct agctl_data	*agctl = filp->private_data;
 	unsigned int mask = 0;
-	bool master;
 
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
-	master = ((agc_regr(agctl->agm, agctl->ctlreg_offs) & AC_CTL_MASTER_MODE) != 0);
 
-	if (master) {
+	if (agctl_is_master(agctl)) {
 		mask = POLLIN;
 	} else {
 		poll_wait(filp, &agctl->wait, wait);
@@ -642,7 +667,7 @@ static ssize_t agdev_w_reset(struct class *class, const char *buf, size_t count)
 		} else {
 			status |= AC_CTL_RESET_SIG;
 		}
-		if ((status & AC_CTL_MASTER_MODE) != 0) {
+		if (agctl_is_master(agctl)) {
 			agc_regw(agm, agctl->ctlreg_offs, status);
 		}
 		spin_unlock_irqrestore(&agm->aglock, flags);
@@ -681,7 +706,7 @@ static ssize_t agdev_w_mute(struct class *class, const char *buf, size_t count)
 		} else {
 			status |= AC_CTL_MUTE_SIG;
 		}
-		if ((status & AC_CTL_MASTER_MODE) != 0) {
+		if (agctl_is_master(agctl)) {
 			agc_regw(agm, agctl->ctlreg_offs, status);
 		}
 		spin_unlock_irqrestore(&agm->aglock, flags);
@@ -798,6 +823,8 @@ static ssize_t agdev_w_avbmute(struct class *class, const char *buf, size_t coun
 		val = -1;
 	} else if (strncmp(buf, "off", 3) == 0) {
 		val = -2;
+	} else if (strncmp(buf, "auto", 4) == 0 || strncmp(buf, "cancel", 6) == 0) {
+		val = -3;
 	} else if (strict_strtol(buf, 0, &val) != 0 || val < 0 || val > 0xF) {
 		return -EINVAL;
 	}
@@ -806,14 +833,15 @@ static ssize_t agdev_w_avbmute(struct class *class, const char *buf, size_t coun
 		spin_lock_irqsave(&agm->aglock, flags);
 		status = agc_regr(agm, agctl->ctlreg_offs);
 		if (val == -1) {
-			status |= AC_CTL_MUTE_FORCE;
-			status &= ~(AC_CTL_ENA_UNMUTE | AC_CTL_MUTESTREAM_MASK);
+			status |= (AC_CTL_MUTE | AC_CTL_ENA_MUTE_FORCE);
 		} else if (val == -2) {
-			status |= AC_CTL_ENA_UNMUTE;
-			status &= ~(AC_CTL_MUTE_FORCE | AC_CTL_MUTESTREAM_MASK);
+			status |= AC_CTL_ENA_MUTE_FORCE;
+			status &= ~AC_CTL_MUTE;
+		} else if (val == -3) {
+			status &= ~(AC_CTL_MUTE | AC_CTL_ENA_MUTE_FORCE);
 		} else {
-			status = (status & ~(AC_CTL_MUTESTREAM_MASK | AC_CTL_ENA_UNMUTE | AC_CTL_MUTE_FORCE)) |
-					((val << 20) & AC_CTL_MUTESTREAM_MASK);
+			status = (status & ~AC_CTL_MUTESTREAM_MASK) |
+					((val << AC_CTL_MUTESTREAM_SHIFT) & AC_CTL_MUTESTREAM_MASK);
 		}
 		agc_regw(agm, agctl->ctlreg_offs, status);
 		spin_unlock_irqrestore(&agm->aglock, flags);
@@ -828,12 +856,12 @@ static ssize_t agdev_r_avbmute(struct class *class, char *buf)
 	if (agctl != NULL) {
 		struct agctl_master *agm = agctl->agm;
 		status = agc_regr(agm, agctl->ctlreg_offs);
-		if ((status & AC_CTL_MUTE_FORCE) == 0 && (status & AC_CTL_ENA_UNMUTE) != 0) {
-			strncpy(buf, "off\n", PAGE_SIZE);
-		} else if ((status & AC_CTL_MUTE_FORCE) != 0 && (status & AC_CTL_ENA_UNMUTE) == 0) {
+		if ((status & AC_CTL_MUTE) != 0) {
 			strncpy(buf, "on\n", PAGE_SIZE);
+		} else if ((status & AC_CTL_ENA_MUTE_FORCE) != 0) {
+			strncpy(buf, "off\n", PAGE_SIZE);
 		} else {
-			snprintf(buf, PAGE_SIZE, "%u\n", (unsigned int)((status >> 20) & 0xF));
+			snprintf(buf, PAGE_SIZE, "%u\n", (unsigned int)((status & AC_CTL_MUTESTREAM_MASK) >> AC_CTL_MUTESTREAM_SHIFT));
 		}
 	} else {
 		strncpy(buf, "-1\n", PAGE_SIZE);
@@ -844,6 +872,18 @@ static ssize_t agdev_r_avbmute(struct class *class, char *buf)
 static CLASS_ATTR(avbmute, S_IRUGO | S_IWUSR, agdev_r_avbmute, agdev_w_avbmute);
 
 /*-------------------------------------------------------------------------*/
+
+void garcia_control_set_master(int is_master)
+{
+	unsigned long minor;
+	for (minor = 0; minor < N_AGCTL_CHANNELS; minor++) {
+		agm_stat->chan[minor].flags = (uint8_t)
+					((agm_stat->chan[minor].flags & ~AGCTL_FLAG_MASTER) |
+					((is_master != 0) ? AGCTL_FLAG_MASTER : 0));
+	}
+	return;
+}
+EXPORT_SYMBOL(garcia_control_set_master);
 
 static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		void __iomem *address, uint32_t irq)
@@ -881,7 +921,7 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 	for (minor = 0; minor < N_AGCTL_CHANNELS; minor++) {
 		agctl = &agm->chan[minor];
 		agctl->agm = agm;
-		agctl->slot_number = (uint8_t)minor;
+		agctl->flags = (uint8_t)(minor & AGCTL_FLAG_SLOTMASK);
 		agctl->devt = MKDEV(AGCTL_MAJOR, minor);
 		init_waitqueue_head(&agctl->wait);
 

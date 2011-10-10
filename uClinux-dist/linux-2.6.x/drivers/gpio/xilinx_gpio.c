@@ -21,13 +21,20 @@
 #include <linux/gpio.h>
 
 /* Register Offset Definitions */
-#define XGPIO_DATA_OFFSET   (0x0)	/* Data register  */
-#define XGPIO_TRI_OFFSET    (0x4)	/* I/O direction register  */
+#define XGPIO_DATA_OFFSET   (0x0)	/* Port 1 Data register  */
+#define XGPIO_TRI_OFFSET    (0x4)	/* Port 1 I/O direction register  */
+#define XGPIO2_DATA_OFFSET  (0x8) /* Port 2 Data Register */
+#define XGPIO2_TRI_OFFSET   (0xC)	/* Port 2 I/O direction register  */
 
 struct xgpio_instance {
 	struct of_mm_gpio_chip mmchip;
 	u32 gpio_state;		/* GPIO state shadow register */
 	u32 gpio_dir;		/* GPIO direction shadow register */
+	u8  gpio_width; /* GPIO width */
+	u32 gpio2_state; /* GPIO2 state shadow register */
+	u32 gpio2_dir; /* GPIO2 direction shadow register */
+	u8  gpio2_width; /* GPIO2 width */
+	u8  isdual;   /* if GPIO is dual port */
 	spinlock_t gpio_lock;	/* Lock used for synchronization */
 };
 
@@ -42,8 +49,16 @@ struct xgpio_instance {
 static int xgpio_get(struct gpio_chip *gc, unsigned int gpio)
 {
 	struct of_mm_gpio_chip *mm_gc = to_of_mm_gpio_chip(gc);
-
-	return (in_be32(mm_gc->regs + XGPIO_DATA_OFFSET) >> gpio) & 1;
+  struct xgpio_instance *chip =
+	    container_of(mm_gc, struct xgpio_instance, mmchip);
+	    
+	if ((chip->isdual) && (gpio >= chip->gpio_width))
+	{
+  	gpio -= chip->gpio_width;
+  	return (in_be32(mm_gc->regs + XGPIO2_DATA_OFFSET) >> gpio) & 1;
+	}    
+	else
+	  return (in_be32(mm_gc->regs + XGPIO_DATA_OFFSET) >> gpio) & 1;
 }
 
 /**
@@ -61,16 +76,26 @@ static void xgpio_set(struct gpio_chip *gc, unsigned int gpio, int val)
 	struct of_mm_gpio_chip *mm_gc = to_of_mm_gpio_chip(gc);
 	struct xgpio_instance *chip =
 	    container_of(mm_gc, struct xgpio_instance, mmchip);
-
 	spin_lock_irqsave(&chip->gpio_lock, flags);
 
 	/* Write to GPIO signal and set its direction to output */
-	if (val)
-		chip->gpio_state |= 1 << gpio;
-	else
-		chip->gpio_state &= ~(1 << gpio);
-	out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
-
+	if ((chip->isdual) && (gpio >= chip->gpio_width))
+	{
+  	gpio -= chip->gpio_width;
+	  if (val)
+	  	chip->gpio2_state |= 1 << gpio;
+	  else
+	  	chip->gpio2_state &= ~(1 << gpio);
+	  out_be32(mm_gc->regs + XGPIO2_DATA_OFFSET, chip->gpio2_state);
+  }
+  else
+  {
+	  if (val)
+	  	chip->gpio_state |= 1 << gpio;
+	  else
+	  	chip->gpio_state &= ~(1 << gpio);
+	  out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
+  }
 	spin_unlock_irqrestore(&chip->gpio_lock, flags);
 }
 
@@ -93,9 +118,17 @@ static int xgpio_dir_in(struct gpio_chip *gc, unsigned int gpio)
 	spin_lock_irqsave(&chip->gpio_lock, flags);
 
 	/* Set the GPIO bit in shadow register and set direction as input */
-	chip->gpio_dir |= (1 << gpio);
-	out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
-
+	if ((chip->isdual) && (gpio >= chip->gpio_width))
+	{
+  	gpio -= chip->gpio_width;
+    chip->gpio2_dir |= (1 << gpio);
+	  out_be32(mm_gc->regs + XGPIO2_TRI_OFFSET, chip->gpio2_dir);	
+  }
+  else
+  {
+  	chip->gpio_dir |= (1 << gpio);
+  	out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
+  }
 	spin_unlock_irqrestore(&chip->gpio_lock, flags);
 
 	return 0;
@@ -117,20 +150,33 @@ static int xgpio_dir_out(struct gpio_chip *gc, unsigned int gpio, int val)
 	struct of_mm_gpio_chip *mm_gc = to_of_mm_gpio_chip(gc);
 	struct xgpio_instance *chip =
 	    container_of(mm_gc, struct xgpio_instance, mmchip);
-
+	    
 	spin_lock_irqsave(&chip->gpio_lock, flags);
 
 	/* Write state of GPIO signal */
-	if (val)
-		chip->gpio_state |= 1 << gpio;
+	if ((chip->isdual) && (gpio >= chip->gpio_width))
+	{
+	  gpio -= chip->gpio_width;
+	  if (val)
+	  	chip->gpio2_state |= 1 << gpio;
+	  else
+	  	chip->gpio2_state &= ~(1 << gpio);
+	  out_be32(mm_gc->regs + XGPIO2_DATA_OFFSET, chip->gpio2_state);
+	  /* Clear the GPIO bit in shadow register and set direction as output */
+	  chip->gpio2_dir &= (~(1 << gpio));
+	  out_be32(mm_gc->regs + XGPIO2_TRI_OFFSET, chip->gpio2_dir);
+  }
 	else
-		chip->gpio_state &= ~(1 << gpio);
-	out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
-
-	/* Clear the GPIO bit in shadow register and set direction as output */
-	chip->gpio_dir &= (~(1 << gpio));
-	out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
-
+	{  
+	  if (val)
+	  	chip->gpio_state |= 1 << gpio;
+	  else
+	  	chip->gpio_state &= ~(1 << gpio);
+	  out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
+	  /* Clear the GPIO bit in shadow register and set direction as output */
+	  chip->gpio_dir &= (~(1 << gpio));
+	  out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
+  }
 	spin_unlock_irqrestore(&chip->gpio_lock, flags);
 
 	return 0;
@@ -147,6 +193,8 @@ static void xgpio_save_regs(struct of_mm_gpio_chip *mm_gc)
 
 	out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
 	out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
+	out_be32(mm_gc->regs + XGPIO2_DATA_OFFSET, chip->gpio2_state);
+	out_be32(mm_gc->regs + XGPIO2_TRI_OFFSET, chip->gpio2_dir);
 }
 
 /**
@@ -163,31 +211,66 @@ static int __devinit xgpio_of_probe(struct device_node *np)
 	struct of_gpio_chip *ofchip;
 	int status = 0;
 	const u32 *tree_info;
+	u8 isdual = 0;
 
 	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 	ofchip = &chip->mmchip.of_gc;
 
+	/* Check if the GPIO is dual ports */
+	tree_info = of_get_property(np, "xlnx,is-dual", NULL);
+	if (tree_info)
+		chip->isdual = *tree_info;
+
 	/* Update GPIO state shadow register with default value */
 	tree_info = of_get_property(np, "xlnx,dout-default", NULL);
 	if (tree_info)
 		chip->gpio_state = *tree_info;
-
+	
+	if (chip->isdual)
+	{	
+    /* Update GPIO2 state shadow register with default value */
+	  tree_info = of_get_property(np, "xlnx,dout-default-2", NULL);
+	  if (tree_info)
+	  	chip->gpio2_state = *tree_info;
+  }
 	/* Update GPIO direction shadow register with default value */
 	chip->gpio_dir = 0xFFFFFFFF; /* By default, all pins are inputs */
 	tree_info = of_get_property(np, "xlnx,tri-default", NULL);
 	if (tree_info)
 		chip->gpio_dir = *tree_info;
+		
+	if (chip->isdual)
+	{
+    /* Update GPIO2 direction shadow register with default value */
+	  chip->gpio2_dir = 0xFFFFFFFF; /* By default, all pins are inputs */
+	  tree_info = of_get_property(np, "xlnx,tri-default-2", NULL);
+	  if (tree_info)
+	  	chip->gpio2_dir = *tree_info;
+  }
 
 	/* Check device node and parent device node for device width */
-	ofchip->gc.ngpio = 32; /* By default assume full GPIO controller */
+	ofchip->gc.ngpio = (chip->isdual)? 64:32; /* By default assume full GPIO controller */
 	tree_info = of_get_property(np, "xlnx,gpio-width", NULL);
 	if (!tree_info)
 		tree_info = of_get_property(np->parent,
 					    "xlnx,gpio-width", NULL);
 	if (tree_info)
+	{
 		ofchip->gc.ngpio = *tree_info;
+		chip->gpio_width = *tree_info;
+	}
+	/* if it is dual port, add the width of the second port */	
+	if (chip->isdual)
+	{
+    	tree_info = of_get_property(np, "xlnx,gpio2-width", NULL);
+    	if (tree_info)    
+    	{             
+       	ofchip->gc.ngpio += *tree_info;
+        chip->gpio2_width = *tree_info;
+      }    	
+  }
 
 	spin_lock_init(&chip->gpio_lock);
 
@@ -212,7 +295,8 @@ static int __devinit xgpio_of_probe(struct device_node *np)
 }
 
 static struct of_device_id xgpio_of_match[] __devinitdata = {
-	{ .compatible = "xlnx,xps-gpio-1.00.a", },
+	{ .compatible = "xlnx,xps-gpio-1.00.a", 
+	  .compatible = "xlnx,xps-gpio-2.00.a",},
 	{ /* end of list */ },
 };
 
