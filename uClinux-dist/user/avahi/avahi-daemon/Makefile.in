@@ -566,8 +566,8 @@ avahi-dbus.conf: $(top_builddir)/config.status $(srcdir)/avahi-dbus.conf.in
 clean-noinstPROGRAMS:
 	@list='$(noinst_PROGRAMS)'; for p in $$list; do \
 	  f=`echo $$p|sed 's/$(EXEEXT)$$//'`; \
-	  echo " rm -f $$p $$f"; \
-	  rm -f $$p $$f ; \
+	  echo " rm -f $$p $$f $$p.gdb"; \
+	  rm -f $$p $$f $$p.gdb ; \
 	done
 install-sbinPROGRAMS: $(sbin_PROGRAMS)
 	@$(NORMAL_INSTALL)
@@ -594,14 +594,14 @@ uninstall-sbinPROGRAMS:
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
 	  f=`echo $$p|sed 's/$(EXEEXT)$$//'`; \
-	  echo " rm -f $$p $$f"; \
-	  rm -f $$p $$f ; \
+	  echo " rm -f $$p $$f $$p.gdb"; \
+	  rm -f $$p $$f $$p.gdb ; \
 	done
 avahi-daemon$(EXEEXT): $(avahi_daemon_OBJECTS) $(avahi_daemon_DEPENDENCIES) 
-	@rm -f avahi-daemon$(EXEEXT)
+	@rm -f avahi-daemon$(EXEEXT) avahi-daemon.gdb
 	$(avahi_daemon_LINK) $(avahi_daemon_OBJECTS) $(avahi_daemon_LDADD) $(LIBS)
 ini-file-parser-test$(EXEEXT): $(ini_file_parser_test_OBJECTS) $(ini_file_parser_test_DEPENDENCIES) 
-	@rm -f ini-file-parser-test$(EXEEXT)
+	@rm -f ini-file-parser-test$(EXEEXT) ini-file-parser-test.gdb
 	$(ini_file_parser_test_LINK) $(ini_file_parser_test_OBJECTS) $(ini_file_parser_test_LDADD) $(LIBS)
 
 mostlyclean-compile:

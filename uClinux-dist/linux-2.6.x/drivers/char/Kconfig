@@ -1125,5 +1125,28 @@ config DEVPORT
 
 source "drivers/s390/char/Kconfig"
 
+config I2S_SWITCH
+	tristate "FPGA-based I2S Switch"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  I2S switch, implemented on Xilinx FPGA.
+
+config I2S_GNET
+	tristate "I2S Interface for GNET audio support"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  I2S Interface for GNET audio support.
+
+config XILINX_MAILBOX
+	tristate "Xilinx mailbox device"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Xilinx mailbox device for interprocessor communication"
+
+config MEYER_SMPTE
+	tristate "Meyer Sound SMPTE interface"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Meyer Sound SMPTE interface"
 endmenu
 

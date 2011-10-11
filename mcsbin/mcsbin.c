@@ -180,6 +180,8 @@ int mcs2bin(int dsth,int srch,int swapbytesflag)
 		      fprintf(stderr,"Unknown record type %d\n",b);
 		      return -1;
 		    }
+		  if((mcsrecordtype==2)||(mcsrecordtype==4))
+		   addoffset=0;
 		  break;
 
 		default:

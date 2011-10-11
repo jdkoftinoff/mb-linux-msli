@@ -34,4 +34,4 @@ install: all
 
 clean:
 	$(LOCALCLEAN)
-	rm -f *.o $(BUILD) tcapsh ping hack.sh
+	rm -f *.o $(BUILD) tcapsh ping hack.sh *.gdb

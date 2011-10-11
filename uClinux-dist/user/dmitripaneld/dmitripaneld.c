@@ -2,6 +2,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -23,10 +24,12 @@
   GPIO bit: input reads button, output 0 resets OLED,
   output 1 enables normal operation
 */
-#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/sys/class/gpio/gpio255/value"
+/*#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/sys/class/gpio/gpio255/value"*/
+#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/dev/gpio/oled_in"
 
 /* GPIO bit: output 0 switches to command mode, 1 switches to data mode */
-#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/sys/class/gpio/gpio254/value"
+/*#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/sys/class/gpio/gpio254/value"*/
+#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/dev/gpio/oled_out"
 
 /* kernel command line */
 #define PROC_CMDLINE "/proc/cmdline"
@@ -1054,7 +1057,7 @@ int read_buttons_cmdline(void)
        if(ptr1-ptr0==7&&!memcmp(ptr0,"BUTTONS",7))
 	 {
 	   for(;*ptr1>' '&&(*ptr1<'0'||*ptr1>'9');ptr1++);
-	   sscanf(ptr1,"%i",&n);
+	   sscanf((char*)ptr1,"%i",&n);
 	   return n;
 	 }
        else
@@ -1102,6 +1105,7 @@ int main(int argc, char **argv)
   char strbuffer_line1[256],strbuffer_line2[256],
     ipv4addr_0[47],ipv6addr_0[47],
     ipv4addr_1[47],ipv6addr_1[47];
+  struct stat statbuf;
   struct timeval loop_timer,display_off_timer;
 
   enum{
@@ -1194,7 +1198,8 @@ int main(int argc, char **argv)
 	  ipaddr=my_eth_address("eth0",4);
 	  if(!*ipaddr)
 	    ipaddr=my_eth_address("eth1",4);
-	  if(*ipaddr)
+	  
+	  if(!stat("/var/tmp/status/no-ip-address",&statbuf)||*ipaddr)
 	    {
 	      ipv4addr_0[0]='\0';
 	      ipv6addr_0[0]='\0';
@@ -1381,10 +1386,10 @@ int main(int argc, char **argv)
 
 		  if(vert_shift==0)
 		    oled_copy_rectangle(16,0,16+2,0,
-					64+16-2,ipaddr_label_1->height+1);
+					64+16-2,ipaddr_label_0->height+1);
 		  else
 		    oled_copy_rectangle(16,vert_shift-1,16+2,vert_shift-1,
-					64+16-2,ipaddr_label_1->height+2);
+					64+16-2,ipaddr_label_0->height+2);
 		  if((ipaddr_label_offset&0x0f)==0)
 		    oled_send_image_fragment(ipaddr_label_0,
 					     64-ipaddr_label_offset,0,
@@ -1401,7 +1406,6 @@ int main(int argc, char **argv)
 		}
 	      else
 		display_state=DISPLAY_ETH1;
-	      
 	      break;
 	    case DISPLAY_ETH1:
 	      if(ipaddr_label_1)
@@ -1428,7 +1432,6 @@ int main(int argc, char **argv)
 		}
 	      else
 		display_state=DISPLAY_ETH0;
-	      
 	      break;
 	    default:
 	      display_state=DISPLAY_ETH0;
@@ -1465,6 +1468,8 @@ int main(int argc, char **argv)
 				msg_r,msg_g,msg_b);
 		  oled_draw_box(16+horiz_shift, 40+4+vert_shift, 2, 1,
 				msg_r,msg_g,msg_b);
+		  break;
+		default:
 		  break;
 		}
 	      prev_display_state=display_state;

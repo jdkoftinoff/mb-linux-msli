@@ -23,6 +23,16 @@ config USER_DMITRIPANELD
 	help
 	  Include the D-Mitri panel server.
 
+config USER_SCPINSTALL
+	bool "scp installer"
+	help
+	  Include scp-based installer/updater program.
+
+config USER_NANO
+	bool "nano editor"
+	help
+	  Include nano text editor
+
 config USER_INIT_INIT
 	bool "init"
 	help
@@ -147,6 +157,16 @@ config USER_MIDILOOPBACK_MIDILOOPBACK
 	bool "midiloopback"
 	help
 	  MIDI Loopback
+
+config USER_MBBL_MKBOOTIMAGE
+	bool "mbbl_mkbootimage"
+	help
+	  MBBL Boot Image Maker
+
+config USER_MTD_STORAGE
+	bool "mtd_storage"
+	help
+	  MTD-based persistent storage of relatively frequently changed files
 
 config USER_AVAHI_AVAHI
 	bool "avahi"

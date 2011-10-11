@@ -17,13 +17,6 @@ if ! which awk > /dev/null 2>&1
  exit 1
 fi
 
-if ! which makeinfo > /dev/null 2>&1
- then
- echo "This script requires texinfo to be present"
- echo "(for GDB compilation procedure)"
- exit 1
-fi
-
 if ! which flex > /dev/null 2>&1
  then
  echo "This script requires flex to be present"
@@ -51,6 +44,19 @@ fi
 if [ ! -f /usr/include/zlib.h ]
  then
  echo "This script requires zlib development package to be present"
+ exit 1
+fi
+
+if ! which msgfmt > /dev/null 2>&1
+ then
+ echo "This script requires gettext to be present"
+ exit 1
+fi
+
+if ! which makeinfo > /dev/null 2>&1
+ then
+ echo "This script requires texinfo to be present"
+ echo "(for GDB compilation procedure)"
  exit 1
 fi
 

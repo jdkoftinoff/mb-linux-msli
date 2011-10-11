@@ -436,11 +436,11 @@ uninstall-sbinPROGRAMS:
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
 	  f=`echo $$p|sed 's/$(EXEEXT)$$//'`; \
-	  echo " rm -f $$p $$f"; \
-	  rm -f $$p $$f ; \
+	  echo " rm -f $$p $$f $$p.gdb"; \
+	  rm -f $$p $$f $$p.gdb ; \
 	done
 avahi-autoipd$(EXEEXT): $(avahi_autoipd_OBJECTS) $(avahi_autoipd_DEPENDENCIES) 
-	@rm -f avahi-autoipd$(EXEEXT)
+	@rm -f avahi-autoipd$(EXEEXT) avahi-autoipd.gdb
 	$(avahi_autoipd_LINK) $(avahi_autoipd_OBJECTS) $(avahi_autoipd_LDADD) $(LIBS)
 install-nodist_pkgsysconfSCRIPTS: $(nodist_pkgsysconf_SCRIPTS)
 	@$(NORMAL_INSTALL)
