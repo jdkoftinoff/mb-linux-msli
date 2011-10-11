@@ -511,6 +511,11 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     ack_grandmaster_change(ptp);
     break;
 
+  case IOC_PTP_GET_RTC_LOCKED:
+    /* Copy the properties into the userspace argument */
+    copyResult = copy_to_user((void __user*)arg, &ptp->rtcLockState, sizeof(uint32_t));
+    break;
+
   default:
     return(-EINVAL);
   }
