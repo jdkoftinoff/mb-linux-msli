@@ -405,11 +405,11 @@ uninstall-sbinPROGRAMS:
 clean-sbinPROGRAMS:
 	@list='$(sbin_PROGRAMS)'; for p in $$list; do \
 	  f=`echo $$p|sed 's/$(EXEEXT)$$//'`; \
-	  echo " rm -f $$p $$f"; \
-	  rm -f $$p $$f ; \
+	  echo " rm -f $$p $$f $$p.gdb"; \
+	  rm -f $$p $$f $$p.gdb ; \
 	done
 avahi-dnsconfd$(EXEEXT): $(avahi_dnsconfd_OBJECTS) $(avahi_dnsconfd_DEPENDENCIES) 
-	@rm -f avahi-dnsconfd$(EXEEXT)
+	@rm -f avahi-dnsconfd$(EXEEXT) avahi-dnsconfd.gdb
 	$(avahi_dnsconfd_LINK) $(avahi_dnsconfd_OBJECTS) $(avahi_dnsconfd_LDADD) $(LIBS)
 install-pkgsysconfSCRIPTS: $(pkgsysconf_SCRIPTS)
 	@$(NORMAL_INSTALL)

@@ -56,7 +56,7 @@
 #define HAVE_CRYPT_H 1
 
 /* Define to 1 if you have the `daemon' function. */
-/* #undef HAVE_DAEMON */
+#define HAVE_DAEMON 1
 
 /* Use /dev/ptc & /dev/pts */
 /* #undef HAVE_DEV_PTS_AND_PTC */

@@ -672,7 +672,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
 	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
 	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
-            ((512 << VCO_LOCK_COUNT_SHIFT) | 0));
+            ((512 << VCO_LOCK_COUNT_SHIFT) | (8 << VCO_UNLOCK_COUNT_SHIFT)));
 
   /* TODO: Need to introduce some locked status and interrupt mask / flag bits in the hardware!
    *       Once they exist, a lock detection kernel event mechanism can be added to the driver
@@ -1417,7 +1417,7 @@ static int __init audio_depacketizer_driver_init(void)
   /* Allocate a range of major / minor device numbers for use */
   instanceCount = 0;
   if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
-    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
+    printk(KERN_INFO DRIVER_NAME ": Failed to allocate character device range\n");
     goto device_unregister;
   }
 

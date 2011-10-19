@@ -63,7 +63,7 @@ clean:
 	cd xmlwf && rm -f xmlwf *.o *.lo && rm -rf .libs _libs
 	cd examples && rm -f elements outline *.o *.lo && rm -rf .libs _libs
 	cd tests && rm -rf .libs runtests runtests.o chardata.o
-	rm -rf .libs libexpat.la
+	rm -rf .libs libexpat.la libexpat.a
 	rm -f examples/core tests/core xmlwf/core
 
 clobber: clean

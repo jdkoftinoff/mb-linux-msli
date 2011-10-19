@@ -195,6 +195,8 @@ romfs:
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
+	$(ROMFSINST) $(COMMON)/etc/rc/daemons /etc/init.d/daemons
+	$(ROMFSINST) -s /etc/init.d/daemons /etc/rc.d/S40daemons
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper

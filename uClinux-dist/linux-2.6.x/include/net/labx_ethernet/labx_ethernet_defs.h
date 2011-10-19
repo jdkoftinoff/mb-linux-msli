@@ -85,6 +85,7 @@ struct labx_ll_eth_platform_data {
 /* LocalLink TYPE Enumerations */
 #define XPAR_LL_FIFO    1
 #define XPAR_LL_DMA     2
+#define XPAR_LL_NONE    3 /* No legacy traffic, only MAC/MDIO control */
 
 /* Platform device data structure for Direct Ethernet */
 struct labx_eth_platform_data {

@@ -1,0 +1,3 @@
+#!/bin/sh
+cd /
+mtd-storage -o /dev/mtd0 -f -s 0x800000 -e 0xffffff var/tmp/persist

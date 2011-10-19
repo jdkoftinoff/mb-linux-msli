@@ -122,11 +122,14 @@ static void garcia_power_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
 	garcia_led_set(POWER_LED, value);
+	led_cdev->brightness = value;
 }
 
 static struct led_classdev garcia_power_led = {
 	.name		= "power",
 	.brightness_set	= garcia_power_led_set,
+	.max_brightness = 3,
+	.brightness = 2,
 	.flags		= LED_CORE_SUSPENDRESUME,
 	.default_trigger = "timer"
 };
@@ -137,6 +140,7 @@ static void garcia_status_led_set(struct led_classdev *led_cdev,
 		enum led_brightness value)
 {
 	garcia_led_set(STATUS_LED, value);
+	led_cdev->brightness = value;
 	del_timer_sync(&timer);
 }
 
@@ -144,6 +148,8 @@ static void garcia_status_led_set(struct led_classdev *led_cdev,
 static struct led_classdev garcia_status_led = {
 	.name		= "status",
 	.brightness_set	= garcia_status_led_set,
+	.max_brightness = 3,
+	.brightness = 3,
 	.flags		= LED_CORE_SUSPENDRESUME,
 	.default_trigger = "timer"
 };
@@ -174,7 +180,9 @@ static int __init garcia_led_init(void)
 	status |= led_classdev_register(0, &garcia_eth3_act_led);
 	status |= led_classdev_register(0, &garcia_eth3_stat_led);
 	status |= led_classdev_register(0, &garcia_power_led);
+	garcia_power_led_set(&garcia_power_led, garcia_power_led.brightness);
 	status |= led_classdev_register(0, &garcia_status_led);
+	garcia_status_led_set(&garcia_status_led, garcia_status_led.brightness);
 	printk("Registered Garcia LEDs status %d\n", status);
 	return status;
 }

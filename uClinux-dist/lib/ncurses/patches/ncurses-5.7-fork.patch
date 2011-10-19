@@ -1,0 +1,13 @@
+http://lists.gnu.org/archive/html/bug-ncurses/2010-01/msg00011.html
+
+--- ncurses-5.7/test/ditto.c
++++ ncurses-5.7/test/ditto.c
+@@ -162,7 +162,11 @@
+ 	failed(slave_name);
+     }
+     sprintf(s_option, "-S%s/%d", slave_name, aslave);
+-    if (fork()) {
++    if (vfork() == 0) {
+ 	execlp("xterm", "xterm", s_option, "-title", path, (char *) 0);
+ 	_exit(0);
+     }

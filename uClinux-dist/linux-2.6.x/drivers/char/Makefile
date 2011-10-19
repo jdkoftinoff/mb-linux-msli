@@ -113,6 +113,14 @@ EXTRA_CFLAGS	+= -I$(TOPDIR)/drivers/xilinx_common
 
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
+obj-$(CONFIG_I2S_SWITCH)	+= i2s_switch.o
+
+obj-$(CONFIG_I2S_GNET)		+= i2s_gnet.o
+
+obj-$(CONFIG_XILINX_MAILBOX)	+= xilinx_mailbox.o
+
+obj-$(CONFIG_MEYER_SMPTE)	+= meyer_smpte.o
+
 obj-$(CONFIG_JS_RTC)		+= js-rtc.o
 js-rtc-y = rtc.o
 

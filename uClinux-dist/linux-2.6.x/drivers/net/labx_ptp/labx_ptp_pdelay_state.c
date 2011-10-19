@@ -207,6 +207,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 
 #ifdef PATH_DELAY_DEBUG
       {
+        #define PTP_CLOCK_IDENTITY_CHARS 8
         int i;
         printk("AS CHECK: pd %d, pdt %d, pidc %d, nrrv %d\n", ptp->ports[port].neighborPropDelay,
           ptp->ports[port].neighborPropDelayThresh, compare_clock_identity(rxSourcePortId, ptp->properties.grandmasterIdentity),

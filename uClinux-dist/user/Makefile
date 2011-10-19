@@ -37,6 +37,8 @@ dir_$(CONFIG_JFFS2_FS)                      += mtd-utils
 dir_$(CONFIG_USER_TI_SRC4392)               += ti-src4392
 dir_$(CONFIG_USER_CAL_OLED)                 += cal_oled
 dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld
+dir_$(CONFIG_USER_SCPINSTALL)               += scpinstall
+dir_$(CONFIG_USER_NANO)                     += nano
 dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty
 dir_$(CONFIG_USER_APPWEB_APPWEB)            += appWeb
 dir_$(CONFIG_USER_ARJ_ARJ)                  += arj
@@ -443,6 +445,8 @@ dir_$(CONFIG_USER_ZEBRA_OSPFD_OSPFD)        += zebra
 dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
 dir_$(CONFIG_USER_MIDILOOPBACK_MIDILOOPBACK) += midiloopback
+dir_$(CONFIG_USER_MBBL_MKBOOTIMAGE)         += mbbl-mkbootimage
+dir_$(CONFIG_USER_MTD_STORAGE)              += mtd-storage
 dir_$(CONFIG_USER_AVAHI_AVAHI)              += avahi 
 
 dir_y += games
