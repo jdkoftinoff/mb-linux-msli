@@ -139,6 +139,18 @@
 #define PTP_TX_PDELAY_RESP_BUFFER      (6)
 #define PTP_TX_PDELAY_RESP_FUP_BUFFER  (7)
 
+/* Length, in bytes, of each packet type we transmit */
+#define PTP_ANNOUNCE_LENGTH         (64)
+#define PTP_SYNC_LENGTH             (44)
+#define PTP_FUP_LENGTH              (44)
+#define PTP_DELAY_REQ_LENGTH        (44)
+#define PTP_DELAY_RESP_LENGTH       (54)
+#define PTP_PDELAY_REQ_LENGTH       (54)
+#define PTP_PDELAY_RESP_LENGTH      (54)
+#define PTP_PDELAY_RESP_FUP_LENGTH  (54)
+
+
+
 /* Number of bytes in a PTP port ID */
 #define PORT_ID_BYTES  (10)
 
@@ -159,6 +171,83 @@
 
 /* Period, in msec., of the hardware timer tick governing the PTP state machines */
 #define PTP_TIMER_TICK_MS (10)
+
+/* Ethernet header definitions */
+#define LTF_MASK          (0x0FFFF)
+#define ETH_HEADER_BYTES  (14)
+
+/* PTP header definitions */
+#define TS_SPEC_ETH_AVB    (0x01)
+#define PTP_VERSION_2_0      (0x02)
+#define MSG_LENGTH_MASK      (0x0FFFF)
+#define DOMAIN_NUM_MASK      (0x0FF)
+#define FLAGS_FIELD_MASK     (0x0FFFF)
+#  define FLAG_SECURITY       (0x8000)
+#  define FLAG_PROF_SPEC_2    (0x4000)
+#  define FLAG_PROF_SPEC_1    (0x2000)
+#  define FLAG_UNICAST        (0x0400)
+#  define FLAG_TWO_STEP       (0x0200)
+#  define FLAG_ALT_MASTER     (0x0100)
+#  define FLAG_FREQ_TRACE     (0x0020)
+#  define FLAG_TIME_TRACE     (0x0010)
+#  define FLAG_PTP_TIMESCALE  (0x0008)
+#  define FLAG_UTC_OFF_VALID  (0x0004)
+#  define FLAG_LEAP_59        (0x0002)
+#  define FLAG_LEAP_61        (0x0001)
+
+/* Number of words comprising a hardware timestamp (transmit or receive) */
+#define HW_TIMESTAMP_WORDS  (3)
+
+/* Word-aligned offsets for fields which are dynamically changed or
+ * inspected upon reception
+ */
+#define PACKET_BUFFER_WORDS     (PTP_MAX_PACKET_BYTES / BYTES_PER_WORD)
+#define SOURCE_MAC_OFFSET       ( 1 * BYTES_PER_WORD)
+#define MESSAGE_TYPE_OFFSET     ( 3 * BYTES_PER_WORD)
+#define DOMAIN_NUMBER_OFFSET    ( 4 * BYTES_PER_WORD)
+#define CORRECTION_FIELD_OFFSET ( 5 * BYTES_PER_WORD)
+#define SOURCE_PORT_ID_OFFSET   ( 8 * BYTES_PER_WORD)
+#define SEQUENCE_ID_OFFSET      (11 * BYTES_PER_WORD)
+#define TIMESTAMP_OFFSET        (12 * BYTES_PER_WORD)
+#define UTC_OFFSET_OFFSET       (14 * BYTES_PER_WORD)
+#define REQ_PORT_ID_OFFSET      (14 * BYTES_PER_WORD)
+#define GM_PRIORITY1_OFFSET     (15 * BYTES_PER_WORD)
+
+/* Port-width-specific offsets for timestamp words in the buffers;
+ * the data alignment from the network side to the host interface
+ * necessitates skipping words in the block RAMs.
+ */
+#define HW_TIMESTAMP_OFFSET_X8        ((PACKET_BUFFER_WORDS - HW_TIMESTAMP_WORDS) * BYTES_PER_WORD)
+#define HW_LOCAL_TIMESTAMP_OFFSET_X8  (HW_TIMESTAMP_OFFSET_X8 - (HW_TIMESTAMP_WORDS * BYTES_PER_WORD))
+#define HW_TIMESTAMP_OFFSET_X64       ((PACKET_BUFFER_WORDS - (2 * HW_TIMESTAMP_WORDS)) * BYTES_PER_WORD)
+#define HW_LOCAL_TIMESTAMP_OFFSET_X64 (HW_TIMESTAMP_OFFSET_X64 - (2 * HW_TIMESTAMP_WORDS * BYTES_PER_WORD))
+
+/* Additional offset applied for the transmit buffers, since the first
+ * word holds the packet length (minus one.)  Additionally, the second
+ * word must be skipped for 64-bit port instances.
+ */
+#define TX_LENGTH_OFFSET   (0 * BYTES_PER_WORD)
+#define TX_DATA_OFFSET_X8  (1 * BYTES_PER_WORD)
+#define TX_DATA_OFFSET_X64 (2 * BYTES_PER_WORD)
+
+#define TX_DATA_OFFSET(ptp) ((ptp->portWidth == 8) ? TX_DATA_OFFSET_X8 : TX_DATA_OFFSET_X64)
+
+/* Amount to be decremented from a packet length to form the length word
+ * expected by the transmit hardware as the first word of each Tx buffer
+ */
+#define TX_LENGTH_SUB_X8  (1)
+#define TX_LENGTH_SUB_X64 (8)
+
+#define TX_LENGTH_SUB(ptp) ((ptp->portWidth == 8) ? TX_LENGTH_SUB_X8 : TX_LENGTH_SUB_X64)
+
+/* TLV Types */
+#define ORGANIZATION_EXTENSION_TLV_TYPE 0x0003
+#define PATH_TRACE_TLV_TYPE             0x0008
+
+/* TLV Sizes */
+#define TLV_HEADER_LENGTH                4
+#define PATH_TRACE_TLV_LENGTH(n)         (8*(n))
+#define FOLLOW_UP_INFORMATION_TLV_LENGTH 28
 
 /* 802.1AS MDPdelayReq state machine states */
 typedef enum { MDPdelayReq_NOT_ENABLED, MDPdelayReq_INITIAL_SEND_PDELAY_REQ,
@@ -225,9 +314,9 @@ struct ptp_port {
 
   uint32_t pdelayIntervalTimer;
   uint32_t rcvdPdelayResp;
-  uint32_t rcvdPdelayRespPtr;
+  uint8_t * rcvdPdelayRespPtr;
   uint32_t rcvdPdelayRespFollowUp;
-  uint32_t rcvdPdelayRespFollowUpPtr;
+  uint8_t *rcvdPdelayRespFollowUpPtr;
   uint32_t rcvdMDTimestampReceive;
   uint32_t pdelayReqSequenceId;
   uint32_t initPdelayRespReceived;
@@ -344,7 +433,7 @@ struct ptp_device {
 
   /* Mutex for the device instance */
   spinlock_t mutex;
-  bool opened;
+  uint32_t opened;
 
   /* Network device event notifier */
   struct notifier_block notifier;
@@ -362,11 +451,11 @@ typedef enum {
 
 /* From labx_ptp_messages.c */
 void init_tx_templates(struct ptp_device *ptp, uint32_t port);
-uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer);
-void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, uint8_t *macAddress);
-void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint32_t rxBuffer, uint8_t *sourcePortId);
-void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, uint8_t *requestingPortId);
-void extract_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, PtpProperties *properties, PtpPortProperties *portProperties);
+uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
+void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress);
+void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t * rxBuffer, uint8_t *sourcePortId);
+void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *requestingPortId);
+void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpProperties *properties, PtpPortProperties *portProperties);
 void copy_ptp_properties(PtpProperties *to, PtpProperties *from);
 void copy_ptp_port_properties(PtpPortProperties *to, PtpPortProperties *from);
 int32_t compare_mac_addresses(const uint8_t *macAddressA, const uint8_t *macAddressB);
@@ -376,25 +465,26 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port);
 void transmit_sync(struct ptp_device *ptp, uint32_t port);
 void transmit_fup(struct ptp_device *ptp, uint32_t port);
 void transmit_delay_request(struct ptp_device *ptp, uint32_t port);
-void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer);
+void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer);
 void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port);
-void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer);
+void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t *requestRxBuffer);
 void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port);
 void print_packet_buffer(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                         uint32_t packetBuffer, uint32_t packetWords);
+                         uint8_t * packetBuffer, uint32_t packetWords);
 uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                         uint32_t packetBuffer);
+                         uint8_t * packetBuffer);
 void get_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                            uint32_t packetBuffer, PtpTime *timestamp);
+                            uint8_t * packetBuffer, PtpTime *timestamp);
 void get_local_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                                  uint32_t packetBuffer, PtpTime *timestamp);
+                                  uint8_t *packetBuffer, PtpTime *timestamp);
 void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                   uint32_t packetBuffer, PtpTime *timestamp);
-void get_correction_field(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, PtpTime *correctionField);
+                   uint8_t * packetBuffer, PtpTime *timestamp);
+void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
 
 /* From labx_ptp_state.c */
 void ack_grandmaster_change(struct ptp_device *ptp);
 void init_state_machines(struct ptp_device *ptp);
+void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer);
 
 /* From labx_ptp_pdelay_state.c */
 void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port);
@@ -424,5 +514,31 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
 int ptp_events_tx_rtc_change(struct ptp_device *ptp);
 
+/* From Platform Specific Files */
+void ptp_disable_irqs(struct ptp_device *ptp, int port);
+void ptp_enable_irqs(struct ptp_device *ptp, int port);
+void ptp_enable_port(struct ptp_device *ptp, int port);
+void ptp_disable_port(struct ptp_device *ptp, int port);
+void ptp_setup_event_timer(struct ptp_device *ptp, int port, PtpPlatformData *platformData);
+uint32_t ptp_get_version(struct ptp_device *ptp);
+uint32_t ptp_setup_interrupt(struct ptp_device *ptp);
+void ptp_process_rx(struct ptp_device *ptp, int port);
+
+/* Bytes in a buffer word */
+#define BYTES_PER_WORD  (4)
+#define PTP_ETHERTYPE        (0x88F7u)
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+
+#ifdef PATH_DELAY_DEBUG
+#define PTP_CLOCK_IDENTITY_CHARS 8
+#endif
 #endif /* _LABX_PTP_H_ */
 
