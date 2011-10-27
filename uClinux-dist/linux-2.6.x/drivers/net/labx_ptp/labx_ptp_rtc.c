@@ -43,103 +43,6 @@
 /* Saturation range limit for the integrator */
 #define INTEGRAL_MAX_ABS  (100000LL)
 
-/* Disables the RTC */
-void disable_rtc(struct ptp_device *ptp) {
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), PTP_RTC_DISABLE);
-}
-
-/* Sets the RTC increment, simultaneously enabling the RTC */
-void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
-  uint32_t incrementWord;
-
-  /* Save the current increment if anyone needs it */
-  ptp->currentIncrement = *increment;
-
-  /* Assemble a single value from the increment components */
-  incrementWord = ((increment->mantissa & RTC_MANTISSA_MASK) << RTC_MANTISSA_SHIFT);
-  incrementWord |= (increment->fraction & RTC_FRACTION_MASK);
-  incrementWord |= PTP_RTC_ENABLE;
-
-  /* The actual write is already atomic, so no need to ensure mutual exclusion */
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), incrementWord);
-}
-
-/* Return the current increment value */
-void get_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
-  *increment = ptp->currentIncrement;
-}
-
-/* Captures the present RTC time, returning it into the passed structure */
-void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
-  uint32_t timeWord;
-  unsigned long flags;
-
-  /* Write to the capture flag in the upper seconds word to initiate a capture,
-   * then poll the same bit to determine when it has completed.  The capture only
-   * takes a few RTC clocks, so this busy wait can only consume tens of nanoseconds.
-   *
-   * This will *not* modify the time, since we don't write the nanoseconds register.
-   */
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), PTP_RTC_CAPTURE_FLAG);
-  do {
-    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
-  } while((timeWord & PTP_RTC_CAPTURE_FLAG) != 0);
-
-  /* Now read the entire captured time and pack it into the structure.  The last
-   * value read during polling is perfectly valid.
-   */
-  time->secondsUpper = (uint16_t) timeWord;
-  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG));
-  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG));
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
-}
-
-void get_local_time(struct ptp_device *ptp, PtpTime *time) {
-  uint32_t timeWord;
-  unsigned long flags;
-
-  /* Write to the capture flag in the upper seconds word to initiate a capture,
-   * then poll the same bit to determine when it has completed.  The capture only
-   * takes a few RTC clocks, so this busy wait can only consume tens of nanoseconds.
-   *
-   * This will *not* modify the time, since we don't write the nanoseconds register.
-   */
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG), PTP_RTC_LOCAL_CAPTURE_FLAG);
-  do {
-    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG));
-  } while((timeWord & PTP_RTC_LOCAL_CAPTURE_FLAG) != 0);
-
-  /* Now read the entire captured time and pack it into the structure.  The last
-   * value read during polling is perfectly valid.
-   */
-  time->secondsUpper = (uint16_t) timeWord;
-  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_LOW_REG));
-  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_NANOSECONDS_REG));
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
-}
-
-
-/* Sets a new RTC time from the passed structure */
-void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
-  unsigned long flags;
-
-  /* Write to the time register, beginning with the seconds.  The write to the 
-   * nanoseconds register is what actually effects the change to the RTC.
-   */
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), time->secondsUpper);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG), time->secondsLower);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG), time->nanoseconds);
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
-}
 
 /* Sets a new RTC time from the passed structure */
 void set_rtc_time_adjusted(struct ptp_device *ptp, PtpTime *time, PtpTime *entryTime) {
@@ -482,19 +385,17 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       adjustment = (int32_t) accumulator;
     }
     newRtcIncrement += adjustment;
-    
+
     /* Write the new increment out to the hardware, incorporating the enable bit.
      * Suppress the actual write to the RTC increment register if the userspace
      * control has not acknowledged a Grandmaster change.
      */
-    newRtcIncrement |= PTP_RTC_ENABLE;
-    if(ptp->rtcChangesAllowed) {
-      /* Save the current increment if anyone needs it */
-      ptp->currentIncrement.mantissa = (newRtcIncrement >> RTC_MANTISSA_SHIFT) & RTC_MANTISSA_MASK;
-      ptp->currentIncrement.fraction = (newRtcIncrement & RTC_FRACTION_MASK);
 
-      /* Update the increment register */
-      XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), newRtcIncrement); 
+    if(ptp->rtcChangesAllowed) {
+      RtcIncrement newIncrement;
+      newIncrement.mantissa = (newRtcIncrement >> RTC_MANTISSA_SHIFT) & RTC_MANTISSA_MASK;
+      newIncrement.fraction = (newRtcIncrement & RTC_FRACTION_MASK);
+      set_rtc_increment(ptp,&newIncrement);
     }
 
 #ifdef SLAVE_OFFSET_DEBUG
