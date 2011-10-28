@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /* Define these to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
@@ -48,6 +47,11 @@ typedef enum {
   RETAIN_PRESENT_MASTER,
   REPLACE_PRESENT_MASTER
 } BmcaResult;
+
+/* Function Prototypes */
+uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
+void tasklet_init(struct tasklet_struct *t, void (*func)(unsigned long),unsigned long data);
+void ptp_platform_init(struct ptp_device *ptp, int port);
 
 /* Tasklet function for responding to timer interrupts */
 static void timer_state_task(unsigned long data) {
@@ -129,8 +133,8 @@ static void timer_state_task(unsigned long data) {
       /* Periodically print out the increment we're using */
       if(++ptp->slaveDebugCounter >= timeoutTicks) {
         ptp->slaveDebugCounter = 0;
-        printk("PTP increment: 0x%08X\n",
-               (XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG)) & ~PTP_RTC_ENABLE));
+
+        printk("PTP increment: 0x%08X\n",ptp_get_increment());
       }
 #endif
 
@@ -306,7 +310,7 @@ static BmcaResult bmca_comparison(PtpProperties *presentMaster,
 }
 
 /* Processes a newly-received ANNOUNCE packet for the passed instance */
-static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   PtpProperties properties;
   PtpPortProperties portProperties;
   unsigned long flags;
@@ -387,7 +391,7 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint32_t 
 }
 
 /* Processes a newly-received SYNC packet for the passed instance */
-static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
 
@@ -424,7 +428,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint32_t rxBu
 }
 
 /* Processes a newly-received FUP packet for the passed instance */
-static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
 
@@ -457,6 +461,15 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
     get_correction_field(ptp, port, rxBuffer, &correctionField);
     timestamp_sum(&syncTxTimestamp, &correctionField, &correctedTimestamp);
 
+    preempt_disable();
+    spin_lock_irqsave(&ptp->mutex, flags);
+    timestamp_copy(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncRxTimestampTemp);
+    timestamp_copy(&ptp->ports[port].syncTxTimestamp, &correctedTimestamp);
+    ptp->ports[port].syncTimestampsValid = 1;
+    spin_unlock_irqrestore(&ptp->mutex, flags);
+    preempt_enable();
+
+
     /* Compare the timestamps; if the one-way offset plus delay is greater than
      * the reset threshold, we need to reset our RTC before beginning to servo.  Regardless
      * of what we do, we need to invalidate the sync sequence ID, it's been "used up."
@@ -466,7 +479,8 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
     timestamp_abs(&difference, &absDifference);
     if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0) ||
        (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
-      /* Reset the time using the uncorrected timestamp; also re-load the nominal
+      /* Reset the time using the corrected timestamp adjusted by the time it has been
+       * resident locally since it was received; also re-load the nominal
        * RTC increment in advance in order to always have a known starting point
        * for convergence.  Suppress this if the userspace controller hasn't acknowledged
        * a Grandmaster change yet.
@@ -489,9 +503,6 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
 #endif
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      timestamp_copy(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncRxTimestampTemp);
-      timestamp_copy(&ptp->ports[port].syncTxTimestamp, &correctedTimestamp);
-      ptp->ports[port].syncTimestampsValid = 1;
       rtc_update_servo(ptp, port);
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
@@ -500,7 +511,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuf
 }
 
 /* Processes a newly-received DELAY_REQ packet for the passed instance */
-static void process_rx_delay_req(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_delay_req(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer) {
   /* Only react to these messages if we are the master */
   if(ptp->presentRole == PTP_MASTER) {
     /* React to the reception of a delay request by simply transmitting a delay
@@ -511,11 +522,12 @@ static void process_rx_delay_req(struct ptp_device *ptp, uint32_t port, uint32_t
 };
 
 /* Processes a newly-received DELAY_RESP packet for the passed instance */
-static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
   uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
   uint8_t rxRequestingPortId[PORT_ID_BYTES];
   uint8_t txRequestingPortId[PORT_ID_BYTES];
+  uint8_t *txBuffer;
 
   /* Make certain of the following:
    * - We are a slave
@@ -525,15 +537,17 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint32_
    */
   get_rx_mac_address(ptp, port, rxBuffer, rxMacAddress);
   get_rx_requesting_port_id(ptp, port, rxBuffer, rxRequestingPortId);
-  get_source_port_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
+  get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, 
                      txRequestingPortId);
+
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_REQ_BUFFER);
   if((ptp->presentRole == PTP_SLAVE) && 
      (compare_mac_addresses(rxMacAddress, ptp->presentMasterPort.sourceMacAddress) == 0) &&
      (compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0) &&
      (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == 
-      get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER))) {
+      get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer))) {
     PtpTime delayReqRxTimestamp;
-    PtpTime delayReqRxLocalTimestamp;
     PtpTime difference;
     PtpTime absDifference;
 
@@ -564,7 +578,7 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint32_
 }
 
 /* Processes a newly-received PDELAY_REQ packet for the passed instance */
-static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
   ptp->ports[port].stats.rxPDelayRequestCount++;
 
@@ -577,7 +591,7 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint32_
 };
 
 /* Processes a newly-received PDELAY_RESP packet for the passed instance */
-static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
   ptp->ports[port].stats.rxPDelayResponseCount++;
 
@@ -588,7 +602,7 @@ static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint32
 }
 
 /* Processes a newly-received PDELAY_RESP_FUP packet for the passed instance */
-static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
+static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
   ptp->ports[port].stats.rxPDelayResponseFollowupCount++;
 
@@ -603,7 +617,6 @@ static void tx_state_task(unsigned long data);
 /* Tasklet function for PTP Rx packets */
 static void rx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
-  uint32_t newRxBuffer;
   int i;
 
   for(i=0; i<ptp->numPorts; i++) {
@@ -612,53 +625,49 @@ static void rx_state_task(unsigned long data) {
     {
       tx_state_task(data);
     }
+    ptp_process_rx(ptp,i);
+  }
+}
 
-    /* Process all messages received since the last time we ran */
-    newRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
-    while(ptp->ports[i].lastRxBuffer != newRxBuffer) {
-      /* Advance the last buffer circularly around the available Rx buffers */
-      ptp->ports[i].lastRxBuffer = ((ptp->ports[i].lastRxBuffer + 1) & PTP_RX_BUFFER_MASK);
-
-      /* Determine which message to process */
-      switch(get_message_type(ptp, i, ptp->ports[i].lastRxBuffer)) {
+void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
+{
+       /* Determine which message to process */
+      switch(get_message_type(ptp, port, buffer)) {
       case MSG_ANNOUNCE:
-        process_rx_announce(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_announce(ptp, port, buffer);
         break;
 
       case MSG_SYNC:
-        process_rx_sync(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_sync(ptp, port, buffer);
         break;
 
       case MSG_FUP:
-        process_rx_fup(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_fup(ptp, port, buffer);
         break;
 
       case MSG_DELAY_REQ:
-        process_rx_delay_req(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_delay_req(ptp, port, buffer);
         break;
       case MSG_DELAY_RESP:
-        process_rx_delay_resp(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_delay_resp(ptp, port, buffer);
         break;
 
       case MSG_PDELAY_REQ:
-        process_rx_pdelay_req(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_pdelay_req(ptp, port, buffer);
         break;
 
       case MSG_PDELAY_RESP:
-        process_rx_pdelay_resp(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_pdelay_resp(ptp, port, buffer);
         break;
 
       case MSG_PDELAY_RESP_FUP:
-        process_rx_pdelay_resp_fup(ptp, i, ptp->ports[i].lastRxBuffer);
+        process_rx_pdelay_resp_fup(ptp, port, buffer);
         break;
 
       default:
         break;
       } /* switch(messageType) */
-    }
-  }
 }
-
 /* Tasklet function for PTP Tx packets */
 static void tx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
@@ -666,6 +675,7 @@ static void tx_state_task(unsigned long data) {
   uint32_t whichBuffer;
   uint32_t bufferMask;
   unsigned long flags;
+  uint8_t *txBuffer;
   int i;
 
   for(i=0; i<ptp->numPorts; i++) {
@@ -702,9 +712,10 @@ static void tx_state_task(unsigned long data) {
           /* A delay request message has just been sent; capture and store the 
            * transmission timestamp for later use.
            */
-          get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER, 
+          txBuffer = get_output_buffer(ptp,i,PTP_TX_DELAY_REQ_BUFFER);
+          get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, 
                                  &ptp->ports[i].delayReqTxTimestampTemp);
-          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, PTP_TX_DELAY_REQ_BUFFER, 
+          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, 
                                        &ptp->ports[i].delayReqTxLocalTimestampTemp);
 
         } break;
@@ -713,7 +724,8 @@ static void tx_state_task(unsigned long data) {
           /* A peer delay request message has just been sent; capture and store the
            * transmission timestamp for later use. (Treq1 - our local clock)
            */
-          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, 
+          uint8_t *txBuffer = get_output_buffer(ptp,i,PTP_TX_PDELAY_REQ_BUFFER);
+          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer , 
                                        &ptp->ports[i].pdelayReqTxTimestamp);
 
           ptp->ports[i].rcvdMDTimestampReceive = TRUE;
@@ -801,7 +813,7 @@ void init_state_machines(struct ptp_device *ptp) {
   tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
 
   for(i=0; i<ptp->numPorts; i++) {
-    ptp->ports[i].lastRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
+    ptp_platform_init(ptp,i);
     ptp->ports[i].syncTimestampsValid     = 0;
     ptp->ports[i].delayReqTimestampsValid = 0;
     ptp->ports[i].neighborPropDelay       = 0;

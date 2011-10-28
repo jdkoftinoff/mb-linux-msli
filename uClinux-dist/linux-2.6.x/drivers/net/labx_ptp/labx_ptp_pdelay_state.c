@@ -26,6 +26,7 @@
 
 #include "labx_ptp.h"
 #include <xio.h>
+uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
 
 /* Define this to get some extra debug on path delay messages */
 /* #define PATH_DELAY_DEBUG */
@@ -207,7 +208,6 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 
 #ifdef PATH_DELAY_DEBUG
       {
-        #define PTP_CLOCK_IDENTITY_CHARS 8
         int i;
         printk("AS CHECK: pd %d, pdt %d, pidc %d, nrrv %d\n", ptp->ports[port].neighborPropDelay,
           ptp->ports[port].neighborPropDelayThresh, compare_clock_identity(rxSourcePortId, ptp->properties.grandmasterIdentity),
@@ -267,6 +267,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
     uint32_t rxFUPSequenceId = 0;
     uint32_t txFUPSequenceId = 0;
     MDPdelayReq_State_t prevState;
+    uint8_t *txBuffer;
 
     memset(rxRequestingPortId, 0, PORT_ID_BYTES);
     memset(txRequestingPortId, 0, PORT_ID_BYTES);
@@ -277,16 +278,18 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
     if (ptp->ports[port].rcvdPdelayResp)
     {
       get_rx_requesting_port_id(ptp, port, ptp->ports[port].rcvdPdelayRespPtr, rxRequestingPortId);
-      get_source_port_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, txRequestingPortId);
+      txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
+      get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txRequestingPortId);
       rxSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
-      txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER);
+      txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
     }
     if (ptp->ports[port].rcvdPdelayRespFollowUp)
     {
       get_rx_requesting_port_id(ptp, port, ptp->ports[port].rcvdPdelayRespFollowUpPtr, rxFUPRequestingPortId);
-      get_source_port_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER, txFUPRequestingPortId);
+      txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
+      get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txFUPRequestingPortId);
       rxFUPSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespFollowUpPtr);
-      txFUPSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_REQ_BUFFER);
+      txFUPSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
     }
 
     do
@@ -467,4 +470,5 @@ void LinkDelaySyncIntervalSetting_StateMachine(struct ptp_device *ptp, uint32_t 
     } while (prevState != ptp->ports[port].linkDelaySyncIntervalSetting_State);
   }
 }
+
 

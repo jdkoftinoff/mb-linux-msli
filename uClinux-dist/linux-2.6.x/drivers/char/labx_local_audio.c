@@ -369,7 +369,8 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
   const char *interfaceType;
   u32 numChannels;
   int ret;
-
+  u32 has_serializer;
+  
   /* Obtain the resources for this instance; use the device tree node name */
   const char *name = ofdev->node->name;
   ret = of_address_to_resource(ofdev->node, 0, addressRange);
@@ -382,7 +383,11 @@ static int labx_local_audio_of_probe(struct of_device *ofdev, const struct of_de
   numChannels = (get_u32(ofdev, "xlnx,num-i2s-streams") * 2);
 
   /* Check the interface type to see if a DMA exists */
-  interfaceType = (char *) of_get_property(ofdev->node, "xlnx,interface-type", NULL);
+  has_serializer = get_u32(ofdev, "xlnx,has-serializer");
+  if (has_serializer)
+    interfaceType = (char *) of_get_property(ofdev->node, "xlnx,interface-type", NULL);
+  else
+    interfaceType = LA_DMA_INTERFACE_EXTERNAL;
   
   if(interfaceType == NULL) {
     dev_warn(&ofdev->dev, "labx_local_audio : (%s) No interface type defined\n", name);
