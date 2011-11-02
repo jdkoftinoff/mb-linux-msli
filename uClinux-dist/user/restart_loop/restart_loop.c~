@@ -1,0 +1,85 @@
+#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+
+int main(int argc, char **argv, char **env)
+{
+  pid_t p;
+
+
+  if(argc<2)
+    {
+      fprintf(stderr, "Usage: restart_loop <executable> <arguments>\n");
+      return 1;
+    }
+
+  do
+    {
+      p=vfork();
+      if(p<0)
+	{
+	  perror("vfork");
+	  fputs("\r\n",stderr);
+	  return 1;
+	}
+      if(p==0)
+	{
+	  /* child process */
+	  execve(argv[1],&argv[1],env);
+	  _exit(127);
+	}
+      else
+	{
+	  if(waitpid(p,&retval,0)==p)
+	    {
+	      if(WIFEXITED(retval))
+		{
+		  ret=WEXITSTATUS(status);
+		  if(ret==127)
+		    {
+		      fprintf(stderr,
+			      "restart_loop: %s failed to run or exited "
+			      "with status 127\r\n",
+			      argv[1]);
+		    }
+		  else
+		    {
+		      fprintf(stderr,
+			      "restart_loop: %s exited with status %d\r\n",
+			      argv[1],ret);
+		    }
+		}
+	      else
+		{
+		  
+		  if(WIFSIGNALED(retval))
+		    {
+		      fprintf(stderr,
+			      "restart_loop: %s terminated by signal %d\r\n",
+			      argv[1],
+			      WTERMSIG(retval));
+		    }
+		  else
+		    {
+		      fprintf(stderr,
+			      "restart_loop: %s terminated for unknown "
+			      "reason\r\n",
+			      argv[1]);
+		    }
+		}
+	    }
+	  else
+	    {
+	      perror("restart_loop: Unknown result, restarting myself");
+	      fputs("\r\n",stderr);
+	      sleep(3);
+	      execve(argv[0],argv[1],env);
+	      perror("restart_loop: Can'r restart myself, giving up");
+	      fputs("\r\n",stderr);
+	      _exit(1);
+	    }
+	}
+      sleep(2);
+    }
+  while(1);
+}

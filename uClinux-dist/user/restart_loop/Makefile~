@@ -1,0 +1,30 @@
+EXEC = gsbd
+OBJS = gsbd.o
+
+FLTFLAGS += -s 65536
+
+all: $(EXEC) dmitri-sethostname gnetd
+
+$(EXEC): $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+dmitri-sethostname: dmitri-sethostname.o
+	$(CC) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+gnetd: gnetd.o
+	$(CC) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+romfs:
+	$(ROMFSINST) /bin/$(EXEC)
+	$(ROMFSINST) /bin/dmitri-sethostname
+	$(ROMFSINST) /bin/gnetd
+	$(ROMFSINST) /bin/reboot
+	$(ROMFSINST) /bin/reboot_maint
+	$(ROMFSINST) etc/rc/gsbd /etc/init.d/gsbd
+	$(ROMFSINST) -s /etc/init.d/gsbd /etc/rc.d/S35gsbd
+
+clean:
+	-rm -f $(EXEC) dmitri-sethostname gnetd *.elf *.gdb *.o
+
+gsbd.o: gsbd.c crc16.h
+
