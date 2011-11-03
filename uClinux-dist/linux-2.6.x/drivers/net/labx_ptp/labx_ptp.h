@@ -149,8 +149,6 @@
 #define PTP_PDELAY_RESP_LENGTH      (54)
 #define PTP_PDELAY_RESP_FUP_LENGTH  (54)
 
-
-
 /* Number of bytes in a PTP port ID */
 #define PORT_ID_BYTES  (10)
 
@@ -201,17 +199,19 @@
 /* Word-aligned offsets for fields which are dynamically changed or
  * inspected upon reception
  */
-#define PACKET_BUFFER_WORDS     (PTP_MAX_PACKET_BYTES / BYTES_PER_WORD)
-#define SOURCE_MAC_OFFSET       ( 1 * BYTES_PER_WORD)
-#define MESSAGE_TYPE_OFFSET     ( 3 * BYTES_PER_WORD)
-#define DOMAIN_NUMBER_OFFSET    ( 4 * BYTES_PER_WORD)
-#define CORRECTION_FIELD_OFFSET ( 5 * BYTES_PER_WORD)
-#define SOURCE_PORT_ID_OFFSET   ( 8 * BYTES_PER_WORD)
-#define SEQUENCE_ID_OFFSET      (11 * BYTES_PER_WORD)
-#define TIMESTAMP_OFFSET        (12 * BYTES_PER_WORD)
-#define UTC_OFFSET_OFFSET       (14 * BYTES_PER_WORD)
-#define REQ_PORT_ID_OFFSET      (14 * BYTES_PER_WORD)
-#define GM_PRIORITY1_OFFSET     (15 * BYTES_PER_WORD)
+#define PACKET_BUFFER_WORDS                  (PTP_MAX_PACKET_BYTES / BYTES_PER_WORD)
+#define SOURCE_MAC_OFFSET                    ( 1 * BYTES_PER_WORD)
+#define MESSAGE_TYPE_OFFSET                  ( 3 * BYTES_PER_WORD)
+#define DOMAIN_NUMBER_OFFSET                 ( 4 * BYTES_PER_WORD)
+#define CORRECTION_FIELD_OFFSET              ( 5 * BYTES_PER_WORD)
+#define SOURCE_PORT_ID_OFFSET                ( 8 * BYTES_PER_WORD)
+#define SEQUENCE_ID_OFFSET                   (11 * BYTES_PER_WORD)
+#define TIMESTAMP_OFFSET                     (12 * BYTES_PER_WORD)
+#define UTC_OFFSET_OFFSET                    (14 * BYTES_PER_WORD)
+#define REQ_PORT_ID_OFFSET                   (14 * BYTES_PER_WORD)
+#define GM_PRIORITY1_OFFSET                  (15 * BYTES_PER_WORD)
+#define CUMULATIVE_SCALED_RATE_OFFSET_OFFSET (17 * BYTES_PER_WORD)
+#define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
  * the data alignment from the network side to the host interface
@@ -260,6 +260,14 @@ typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSe
   LinkDelaySyncIntervalSetting_SET_INTERVALS
 } LinkDelaySyncIntervalSetting_State_t;
 
+#define SIGNED_SHIFT(a, b) (((b) >= 0) ? ((a)<<(b)) : ((a)>>(-b)))
+#define ANNOUNCE_INTERVAL_TICKS(ptp, port)   \
+  SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogAnnounceInterval))
+#define SYNC_INTERVAL_TICKS(ptp, port)       \
+  SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogSyncInterval))
+#define PDELAY_REQ_INTERVAL_TICKS(ptp, port) \
+  SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogPdelayReqInterval))
+
 struct ptp_port {
 
   /* Net interface name associated with this port */
@@ -294,8 +302,10 @@ struct ptp_port {
   /* Mask of pending transmit interrupts to respond to */
   uint32_t pendingTxFlags;
 
-  /* 802.1AS per-port variables (10.2.4) */
+  /* 802.1AS per-port variables (10.2.4) - Time sync state machines */
   uint32_t asCapable;
+  int8_t   currentLogSyncInterval;
+  int8_t   initialLogSyncInterval;
   uint32_t neighborRateRatio;
   uint32_t neighborPropDelay;
   uint32_t computeNeighborRateRatio;
@@ -303,8 +313,17 @@ struct ptp_port {
   uint32_t portEnabled;
   uint32_t pttPortEnabled;
 
+  /* 802.1AS per-port variables (10.3.9) - BMCA/Announce state machines */
+  int8_t currentLogAnnounceInterval;
+  int8_t initialLogAnnounceInterval;
+
+  /* 802.1AS timeouts (10.6.3) */
+  uint8_t syncReceiptTimeout;
+  uint8_t announceReceiptTimeout;
+
   /* 802.1AS MD entity variables (11.2.12) */
-  uint32_t pdelayReqInterval;
+  int8_t currentLogPdelayReqInterval;
+  int8_t initialLogPdelayReqInterval;
   uint32_t allowedLostResponses;
   uint32_t isMeasuringDelay;
   uint32_t neighborPropDelayThresh;
@@ -314,7 +333,7 @@ struct ptp_port {
 
   uint32_t pdelayIntervalTimer;
   uint32_t rcvdPdelayResp;
-  uint8_t * rcvdPdelayRespPtr;
+  uint8_t *rcvdPdelayRespPtr;
   uint32_t rcvdPdelayRespFollowUp;
   uint8_t *rcvdPdelayRespFollowUpPtr;
   uint32_t rcvdMDTimestampReceive;
@@ -325,6 +344,11 @@ struct ptp_port {
 
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
+  uint32_t rcvdSignalingMsg1;
+  uint8_t *rcvdSignalingPtr;
+
+  // 802.1AS Follow_Up information TLV variables (11.4.4.3)
+  uint32_t cumulativeScaledRateOffset;
 
   /* Current PDelay Request/Response timestamps */
   PtpTime pdelayReqTxTimestamp;  // pdelayReqEventEgressTimestamp (Treq1)

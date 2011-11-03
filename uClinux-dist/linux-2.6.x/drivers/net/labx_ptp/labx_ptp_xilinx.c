@@ -188,6 +188,7 @@ void get_hardware_timestamp(struct ptp_device *ptp,
                             PtpTime *timestamp) {
   uint32_t wordOffset;
   uint32_t skipIncrement;
+  PtpTime tempTimestamp;
 
   /* Fetch the hardware timestamp from the end of the specified packet buffer and pack
    * it into the passed timestamp structure.  Don't offset the Tx packet buffer by
@@ -200,11 +201,19 @@ void get_hardware_timestamp(struct ptp_device *ptp,
    */
   wordOffset = (ptp->portWidth == 8) ? HW_TIMESTAMP_OFFSET_X8 : HW_TIMESTAMP_OFFSET_X64;
   skipIncrement = (ptp->portWidth = 8) ? 0 : BYTES_PER_WORD;
-  timestamp->secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
+  tempTimestamp.secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
   wordOffset += skipIncrement;
-  timestamp->secondsLower = read_packet(packetBuffer, &wordOffset);
+  tempTimestamp.secondsLower = read_packet(packetBuffer, &wordOffset);
   wordOffset += skipIncrement;
-  timestamp->nanoseconds  = read_packet(packetBuffer, &wordOffset);
+  tempTimestamp.nanoseconds  = read_packet(packetBuffer, &wordOffset);
+
+  if (bufferDirection == TRANSMITTED_PACKET) {
+    /* Add the MAC latency and the PHY latency */
+    timestamp_sum(&tempTimestamp, &ptp->ports[port].txPhyMacDelay, timestamp);
+  } else {
+    /* Subtract the MAC latency and the PHY latency */
+    timestamp_difference(&tempTimestamp, &ptp->ports[port].rxPhyMacDelay, timestamp);
+  }
 }
 
 /* Gets the local hardware timestamp located within the passed packet buffer.
@@ -218,6 +227,7 @@ void get_local_hardware_timestamp(struct ptp_device *ptp,
                                   PtpTime *timestamp) {
   uint32_t wordOffset;
   uint32_t skipIncrement;
+  PtpTime tempTimestamp;
 
   /* Fetch the hardware timestamp from the end of the specified packet buffer and pack
    * it into the passed timestamp structure.  Don't offset the Tx packet buffer by
@@ -227,11 +237,19 @@ void get_local_hardware_timestamp(struct ptp_device *ptp,
 
   wordOffset = (ptp->portWidth == 8) ? HW_LOCAL_TIMESTAMP_OFFSET_X8 : HW_LOCAL_TIMESTAMP_OFFSET_X64;
   skipIncrement = (ptp->portWidth = 8) ? 0 : BYTES_PER_WORD;
-  timestamp->secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
+  tempTimestamp.secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
   wordOffset += skipIncrement;
-  timestamp->secondsLower = read_packet(packetBuffer, &wordOffset);
+  tempTimestamp.secondsLower = read_packet(packetBuffer, &wordOffset);
   wordOffset += skipIncrement;
-  timestamp->nanoseconds  = read_packet(packetBuffer, &wordOffset);
+  tempTimestamp.nanoseconds  = read_packet(packetBuffer, &wordOffset);
+
+  if (bufferDirection == TRANSMITTED_PACKET) {
+    /* Add the MAC latency and the PHY latency */
+    timestamp_sum(&tempTimestamp, &ptp->ports[port].txPhyMacDelay, timestamp);
+  } else {
+    /* Subtract the MAC latency and the PHY latency */
+    timestamp_difference(&tempTimestamp, &ptp->ports[port].rxPhyMacDelay, timestamp);
+  }
 }
 
 /* Transmits the packet within the specified buffer.  The first word of the
