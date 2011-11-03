@@ -278,6 +278,21 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      */
     slaveOffset = (((int32_t) difference.nanoseconds) - ptp->ports[port].neighborPropDelay);
     slaveOffsetValid = PTP_RTC_OFFSET_VALID;
+
+    if (ptp->ports[port].neighborRateRatioValid) {
+      uint64_t tempRate;
+      // Convert from 2^-41 - (1.0) back to something in the 2^-31 range and add the 1.0 back in
+      tempRate = (((int32_t)ptp->ports[port].cumulativeScaledRateOffset) >> 10) + 0x80000000;
+
+      // Get the cumulative rate ratio, including our neighbor
+      tempRate = ((ptp->ports[port].neighborRateRatio * tempRate) >> 31);
+
+      ptp->masterRateRatio = (uint32_t)tempRate;
+      ptp->masterRateRatioValid = TRUE;
+    }
+    else {
+      ptp->masterRateRatioValid = FALSE;
+    }
   }
 
   /* Perform the actual servo update if the slave offset is valid */

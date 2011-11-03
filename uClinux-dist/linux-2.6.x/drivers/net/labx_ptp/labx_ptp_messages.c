@@ -454,6 +454,12 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
   correctionField->nanoseconds = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
 }
 
+/* Get the cumulative scaled rate offset from the follow-up TLV */
+uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer) {
+  uint32_t wordOffset = CUMULATIVE_SCALED_RATE_OFFSET_OFFSET;
+  return read_packet(rxBuffer, &wordOffset);
+}
+
 /* Sets the message timestamp (e.g. originTimestamp) within the passed packet buffer */
 static void set_timestamp(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer, PtpTime *timestamp) {
   uint8_t * bufferBase;
@@ -598,7 +604,6 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
   uint8_t *txFupBuffer;
   uint8_t *txSyncBuffer;
   PtpTime syncTxTimestamp;
-  PtpTime syncTxTimestampPhy;
   int64_t correctionField; 
 
   txFupBuffer = get_output_buffer(ptp,port,PTP_TX_FUP_BUFFER);
@@ -613,10 +618,7 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
    */
   get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txSyncBuffer, &syncTxTimestamp);
 
-  /* Add in the MAC latency and the PHY latency */
-  timestamp_sum(&syncTxTimestamp, &ptp->ports[port].txPhyMacDelay, &syncTxTimestampPhy);
-
-  set_timestamp(ptp, port, txFupBuffer, &syncTxTimestampPhy);
+  set_timestamp(ptp, port, txFupBuffer, &syncTxTimestamp);
 
   /* Update the correction field.
    * TODO: This should always be zero except if we are acting as a transparent clock 
@@ -652,7 +654,6 @@ void transmit_delay_request(struct ptp_device *ptp, uint32_t port) {
  */
 void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
   PtpTime delayReqRxTimestamp;
-  PtpTime delayReqRxTimestampPhy;
   uint8_t requestPortId[PORT_ID_BYTES];
   uint16_t delayReqSequenceId;
   uint8_t *txBuffer;
@@ -671,10 +672,7 @@ void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * re
    */
   get_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &delayReqRxTimestamp);
 
-  /* Subtract the MAC latency and the PHY latency */
-  timestamp_difference(&delayReqRxTimestamp, &ptp->ports[port].rxPhyMacDelay, &delayReqRxTimestampPhy);
-
-  set_timestamp(ptp, port, txBuffer, &delayReqRxTimestampPhy);
+  set_timestamp(ptp, port, txBuffer, &delayReqRxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
@@ -703,7 +701,6 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
  */
 void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
   PtpTime pdelayReqRxTimestamp;
-  PtpTime pdelayReqRxTimestampPhy;
   uint16_t pdelayReqSequenceId;
   uint8_t *txBuffer;
   
@@ -721,10 +718,7 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
    */
   get_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
 
-  /* Subtract the MAC latency and the PHY latency */
-  timestamp_difference(&pdelayReqRxTimestamp, &ptp->ports[port].rxPhyMacDelay, &pdelayReqRxTimestampPhy);
-
-  set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestampPhy);
+  set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
@@ -736,7 +730,6 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
  */
 void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
   PtpTime pdelayRespTxTimestamp;
-  PtpTime pdelayRespTxTimestampPhy;
   uint8_t *txFupBuffer;
   uint8_t *txRespBuffer;
 
@@ -757,10 +750,7 @@ void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
   get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txRespBuffer, 
                          &pdelayRespTxTimestamp);
 
-  /* Add in the MAC latency and the PHY latency */
-  timestamp_sum(&pdelayRespTxTimestamp, &ptp->ports[port].txPhyMacDelay, &pdelayRespTxTimestampPhy);
-
-  set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestampPhy);
+  set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txFupBuffer);

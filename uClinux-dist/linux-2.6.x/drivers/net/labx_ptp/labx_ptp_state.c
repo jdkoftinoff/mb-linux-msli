@@ -32,11 +32,7 @@
 
 /* Parameters governing message rates, etc. measuring time in msec. */
 #define HEARTBEAT_INTERVAL        (5000)
-#define ANNOUNCE_INTERVAL         (1000)
-#define ANNOUNCE_RECEIPT_TIMEOUT     (3)
-#define SYNC_INTERVAL              (100)
 #define DELAY_REQ_INTERVAL        (1000)
-#define PDELAY_REQ_INTERVAL       (1000)
 
 /* Maximum error, in nanoseconds, tolerated before the time is reset */
 #define RESET_THRESHOLD_NS  (100000)
@@ -67,13 +63,13 @@ static void timer_state_task(unsigned long data) {
       for (i=0; i<ptp->numPorts; i++) {
         /* Send ANNOUNCE and SYNC messages at their rate if we're a master */
         ptp->ports[i].announceCounter++;
-        if(ptp->ports[i].announceCounter >= (ANNOUNCE_INTERVAL / PTP_TIMER_TICK_MS)) {
+        if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
           ptp->ports[i].announceCounter = 0;
           transmit_announce(ptp, i);
         }
 
         ptp->ports[i].syncCounter++;
-        if(ptp->ports[i].syncCounter >= (SYNC_INTERVAL / PTP_TIMER_TICK_MS)) {
+        if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
           ptp->ports[i].syncCounter = 0;
           transmit_sync(ptp, i);
         }
@@ -96,7 +92,7 @@ static void timer_state_task(unsigned long data) {
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      timeoutTicks = ((ANNOUNCE_INTERVAL * ANNOUNCE_RECEIPT_TIMEOUT) / PTP_TIMER_TICK_MS);
+      timeoutTicks = ANNOUNCE_INTERVAL_TICKS(ptp, ptp->presentMasterPort.portNumber-1) * ptp->ports[ptp->presentMasterPort.portNumber-1].announceReceiptTimeout;
       if(++ptp->announceTimeoutCounter >= timeoutTicks) {
         /* We haven't received an ANNOUNCE message from our master in too long, presume
          * we've become a master so we participate in BMCA again.
@@ -469,6 +465,8 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
     spin_unlock_irqrestore(&ptp->mutex, flags);
     preempt_enable();
 
+    /* Retrieve the scaled rate offset */
+    ptp->ports[port].cumulativeScaledRateOffset = get_cumulative_scaled_rate_offset_field(rxBuffer);
 
     /* Compare the timestamps; if the one-way offset plus delay is greater than
      * the reset threshold, we need to reset our RTC before beginning to servo.  Regardless
@@ -508,6 +506,15 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
       preempt_enable();
     }
   }
+}
+
+/* Processes a newly-received signaling packet for the passed instance */
+static void process_rx_signaling(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
+
+  ptp->ports[port].rcvdSignalingPtr = rxBuffer;
+  ptp->ports[port].rcvdSignalingMsg1 = TRUE;
+
+  LinkDelaySyncIntervalSetting_StateMachine(ptp, port);
 }
 
 /* Processes a newly-received DELAY_REQ packet for the passed instance */
@@ -664,6 +671,10 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
         process_rx_pdelay_resp_fup(ptp, port, buffer);
         break;
 
+      case MSG_SIGNALING:
+        process_rx_signaling(ptp, port, buffer);
+        break;
+
       default:
         break;
       } /* switch(messageType) */
@@ -786,13 +797,21 @@ void init_state_machines(struct ptp_device *ptp) {
     ptp->ports[i].delayReqCounter     = 0;
     ptp->ports[i].delayReqSequenceId  = 0x0000;
 
+    ptp->ports[i].currentLogSyncInterval = -3;
+    ptp->ports[i].initialLogSyncInterval = -3;
+
     /* TODO: check the ethernet port for link-up here to determine if it should be enabled */
     ptp->ports[i].portEnabled = TRUE;
     ptp->ports[i].pttPortEnabled = TRUE;
 
+    ptp->ports[i].currentLogAnnounceInterval = 0;
+    ptp->ports[i].initialLogAnnounceInterval = 0;
+
+    ptp->ports[i].syncReceiptTimeout = 3;
+    ptp->ports[i].announceReceiptTimeout = 3;
+
     /* peer delay request state machine initialization */
     ptp->ports[i].mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
-    ptp->ports[i].pdelayReqInterval    = (PDELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS);
     ptp->ports[i].allowedLostResponses = 3;
     ptp->ports[i].neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
   }
