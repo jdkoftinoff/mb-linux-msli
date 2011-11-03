@@ -10,6 +10,8 @@ mount -t devpts none /dev/pts
 
 BUTTONS=`tr ' ' '\\n' < /proc/cmdline | grep BUTTONS | cut -d'=' -f2`
 export BUTTONS
+echo "Locking flash:"
+/bin/mtd-lock -l -d /dev/mtd0
 
 echo "Configuring devices: "
 if [ -d /sys/class/gpio/gpiochip240 ]; then
@@ -42,14 +44,14 @@ ln -s "/sys/class/gpio/gpio${OLEDINDEV}/value" /var/devices/gpio/oled_in
 ln -s "/sys/class/gpio/gpio${OLEDOUTDEV}/value" /var/devices/gpio/oled_out
 ln -s "/sys/class/gpio/gpio${GNETOUTDEV}/value" /var/devices/gpio/gnet_out
 
-echo "Restoring persistent settings."
+echo "Restoring persistent settings:"
 mkdir /var/tmp/persist
 touch /var/tmp/persist/environment
 /bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
 if [ "$BUTTONS" = "0x00" ]; then
   . /var/tmp/persist/environment
 fi
-echo "Running system startup scripts."
+echo "Running system startup scripts:"
 for i in /etc/rc.d/S*
 do
   if [ -x $i ]; then

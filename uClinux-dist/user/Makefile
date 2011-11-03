@@ -40,6 +40,7 @@ dir_$(CONFIG_USER_AVBWEB)                   += avbweb
 dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld
 dir_$(CONFIG_USER_GSBD)                     += gsbd
 dir_$(CONFIG_USER_SCPINSTALL)               += scpinstall
+dir_$(CONFIG_USER_RESTART_LOOP)             += restart_loop
 dir_$(CONFIG_USER_NANO)                     += nano
 dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty
 dir_$(CONFIG_USER_APPWEB_APPWEB)            += appWeb

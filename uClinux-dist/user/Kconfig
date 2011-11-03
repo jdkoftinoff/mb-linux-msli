@@ -43,6 +43,11 @@ config USER_SCPINSTALL
 	help
 	  Include scp-based installer/updater program.
 
+config USER_RESTART_LOOP
+	bool "restart loop utility"
+	help
+	  Include restart loop utility.
+
 config USER_NANO
 	bool "nano editor"
 	help
