@@ -504,6 +504,7 @@ void get_local_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketD
 void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                    uint8_t * packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
+uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer);
 
 /* From labx_ptp_state.c */
 void ack_grandmaster_change(struct ptp_device *ptp);
