@@ -734,6 +734,59 @@ static struct phy_driver bcm5464_driver = {
 	.driver 	= { .owner = THIS_MODULE },
 };
 
+static void bcm5481_set_test_mode(struct phy_device *phydev, u32 mode) {
+  /* Configure the PHY for the selected test mode */
+  /* Note that the bcm5481 works just like the bcm54610 in test mode setup,
+   * so we just reuse the bcm54610 defines */
+  switch(mode) {
+  case PHY_TEST_EXT_LOOP:
+    phy_write(phydev, MII_CTRL1000,
+	      (BCM54610_MST_SLV_MANUAL | BCM54610_MANUAL_MASTER));
+    phy_write(phydev, MII_BMCR, (BMCR_FULLDPLX | BMCR_SPEED1000));
+    phy_write(phydev, MII_LBRERROR,
+	      (BCM54610_LBR_EXT_LOOPBACK | BCM54610_LBR_TX_NORMAL_MODE));
+    phydev->autoneg = AUTONEG_DISABLE;
+    printk("BCM5481 external loopback configured; insert loopback jumper\n");
+    break;
+
+  case PHY_TEST_INT_LOOP:
+    phy_write(phydev, MII_BMCR,
+              (BMCR_LOOPBACK | BMCR_FULLDPLX | BMCR_SPEED1000));
+    phydev->autoneg = AUTONEG_DISABLE;
+    printk("BCM5481 internal loopback configured\n");
+    break;
+
+  case PHY_TEST_TX_WAVEFORM:
+    printk("IEEE 802.3ba Transmit Waveform Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_TX_WAVE);
+    break;
+
+  case PHY_TEST_MASTER_JITTER:
+    printk("IEEE 802.3ba Master Jitter Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_MST_JITTER);
+    break;
+
+  case PHY_TEST_SLAVE_JITTER:
+    printk("IEEE 802.3ba Slave Jitter Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_SLV_JITTER);
+    break;
+
+  case PHY_TEST_TX_DISTORTION:
+    printk("IEEE 802.3ba Transmit Distortion Test mode\n");
+    phy_write(phydev, MII_CTRL1000, BCM54610_TEST_TX_DIST);
+    break;
+
+  default:
+    /* No test mode, normal operation */
+    phy_write(phydev, MII_LBRERROR, BCM54610_LBR_TX_NORMAL_MODE);
+    phy_write(phydev, MII_BMCR, (BMCR_ANENABLE | BMCR_FULLDPLX | BMCR_SPEED1000));
+    phy_write(phydev, MII_CTRL1000,
+              (ADVERTISE_1000FULL | BCM54610_MST_SLV_AUTO));
+    phydev->autoneg = AUTONEG_ENABLE;
+    printk("BCM5481 set for normal operation\n");
+  }
+}
+
 static struct phy_driver bcm5481_driver = {
 	.phy_id		= 0x0143bca0,
 	.phy_id_mask	= 0xfffffff0,
@@ -746,6 +799,7 @@ static struct phy_driver bcm5481_driver = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm54xx_ack_interrupt,
 	.config_intr	= bcm54xx_config_intr,
+	.set_test_mode  = bcm5481_set_test_mode,
 	.driver 	= { .owner = THIS_MODULE },
 };
 
