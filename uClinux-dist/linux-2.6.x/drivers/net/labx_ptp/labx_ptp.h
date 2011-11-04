@@ -547,6 +547,11 @@ void ptp_setup_event_timer(struct ptp_device *ptp, int port, PtpPlatformData *pl
 uint32_t ptp_get_version(struct ptp_device *ptp);
 uint32_t ptp_setup_interrupt(struct ptp_device *ptp);
 void ptp_process_rx(struct ptp_device *ptp, int port);
+uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
+void write_packet(uint8_t *bufferBase, uint32_t *wordOffset, uint32_t writeWord);
+uint32_t read_packet(uint8_t * bufferBase, uint32_t *wordOffset);
+void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
+
 
 /* Bytes in a buffer word */
 #define BYTES_PER_WORD  (4)
