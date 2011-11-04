@@ -28,17 +28,6 @@
 #include <xio.h>
 
 /**
- * Common helper methods
- */
-
-
-
-uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
-void write_packet(uint8_t *bufferBase, uint32_t *wordOffset, uint32_t writeWord);
-uint32_t read_packet(uint8_t * bufferBase, uint32_t *wordOffset);
-void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
-
-/**
  * Packet transmission methods
  */
 

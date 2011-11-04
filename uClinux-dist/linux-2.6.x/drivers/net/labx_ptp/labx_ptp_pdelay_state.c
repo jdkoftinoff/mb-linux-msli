@@ -26,7 +26,6 @@
 
 #include "labx_ptp.h"
 #include <xio.h>
-uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
 
 /* Define this to get some extra debug on path delay messages */
 /* #define PATH_DELAY_DEBUG */
