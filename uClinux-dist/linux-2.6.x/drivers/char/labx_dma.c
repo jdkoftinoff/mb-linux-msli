@@ -247,7 +247,9 @@ static int netlink_thread(void *data) {
     set_current_state(TASK_INTERRUPTIBLE);
 
     /* Go to sleep only if the status FIFO is empty */
-    wait_event_interruptible(dma->statusFifoQueue, (dma->statusReady == DMA_NEW_STATUS_READY));
+    wait_event_interruptible(dma->statusFifoQueue, (dma->statusReady == DMA_NEW_STATUS_READY) || kthread_should_stop());
+
+    if (kthread_should_stop()) break;
 
     __set_current_state(TASK_RUNNING);
 
@@ -824,6 +826,7 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
 EXPORT_SYMBOL(labx_dma_ioctl);
 
 int32_t labx_dma_remove(struct labx_dma *dma) {
+  kthread_stop(dma->netlinkTask);
   if((NULL != dma->callbacks) && (NULL != dma->callbacks->irqTeardown)) {
     dma->callbacks->irqTeardown(dma);
   } else if(dma->irq != DMA_NO_IRQ_SUPPLIED) {

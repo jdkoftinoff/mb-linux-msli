@@ -325,6 +325,8 @@ static int __devexit labx_dma_pdev_remove(struct platform_device *pdev)
 	/* Make sure the DMA unit is no longer running */
 	XIo_Out32(DMA_REGISTER_ADDRESS(&dma_pdev->dma, DMA_CONTROL_REG), DMA_DISABLE);
 
+	labx_dma_remove(&dma_pdev->dma);
+
 	misc_deregister(&dma_pdev->miscdev);
 
 	for (i=0; i<MAX_DMA_DEVICES; i++)
