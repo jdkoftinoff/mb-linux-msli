@@ -72,6 +72,11 @@ static void timer_state_task(unsigned long data) {
         if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
           ptp->ports[i].syncCounter = 0;
           transmit_sync(ptp, i);
+          if(ptp->rtcChangesAllowed) {
+            /* Periodically update the RTC to get update listeners to
+               notice (IE when they are not coasting) */
+            set_rtc_increment(ptp, &ptp->nominalIncrement);
+          }
         }
       }
 
