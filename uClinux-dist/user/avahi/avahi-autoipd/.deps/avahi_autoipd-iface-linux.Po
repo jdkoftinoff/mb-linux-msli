@@ -1,254 +1,254 @@
 avahi_autoipd-iface-linux.o avahi_autoipd-iface-linux.o: iface-linux.c \
   ../config.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/unistd.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix_opt.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/environments.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/confname.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/getopt.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/arpa/inet.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/hdlc/ioctl.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_arp.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netdevice.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_ether.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_packet.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/libdaemon/dlog.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/syslog.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/syslog.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/unistd.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix_opt.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/environments.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/confname.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/getopt.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/arpa/inet.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/hdlc/ioctl.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_arp.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netdevice.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_ether.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_packet.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/libdaemon/dlog.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/syslog.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/syslog.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h \
   ../avahi-common/llist.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h \
   ../avahi-common/cdecl.h ../avahi-common/malloc.h \
   ../avahi-common/gccmacro.h iface.h \
-  /home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h \
+  /home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h \
   main.h
 
 ../config.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/socket.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/uio.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uio.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/socket.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/limits.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/limits.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix1_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/local_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/limits.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_local_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix2_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/xopen_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/stdio_lim.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sockaddr.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/socket.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/sockios.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/ioctl.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/ioctl.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/ioctl.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/unistd.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/unistd.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix_opt.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/posix_opt.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/environments.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/environments.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/confname.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/confname.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/getopt.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/getopt.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/arpa/inet.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/arpa/inet.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/netinet/in.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/in.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/byteswap.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netlink.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/socket.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/rtnetlink.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_link.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_addr.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/neighbour.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/hdlc/ioctl.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/hdlc/ioctl.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_arp.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_arp.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netdevice.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/netdevice.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_ether.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_ether.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_packet.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/if_packet.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/libdaemon/dlog.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/libdaemon/dlog.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/syslog.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/syslog.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/syslog.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/syslog.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h:
 
 ../avahi-common/llist.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h:
 
 ../avahi-common/cdecl.h:
 
@@ -258,6 +258,6 @@ avahi_autoipd-iface-linux.o avahi_autoipd-iface-linux.o: iface-linux.c \
 
 iface.h:
 
-/home/andre/build/xxx/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h:
+/home/andre/build/devel/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/inttypes.h:
 
 main.h:
