@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Harman AVBX MicroBlaze system
+# Makefile -- Build instructions for Meyer Sound CAL ICS MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -133,24 +133,12 @@ DEVICES +=	\
 	video0,c,81,0
 endif
 
-ifdef CONFIG_SPI_SPIDEV
-DEVICES +=	\
-	spidev0,c,153,0
-endif
-
 # Add the AVB packet engine device nodes
 DEVICES += packetizer0,c,250,0
 DEVICES += depacketizer0,c,252,0
 DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
-
-# Add the Xilinx SPI Master peripheral device node
-ifdef CONFIG_XILINX_SPI
-DEVICES += spidev0,c,153,0
-endif
-
-I2C_MAJOR = 89
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
 CONFIG_SYSTEM_ROOT_PASSWD := "root"
@@ -190,8 +178,6 @@ romfs:
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
-	$(ROMFSINST) $(COMMON)/etc/rc/avb_startup /etc/init.d/avb_startup
-	$(ROMFSINST) -s /etc/init.d/avb_startup /etc/rc.d/S31avb_startup
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
