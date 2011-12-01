@@ -1,129 +1,129 @@
 avahi_daemon-caps.o avahi_daemon-caps.o: caps.c ../config.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/features.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/gcc/stddef.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/time.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/endian.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/assert.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/errno.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/errno.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/string.h \
   sys/capability.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/capability.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/posix_types.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/capability.h \
   sys/prctl.h ../avahi-core/log.h \
-  /home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h \
+  /mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h \
   ../avahi-common/cdecl.h ../avahi-common/gccmacro.h caps.h
 
 ../config.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/features.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/features.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_config.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/uClibc_arch_features.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/cdefs.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/wordsize.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stddef.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/gcc/stddef.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/kernel_types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/typesizes.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/pthreadtypes.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/sched.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/time.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/time.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/endian.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/endian.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/endian.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/select.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/select.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/sigset.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/time.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/sys/sysmacros.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/assert.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/assert.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/errno.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/errno.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/bits/errno.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/errno.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/errno.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/errno.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/errno.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/errno-base.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/string.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/string.h:
 
 sys/capability.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/uClibc/include/stdint.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm-generic/int-ll64.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/posix_types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/stddef.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/compiler.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/asm/posix_types.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/asm/posix_types.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/include-linux/linux/capability.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/include-linux/linux/capability.h:
 
 sys/prctl.h:
 
 ../avahi-core/log.h:
 
-/home/andre/build/dual/io-module-firmware/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h:
+/mnt/homes/jeffk/src/msli/io/io-module-firmware-msli-a-devel/mb-linux-msli/uClinux-dist/include/gcc/stdarg.h:
 
 ../avahi-common/cdecl.h:
 
