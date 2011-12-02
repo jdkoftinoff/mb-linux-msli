@@ -746,7 +746,7 @@ static int xenet_open(struct net_device *dev)
 	printk("%s: phy_start_aneg() Passed\n",__func__);
       }
     } else {
-      printk("Not able to find Phy");
+      printk("Not able to find Phy\n");
       lp->phy_dev = NULL;
     }
   }

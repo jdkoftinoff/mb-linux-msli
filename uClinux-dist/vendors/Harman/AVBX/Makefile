@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Riedel Artst MicroBlaze system
+# Makefile -- Build instructions for Harman AVBX MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -145,12 +145,6 @@ DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
 
-# Add the Biamp SPI mailbox peripheral device node
-DEVICES += mailbox0,c,255,0
-
-# Add the Biamp legacy packet bridge device node
-DEVICES += legacy_bridge0,c,222,0
-
 # Add the Xilinx SPI Master peripheral device node
 ifdef CONFIG_XILINX_SPI
 DEVICES += spidev0,c,153,0
@@ -196,6 +190,8 @@ romfs:
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
+	$(ROMFSINST) $(COMMON)/etc/rc/avb_startup /etc/init.d/avb_startup
+	$(ROMFSINST) -s /etc/init.d/avb_startup /etc/rc.d/S31avb_startup
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper

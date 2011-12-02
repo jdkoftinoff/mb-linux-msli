@@ -28,6 +28,16 @@ config USER_AVBWEB
     help
       Include the avb controller web app server
 
+config USER_TI_SRC4392
+	bool "Ti SRC4392 setup for AES interface of CAL ICS"
+	help
+	  Include the CAL panel server.
+	  
+config USER_CAL_OLED
+	bool "CAL OLED button daemon - CAL"
+	help
+	  Include the CAL panel server.
+	  	  
 config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"
 	help

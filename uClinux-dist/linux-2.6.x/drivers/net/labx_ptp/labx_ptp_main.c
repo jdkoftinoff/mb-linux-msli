@@ -29,7 +29,6 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/netdevice.h>
-#include <xio.h>
 
 /* Enable this to get some extra link debug messages */
 /* #define DEBUG_LINK */
@@ -59,7 +58,7 @@ static uint32_t instanceCount;
  * This is a Xilinx address since Lab X doesn't have a MAC address range
  * allocated... yet. ;)
  */
-static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
+static uint8_t DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
   0x00, 0x0A, 0x35, 0x00, 0x22, 0xFF
 };
 
@@ -79,54 +78,6 @@ static u8 DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
 #else
 #define DBG(f, x...)
 #endif
-
-/* Interrupt service routine for the instance */
-static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
-{
-  struct ptp_device *ptp = dev_id;
-  uint32_t maskedFlags;
-  uint32_t txCompletedFlags;
-  unsigned long flags;
-  int i;
-
-  for (i=0; i<ptp->numPorts; i++) {
-    /* Read the interrupt flags and immediately clear them */
-    maskedFlags = XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG));
-    maskedFlags &= XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG));
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG), maskedFlags);
-
-    /* Detect the timer IRQ */
-    if((maskedFlags & PTP_TIMER_IRQ) != 0) {
-      /* Kick off the timer tasklet */
-      tasklet_schedule(&ptp->timerTasklet);
-    }
-
-    /* Detect the Rx IRQ */
-    if((maskedFlags & PTP_RX_IRQ) != 0) {
-      /* Kick off the Rx tasklet */
-      tasklet_schedule(&ptp->rxTasklet);
-    }
-  
-    /* Detect the Tx IRQ from any enabled buffer bits */
-    txCompletedFlags = (maskedFlags & PTP_TX_IRQ_MASK);
-    if(txCompletedFlags != PTP_TX_BUFFER_NONE) {
-      /* Add the new pending Tx buffer IRQ flags to the mask in the device
-       * structure for the tasklet to whittle away at.  Lock the mutex so we
-       * avoid a race condition with the Tx tasklet.
-       */
-      preempt_disable();
-      spin_lock_irqsave(&ptp->mutex, flags);
-      ptp->ports[i].pendingTxFlags |= txCompletedFlags;
-      spin_unlock_irqrestore(&ptp->mutex, flags);
-      preempt_enable();
-
-      /* Now kick off the Tx tasklet */
-      tasklet_schedule(&ptp->txTasklet);
-    }
-  }
-  
-  return(IRQ_HANDLED);
-}
 
 /*
  * Character device hook functions
@@ -209,16 +160,13 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
 
       if (on) {
         /* Enable Rx/Tx when the link comes up */
-        XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_TX_REG)) | PTP_TX_ENABLE);
-        XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) | PTP_RX_ENABLE);
 
-        ptp->ports[i].portEnabled = TRUE;
+        ptp_enable_port(ptp,i);
+        ptp->ports[i].portEnabled = 1;
       } else {
         /* Disable Rx/Tx when the link goes down */
-        XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_TX_REG)) & ~PTP_TX_ENABLE);
-        XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) & ~PTP_RX_ENABLE);
-
-        ptp->ports[i].portEnabled = FALSE;
+        ptp_disable_port(ptp,i);
+        ptp->ports[i].portEnabled = 0;
       }
 
       break;
@@ -234,7 +182,7 @@ void ptp_stop_service(struct ptp_device *ptp) {
 
   /* Stopping the service is as simple as disabling all the interrupts */
   for (i=0; i<ptp->numPorts; i++) {
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG), PTP_NO_IRQS);
+    ptp_disable_irqs(ptp,i);
   }
 
   /* Also stop the RTC */
@@ -243,7 +191,6 @@ void ptp_stop_service(struct ptp_device *ptp) {
 
 /* Starts the PTP service */
 void ptp_start_service(struct ptp_device *ptp) {
-  uint32_t irqMask;
   int i;
 
   /* Initialize state machines */
@@ -256,15 +203,8 @@ void ptp_start_service(struct ptp_device *ptp) {
     /* Enable all of the interrupt sources, packet transmission of the messages we
      * need to capture Tx timestamps or send followups for, and packet reception.
      */
-    irqMask = (PTP_TIMER_IRQ | PTP_RX_IRQ | 
-               PTP_TX_IRQ(PTP_TX_SYNC_BUFFER) |
-               PTP_TX_IRQ(PTP_TX_DELAY_REQ_BUFFER) |
-               PTP_TX_IRQ(PTP_TX_PDELAY_REQ_BUFFER) |
-               PTP_TX_IRQ(PTP_TX_PDELAY_RESP_BUFFER));
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG), irqMask);
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG), irqMask);
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_TX_REG), PTP_TX_ENABLE);
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG), PTP_RX_ENABLE);
+    ptp_enable_irqs(ptp,i);
+    ptp_enable_port(ptp,i);
   }
 }
 
@@ -290,15 +230,15 @@ static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortData
   dataSet->neighborPropDelayThresh        = ptp->ports[port].neighborPropDelayThresh;
   dataSet->delayAsymmetry                 = 0;
   dataSet->neighborRateRatio              = ptp->ports[port].neighborRateRatio;
-  dataSet->initialLogAnnounceInterval     = 0; /* TODO */
-  dataSet->currentLogAnnounceInterval     = 0; /* TODO */
-  dataSet->announceReceiptTimeout         = 0; /* TODO */
-  dataSet->initialLogSyncInterval         = 0; /* TODO */
-  dataSet->currentLogSyncInterval         = 0; /* TODO */
-  dataSet->syncReceiptTimeout             = 0; /* TODO */
+  dataSet->initialLogAnnounceInterval     = ptp->ports[port].initialLogAnnounceInterval;
+  dataSet->currentLogAnnounceInterval     = ptp->ports[port].currentLogAnnounceInterval;
+  dataSet->announceReceiptTimeout         = ptp->ports[port].announceReceiptTimeout;
+  dataSet->initialLogSyncInterval         = ptp->ports[port].initialLogSyncInterval;
+  dataSet->currentLogSyncInterval         = ptp->ports[port].currentLogSyncInterval;
+  dataSet->syncReceiptTimeout             = ptp->ports[port].syncReceiptTimeout;
   dataSet->syncReceiptTimeoutTimeInterval = 0; /* TODO */
-  dataSet->initialLogPdelayReqInterval    = 0; /* TODO */
-  dataSet->currentLogPdelayReqInterval    = 0; /* TODO */
+  dataSet->initialLogPdelayReqInterval    = ptp->ports[port].initialLogPdelayReqInterval;
+  dataSet->currentLogPdelayReqInterval    = ptp->ports[port].currentLogPdelayReqInterval;
   dataSet->allowedLostResponses           = ptp->ports[port].allowedLostResponses;
   dataSet->versionNumber                  = 2;
   dataSet->nup                            = 0;
@@ -373,7 +313,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_GET_PORT_PROPERTIES:
     {
       uint32_t copyResult;
-      PtpPortProperties properties;
+      PtpPortProperties properties = {};
 
       /* Copy the port properties from userspace to get the port number */
       copyResult = copy_from_user(&properties, (void __user*)arg, sizeof(PtpPortProperties));
@@ -395,7 +335,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_SET_PORT_PROPERTIES:
     {
       uint32_t copyResult;
-      PtpPortProperties properties;
+      PtpPortProperties properties = {};
 
       /* Copy the userspace argument into the device */
       copyResult = copy_from_user(&properties, (void __user*)arg, sizeof(PtpPortProperties));
@@ -456,7 +396,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
 
   case IOC_PTP_SET_RTC_COEF:
     {
-      PtpCoefficients c;
+      PtpCoefficients c = {};
 
       if(copy_from_user(&c, (void __user*)arg, sizeof(c)) != 0) {
         return(-EFAULT);
@@ -471,7 +411,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_GET_AS_PORT_DATA_SET:
     {
       uint32_t copyResult;
-      PtpAsPortDataSet dataSet;
+      PtpAsPortDataSet dataSet = {};
 
       /* Copy the port properties from userspace to get the port number */
       copyResult = copy_from_user(&dataSet, (void __user*)arg, sizeof(PtpAsPortDataSet));
@@ -491,7 +431,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_GET_AS_PORT_STATISTICS:
     {
       uint32_t copyResult;
-      PtpAsPortStatistics stats;
+      PtpAsPortStatistics stats = {};
 
       /* Copy the port properties from userspace to get the port number */
       copyResult = copy_from_user(&stats, (void __user*)arg, sizeof(PtpAsPortStatistics));
@@ -509,6 +449,13 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_ACK_GM_CHANGE:
     /* Simply acknowledge the Grandmaster change for the instance */
     ack_grandmaster_change(ptp);
+    break;
+
+  case IOC_PTP_GET_RTC_LOCKED:
+    /* Copy the properties into the userspace argument */
+    if (0 != copy_to_user((void __user*)arg, &ptp->rtcLockState, sizeof(uint32_t))) {
+      return (-EFAULT);
+    }
     break;
 
   default:
@@ -580,7 +527,7 @@ static int ptp_probe(const char *name,
   }
 
   /* Inspect and check the version */
-  versionWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_REVISION_REG));
+  versionWord = ptp_get_version(ptp);
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
   versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
@@ -594,13 +541,14 @@ static int ptp_probe(const char *name,
 
   /* Ensure that the interrupts are disabled */
   for (i=0; i<ptp->numPorts; i++) {
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG), PTP_NO_IRQS);
+    ptp_disable_irqs(ptp,i);
     ptp->ports[i].pendingTxFlags = PTP_TX_BUFFER_NONE;
   }
 
   /* Retain the IRQ and register our handler */
   ptp->irq = irq->start;
-  returnValue = request_irq(ptp->irq, &labx_ptp_interrupt, IRQF_DISABLED, "Lab X PTP", ptp);
+
+  returnValue = ptp_setup_interrupt(ptp);
   if (returnValue) {
     printk(KERN_ERR "%s: : Could not allocate Lab X PTP interrupt (%d).\n",
            ptp->name, ptp->irq);
@@ -640,12 +588,7 @@ static int ptp_probe(const char *name,
   kobject_set_name(&ptp->cdev.kobj, "%s.%d", name, ptp->instanceNumber);
   cdev_add(&ptp->cdev, MKDEV(DRIVER_MAJOR, ptp->instanceNumber), 1);
 
-  /* Configure the prescaler and divider used to generate a 10 msec event timer.
-   * The register values are terminal counts, so are one less than the count value.
-   */
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_TIMER_REG), 
-            (((platformData->timerPrescaler - 1) & PTP_PRESCALER_MASK) |
-             (((platformData->timerDivider - 1) & PTP_DIVIDER_MASK) << PTP_DIVIDER_SHIFT)));
+  ptp_setup_event_timer(ptp, 0, platformData);
 
   /* Configure defaults and initialize the transmit templates */
   quality = &ptp->properties.grandmasterClockQuality;

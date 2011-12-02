@@ -27,119 +27,6 @@
 #include "labx_ptp.h"
 #include <xio.h>
 
-/* Bytes in a buffer word */
-#define BYTES_PER_WORD  (4)
-
-/* Ethernet header definitions */
-#define LTF_MASK          (0x0FFFF)
-#define ETH_HEADER_BYTES  (14)
-
-/* PTP header definitions */
-#define PTP_ETHERTYPE        (0x88F7)
-#define TS_SPEC_ETH_AVB    (0x01)
-#define PTP_VERSION_2_0      (0x02)
-#define MSG_LENGTH_MASK      (0x0FFFF)
-#define DOMAIN_NUM_MASK      (0x0FF)
-#define FLAGS_FIELD_MASK     (0x0FFFF)
-#  define FLAG_SECURITY       (0x8000)
-#  define FLAG_PROF_SPEC_2    (0x4000)
-#  define FLAG_PROF_SPEC_1    (0x2000)
-#  define FLAG_UNICAST        (0x0400)
-#  define FLAG_TWO_STEP       (0x0200)
-#  define FLAG_ALT_MASTER     (0x0100)
-#  define FLAG_FREQ_TRACE     (0x0020)
-#  define FLAG_TIME_TRACE     (0x0010)
-#  define FLAG_PTP_TIMESCALE  (0x0008)
-#  define FLAG_UTC_OFF_VALID  (0x0004)
-#  define FLAG_LEAP_59        (0x0002)
-#  define FLAG_LEAP_61        (0x0001)
-
-/* Number of words comprising a hardware timestamp (transmit or receive) */
-#define HW_TIMESTAMP_WORDS  (3)
-
-/* Word-aligned offsets for fields which are dynamically changed or
- * inspected upon reception
- */
-#define PACKET_BUFFER_WORDS     (PTP_MAX_PACKET_BYTES / BYTES_PER_WORD)
-#define SOURCE_MAC_OFFSET       ( 1 * BYTES_PER_WORD)
-#define MESSAGE_TYPE_OFFSET     ( 3 * BYTES_PER_WORD)
-#define DOMAIN_NUMBER_OFFSET    ( 4 * BYTES_PER_WORD)
-#define CORRECTION_FIELD_OFFSET ( 5 * BYTES_PER_WORD)
-#define SOURCE_PORT_ID_OFFSET   ( 8 * BYTES_PER_WORD)
-#define SEQUENCE_ID_OFFSET      (11 * BYTES_PER_WORD)
-#define TIMESTAMP_OFFSET        (12 * BYTES_PER_WORD)
-#define UTC_OFFSET_OFFSET       (14 * BYTES_PER_WORD)
-#define REQ_PORT_ID_OFFSET      (14 * BYTES_PER_WORD)
-#define GM_PRIORITY1_OFFSET     (15 * BYTES_PER_WORD)
-
-/* Port-width-specific offsets for timestamp words in the buffers;
- * the data alignment from the network side to the host interface
- * necessitates skipping words in the block RAMs.
- */
-#define HW_TIMESTAMP_OFFSET_X8        ((PACKET_BUFFER_WORDS - HW_TIMESTAMP_WORDS) * BYTES_PER_WORD)
-#define HW_LOCAL_TIMESTAMP_OFFSET_X8  (HW_TIMESTAMP_OFFSET_X8 - (HW_TIMESTAMP_WORDS * BYTES_PER_WORD))
-#define HW_TIMESTAMP_OFFSET_X64       ((PACKET_BUFFER_WORDS - (2 * HW_TIMESTAMP_WORDS)) * BYTES_PER_WORD)
-#define HW_LOCAL_TIMESTAMP_OFFSET_X64 (HW_TIMESTAMP_OFFSET_X64 - (2 * HW_TIMESTAMP_WORDS * BYTES_PER_WORD))
-
-/* Additional offset applied for the transmit buffers, since the first
- * word holds the packet length (minus one.)  Additionally, the second
- * word must be skipped for 64-bit port instances.
- */
-#define TX_LENGTH_OFFSET   (0 * BYTES_PER_WORD)
-#define TX_DATA_OFFSET_X8  (1 * BYTES_PER_WORD)
-#define TX_DATA_OFFSET_X64 (2 * BYTES_PER_WORD)
-
-#define TX_DATA_OFFSET(ptp) ((ptp->portWidth == 8) ? TX_DATA_OFFSET_X8 : TX_DATA_OFFSET_X64)
-
-/* Amount to be decremented from a packet length to form the length word
- * expected by the transmit hardware as the first word of each Tx buffer
- */
-#define TX_LENGTH_SUB_X8  (1)
-#define TX_LENGTH_SUB_X64 (8)
-
-#define TX_LENGTH_SUB(ptp) ((ptp->portWidth == 8) ? TX_LENGTH_SUB_X8 : TX_LENGTH_SUB_X64)
-
-/* Length, in bytes, of each packet type we transmit */
-#define PTP_ANNOUNCE_LENGTH         (64)
-#define PTP_SYNC_LENGTH             (44)
-#define PTP_FUP_LENGTH              (44)
-#define PTP_DELAY_REQ_LENGTH        (44)
-#define PTP_DELAY_RESP_LENGTH       (54)
-#define PTP_PDELAY_REQ_LENGTH       (54)
-#define PTP_PDELAY_RESP_LENGTH      (54)
-#define PTP_PDELAY_RESP_FUP_LENGTH  (54)
-
-/* TLV Types */
-#define ORGANIZATION_EXTENSION_TLV_TYPE 0x0003
-#define PATH_TRACE_TLV_TYPE             0x0008
-
-/* TLV Sizes */
-#define TLV_HEADER_LENGTH                4
-#define PATH_TRACE_TLV_LENGTH(n)         (8*(n))
-#define FOLLOW_UP_INFORMATION_TLV_LENGTH 0x28
-
-/**
- * Common helper methods
- */
-
-/* Writes a word to a packet buffer at the passed offset.  The offset is
- * advanced to the next word.
- */
-static void write_packet(uint32_t bufferBase, uint32_t *wordOffset, 
-                         uint32_t writeWord) {
-  XIo_Out32((bufferBase + *wordOffset), writeWord);
-  *wordOffset += BYTES_PER_WORD;
-}
-
-/* Reads a word from a packet buffer at the passed offset.  The offset is
- * advanced to the next word.
- */
-static uint32_t read_packet(uint32_t bufferBase, uint32_t *wordOffset) {
-  uint32_t readWord = XIo_In32(bufferBase + *wordOffset);
-  *wordOffset += BYTES_PER_WORD;
-  return(readWord);
-}
-
 /**
  * Packet transmission methods
  */
@@ -147,10 +34,9 @@ static uint32_t read_packet(uint32_t bufferBase, uint32_t *wordOffset) {
 /* Builds the common PTP header into the passed buffer using the passed word offset,
  * which should be set to zero prior to the call.
  */
-static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, 
+static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, 
                             uint32_t *wordOffset, uint32_t messageType,
                             uint32_t messageLength, uint16_t headerFlags) {
-  uint32_t bufferBase;
   uint32_t packetWord;
   PtpPortProperties *portProperties = &ptp->ports[port].portProperties;
 
@@ -159,12 +45,10 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
    * minus one full port word, in bytes (which differs between 100M/1G and 10G).
    */
   *wordOffset = 0; 
-  bufferBase = PTP_TX_PACKET_BUFFER(ptp, port, txBuffer);
-  write_packet(bufferBase, wordOffset, (ETH_HEADER_BYTES + messageLength - TX_LENGTH_SUB(ptp)));
+  write_packet(txBuffer, wordOffset, (ETH_HEADER_BYTES + messageLength - TX_LENGTH_SUB(ptp)));
 
   /* Now begin at the Tx data base, which differs based upon port width */
-  *wordOffset = 0;
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+  *wordOffset = TX_DATA_OFFSET(ptp);
 
   /* Begin with the destination and source MAC addresses.
    * The following multicast MAC addresses are used for PTP:
@@ -179,40 +63,40 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
    */
   if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
     /* Peer-to-peer (802.1AS) */
-    write_packet(bufferBase, wordOffset, 0x0180C200);
+    write_packet(txBuffer, wordOffset, 0x0180C200);
     packetWord = 0x000E0000;
     packetWord |= (portProperties->sourceMacAddress[0] << 8);
     packetWord |= portProperties->sourceMacAddress[1];
-    write_packet(bufferBase, wordOffset, packetWord);
+    write_packet(txBuffer, wordOffset, packetWord);
   } else {
     /* End-to-end (legacy PTP 2.0) */
-    write_packet(bufferBase, wordOffset, 0x011B1900);
+    write_packet(txBuffer, wordOffset, 0x011B1900);
     packetWord = 0x00000000;
     packetWord |= (portProperties->sourceMacAddress[0] << 8);
     packetWord |= portProperties->sourceMacAddress[1];
-    write_packet(bufferBase, wordOffset, packetWord);
+    write_packet(txBuffer, wordOffset, packetWord);
   }
   packetWord = (portProperties->sourceMacAddress[2] << 24);
   packetWord |= (portProperties->sourceMacAddress[3] << 16);
   packetWord |= (portProperties->sourceMacAddress[4] << 8);
   packetWord |= portProperties->sourceMacAddress[5];
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
 
   /* PTP EtherType and the first two PTP header bytes */
   packetWord = (PTP_ETHERTYPE << 16);
   packetWord |= (TS_SPEC_ETH_AVB << 12);
   packetWord |= ((messageType & MSG_TYPE_MASK) << 8);
   packetWord |= PTP_VERSION_2_0;
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
 
   /* Message length, domain number, and reserved field */
   packetWord = ((messageLength & MSG_LENGTH_MASK) << 16);
   packetWord |= ((ptp->properties.domainNumber & DOMAIN_NUM_MASK) << 8);
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
 
   /* Assign the passed flags into the flag field, clear the correction field */
   packetWord = (headerFlags << 16);
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
 
   /* Clear out the flag field, correction field, four reserved bytes,
    * and set the 80-bit source ID to be our clockIdentity, port zero.
@@ -220,52 +104,52 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint32_t txBu
    * OUI and serial number are the first three and last three bytes of
    * our MAC address, respectively.
    */
-  write_packet(bufferBase, wordOffset, 0x00000000);
-  write_packet(bufferBase, wordOffset, 0x00000000);
+  write_packet(txBuffer, wordOffset, 0x00000000);
+  write_packet(txBuffer, wordOffset, 0x00000000);
   packetWord = (ptp->properties.grandmasterIdentity[0] << 8);
   packetWord |= ptp->properties.grandmasterIdentity[1];
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
   packetWord = (ptp->properties.grandmasterIdentity[2] << 24);
   packetWord |= (ptp->properties.grandmasterIdentity[3] << 16);
   packetWord |= (ptp->properties.grandmasterIdentity[4] << 8);
   packetWord |= ptp->properties.grandmasterIdentity[5];
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
   packetWord = (ptp->properties.grandmasterIdentity[6] << 24);
   packetWord |= (ptp->properties.grandmasterIdentity[7] << 16);
-  write_packet(bufferBase, wordOffset, packetWord);
+  write_packet(txBuffer, wordOffset, packetWord);
 
   /* Clear the sequence ID and log message interval to zero, and set the
    * control field appropriately for the message type.
    */
   switch(messageType) {
   case MSG_SYNC:
-    write_packet(bufferBase, wordOffset, 0x00000000);
+    write_packet(txBuffer, wordOffset, 0x00000000);
     break;
 
   case MSG_DELAY_REQ:
-    write_packet(bufferBase, wordOffset, 0x00000100);
+    write_packet(txBuffer, wordOffset, 0x00000100);
     break;
 
   case MSG_FUP:
-    write_packet(bufferBase, wordOffset, 0x00000200);
+    write_packet(txBuffer, wordOffset, 0x00000200);
     break;
 
   case MSG_DELAY_RESP:
-    write_packet(bufferBase, wordOffset, 0x00000300);
+    write_packet(txBuffer, wordOffset, 0x00000300);
     break;
 
   case MSG_MANAGEMENT:
-    write_packet(bufferBase, wordOffset, 0x00000400);
+    write_packet(txBuffer, wordOffset, 0x00000400);
     break;
 
   default:
-    write_packet(bufferBase, wordOffset, 0x00000500);
+    write_packet(txBuffer, wordOffset, 0x00000500);
   }
 }
 
 /* Initializes the ANNOUNCE message transmit template */
 static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t *txBuffer;
   uint32_t wordOffset;
   uint32_t packetWord;
   PtpClockQuality *quality;
@@ -273,16 +157,16 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
   /* Clear out all dynamic fields and populate static ones with properties from
    * the PTP device structure.
    */
-  init_ptp_header(ptp, port, PTP_TX_ANNOUNCE_BUFFER, &wordOffset, MSG_ANNOUNCE, 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_ANNOUNCE_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_ANNOUNCE, 
                   PTP_ANNOUNCE_LENGTH + TLV_HEADER_LENGTH + PATH_TRACE_TLV_LENGTH(1),
                   (uint16_t) (FLAG_TWO_STEP|FLAG_PTP_TIMESCALE));
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_ANNOUNCE_BUFFER) + TX_DATA_OFFSET(ptp));
 
   /* Clear originTimestamp and set currentUtcOffset */
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
   packetWord = (ptp->properties.currentUtcOffset & 0x0000FFFF);
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
 
   /* Clear reserved, and set the grandmaster properties.  Initialize the stepsRemoved
    * field to zero since the packet's source.
@@ -291,22 +175,22 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
   packetWord = (ptp->properties.grandmasterPriority1 << 16);
   packetWord |= (quality->clockClass << 8);
   packetWord |= quality->clockAccuracy;
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = (quality->offsetScaledLogVariance << 16);
   packetWord |= (ptp->properties.grandmasterPriority2 << 8);
   packetWord |= ptp->properties.grandmasterIdentity[0];
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = ((ptp->properties.grandmasterIdentity[1] << 24) | 
                 (ptp->properties.grandmasterIdentity[2] << 16) | 
                 (ptp->properties.grandmasterIdentity[3] << 8)  |
                 ptp->properties.grandmasterIdentity[4]);
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = ((ptp->properties.grandmasterIdentity[5] << 24) | 
                 (ptp->properties.grandmasterIdentity[6] << 16) | 
                 (ptp->properties.grandmasterIdentity[7] << 8));
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = (ptp->properties.timeSource << 16) | PATH_TRACE_TLV_TYPE;
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
 
   /* Add the path trace TLV info. TODO: If we are ever forwarding
      announce packets then this needs to be modified to include
@@ -314,96 +198,100 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
   packetWord = ((1/*entries*/*8) << 16) |
                (ptp->properties.grandmasterIdentity[0] << 8) |
                ptp->properties.grandmasterIdentity[1];
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = (ptp->properties.grandmasterIdentity[2] << 24) |
                (ptp->properties.grandmasterIdentity[3] << 16) |
                (ptp->properties.grandmasterIdentity[4] << 8) |
                ptp->properties.grandmasterIdentity[5];
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = (ptp->properties.grandmasterIdentity[6] << 24) |
                (ptp->properties.grandmasterIdentity[7] << 16);
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
 }
 
 /* Initializes the SYNC message transmit template */
 static void init_sync_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t * txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the originTimestamp for good measure. */
-  init_ptp_header(ptp, port, PTP_TX_SYNC_BUFFER, &wordOffset, MSG_SYNC, PTP_SYNC_LENGTH,
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_SYNC, PTP_SYNC_LENGTH,
                   (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_SYNC_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+  txBuffer = get_output_buffer(ptp, port, PTP_TX_SYNC_BUFFER);
+  write_packet(txBuffer , &wordOffset, 0x00000000);
+  write_packet(txBuffer , &wordOffset, 0x00000000);
+  write_packet(txBuffer , &wordOffset, 0x00000000);
 }
 
 /* Initializes the FUP message transmit template */
 static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t * txBuffer;
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Initialize the header, and clear the preciseOriginTimestamp for good measure */
-  init_ptp_header(ptp, port, PTP_TX_FUP_BUFFER, &wordOffset, MSG_FUP,
+  txBuffer = get_output_buffer(ptp, port, PTP_TX_FUP_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_FUP,
                   PTP_FUP_LENGTH + TLV_HEADER_LENGTH + FOLLOW_UP_INFORMATION_TLV_LENGTH,
                   (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_FUP_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
   packetWord = ORGANIZATION_EXTENSION_TLV_TYPE;
-  write_packet(bufferBase, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, packetWord);
 
   /* Add the follow-up information TLV */
   packetWord = (FOLLOW_UP_INFORMATION_TLV_LENGTH << 16) | 0x0080;
-  write_packet(bufferBase, &wordOffset, packetWord);
-  write_packet(bufferBase, &wordOffset, 0xC2000001);
-  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: rate ratio is 1.0 unless we can forward */
-  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0xFFFF0000 */
-  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: lastGmPhaseChange*/
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000); /* TODO: scaledLastGmFreqChange */
+  write_packet(txBuffer, &wordOffset, packetWord);
+  write_packet(txBuffer, &wordOffset, 0xC2000001);
+  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: rate ratio is 1.0 unless we can forward */
+  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0xFFFF0000 */
+  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: lastGmPhaseChange*/
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: scaledLastGmFreqChange */
 }
 
 /* Initializes the DELAY_REQ message transmit template */
 static void init_delay_request_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t * txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the originTimestamp for good measure */
-  init_ptp_header(ptp, port, PTP_TX_DELAY_REQ_BUFFER, &wordOffset, MSG_DELAY_REQ, 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_REQ_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_DELAY_REQ, 
                   PTP_DELAY_REQ_LENGTH, (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_DELAY_REQ_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
 }
 
 /* Initializes the DELAY_RESP message transmit template */
 static void init_delay_response_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t *txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the requestReceiptTimestamp and
    * requestingPortIdentity for good measure 
    */
-  init_ptp_header(ptp, port, PTP_TX_DELAY_RESP_BUFFER, &wordOffset, MSG_DELAY_RESP,
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_RESP_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_DELAY_RESP,
                   PTP_DELAY_RESP_LENGTH, (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_DELAY_RESP_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
 }
 
 /* Initializes the PDELAY_REQ message transmit template */
 static void init_pdelay_request_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t *txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the originTimestamp for good measure.
@@ -411,55 +299,58 @@ static void init_pdelay_request_template(struct ptp_device *ptp, uint32_t port) 
    * set to zero and are sized to match that of the PDELAY_RESP message in
    * an attempt to minimize path asymmetry through bridges.
    */
-  init_ptp_header(ptp, port, PTP_TX_PDELAY_REQ_BUFFER, &wordOffset, MSG_PDELAY_REQ, 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_PDELAY_REQ, 
                   PTP_PDELAY_REQ_LENGTH, (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_PDELAY_REQ_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
 }
 
 /* Initializes the PDELAY_RESP message transmit template */
 static void init_pdelay_response_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t * txBuffer ;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the requestReceiptTimestamp and
    * requestingPortIdentity for good measure 
    */
-  init_ptp_header(ptp, port, PTP_TX_PDELAY_RESP_BUFFER, &wordOffset, MSG_PDELAY_RESP,
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_RESP_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_PDELAY_RESP,
                   PTP_PDELAY_RESP_LENGTH, (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_PDELAY_RESP_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
 }
 
 /* Initializes the PDELAY_RESP_FUP message transmit template */
 static void init_pdelay_response_fup_template(struct ptp_device *ptp, uint32_t port) {
-  uint32_t bufferBase;
+  uint8_t *txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the responseOriginTimestamp and
    * requestingPortIdentity for good measure 
    */
-  init_ptp_header(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER, &wordOffset, 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_RESP_FUP_BUFFER);
+  init_ptp_header(ptp, port, txBuffer, &wordOffset, 
                   MSG_PDELAY_RESP_FUP, PTP_PDELAY_RESP_FUP_LENGTH, 
                   (uint16_t) FLAG_TWO_STEP);
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER) + TX_DATA_OFFSET(ptp));
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
-  write_packet(bufferBase, &wordOffset, 0x00000000);
+
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000);
 }
 
 /* Initializes the transmit packet buffers with their packet templates */
@@ -479,14 +370,14 @@ void init_tx_templates(struct ptp_device *ptp, uint32_t port) {
 }
 
 /* Sets the sequence ID within the passed packet buffer */
-static void set_sequence_id(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, 
+static void set_sequence_id(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer, 
                             uint16_t sequenceId) {
-  uint32_t bufferBase;
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Read, modify, and write back the sequence ID */
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
 
   /* Locate the sequence ID in the packet */
   wordOffset = SEQUENCE_ID_OFFSET;
@@ -499,14 +390,13 @@ static void set_sequence_id(struct ptp_device *ptp, uint32_t port, uint32_t txBu
 
 /* Gets the sequence ID within the passed packet buffer */
 uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                         uint32_t packetBuffer) {
-  uint32_t bufferBase;
+                         uint8_t * packetBuffer) {
+  uint8_t *bufferBase;
   uint32_t wordOffset;
 
   /* Read and return the sequence ID */
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+  bufferBase = (bufferDirection == TRANSMITTED_PACKET) ? packetBuffer + TX_DATA_OFFSET(ptp) : packetBuffer; 
+                
 
   /* Locate the sequence ID in the packet */
   wordOffset = SEQUENCE_ID_OFFSET;
@@ -515,14 +405,12 @@ uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection 
 
 /* Gets the message timestamp (e.g. originTimestamp) within the passed packet buffer */
 void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                   uint32_t packetBuffer, PtpTime *timestamp) {
-  uint32_t bufferBase;
+                   uint8_t * packetBuffer, PtpTime *timestamp) {
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+  bufferBase = (bufferDirection == TRANSMITTED_PACKET) ? packetBuffer + TX_DATA_OFFSET(ptp) : packetBuffer;
 
   /* Locate the timestamp in the packet */
   wordOffset = TIMESTAMP_OFFSET;
@@ -537,8 +425,7 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
 }
 
 /* Gets the correction field from the passed Rx packet buffer */
-void get_correction_field(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, PtpTime *correctionField) {
-  uint32_t bufferBase;
+void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpTime *correctionField) {
   uint32_t wordOffset;
   uint32_t packetWord;
   int64_t rawField;
@@ -546,24 +433,29 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint32_t rxBuff
   /* Presume we are dealing with less than a second of correction */
   correctionField->secondsUpper = 0;
   correctionField->secondsLower = 0;
-  bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
   wordOffset = CORRECTION_FIELD_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   rawField = ((int64_t) (packetWord & 0x0000FFFF) << 48);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   rawField |= (((int64_t) packetWord) << 16);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   rawField |= (int64_t) ((packetWord & 0xFFFF0000) >> 16);
   correctionField->nanoseconds = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
 }
 
+/* Get the cumulative scaled rate offset from the follow-up TLV */
+uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer) {
+  uint32_t wordOffset = CUMULATIVE_SCALED_RATE_OFFSET_OFFSET;
+  return read_packet(rxBuffer, &wordOffset);
+}
+
 /* Sets the message timestamp (e.g. originTimestamp) within the passed packet buffer */
-static void set_timestamp(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer, PtpTime *timestamp) {
-  uint32_t bufferBase;
+static void set_timestamp(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer, PtpTime *timestamp) {
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
 
   /* Locate the timestamp in the packet */
   wordOffset = TIMESTAMP_OFFSET;
@@ -582,13 +474,13 @@ static void set_timestamp(struct ptp_device *ptp, uint32_t port, uint32_t txBuff
 /* Updates the correctionField for an outgoing packet */
 static void update_correction_field(struct ptp_device *ptp, 
                                     uint32_t port, 
-                                    uint32_t txBuffer,
+                                    uint8_t *txBuffer,
                                     int64_t correctionField) {
-  uint32_t bufferBase;
+  uint8_t *bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+  bufferBase =  txBuffer + TX_DATA_OFFSET(ptp);
 
   /* Locate the correction field in the packet */
   wordOffset = CORRECTION_FIELD_OFFSET;
@@ -609,13 +501,13 @@ static void update_correction_field(struct ptp_device *ptp,
   /* Sets the requestingPortIdentity field of a delay response packet */
 static void set_requesting_port_id(struct ptp_device *ptp, 
                                    uint32_t port, 
-                                   uint32_t txBuffer,
+                                   uint8_t *txBuffer,
                                    uint8_t *requestPortId) {
-  uint32_t bufferBase;
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
-  bufferBase = (PTP_TX_PACKET_BUFFER(ptp, port, txBuffer) + TX_DATA_OFFSET(ptp));
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
 
   /* Locate the requesting port ID in the packet */
   wordOffset = REQ_PORT_ID_OFFSET;
@@ -632,267 +524,193 @@ static void set_requesting_port_id(struct ptp_device *ptp,
   write_packet(bufferBase, &wordOffset, packetWord);
 }
 
-/* Gets the hardware timestamp located within the passed packet buffer.
- * It is up to the client code to ascertain that a valid timestamp exists; that is,
- * a packet has either been transmitted from or received into the buffer.
- */
-void get_hardware_timestamp(struct ptp_device *ptp, 
-                            uint32_t port, 
-                            PacketDirection bufferDirection,
-                            uint32_t packetBuffer, 
-                            PtpTime *timestamp) {
-  uint32_t bufferBase;
-  uint32_t wordOffset;
-  uint32_t skipIncrement;
-
-  /* Fetch the hardware timestamp from the end of the specified packet buffer and pack
-   * it into the passed timestamp structure.  Don't offset the Tx packet buffer by
-   * its data offset in this case, since we're not going to be reading relative to
-   * the start of data, but relative to the end of the buffer instead!
-   */
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) :
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
-
-  /* If the port is 64 bits wide, the Tx or Rx hardware must write full 64-bit
-   * words into the buffer, even for the timestamp data.  This affects where the
-   * timestamp data must begin, as well as the stride between two values.
-   */
-  wordOffset = (ptp->portWidth == 8) ? HW_TIMESTAMP_OFFSET_X8 : HW_TIMESTAMP_OFFSET_X64;
-  skipIncrement = (ptp->portWidth == 8) ? 0 : BYTES_PER_WORD;
-  timestamp->secondsUpper = (int32_t)(read_packet(bufferBase, &wordOffset) & 0x0FFFF);
-  wordOffset += skipIncrement;
-  timestamp->secondsLower = read_packet(bufferBase, &wordOffset);
-  wordOffset += skipIncrement;
-  timestamp->nanoseconds  = read_packet(bufferBase, &wordOffset);
-}
-
-/* Gets the local hardware timestamp located within the passed packet buffer.
- * This is the same as get_hardware_timestamp except it is from a local clock
- * that is running at a fixed rate unmodified by PTP.
- */
-void get_local_hardware_timestamp(struct ptp_device *ptp, 
-                                  uint32_t port, 
-                                  PacketDirection bufferDirection,
-                                  uint32_t packetBuffer, 
-                                  PtpTime *timestamp) {
-  uint32_t bufferBase;
-  uint32_t wordOffset;
-  uint32_t skipIncrement;
-
-  /* Fetch the hardware timestamp from the end of the specified packet buffer and pack
-   * it into the passed timestamp structure.  Don't offset the Tx packet buffer by
-   * its data offset in this case, since we're not going to be reading relative to
-   * the start of data, but relative to the end of the buffer instead!
-   */
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) :
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
-  wordOffset = (ptp->portWidth == 8) ? HW_LOCAL_TIMESTAMP_OFFSET_X8 : HW_LOCAL_TIMESTAMP_OFFSET_X64;
-  skipIncrement = (ptp->portWidth == 8) ? 0 : BYTES_PER_WORD;
-  timestamp->secondsUpper = (int32_t)(read_packet(bufferBase, &wordOffset) & 0x0FFFF);
-  wordOffset += skipIncrement;
-  timestamp->secondsLower = read_packet(bufferBase, &wordOffset);
-  wordOffset += skipIncrement;
-  timestamp->nanoseconds  = read_packet(bufferBase, &wordOffset);
-}
-
 void print_packet_buffer(struct ptp_device *ptp,
                          uint32_t port, 
                          PacketDirection bufferDirection,
-                         uint32_t packetBuffer,
+                         uint8_t *packetBuffer,
                          uint32_t packetWords) {
-  uint32_t bufferBase;
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t wordIndex;
 
   /* Print the entire contents of the packet buffer, skipping the length for Tx
    * buffers
    */
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+  bufferBase = (bufferDirection == TRANSMITTED_PACKET) ? packetBuffer + TX_DATA_OFFSET(ptp):packetBuffer;
+                
   wordOffset = 0;
   for(wordIndex = 0; wordIndex < packetWords; wordIndex++) {
     printk("0x%08X\n", read_packet(bufferBase, &wordOffset));
   }
 }
 
-/* Transmits the packet within the specified buffer.  The first word of the
- * buffer must contain the packet length minus one, in bytes.
- */
-static void transmit_packet(struct ptp_device *ptp, uint32_t port, uint32_t txBuffer) {
-  /* Don't bother checking the busy flag; it only exists to ensure that we know the
-   * pending flags are valid.  We're not using them anyways - the only hazard that
-   * exists is if we attempt to send two packets from the same buffer simultaneously.
-   */
-  XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG), 
-            (PTP_TX_BUFFER(txBuffer) | PTP_TX_ENABLE));
-}
-
 /* Transmits the next ANNOUNCE message in a sequence */
 void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
+  uint8_t *txBuffer;
 
   /* Update the sequence ID */
-  set_sequence_id(ptp, port, PTP_TX_ANNOUNCE_BUFFER, ptp->ports[port].announceSequenceId++);
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_ANNOUNCE_BUFFER);
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].announceSequenceId++);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, PTP_TX_ANNOUNCE_BUFFER, &presentTime);
+  set_timestamp(ptp, port, txBuffer, &presentTime);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txAnnounceCount++;
 }
 
 /* Transmits the next SYNC message in a sequence */
 void transmit_sync(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
-  int64_t correctionField; 
+  int64_t correctionField;
+  uint8_t *txBuffer; 
 
   /* Update the sequence ID */
-  set_sequence_id(ptp, port, PTP_TX_SYNC_BUFFER, ptp->ports[port].syncSequenceId++);
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].syncSequenceId++);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, PTP_TX_SYNC_BUFFER, &presentTime);
+  set_timestamp(ptp, port, txBuffer, &presentTime);
 
   /* Update the correction field.
    * TODO: This should always be zero except if we are acting as a transparent clock 
    */
   correctionField = (int64_t) 0;
   correctionField <<= CORRECTION_FRACTION_BITS;
-  update_correction_field(ptp, port, PTP_TX_SYNC_BUFFER, correctionField);
+  update_correction_field(ptp, port, txBuffer , correctionField);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_SYNC_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txSyncCount++;
 }
 
 /* Transmits a FUP message related to the last SYNC message that was sent */
 void transmit_fup(struct ptp_device *ptp, uint32_t port) {
+  uint8_t *txFupBuffer;
+  uint8_t *txSyncBuffer;
   PtpTime syncTxTimestamp;
-  PtpTime syncTxTimestampPhy;
   int64_t correctionField; 
 
+  txFupBuffer = get_output_buffer(ptp,port,PTP_TX_FUP_BUFFER);
+  txSyncBuffer= get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
   /* Copy the sequence ID from the last SYNC message we sent */
-  set_sequence_id(ptp, port, PTP_TX_FUP_BUFFER, 
-                  get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_SYNC_BUFFER));
+  set_sequence_id(ptp, port, txFupBuffer, 
+                  get_sequence_id(ptp, port, TRANSMITTED_PACKET, txSyncBuffer));
 
   /* Update the precise origin timestamp with the hardware timestamp from when
    * the preceding SYNC was accepted into the MAC, augmented by the MAC's TX
    * latency.
    */
-  get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, PTP_TX_SYNC_BUFFER, &syncTxTimestamp);
+  get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txSyncBuffer, &syncTxTimestamp);
 
-  /* Add in the MAC latency and the PHY latency */
-  timestamp_sum(&syncTxTimestamp, &ptp->ports[port].txPhyMacDelay, &syncTxTimestampPhy);
-
-  set_timestamp(ptp, port, PTP_TX_FUP_BUFFER, &syncTxTimestampPhy);
+  set_timestamp(ptp, port, txFupBuffer, &syncTxTimestamp);
 
   /* Update the correction field.
    * TODO: This should always be zero except if we are acting as a transparent clock 
    */
   correctionField = (int64_t) 0;
   correctionField <<= CORRECTION_FRACTION_BITS;
-  update_correction_field(ptp, port, PTP_TX_SYNC_BUFFER, correctionField);
+  update_correction_field(ptp, port, txSyncBuffer, correctionField);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_FUP_BUFFER);
+  transmit_packet(ptp, port, txFupBuffer);
   ptp->ports[port].stats.txFollowupCount++;
 }
 
 /* Transmits the next DELAY_REQ message in a sequence */
 void transmit_delay_request(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
+  uint8_t *txBuffer;
 
   /* Update the sequence ID */
-  set_sequence_id(ptp, port, PTP_TX_DELAY_REQ_BUFFER, ptp->ports[port].delayReqSequenceId++);
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_REQ_BUFFER);
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].delayReqSequenceId++);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, PTP_TX_DELAY_REQ_BUFFER, &presentTime);
+  set_timestamp(ptp, port, txBuffer, &presentTime);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_DELAY_REQ_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
 }
 
 /* Transmits a DELAY_RESP message in response to the DELAY_REQ message received
  * into the passed Rx packet buffer
  */
-void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer) {
+void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
   PtpTime delayReqRxTimestamp;
-  PtpTime delayReqRxTimestampPhy;
   uint8_t requestPortId[PORT_ID_BYTES];
   uint16_t delayReqSequenceId;
+  uint8_t *txBuffer;
   
   /* Get the source MAC address and sequence ID of the delay request */
   get_source_port_id(ptp, port, RECEIVED_PACKET, requestRxBuffer, requestPortId);
   delayReqSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, requestRxBuffer);
 
   /* Update the sequence ID and requesting port identity */
-  set_sequence_id(ptp, port, PTP_TX_DELAY_RESP_BUFFER, delayReqSequenceId);
-  set_requesting_port_id(ptp, port, PTP_TX_DELAY_RESP_BUFFER, requestPortId);
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_RESP_BUFFER);
+  set_sequence_id(ptp, port, txBuffer, delayReqSequenceId);
+  set_requesting_port_id(ptp, port, txBuffer, requestPortId);
 
   /* Update the requestReceiptTimestamp with the timestamp captured in the delay
    * request's Rx buffer
    */
   get_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &delayReqRxTimestamp);
 
-  /* Subtract the MAC latency and the PHY latency */
-  timestamp_difference(&delayReqRxTimestamp, &ptp->ports[port].rxPhyMacDelay, &delayReqRxTimestampPhy);
-
-  set_timestamp(ptp, port, PTP_TX_DELAY_RESP_BUFFER, &delayReqRxTimestampPhy);
+  set_timestamp(ptp, port, txBuffer, &delayReqRxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_DELAY_RESP_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
 }
 
 /* Transmits the next PDELAY_REQ message in a sequence */
 void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
+  uint8_t *txBuffer;
 
+  txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
   /* Update the sequence ID */
-  set_sequence_id(ptp, port, PTP_TX_PDELAY_REQ_BUFFER, ptp->ports[port].pdelayReqSequenceId++);
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId++);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, PTP_TX_PDELAY_REQ_BUFFER, &presentTime);
+  set_timestamp(ptp, port, txBuffer, &presentTime);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_PDELAY_REQ_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txPDelayRequestCount++;
 }
 
 /* Transmits a PDELAY_RESP message in response to the PDELAY_REQ message received
  * into the passed Rx packet buffer
  */
-void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint32_t requestRxBuffer) {
+void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
   PtpTime pdelayReqRxTimestamp;
-  PtpTime pdelayReqRxTimestampPhy;
   uint16_t pdelayReqSequenceId;
+  uint8_t *txBuffer;
   
   /* Get the source port identity address and sequence ID of the peer delay request */
   get_source_port_id(ptp, port, RECEIVED_PACKET, requestRxBuffer, ptp->ports[port].lastPeerRequestPortId);
   pdelayReqSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, requestRxBuffer);
 
   /* Update the sequence ID and requesting port identity */
-  set_sequence_id(ptp, port, PTP_TX_PDELAY_RESP_BUFFER, pdelayReqSequenceId);
-  set_requesting_port_id(ptp, port, PTP_TX_PDELAY_RESP_BUFFER, ptp->ports[port].lastPeerRequestPortId);
+  txBuffer = get_output_buffer(ptp, port, PTP_TX_PDELAY_RESP_BUFFER);
+  set_sequence_id(ptp, port, txBuffer, pdelayReqSequenceId);
+  set_requesting_port_id(ptp, port, txBuffer, ptp->ports[port].lastPeerRequestPortId);
 
   /* Update the requestReceiptTimestamp with the timestamp captured in the peer delay
    * request's Rx buffer
    */
   get_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
 
-  /* Subtract the MAC latency and the PHY latency */
-  timestamp_difference(&pdelayReqRxTimestamp, &ptp->ports[port].rxPhyMacDelay, &pdelayReqRxTimestampPhy);
-
-  set_timestamp(ptp, port, PTP_TX_PDELAY_RESP_BUFFER, &pdelayReqRxTimestampPhy);
+  set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_PDELAY_RESP_BUFFER);
+  transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txPDelayResponseCount++;
 }
 
@@ -901,29 +719,30 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint32_t re
  */
 void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
   PtpTime pdelayRespTxTimestamp;
-  PtpTime pdelayRespTxTimestampPhy;
+  uint8_t *txFupBuffer;
+  uint8_t *txRespBuffer;
+
+  txFupBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_RESP_FUP_BUFFER);
+  txRespBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_RESP_BUFFER);
 
   /* Copy the sequence ID from the last PDELAY_RESP message we sent */
-  set_sequence_id(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER, 
-                  get_sequence_id(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_RESP_BUFFER));
+  set_sequence_id(ptp, port, txFupBuffer, 
+                  get_sequence_id(ptp, port, TRANSMITTED_PACKET, txRespBuffer));
 
   /* Update the requesting port identity from the last peer delay request */
-  set_requesting_port_id(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER, ptp->ports[port].lastPeerRequestPortId);
+  set_requesting_port_id(ptp, port, txFupBuffer, ptp->ports[port].lastPeerRequestPortId);
 
   /* Update the precise origin timestamp with the hardware timestamp from when
    * the preceding PDELAY_RESP was accepted into the MAC, augmented by the MAC's TX
    * latency.
    */
-  get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, PTP_TX_PDELAY_RESP_BUFFER, 
+  get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txRespBuffer, 
                          &pdelayRespTxTimestamp);
 
-  /* Add in the MAC latency and the PHY latency */
-  timestamp_sum(&pdelayRespTxTimestamp, &ptp->ports[port].txPhyMacDelay, &pdelayRespTxTimestampPhy);
-
-  set_timestamp(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER, &pdelayRespTxTimestampPhy);
+  set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, PTP_TX_PDELAY_RESP_FUP_BUFFER);
+  transmit_packet(ptp, port, txFupBuffer);
   ptp->ports[port].stats.txPDelayResponseFollowupCount++;
 }
 
@@ -934,16 +753,14 @@ void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
 /* Returns the type of PTP message contained within the passed receive buffer, or 
  * PACKET_NOT_PTP if the buffer does not contain a valid PTP datagram.
  */
-uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer) {
-  uint32_t bufferBase;
+uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   uint32_t wordOffset;
   uint32_t packetWord;
   uint32_t messageType = PACKET_NOT_PTP;
 
   /* Fetch the word containing the LTF and the message type */
-  bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
   wordOffset = MESSAGE_TYPE_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
 
   /* Check the LTF for the PTP Ethertype; if we are seriously falling behind in 
    * responding to received packets, it's possible we could be reading from the
@@ -961,20 +778,18 @@ uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint32_t rxBuff
  * The message should already be ascertained to be an ANNOUNCE, this method will not
  * re-check.
  */
-void extract_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer,
+void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer,
   PtpProperties *properties, PtpPortProperties *portProperties) {
 
-  uint32_t bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Extract the source address of the packet */
-  bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
   wordOffset = SOURCE_MAC_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   portProperties->sourceMacAddress[0] = ((packetWord >> 8) & 0x0FF);
   portProperties->sourceMacAddress[1] = (packetWord & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   portProperties->sourceMacAddress[2] = ((packetWord >> 24) & 0x0FF);
   portProperties->sourceMacAddress[3] = ((packetWord >> 16) & 0x0FF);
   portProperties->sourceMacAddress[4] = ((packetWord >> 8) & 0x0FF);
@@ -982,34 +797,34 @@ void extract_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer,
 
   /* Exract the domain number */
   wordOffset = DOMAIN_NUMBER_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->domainNumber = ((packetWord >> 8) & 0x0FF);
 
   /* Extract the current UTC offset */
   wordOffset = UTC_OFFSET_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->currentUtcOffset = (packetWord & 0x0FFFF);
 
   /* Extract the grandmaster priorities and clock quality */
   wordOffset = GM_PRIORITY1_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->grandmasterPriority1 = ((packetWord >> 16) & 0x0FF);
   properties->grandmasterClockQuality.clockClass = ((packetWord >> 8) & 0x0FF);
   properties->grandmasterClockQuality.clockAccuracy = (packetWord & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->grandmasterClockQuality.offsetScaledLogVariance = ((packetWord >> 16) & 0x0FFFF);
   properties->grandmasterPriority2 = ((packetWord >> 8) & 0x0FF);
   properties->grandmasterIdentity[0] = (packetWord & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->grandmasterIdentity[1] = ((packetWord >> 24) & 0x0FF);
   properties->grandmasterIdentity[2] = ((packetWord >> 16) & 0x0FF);
   properties->grandmasterIdentity[3] = ((packetWord >> 8) & 0x0FF);
   properties->grandmasterIdentity[4] = (packetWord & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->grandmasterIdentity[5] = ((packetWord >> 24) & 0x0FF);
   properties->grandmasterIdentity[6] = ((packetWord >> 16) & 0x0FF);
   properties->grandmasterIdentity[7] = ((packetWord >> 8) & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   properties->timeSource = ((packetWord >> 16) & 0x0FF);
 
   /* Port number is 1 based and is the port it came in on */
@@ -1018,18 +833,16 @@ void extract_announce(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer,
 }
 
 /* Gets the MAC address from a received packet */
-void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, uint8_t *macAddress) {
-  uint32_t bufferBase;
+void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress) {
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Extract the source address of the packet */
-  bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
   wordOffset = SOURCE_MAC_OFFSET;
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   macAddress[0] = ((packetWord >> 8) & 0x0FF);
   macAddress[1] = (packetWord & 0x0FF);
-  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord = read_packet(rxBuffer, &wordOffset);
   macAddress[2] = ((packetWord >> 24) & 0x0FF);
   macAddress[3] = ((packetWord >> 16) & 0x0FF);
   macAddress[4] = ((packetWord >> 8) & 0x0FF);
@@ -1038,15 +851,13 @@ void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer
 
 /* Gets the source port identity from a received packet */
 void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                        uint32_t packetBuffer, uint8_t *sourcePortId) {
-  uint32_t bufferBase;
+                        uint8_t * packetBuffer, uint8_t *sourcePortId) {
+  uint8_t *bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Extract the source address of the packet */
-  bufferBase = ((bufferDirection == TRANSMITTED_PACKET) ? 
-                (PTP_TX_PACKET_BUFFER(ptp, port, packetBuffer) + TX_DATA_OFFSET(ptp)) : 
-                PTP_RX_PACKET_BUFFER(ptp, port, packetBuffer));
+  bufferBase = (bufferDirection == TRANSMITTED_PACKET) ? packetBuffer + TX_DATA_OFFSET(ptp) : packetBuffer;
 
   /* Locate the source port ID in the packet */
   wordOffset = SOURCE_PORT_ID_OFFSET;
@@ -1068,14 +879,14 @@ void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection b
 /* Gets the requesting port identity from a received response packet
  * (either a DELAY_RESP, PDELAY_RESP, or PDELAY_RESP_FUP)
  */
-void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint32_t rxBuffer, 
+void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer, 
                                uint8_t *requestingPortId) {
-  uint32_t bufferBase;
+  uint8_t * bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;
 
   /* Extract the source address of the packet */
-  bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
+  bufferBase = rxBuffer;
   wordOffset = REQ_PORT_ID_OFFSET;
   packetWord = read_packet(bufferBase, &wordOffset);
   requestingPortId[0] = ((packetWord >> 8) & 0x0FF);

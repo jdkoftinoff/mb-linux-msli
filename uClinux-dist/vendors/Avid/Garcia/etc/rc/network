@@ -10,31 +10,29 @@ IP_ADDRESS_PREFIX=192.168
 
 IS_STAGEBOX=`cat /sys/class/garcia_fpga/jumper1`
 if [ $IS_STAGEBOX -eq 0 ] ; then
-  ifconfig eth3 $IP_ADDRESS_PREFIX.4.1
-  if [ $? -ne 0 ] ; then
+  # A stagebox will have only two depacketizers in its device tree, a console will have four
+  NDEPACKETIZERS=`ls -1 /proc/device-tree/plb@0 | grep depacketizer | wc -l`
+  if [ $NDEPACKETIZERS -le 2 ] ; then
     IS_STAGEBOX=1 ;
-  else
-    ifconfig eth2 $IP_ADDRESS_PREFIX.3.1
-    if [ $? -ne 0 ] ; then
-      IS_STAGEBOX=1 ;
-    else
-    fi
   fi
 else
   echo "Jumper 1 installed - forcing stage box configuration"
 fi
 if [ $IS_STAGEBOX -ne 0 ] ; then
-  echo stagebox > /var/tmp/role
   if [ `cat /sys/class/garcia_fpga/selector` -eq 5 ] ; then
+    echo stagebox2 > /var/tmp/role
     ifconfig eth1 $IP_ADDRESS_PREFIX.4.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.3.2
   else
+    echo stagebox1 > /var/tmp/role
     ifconfig eth1 $IP_ADDRESS_PREFIX.2.2
     ifconfig eth0 $IP_ADDRESS_PREFIX.1.2
   fi
   ifconfig eth2 down 2>/dev/null
   ifconfig eth3 down 2>/dev/null
 else
+  ifconfig eth3 $IP_ADDRESS_PREFIX.4.1
+  ifconfig eth2 $IP_ADDRESS_PREFIX.3.1
   ifconfig eth1 $IP_ADDRESS_PREFIX.2.1
   ifconfig eth0 $IP_ADDRESS_PREFIX.1.1
   echo console > /var/tmp/role

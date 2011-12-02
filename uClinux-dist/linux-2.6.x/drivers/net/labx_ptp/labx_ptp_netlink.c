@@ -161,8 +161,13 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
   switch(returnValue) {
   case 0:
+	    // Success, simply break
+	    break;
+
   case -ESRCH:
-    // Success or no process was listening, simply break
+    // No process was listening, auto-acknowledge the result
+    printk(KERN_INFO DRIVER_NAME ": No process listening for netlink events; auto-acknowledging ...\n");
+    ack_grandmaster_change(ptp);
     break;
 
   default:

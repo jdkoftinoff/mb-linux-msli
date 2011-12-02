@@ -135,7 +135,9 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev0,c,153,0
+	spidev_scarf,c,153,0 \
+	spidev_aes,c,153,1 \
+	spidev_oled,c,153,2
 endif
 
 # Add the AVB packet engine device nodes
@@ -145,16 +147,11 @@ DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
 
-# Add the Biamp SPI mailbox peripheral device node
-DEVICES += mailbox0,c,255,0
+# Add the CAL sample_pointers peripheral device node
+DEVICES += samplepointers0,c,251,0
 
-# Add the Biamp legacy packet bridge device node
-DEVICES += legacy_bridge0,c,222,0
-
-# Add the Xilinx SPI Master peripheral device node
-ifdef CONFIG_XILINX_SPI
-DEVICES += spidev0,c,153,0
-endif
+# Add the Marvell 88E6350R Ethernet Switch peripheral device node
+DEVICES += mvEthSwitch0,c,255,0
 
 I2C_MAJOR = 89
 
@@ -183,6 +180,7 @@ romfs:
 	mkdir -p $(ROMFSDIR)/etc/rc.d
 	mkdir -p $(ROMFSDIR)/dev/pts
 	mkdir -p $(ROMFSDIR)/etc/avahi.orig
+	mkdir -p $(ROMFSDIR)/etc/dmitripaneld
 
 	$(ROMFSINST) -s /dev/ttyUL2 /dev/ttyMIDI
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
@@ -199,6 +197,13 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
+	$(ROMFSINST) $(COMMON)/etc/logo-1.bin /etc/dmitripaneld/logo-1.bin
+	$(ROMFSINST) $(COMMON)/etc/nixie-16x24-font.bin /etc/dmitripaneld/nixie-16x24-font.bin
+	$(ROMFSINST) $(COMMON)/etc/nixie-alternative-bold-8x12-font.bin /etc/dmitripaneld/nixie-alternative-bold-8x12-font.bin
+	$(ROMFSINST) $(COMMON)/etc/nixie-bold-16x24-font.bin /etc/dmitripaneld/nixie-bold-16x24-font.bin
+	$(ROMFSINST) $(COMMON)/etc/nixie-bold-7x11-font.bin /etc/dmitripaneld/nixie-bold-7x11-font.bin
+	$(ROMFSINST) $(COMMON)/etc/nixie-bold-8x12-font.bin /etc/dmitripaneld/nixie-bold-8x12-font.bin
+	$(ROMFSINST) $(COMMON)/etc/bitstream-vera-sans-mono-8x12-font.bin /etc/dmitripaneld/bitstream-vera-sans-mono-8x12-font.bin
 
 	# Symbolic link for fstab into configurable area
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \

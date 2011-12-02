@@ -279,6 +279,9 @@ typedef struct {
 /* I/O control operation to acknowledge Grandmaster changes */
 #define IOC_PTP_ACK_GM_CHANGE _IO('p', 0x1c)
 
+/* I/O control to get the current lock state */
+#define IOC_PTP_GET_RTC_LOCKED _IOR('p', 0x1d, uint32_t)
+
 /* PTP events Generic Netlink family name, version, and multicast groups */
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
 #define PTP_EVENTS_FAMILY_VERSION  1

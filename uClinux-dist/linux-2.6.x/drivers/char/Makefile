@@ -122,6 +122,11 @@ obj-$(CONFIG_XILINX_MAILBOX)	+= xilinx_mailbox.o
 obj-$(CONFIG_MEYER_SMPTE)	+= meyer_smpte.o
 
 obj-$(CONFIG_JS_RTC)		+= js-rtc.o
+
+obj-$(CONFIG_LABX_MAILBOX)	+= labx_mailbox_.o
+labx_mailbox_-objs = labx_mailbox.o
+labx_mailbox_-objs+= labx_mailbox_netlink.o
+
 js-rtc-y = rtc.o
 
 # Files generated that shall be removed upon make clean
