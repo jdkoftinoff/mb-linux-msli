@@ -67,6 +67,7 @@ struct agctl_data {
 	/* buffer is NULL unless this device is open (users > 0) */
 	uint32_t			saved_status;
 	uint16_t			users;
+	uint32_t			latency;
 	uint16_t			transfer_size;
 	uint16_t			irqflags;
 	uint16_t			strobedelay;
@@ -98,18 +99,22 @@ static LIST_HEAD(device_list);
 #define AC_SR_4_7_OFFSET	0x0C	/* 32-bit Shift Registers 8 - 5 (s:RO, m:R/W) */
 #define AC_SR_0_3_OFFSET	0x10	/* 32-bit Shift Registers 4 - 1 (s:RO, m:R/W) */
 #define AC_CLK_COUNT_OFFSET	0x14	/* 8-bit Clock Count Register (s:RO, m:R/W) */
+#define AC_GLOB_STAT_OFFSET	0x18	/* 32-bit Global Status Register (RO) */
 #define AC_CONTROL0_OFFSET	0x20	/* 6-bit Status/Control Register */
 #define AC_CONTROL1_OFFSET	0x24	/* 6-bit Status/Control Register */
 #define AC_CONTROL2_OFFSET	0x28	/* 6-bit Status/Control Register */
 #define AC_CONTROL3_OFFSET	0x2C	/* 6-bit Status/Control Register */
 #define AC_CONTROL4_OFFSET	0x30	/* 6-bit Status/Control Register */
 
+#define AC_GLOB_IRQ_LATENCY_MASK	0x00FFFFFF	/* 24-bit Interrupt Latency counter (16 nS resol.) */
 #define AC_CTL_IDREG_MASK	0xFF000000	/* 8-bit ID Register (Informational only for Master) (R/W) */
 #define AC_CTL_MUTESTREAM_MASK 0x00F00000 /* 4 bit mute stream select mask */
 #define AC_CTL_MUTESTREAM_SHIFT 20  /* Bit shift of mute stream assignment */
-#define AC_CTL_DIAG_ERROR   BIT(19) /* Debug error flag (used e.g. for LFSR) (w1c) */
+#define AC_CTL_OVERFLOW_ERROR BIT(19) /* A strobe (transaction latch) has occurred before the
+                                          previous transaction was serviced (slave only, w1c) */
+#define AC_CTL_DIAG_ERROR   BIT(19) /* Debug error flag (used e.g. for LFSR) overload of AC_CTL_OVERFLOW_ERROR (w1c) */
 #define AC_CTL_DIAG_OFFSET	BIT(16) /* Diagnostic bits 18:16 */
-#define AC_CTL_DIAG_MASK	0x30000 /* Diagnostic bits 18:16 mask */
+#define AC_CTL_DIAG_MASK	0x70000 /* Diagnostic bits 18:16 mask */
 #define AC_CTL_ENA_MUTE_FORCE BIT(15) /* If set, force muting to follow AC_CTL_MUTE (Bit 14) */
 #define AC_CTL_MUTE         BIT(14) /* If set, slot is forced to be muted */
 #define AC_CTL_SERDES_SYNC	BIT(13)	/* SERDES/buffers are synced (RO) */
@@ -127,7 +132,7 @@ static LIST_HEAD(device_list);
 #define AC_CTL_STROBE		BIT(1)	/* Strobe signal is asserted (s:in, m:out) */
 #define AC_CTL_SSI_DDIR		BIT(0)	/* Data direction of SSI (R/W) */
 #define AC_CTL_IRQ_MASK		(AC_CTL_BUF_COL_IRQ | AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ | \
-							AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ | AC_CTL_DIAG_ERROR)
+							AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ | AC_CTL_OVERFLOW_ERROR)
 #define AC_CLK_COUNT_MASK   0xFF    /* Clock bit counter */
 #define AC_CLK_OVF_MASK     0x80000000 /* A strobe (transaction latch) has occurred before the
                                           previous transaction was serviced */
@@ -182,15 +187,12 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 	struct agctl_master *agm = (struct agctl_master *)data;
 	int chan;
 	int do_wake;
-	uint32_t clkcount;
+	struct agctl_data *agctl;
+	uint32_t status;
+	uint32_t global_status = 0;
 	for (chan = 0; chan < N_AGCTL_CHANNELS; chan++) {
-		struct agctl_data *agctl = &agm->chan[chan];
-		uint32_t status = agc_regr(agm, agctl->ctlreg_offs);
 		do_wake = 0;
-		if ((status & (AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ)) != 0) {
-			do_wake = 1;
-			agctl->irqflags |= ((uint16_t)(status & (AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ))); // | AC_CTL_BUF_COL_IRQ)));
-		}
+		agctl = &agm->chan[chan];
 		/* Be careful to preserve big-endianness of receive buffers */
 		/* After this transfer, the byte array representing the shift
 		 * register contents will be in rxbuf, with the most recent
@@ -200,48 +202,51 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 		 * Byte [N_SHIFT_REGISTER_BYTES-1] will contain the slave's
 		 * first byte transmitted, which will be the ID byte.
 		 */
-		if ((status & (AC_CTL_STROBE_IRQ | AC_CTL_TX_COMPL_IRQ)) != 0) {
-			if (!agctl_is_master(agctl)) {
-				clkcount = agc_regr(agm, AC_CLK_COUNT_OFFSET);
-				/* Ignore transfers with overflow, transfers in reset,
-				 *  and transfers of 0 or 1 bytes
-				 */
-				if ((clkcount & AC_CLK_OVF_MASK) != 0) {
-					; // printk("Channel %d Control message write overflow\n", chan);
-				} else if ((status & AC_CTL_RESET_SIG) == 0 && clkcount > 15) {
-					agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
-					agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
-					agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
-					agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
-					agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
-					agctl->transfer_size = clkcount;
-					agctl->irqflags |= ((uint16_t)(status & AC_CTL_STROBE_IRQ));
-					do_wake = 1;
-				}
-			} else {
-				uint8_t cardId;
-				agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
-				agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
-				agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
-				agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
-				agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
-				cardId = *(((uint8_t *)(agctl->rxbuf)) +
-						((N_SHIFT_REGISTER_BYTES-1) - (agctl->transfer_size >> 3)));
-				status = (status & ~AC_CTL_IDREG_MASK) |
-					(((uint32_t)cardId << 24 ) & AC_CTL_IDREG_MASK);
-				agctl->irqflags |= ((uint16_t)(status & AC_CTL_TX_COMPL_IRQ));
-				do_wake = 1;
-			}
+		status = agc_regr(agm, agctl->ctlreg_offs);
+		if ((status & (AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ)) != 0) {
+			agctl->transfer_size = 0;
+			agctl->irqflags |= ((uint16_t)(status & (AC_CTL_RESET_IRQ | AC_CTL_MUTE_IRQ)));
+			do_wake = 1;
 		}
-		agc_regw(agm, agctl->ctlreg_offs, status);	// Clear interrupt
-		if (do_wake) {
+		if ((status & AC_CTL_DIAG_MASK) != 0 && (status & AC_CTL_DIAG_ERROR) != 0) {
+			printk(KERN_INFO "AC_CTL_DIAG_ERROR interrupt on Channel %d\n", chan);
+		} else if ((status & AC_CTL_STROBE_IRQ) != 0 && !agctl_is_master(agctl)) {
 			agctl->saved_status = status;
+			agctl->transfer_size = agc_regr(agm, AC_CLK_COUNT_OFFSET) & ~AC_CLK_OVF_MASK;
+			agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
+			agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
+			agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
+			agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
+			agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
+			agctl->irqflags |= ((uint16_t)(status & AC_CTL_STROBE_IRQ));
+			do_wake = 1;
+		} else if ((status & AC_CTL_TX_COMPL_IRQ) != 0 && agctl_is_master(agctl)) {
+			uint8_t cardId;
+			agctl->rxbuf[0] = agc_regr_be(agm, AC_SR_0_3_OFFSET);
+			agctl->rxbuf[1] = agc_regr_be(agm, AC_SR_4_7_OFFSET);
+			agctl->rxbuf[2] = agc_regr_be(agm, AC_SR_8_11_OFFSET);
+			agctl->rxbuf[3] = agc_regr_be(agm, AC_SR_12_15_OFFSET);
+			agctl->rxbuf[4] = agc_regr_be(agm, AC_SR_16_19_OFFSET);
+			cardId = *(((uint8_t *)(agctl->rxbuf)) +
+				((N_SHIFT_REGISTER_BYTES-1) - (agctl->transfer_size >> 3)));
+			status = (status & ~AC_CTL_IDREG_MASK) |
+				(((uint32_t)cardId << 24 ) & AC_CTL_IDREG_MASK);
+			agctl->irqflags |= ((uint16_t)(status & AC_CTL_TX_COMPL_IRQ));
+			agctl->saved_status = status;
+			do_wake = 1;
+		}
+		if (do_wake) {
 			if (agctl->async_queue) {
 				kill_fasync(&agctl->async_queue, SIGIO, POLL_IN);
 			}
 			/* signal asynchronous readers */
 			wake_up_interruptible(&agctl->wait);
 		}
+		global_status = agc_regr(agm, AC_GLOB_STAT_OFFSET);
+		if ((global_status & AC_GLOB_IRQ_LATENCY_MASK) > agctl->latency) {
+			agctl->latency = global_status & AC_GLOB_IRQ_LATENCY_MASK;
+		}
+		agc_regw(agm, agctl->ctlreg_offs, status | AC_CTL_INT_ENA);	// Clear & enable interrupt
 	}
 	return IRQ_HANDLED;
 }
@@ -285,7 +290,6 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	bool master;
 	uint8_t *regbuf_p;
 	unsigned long flags;
-	__u32 status;
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
@@ -293,10 +297,8 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 
 	mutex_lock(&agm->agmutex);
 	spin_lock_irqsave(&agm->aglock, flags);
-	status = agc_regr(agm, agctl->ctlreg_offs);
 	master = agctl_is_master(agctl);
-	agc_regw(agm, agctl->ctlreg_offs,
-			(status | AC_CTL_INT_ENA)  & ~AC_CTL_IRQ_MASK);
+
 	while (!master && (agctl->irqflags & AC_CTL_STROBE_IRQ) == 0) {
 		spin_unlock_irqrestore(&agm->aglock, flags);
 		mutex_unlock(&agm->agmutex);
@@ -312,13 +314,32 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	}
 	agctl->irqflags &= ~AC_CTL_STROBE_IRQ;
 
+	/* Ignore transfers with overflow, transfers in reset,
+	 *  and transfers of 0 or 1 bytes
+	 */
 	if ((agctl->transfer_size & 7) != (master ? 7 : 0)) {
-		printk(KERN_WARNING "Chan %ld, read transfer_size %u\n", agctl - agm->chan, agctl->transfer_size);
+		printk(KERN_WARNING "Garcia_Control: Chan %ld, read transfer_size %u\n", agctl - agm->chan, agctl->transfer_size);
 	}
+	if ((agctl->saved_status & AC_CTL_OVERFLOW_ERROR) != 0) {
+		struct timespec ts;
+		getnstimeofday(&ts);
+		printk(KERN_WARNING "Garcia_Control: At %lu.%03lu, chan %ld write overflow, control reg 0x%lx,\n"
+				"\tbit count %lu (message discarded)\n", ts.tv_sec, ts.tv_nsec/1000000UL,
+				agctl - agm->chan, (unsigned long int)agctl->saved_status,
+				(unsigned long int)agctl->transfer_size);
+		agctl->transfer_size = 0;
+	} else if (agctl->transfer_size < 16) {
+		printk(KERN_INFO "Garcia_Control: chan %ld, 0 or 1 byte message received (message discarded)\n", agctl - agm->chan);
+		agctl->transfer_size = 0;
+	} else if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
+		printk(KERN_INFO "Garcia_Control: chan %ld, message received while reset asserted (message discarded)\n", agctl - agm->chan);
+		agctl->transfer_size = 0;
+	}
+
 	count = min(((agctl->transfer_size + 7) >> 3), N_SHIFT_REGISTER_BYTES);
 	count = min(count, (int)len);
 	regbuf_p = (uint8_t *)(agctl->rxbuf) + (N_SHIFT_REGISTER_BYTES - count);
-	if (copy_to_user(buf, regbuf_p, count) != 0) {
+	if (count > 0 && copy_to_user(buf, regbuf_p, count) != 0) {
 		count = -EFAULT;
 	}
 	spin_unlock_irqrestore(&agm->aglock, flags);
@@ -871,6 +892,27 @@ static ssize_t agdev_r_avbmute(struct class *class, char *buf)
 
 static CLASS_ATTR(avbmute, S_IRUGO | S_IWUSR, agdev_r_avbmute, agdev_w_avbmute);
 
+static ssize_t agdev_w_latency(struct class *class, const char *buf, size_t count)
+{
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		agctl->latency = 0;
+	}
+	return count;
+}
+
+static ssize_t agdev_r_latency(struct class *class, char *buf)
+{
+	uint32_t latency = 0;
+	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
+	if (agctl != NULL) {
+		latency = agctl->latency;
+	}
+	return (snprintf(buf, PAGE_SIZE, "%lu\n", (long unsigned int)latency));
+}
+
+static CLASS_ATTR(max_latency, S_IRUGO | S_IWUSR, agdev_r_latency, agdev_w_latency);
+
 /*-------------------------------------------------------------------------*/
 
 void garcia_control_set_master(int is_master)
@@ -947,6 +989,7 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		status = class_create_file(&agctl->agclass, &class_attr_cardid);
 		status = class_create_file(&agctl->agclass, &class_attr_status);
 		status = class_create_file(&agctl->agclass, &class_attr_avbmute);
+		status = class_create_file(&agctl->agclass, &class_attr_max_latency);
 	}
 	/* Register for interrupt */
 	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
@@ -1012,6 +1055,7 @@ static int garcia_control_platform_remove(struct platform_device *pdev)
  		class_remove_file(&agm->chan[i].agclass, &class_attr_cardid);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_status);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_avbmute);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_max_latency);
  		class_unregister(&agm->chan[i].agclass);
  		users += agm->chan[0].users;
  	}
