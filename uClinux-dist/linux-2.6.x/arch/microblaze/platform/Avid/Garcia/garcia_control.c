@@ -67,7 +67,9 @@ struct agctl_data {
 	/* buffer is NULL unless this device is open (users > 0) */
 	uint32_t			saved_status;
 	uint16_t			users;
+	uint32_t			irq_latency;
 	uint32_t			latency;
+	uint32_t			max_latency;
 	uint16_t			transfer_size;
 	uint16_t			irqflags;
 	uint16_t			strobedelay;
@@ -75,6 +77,7 @@ struct agctl_data {
 	uint8_t				flags;           // Slot number and master/slave status
 	__be32				rxbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
 	__be32				txbuf[AC_BUFSIZE>>2]; // Note: guaranteed big-endian
+	struct timespec     timestamp;  // Time at which the last interrupt was generated on this channel
 };
 #define AGCTL_FLAG_SLOTMASK 7
 #define agctl_slot_number(d) ((d)->flags & AGCTL_FLAG_SLOTMASK) // Get slot number
@@ -189,7 +192,7 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 	int do_wake;
 	struct agctl_data *agctl;
 	uint32_t status;
-	uint32_t global_status = 0;
+
 	for (chan = 0; chan < N_AGCTL_CHANNELS; chan++) {
 		do_wake = 0;
 		agctl = &agm->chan[chan];
@@ -242,9 +245,15 @@ irqreturn_t agc_irq_callback(int irqnum, void *data)
 			/* signal asynchronous readers */
 			wake_up_interruptible(&agctl->wait);
 		}
-		global_status = agc_regr(agm, AC_GLOB_STAT_OFFSET);
-		if ((global_status & AC_GLOB_IRQ_LATENCY_MASK) > agctl->latency) {
-			agctl->latency = global_status & AC_GLOB_IRQ_LATENCY_MASK;
+
+		// Find the time of the last control interrupt assertion
+		getnstimeofday(&agctl->timestamp);
+		agctl->irq_latency = (agc_regr(agm, AC_GLOB_STAT_OFFSET) & AC_GLOB_IRQ_LATENCY_MASK) << 4;
+		// Subtract hardware interrupt latency timer (units of 16 nS) from current time
+		agctl->timestamp.tv_nsec -= agctl->irq_latency;
+		if (agctl->timestamp.tv_nsec < 0) { // normalize
+			agctl->timestamp.tv_nsec += 1000000000;
+			agctl->timestamp.tv_sec -= 1;
 		}
 		agc_regw(agm, agctl->ctlreg_offs, status | AC_CTL_INT_ENA);	// Clear & enable interrupt
 	}
@@ -290,6 +299,9 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	bool master;
 	uint8_t *regbuf_p;
 	unsigned long flags;
+	struct timespec ts;
+	s64 delta;
+
 	if (agctl == NULL) {
 		return -ESHUTDOWN;
 	}
@@ -344,6 +356,17 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	}
 	spin_unlock_irqrestore(&agm->aglock, flags);
 	mutex_unlock(&agm->agmutex);
+	getnstimeofday(&ts);
+	ts = timespec_sub(ts, agctl->timestamp);
+	delta = timespec_to_ns(&ts);
+	if (delta < 0xFFFFFFFFULL) {
+		agctl->latency = (uint32_t)(delta & 0xFFFFFFFFULL);
+		if (agctl->latency > agctl->max_latency) {
+			agctl->max_latency = agctl->latency;
+		}
+	} else {
+		agctl->latency = ~0UL;
+	}
 	return count;
 }
 
@@ -896,7 +919,7 @@ static ssize_t agdev_w_latency(struct class *class, const char *buf, size_t coun
 {
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
-		agctl->latency = 0;
+		agctl->max_latency = 0;
 	}
 	return count;
 }
@@ -904,14 +927,18 @@ static ssize_t agdev_w_latency(struct class *class, const char *buf, size_t coun
 static ssize_t agdev_r_latency(struct class *class, char *buf)
 {
 	uint32_t latency = 0;
+	uint32_t max_latency = 0;
+	uint32_t irq_latency = 0;
 	struct agctl_data *agctl = container_of(class, struct agctl_data, agclass);
 	if (agctl != NULL) {
+		irq_latency = agctl->irq_latency;
 		latency = agctl->latency;
+		max_latency = agctl->max_latency;
 	}
-	return (snprintf(buf, PAGE_SIZE, "%lu\n", (long unsigned int)latency));
+	return (snprintf(buf, PAGE_SIZE, "%lu  %lu  %lu\n", (long unsigned int)agctl->irq_latency, (long unsigned int)latency, (long unsigned int)max_latency));
 }
 
-static CLASS_ATTR(max_latency, S_IRUGO | S_IWUSR, agdev_r_latency, agdev_w_latency);
+static CLASS_ATTR(latency, S_IRUGO | S_IWUSR, agdev_r_latency, agdev_w_latency);
 
 /*-------------------------------------------------------------------------*/
 
@@ -989,7 +1016,7 @@ static int garcia_control_probe(const char *name, struct platform_device *pdev,
 		status = class_create_file(&agctl->agclass, &class_attr_cardid);
 		status = class_create_file(&agctl->agclass, &class_attr_status);
 		status = class_create_file(&agctl->agclass, &class_attr_avbmute);
-		status = class_create_file(&agctl->agclass, &class_attr_max_latency);
+		status = class_create_file(&agctl->agclass, &class_attr_latency);
 	}
 	/* Register for interrupt */
 	status = request_irq(agm->irq, agc_irq_callback, 0, name, agm);
@@ -1055,7 +1082,7 @@ static int garcia_control_platform_remove(struct platform_device *pdev)
  		class_remove_file(&agm->chan[i].agclass, &class_attr_cardid);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_status);
  		class_remove_file(&agm->chan[i].agclass, &class_attr_avbmute);
- 		class_remove_file(&agm->chan[i].agclass, &class_attr_max_latency);
+ 		class_remove_file(&agm->chan[i].agclass, &class_attr_latency);
  		class_unregister(&agm->chan[i].agclass);
  		users += agm->chan[0].users;
  	}
