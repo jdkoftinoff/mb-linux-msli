@@ -20,3 +20,12 @@ else
 fi
 
 $AVBDFILE platformFile=$XMLFILE &
+
+# If there is an XML file named Config*.xml in /mnt/config, feed it to avb_config to set up streams
+AVB_CONFIGFILE=/mnt/apps/avb_config
+AVB_CONFIGXML=`ls -1 /mnt/config/Config*.xml 2>/dev/null | head -1`
+if [ ! -z "$AVB_CONFIGXML" ] ; then
+  sleep 3
+  echo "Configuring avbd from $AVB_CONFIGXML"
+  $AVB_CONFIGFILE $AVB_CONFIGXML
+fi
