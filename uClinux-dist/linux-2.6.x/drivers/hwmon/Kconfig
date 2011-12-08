@@ -1025,6 +1025,22 @@ config SENSORS_AMC6821
 	  This driver can also be build as a module.  If so, the module
 	  will be called amc6821.
 
+config AMC6821_TACH_MODE
+	bool "Set TACH-MODE bit (TACH pulse output mode of the fan)"
+	depends on SENSORS_AMC6821
+	default n
+	help
+	  The TACH-MODE bit of Configuration Register 2 specifies the TACH
+	  pulse output mode of the fan. Some fans (such as three- and two-wire)
+	  are powered directly by the PWM, and must be PWM-On to provide a
+	  TACH pulse output. When the PWM-Out pin switches these fans ON/OFF
+	  directly, the PWM-Out must be kept ON to power the fan during the
+	  measurement. In this case, the TACH-MODE bit of Configuration Register
+	  2 must be cleared ('0'). When TACH-MODE = 0, the PWM-Out pin is kept
+	  ON during the critical tach edges of the measurement period. Clearing the
+	  TACH mode ('0') also enables the internal correction circuitry to correct
+	  the error caused by the extra duty cycle applied in the measurement period.
+
 config HWMON_DEBUG_CHIP
 	bool "Hardware Monitoring Chip debugging messages"
 	default n
