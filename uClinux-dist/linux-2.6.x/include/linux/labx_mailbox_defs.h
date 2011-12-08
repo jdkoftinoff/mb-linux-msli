@@ -26,48 +26,55 @@
 #ifndef _LABX_MAILBOX_DEFS_H_
 #define _LABX_MAILBOX_DEFS_H_
 
-#include <linux/ioctl.h>
-
 /* This header file contains common driver definitions for any LABX
  * UHI mailbox peripheral.  Use of these definitions permits the use
  * of a common base class in the userspace abstraction libraries.
  */
 
-#define MBOX_IOC_CHAR          ('e')
+/* Constant and type definitions for the message mailbox */
+#define NAME_MAX_SIZE    (256)
 
-/* I/O control commands and structures common to all packet engines */
-#define IOC_START_MBOX           _IO(MBOX_IOC_CHAR, 0x01)
-#define IOC_STOP_MBOX            _IO(MBOX_IOC_CHAR, 0x02)
-
-#define MAX_MESSAGE_DATA 2048
+/* Structure type definition for encapsulating a message */
+#define MAX_MESSAGE_DATA 1024
 typedef struct {
   uint32_t  length;
-  uint8_t *messageContent;
+  uint32_t *messageContent;
 } MessageData;
 
-#define READ_UHI_STATUS          _IOR(MBOX_IOC_CHAR, 0x03, uint32_t)
+/* Maximum size, in words, of a single message packet */
+#define MAX_MESSAGE_PACKET_WORDS (256)
 
 /* Mailbox events Generic Netlink family name, version, and multicast groups */
-#define MAILBOX_EVENTS_FAMILY_NAME     "MAILBOX_EVTS"
-#define MAILBOX_EVENTS_FAMILY_VERSION  1
-#define MAILBOX_EVENTS_GROUP           "MessageGroup"
+#define LABX_MAILBOX_EVENTS_FAMILY_NAME     "MAILBOX_EVTS"
+#define LABX_MAILBOX_EVENTS_FAMILY_VERSION  1
+#define LABX_MAILBOX_EVENTS_GROUP           "MessageGroup"
 
-/* Constant enumeration for Netlink event commands from the audio depacketizer driver */
+/* Constant enumeration for Netlink event commands from the mailbox driver */
 enum {
-  MAILBOX_EVENTS_C_RECEIVE_MESSAGE,
-  MAILBOX_EVENTS_C_RESPONSE_MESSAGE,
-  __MAILBOX_EVENTS_C_MAX,
+  LABX_MAILBOX_EVENTS_C_ANNOUNCE_MESSAGE,
+  LABX_MAILBOX_EVENTS_C_SHUTDOWN_MESSAGE,
+  LABX_MAILBOX_EVENTS_C_REQUEST_MESSAGE,
+  LABX_MAILBOX_EVENTS_C_RESPONSE_MESSAGE,
+  LABX_MAILBOX_EVENTS_C_EVENT_QUEUE_READY,
+  __LABX_MAILBOX_EVENTS_C_MAX,
 };
-#define MAILBOX_EVENTS_C_MAX (__MAILBOX_EVENTS_C_MAX - 1)
+#define LABX_MAILBOX_EVENTS_C_MAX (__LABX_MAILBOX_EVENTS_C_MAX - 1)
+
+/* Constant enumeration defining a message packet */
+enum {
+  LABX_MAILBOX_MESSAGE_A_PACKET,
+  LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH,
+  LABX_MAILBOX_MESSAGE_PACKET_A_WORDS,
+  __LABX_MAILBOX_MESAGE_PACKET_A_MAX,
+};
+#define LABX_MAILBOX_MESSAGE_PACKET_A_MAX (__LABX_MAILBOX_MESSAGE_PACKET_A_MAX - 1)
 
 /* Netlink family attributes */
 enum {
-  MAILBOX_EVENTS_A_MINOR,
-  MAILBOX_EVENTS_A_RECV_MESSAGE,
-  MAILBOX_EVENTS_A_RESP_MESSAGE,
-  MAILBOX_EVENTS_A_MESSAGE_LENGTH,
-  __MAILBOX_EVENTS_A_MAX,
+  LABX_MAILBOX_EVENTS_A_UNSPEC,
+  LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE,
+  __LABX_MAILBOX_EVENTS_A_MAX,
 };
-#define MAILBOX_EVENTS_A_MAX (__MAILBOX_EVENTS_A_MAX - 1)
+#define LABX_MAILBOX_EVENTS_A_MAX (__LABX_MAILBOX_EVENTS_A_MAX - 1)
 
 #endif

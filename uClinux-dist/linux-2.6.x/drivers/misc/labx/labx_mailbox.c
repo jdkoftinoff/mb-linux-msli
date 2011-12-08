@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/char/labx_uhi_mailbox.c
+ *  linux/drivers/misc/labx/labx_mailbox.c
  *
  *  LABX mailbox peripheral driver
  *
@@ -44,11 +44,7 @@
  */
 #define DRIVER_NAME "labx_mailbox"
 
-/* Major device number for the driver */
-#define DRIVER_MAJOR 255
-
-/* Maximum number of packetizers and instance count */
-#define MAX_INSTANCES 1
+struct labx_mailbox* labx_mailboxes[MAX_MAILBOX_DEVICES] = {};
 static uint32_t instanceCount;
 
 /* Number of milliseconds to wait before permitting consecutive events from
@@ -63,7 +59,7 @@ static uint32_t instanceCount;
 #endif
 
 /* Disables the passed instance */
-static void disable_mailbox(struct labx_mailbox *mailbox) {
+void disable_mailbox(struct labx_mailbox *mailbox) {
   uint32_t controlRegister;
 
   DBG("Disabling the mailbox\n");
@@ -74,7 +70,7 @@ static void disable_mailbox(struct labx_mailbox *mailbox) {
 }
 
 /* Enables the passed instance */
-static void enable_mailbox(struct labx_mailbox *mailbox) {
+void enable_mailbox(struct labx_mailbox *mailbox) {
   uint32_t controlRegister;
 
   DBG("Enabling the mailbox\n");
@@ -89,7 +85,27 @@ static void reset_mailbox(struct labx_mailbox *mailbox) {
   disable_mailbox(mailbox);
 }
 
-/* Interrupt service routine for the instance */
+struct labx_mailbox* get_instance(const char *name) {
+  int i;
+  struct labx_mailbox *targetMailbox = NULL;
+
+  for (i = 0; i<MAX_MAILBOX_DEVICES; i++) {
+    if ((labx_mailboxes[i] != NULL) && (labx_mailboxes[i]->name == name))
+    {
+      /* printk("labx_mailbox: found %p\n", devices[i]);*/
+      targetMailbox = labx_mailboxes[i];
+      break;
+    }
+  }
+  return (targetMailbox);
+}
+
+void async_event_notify(struct labx_mailbox *mailbox) {
+
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_TRIG_ASYNC_REG), ENABLE);
+}
+ 
+/* Interrupt service r utine for the instance */
 static irqreturn_t mailbox_interrupt(int irq, void *dev_id) {
   struct labx_mailbox *mailbox = (struct labx_mailbox*) dev_id;
   uint32_t maskedFlags;
@@ -131,7 +147,7 @@ static int netlink_thread(void *data)
 
     __set_current_state(TASK_RUNNING);
 
-    mailbox_event_rcv_mesg(mailbox);
+    mailbox_event_send_request(mailbox);
 
     /* Before returning to waiting, optionally sleep a little bit and then
      * re-enable the IRQs which trigger us.  There should be no need to disable
@@ -156,110 +172,6 @@ static int netlink_thread(void *data)
   return 0;
 }
 
-/*
- * Character device hook functions
- */
-
-static int mailbox_open(struct inode *inode, struct file *filp)
-{
-  struct labx_mailbox *mailbox;
-  unsigned long flags;
-  int returnValue = 0;
-
-  /* Navigate to the driver object */
-  mailbox = container_of(inode->i_cdev, struct labx_mailbox, cdev);
-  filp->private_data = mailbox;
-
-  /* Clear the message ready flag for the first time */
-  mailbox->messageReadyFlag = MESSAGE_NOT_READY;
-
-  /* Lock the mutex and ensure there is only one owner */
-  preempt_disable();
-  spin_lock_irqsave(&mailbox->mutex, flags);
-  if(mailbox->opened) {
-    returnValue = -1;
-  } else {
-    mailbox->opened = true;
-  }
-
-  spin_unlock_irqrestore(&mailbox->mutex, flags);
-  preempt_enable();
-  
-  return(returnValue);
-}
-
-static int mailbox_release(struct inode *inode, struct file *filp)
-{
-  struct labx_mailbox *mailbox = (struct labx_mailbox*)filp->private_data;
-  unsigned long flags;
-
-  preempt_disable();
-
-  spin_lock_irqsave(&mailbox->mutex, flags);
-  mailbox->opened = false;
-  spin_unlock_irqrestore(&mailbox->mutex, flags);
-  preempt_enable();
-  return(0);
-}
-
-/* Read UHI status register 
- */
-static uint8_t read_uhi_status(struct labx_mailbox *mailbox) {
-  uint8_t statusReg;
-
-  DBG("Reading UHI status register\n");
-  statusReg = XIo_In32(REGISTER_ADDRESS(mailbox, UHI_STATUS_REG));
-  return(statusReg);
-}
-
-/* Buffer for storing configuration words */
-static uint8_t messageBuffer[MAX_MESSAGE_DATA];
-
-/* I/O control operations for the driver */
-static int mailbox_ioctl(struct inode *inode, struct file *flip,
-                             unsigned int command, unsigned long arg)
-{
-  // Switch on the request
-  int returnValue = 0;
-  struct labx_mailbox *mailbox = (struct labx_mailbox*)flip->private_data;
-
-  switch(command) {
-  case IOC_START_MBOX:
-    enable_mailbox(mailbox);
-    break;
-
-  case IOC_STOP_MBOX:
-    disable_mailbox(mailbox);
-    break;
-
-  case READ_UHI_STATUS:
-    {
-      uint32_t returnValue = read_uhi_status(mailbox);
-     
-      if(copy_to_user((void __user*)arg, &returnValue, sizeof(returnValue)) != 0 ) {
-        return(-EFAULT);
-      }
-    }
-
-  default:
-    /* We don't recognize this command.
-     */
-    returnValue = -EINVAL;
-  }
-
-  /* Return an error code appropriate to the command */
-  return(returnValue);
-}
-	  
-
-/* Character device file operations structure */
-static struct file_operations mailbox_fops = {
-  .open	   = mailbox_open,
-  .release = mailbox_release,
-  .ioctl   = mailbox_ioctl,
-  .owner   = THIS_MODULE,
-};
-
 /* Function containing the "meat" of the probe mechanism - this is used by
  * the OpenFirmware probe as well as the standard platform device mechanism.
  * @param name - Name of the instance
@@ -273,6 +185,7 @@ static int mailbox_probe(const char *name,
                              struct resource *irq) {
   struct labx_mailbox *mailbox;
   int returnValue;
+  int i;
 
   /* Create and populate a device structure */
   mailbox = (struct labx_mailbox*) kmalloc(sizeof(struct labx_mailbox), GFP_KERNEL);
@@ -300,6 +213,9 @@ static int mailbox_probe(const char *name,
   disable_mailbox(mailbox);
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), NO_IRQS);
 
+  /* Clear the message ready flag for the first time */
+  mailbox->messageReadyFlag = MESSAGE_NOT_READY;
+  
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
   if(irq != NULL) {
     mailbox->irq = irq->start;
@@ -323,7 +239,7 @@ static int mailbox_probe(const char *name,
 
   /* Initialize other resources */
   spin_lock_init(&mailbox->mutex);
-  mailbox->opened = false;
+  mailbox->opened = true;
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, mailbox);
@@ -331,13 +247,6 @@ static int mailbox_probe(const char *name,
 
   /* Reset the state of the mailbox */
   reset_mailbox(mailbox);
-
-  /* Add as a character device to make the instance available for use */
-  cdev_init(&mailbox->cdev, &mailbox_fops);
-  mailbox->cdev.owner = THIS_MODULE;
-  kobject_set_name(&mailbox->cdev.kobj, "%s%d", mailbox->name, mailbox->instanceNumber);
-  mailbox->instanceNumber = instanceCount++;
-  cdev_add(&mailbox->cdev, MKDEV(DRIVER_MAJOR, mailbox->instanceNumber), 1);
 
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(mailbox->messageReadQueue));
@@ -348,13 +257,20 @@ static int mailbox_probe(const char *name,
   if (IS_ERR(mailbox->netlinkTask)) {
     printk(KERN_ERR "Mailbox netlink task creation failed.\n");
     returnValue = -EIO;
-    goto kthread_fail;
+    goto free;
   }
   
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(mailbox->irq != NO_IRQ_SUPPLIED) {
     XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_FLAGS_REG), ALL_IRQS);
-    XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), SUPRV_IRQ_0);
+  }
+
+  // Add the mailbox instance to the list of current devices
+  for(i=0;i<MAX_MAILBOX_DEVICES;i++) {
+    if(NULL == labx_mailboxes[i]) {
+      labx_mailboxes[i] = mailbox;
+      break;
+    }
   }
 
   DBG("Mailbox initialized\n");
@@ -362,8 +278,6 @@ static int mailbox_probe(const char *name,
   /* Return success */
   return(0);
 
- kthread_fail:
-  cdev_del(&mailbox->cdev);
  unmap:
   iounmap(mailbox->virtualAddress);
  release:
@@ -413,7 +327,7 @@ static int __devexit mailbox_of_remove(struct of_device *dev)
 }
 
 static struct of_device_id mailbox_of_match[] = {
-  { .compatible = "xlnx,labx-mailbox-1.00.a", },
+  { .compatible = "xlnx,labx-uhi-mailbox-1.00.a", },
   { /* end of list */ },
 };
 
@@ -464,7 +378,6 @@ static int mailbox_platform_remove(struct platform_device *pdev) {
   }
   
   kthread_stop(mailbox->netlinkTask);
-  cdev_del(&mailbox->cdev);
   reset_mailbox(mailbox);
   iounmap(mailbox->virtualAddress);
   release_mem_region(mailbox->physicalAddress, mailbox->addressRangeSize);
@@ -498,11 +411,8 @@ static int __init mailbox_driver_init(void)
     return(returnValue);
   }
 
-  /* Allocate a range of major / minor device numbers for use */
+  /* Reset instance count for platform device */
   instanceCount = 0;
-  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
-    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
-  }
   
   /* Initialize the Netlink layer for the driver */
   register_mailbox_netlink();
@@ -512,8 +422,6 @@ static int __init mailbox_driver_init(void)
 
 static void __exit mailbox_driver_exit(void)
 {
-  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
-  
   /* Unregister Generic Netlink family */
   unregister_mailbox_netlink();
 
