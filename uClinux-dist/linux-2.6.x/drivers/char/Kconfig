@@ -1149,11 +1149,5 @@ config MEYER_SMPTE
 	help
 	  Meyer Sound SMPTE interface"
 
-config LABX_MAILBOX
-	tristate "Lab X mailbox device"
-        depends on OF && (PPC_OF || MICROBLAZE)
-        help
-          Select this to enable support for host-to-supervisory communication.
-
 endmenu
 

@@ -26,12 +26,14 @@
 #ifndef _LABX_MAILBOX_H_
 #define _LABX_MAILBOX_H_
 
-#include <linux/cdev.h>
 #include <linux/highmem.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 #include <linux/labx_mailbox_defs.h>
+
+/* Maximum number of mailboxes and instance count */
+#define MAX_MAILBOX_DEVICES 2
 
 /* Macros for determining sub-addresses for address ranges and individual registers.
  * These are affected by the amount of address space devoted to packet template and 
@@ -45,20 +47,22 @@
 #define SUPRV_CONTROL_REG        (0x000)
 #  define MAILBOX_DISABLE      	  (0x00)
 #  define MAILBOX_ENABLE      	  (0x01)
+#  define ENABLE                  (0x01)
 
-#define SUPRV_IRQ_MASK_REG   	 (0x001)
-#define SUPRV_IRQ_FLAGS_REG    	 (0x002)
-#define NO_IRQS      		(0x00000000)
-#define SUPRV_IRQ_0    	    (0x00000001)
-#define ALL_IRQS     		(0xFFFFFFFF)
+#define SUPRV_IRQ_MASK_REG   	      (0x001)
+#define SUPRV_IRQ_FLAGS_REG    	      (0x002)
+#define NO_IRQS      		 (0x00000000)
+#define SUPRV_IRQ_0    	         (0x00000001)
+#define SUPRV_IRQ_1    	         (0x00000002)
+#define ALL_IRQS     		 (0xFFFFFFFF)
 
 #define SUPRV_IRQ_FLAGS_REG      (0x002)
 
 #define SUPRV_MSG_LEN_REG        (0x003)
+#define HOST_MSG_LEN_REG         (0x003)  
 
-#define UHI_STATUS_REG         (0x004)
-
-#define MAX_MAILBOX_MSG_BYTES     (2048)
+#define SUPRV_TRIG_ASYNC_REG     (0x005)
+#define MAX_MAILBOX_MSG_BYTES     (1024)
 
 #define MESSAGE_NOT_READY (0)
 #define MESSAGE_READY (1)
@@ -72,16 +76,10 @@
    (MSG_RAM_RANGE))
 
 /* Driver structure to maintain state for each device instance */
-#define NAME_MAX_SIZE    (256)
 #define NO_IRQ_SUPPLIED   (-1)
 struct labx_mailbox {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
-
-  /* Character device data */
-  struct cdev cdev;
-  dev_t       deviceNumber;
-  uint32_t    instanceNumber;
 
   /* Name for use in identification */
   char name[NAME_MAX_SIZE];
@@ -105,9 +103,19 @@ struct labx_mailbox {
   struct task_struct *netlinkTask;
 };
 
+/* From labx_mailbox.c */
+extern struct labx_mailbox* labx_mailboxes[MAX_MAILBOX_DEVICES];
+extern void enable_mailbox(struct labx_mailbox *mailbox);
+extern void disable_mailbox(struct labx_mailbox *mailbox);
+extern void async_event_notify(struct labx_mailbox *mailbox);
+extern struct labx_mailbox* get_instance(const char* name);
+
+
 /* From labx_mailbox_netlink.c */
 extern int register_mailbox_netlink(void);
 extern void unregister_mailbox_netlink(void);
-extern int mailbox_event_rcv_mesg(struct labx_mailbox *mailbox);
+extern int mailbox_event_send_request(struct labx_mailbox *mailbox);
+extern int create_mailbox_socket(void);
+extern void destroy_mailbox_socket(void);
 
 #endif
