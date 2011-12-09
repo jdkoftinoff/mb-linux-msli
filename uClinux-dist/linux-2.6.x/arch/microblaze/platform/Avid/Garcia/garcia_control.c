@@ -332,20 +332,23 @@ static ssize_t agctl_read(struct file *filp, char __user *buf,
 	if ((agctl->transfer_size & 7) != (master ? 7 : 0)) {
 		printk(KERN_WARNING "Garcia_Control: Chan %ld, read transfer_size %u\n", agctl - agm->chan, agctl->transfer_size);
 	}
-	if ((agctl->saved_status & AC_CTL_OVERFLOW_ERROR) != 0) {
-		struct timespec ts;
-		getnstimeofday(&ts);
-		printk(KERN_WARNING "Garcia_Control: At %lu.%03lu, chan %ld write overflow, control reg 0x%lx,\n"
-				"\tbit count %lu (message discarded)\n", ts.tv_sec, ts.tv_nsec/1000000UL,
-				agctl - agm->chan, (unsigned long int)agctl->saved_status,
-				(unsigned long int)agctl->transfer_size);
-		agctl->transfer_size = 0;
-	} else if (agctl->transfer_size < 16) {
-		printk(KERN_INFO "Garcia_Control: chan %ld, 0 or 1 byte message received (message discarded)\n", agctl - agm->chan);
-		agctl->transfer_size = 0;
-	} else if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
-		printk(KERN_INFO "Garcia_Control: chan %ld, message received while reset asserted (message discarded)\n", agctl - agm->chan);
-		agctl->transfer_size = 0;
+	if (!master) {
+		if ((agctl->saved_status & AC_CTL_OVERFLOW_ERROR) != 0) {
+			struct timespec ts;
+			getnstimeofday(&ts);
+			printk(KERN_WARNING "Garcia_Control: At %lu.%03lu, chan %ld write overflow, control reg 0x%lx,\n"
+					"\tbit count %lu (message discarded)\n", ts.tv_sec, ts.tv_nsec/1000000UL,
+					agctl - agm->chan, (unsigned long int)agctl->saved_status,
+					(unsigned long int)agctl->transfer_size);
+			agctl->transfer_size = 0;
+		} else if (agctl->transfer_size < 16) {
+			printk(KERN_INFO "Garcia_Control: chan %ld, %d byte cardIdQuery returned 0x%02lx\n",
+					agctl - agm->chan, agctl->transfer_size >> 3, (agctl->saved_status >> 24) & 0xFF);
+			agctl->transfer_size = 0;
+		} else if ((agctl->saved_status & AC_CTL_RESET_SIG) != 0) {
+			printk(KERN_INFO "Garcia_Control: chan %ld, message received while reset asserted (message discarded)\n", agctl - agm->chan);
+			agctl->transfer_size = 0;
+		}
 	}
 
 	count = min(((agctl->transfer_size + 7) >> 3), N_SHIFT_REGISTER_BYTES);
