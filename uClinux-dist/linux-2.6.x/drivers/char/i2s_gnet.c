@@ -47,10 +47,11 @@ static unsigned char minors[DEVICES_COUNT];
 static DEFINE_SPINLOCK(static_dev_lock);
 
 /* 
-   all devices control 0x38/4 registers 
+   all devices control 0x38/4 registers
+   with optional 12 4-byte meter registers
 */
 
-#define REGISTER_COUNT (0x38/4)
+#define REGISTER_COUNT (0x38/4+12)
 
 /* 
    this driver supports read/write operations that do not start and end
@@ -370,6 +371,7 @@ static const struct of_device_id i2s_gnet_match[] =
     { .compatible = "xlnx,iis2424-g-1.00.g" },
     { .compatible = "xlnx,iis2424-g-1.00.h" },
     { .compatible = "xlnx,iis2424-g-1.00.m" },
+    { .compatible = "xlnx,iis2424-with-peak-mon-1.00.a" },
     {}
   };
 
