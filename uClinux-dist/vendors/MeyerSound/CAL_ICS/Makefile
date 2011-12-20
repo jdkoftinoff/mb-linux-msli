@@ -142,11 +142,11 @@ DEVICES +=	\
 endif
 
 # Add the AVB packet engine device nodes
-DEVICES += packetizer0,c,230,0
-DEVICES += depacketizer0,c,232,0
-DEVICES += depacketizer1,c,232,1
+DEVICES += packetizer0,c,250,0
+DEVICES += depacketizer0,c,252,0
+DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
-DEVICES += ptp0,c,233,0
+DEVICES += ptp0,c,253,0
 
 # Add the CAL sample_pointers peripheral device node
 DEVICES += samplepointers0,c,251,0

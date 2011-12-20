@@ -1,10 +1,23 @@
 #!/bin/sh
 
-# Mount the application ROMfs
-echo "Mounting application ROMfs image"
-mount -t romfs /dev/mtdblock5 /mnt/apps
+# For maintenance mode
+if [ `cat /proc/device-tree/model` == "maintenance" ]; then
+  # Mount the application ROMfs
+  echo "Mounting application ROMfs image"
+  mount -t romfs /dev/mtdblock5 /mnt/apps
 
-# Mount the configuration JFFS2
-echo "Mounting configuration JFFS2 image"
-mount -t jffs2 /dev/mtdblock7 /mnt/config
+  # Mount the configuration JFFS2
+  echo "Mounting configuration JFFS2 image"
+  mount -t jffs2 /dev/mtdblock6 /mnt/config
 
+# For regular mode
+else
+  # Mount the application ROMfs
+  echo "Mounting application ROMfs image"
+  mount -t romfs /dev/mtdblock13 /mnt/apps
+
+  # Mount the configuration JFFS2
+  echo "Mounting configuration JFFS2 image"
+  mount -t jffs2 /dev/mtdblock14 /mnt/config
+
+fi

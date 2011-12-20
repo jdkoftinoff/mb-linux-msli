@@ -137,7 +137,7 @@ int src_spi_read(uint8_t reg )
   if(ioctl(spi_handle,SPI_IOC_MESSAGE(1),&spi_transfer) <0)
 	  return -1;
 
-	printf("Yi Cao: register %x has value %x\n", reg, rx[2]);
+	//printf("Yi Cao: register %x has value %x\n", reg, rx[2]);
   return 0;
 }
 
@@ -187,6 +187,19 @@ int src4392_init()
   }
   millisleep(40);
   src_spi_read(0x07);
+  
+  /* PLL clock source */
+  data[0] = 0x0D;
+  data[2] = 0x08;
+  src_spi_read(0x0D);
+  if (src_spi_write(data, 3))
+  {
+    printf("Error: src4392 spi write error!\n");
+    return 1;  
+  }
+  millisleep(40);
+  src_spi_read(0x0D);
+  
   /* SRC control 1, Set SRC input to DIR out */
   data[0] = 0x2D;
   data[2] = 0x02;
