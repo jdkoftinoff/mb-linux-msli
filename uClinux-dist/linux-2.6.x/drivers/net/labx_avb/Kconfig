@@ -28,6 +28,11 @@ config LABX_AUDIO_DEPACKETIZER_DMA
 	help
 	  This configures support for the Lab X DMA interface to the depacketizer
 
+config LABX_AUDIO_TDM
+	bool "Audio Time Domain Multiplexer support"
+	help
+	  This configures support for the Lab X AVB audio time domain multiplexer driver
+
 config XILINX_AVB_SIMPLE_IPM
 	bool "AVB Simple IPM support"
 	depends on XILINX_LLTEMAC_AVB_LABX
