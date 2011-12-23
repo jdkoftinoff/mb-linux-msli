@@ -24,8 +24,12 @@
  */
 
 #include <asm/io.h>
+#include <linux/cdev.h>
+#include <linux/fs.h>
+#include <linux/highmem.h>
 #include <linux/platform_device.h>
 #include <xio.h>
+#include <net/labx_avb/packet_engine_defs.h>
 
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
@@ -60,9 +64,16 @@ struct audio_tdm {
   struct class tdmclass;
 
   /* Character device data */
-//  struct cdev cdev;
-//  dev_t       deviceNumber;
-//  uint32_t    instanceNumber;
+  struct cdev cdev;
+  uint32_t    instanceNumber;
+  /* Mutex for the device instance */
+  spinlock_t mutex;
+  bool opened;
+  /* File operations and private data for a polymorphic
+   * driver to use
+   */
+  struct file_operations *derivedFops;
+  void *derivedData;
 
   /* Name for use in identification */
   char name[NAME_MAX_SIZE];
@@ -89,13 +100,133 @@ struct audio_tdm {
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
+/* Major device number for the driver */
+#define DRIVER_MAJOR 244
 
+/* Maximum number of redundancy_switchs and instance count */
+#define MAX_INSTANCES 64
+static uint32_t instanceCount;
 
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
 #define DBG(f, x...)
 #endif
+
+/*
+ * Character device hook functions
+ */
+
+static int tdm_open(struct inode *inode, struct file *filp)
+{
+  struct audio_tdm *tdm;
+  unsigned long flags;
+  int returnValue = 0;
+
+  tdm = container_of(inode->i_cdev, struct audio_tdm, cdev);
+  filp->private_data = tdm;
+
+  /* Lock the mutex and ensure there is only one owner */
+  preempt_disable();
+  spin_lock_irqsave(&tdm->mutex, flags);
+  if(tdm->opened) {
+    returnValue = -1;
+  } else {
+    tdm->opened = true;
+  }
+
+  /* Invoke the open() operation on the derived driver, if there is one */
+  if((tdm->derivedFops != NULL) &&
+     (tdm->derivedFops->open != NULL)) {
+    tdm->derivedFops->open(inode, filp);
+  }
+
+  spin_unlock_irqrestore(&tdm->mutex, flags);
+  preempt_enable();
+
+  return(returnValue);
+}
+
+static int tdm_release(struct inode *inode, struct file *filp)
+{
+  struct audio_tdm *tdm = (struct audio_tdm *)filp->private_data;
+  unsigned long flags;
+
+  preempt_disable();
+  spin_lock_irqsave(&tdm->mutex, flags);
+  tdm->opened = false;
+
+  /* Invoke the release() operation on the derived driver, if there is one */
+  if((tdm->derivedFops != NULL) &&
+     (tdm->derivedFops->release != NULL)) {
+    tdm->derivedFops->release(inode, filp);
+  }
+
+  spin_unlock_irqrestore(&tdm->mutex, flags);
+  preempt_enable();
+  return(0);
+}
+
+/* I/O control operations for the driver */
+static int tdm_ioctl(struct inode *inode,
+                                   struct file *filp,
+                                   unsigned int command,
+                                   unsigned long arg) {
+  // Switch on the request
+  AudioTdmControl tdmControl;
+  int returnValue = 0;
+  struct audio_tdm *tdm = (struct audio_tdm *)filp->private_data;
+  uint32_t reg;
+
+  switch(command) {
+  case IOC_GET_AUDIO_TDM_CONTROL:
+	  reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+	  tdmControl.versionMajor = ((tdm->version >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
+	  tdmControl.versionMinor = (tdm->version & REVISION_FIELD_MASK);
+	  tdmControl.maxChannels = reg & TDM_NUM_AUDIO_CHANNELS_MASK;
+	  tdmControl.lrPolarity = ((reg & TDM_LRCLK_FALLING_EDGE_CH0) != 0);
+	  tdmControl.i2sAlign = ((reg & TDM_BIT_ALIGNMENT_I2S_DELAYED) != 0);
+      if(copy_to_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
+        return(-EFAULT);
+      }
+    break;
+
+  case IOC_SET_AUDIO_TDM_CONTROL:
+      if(copy_from_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
+        return(-EFAULT);
+      }
+      if (tdmControl.maxChannels != 0) {
+    	  if (tdmControl.maxChannels != 8 && tdmControl.maxChannels != 16 &&
+    			  tdmControl.maxChannels != 32 && tdmControl.maxChannels != 64) {
+    		  return -EINVAL;
+    	  }
+    	  reg = tdmControl.maxChannels | (tdmControl.lrPolarity ? TDM_LRCLK_FALLING_EDGE_CH0 : 0) |
+    			  (tdmControl.i2sAlign ? TDM_BIT_ALIGNMENT_I2S_DELAYED : 0);
+    	  XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+      }
+    break;
+
+  default:
+    /* We don't recognize this command; give our derived driver's ioctl()
+     * a crack at it, if one exists.
+     */
+    if((tdm->derivedFops != NULL) &&
+       (tdm->derivedFops->ioctl != NULL)) {
+      returnValue = tdm->derivedFops->ioctl(inode, filp, command, arg);
+    } else returnValue = -EINVAL;
+  }
+
+  /* Return an error code appropriate to the command */
+  return(returnValue);
+}
+
+/* Character device file operations structure */
+static struct file_operations tdm_fops = {
+  .open	   = tdm_open,
+  .release = tdm_release,
+  .ioctl   = tdm_ioctl,
+  .owner   = THIS_MODULE,
+};
 
 /* Resets the state of the passed instance */
 static void reset_tdm(struct audio_tdm *tdm) {
@@ -206,6 +337,7 @@ int audio_tdm_probe(const char *name,
   unsigned int versionMinor;
   unsigned int versionCompare;
   int returnValue;
+  static unsigned int instanceNumber=0;
 
   /* Create and populate a device structure */
   tdm = (struct audio_tdm*) kmalloc(sizeof(struct audio_tdm), GFP_KERNEL);
@@ -214,7 +346,7 @@ int audio_tdm_probe(const char *name,
   /* Request and map the device's I/O memory region into uncacheable space */
   tdm->physicalAddress = addressRange->start;
   tdm->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(tdm->name, NAME_MAX_SIZE, "%s", name);
+  snprintf(tdm->name, NAME_MAX_SIZE, "%s.%ld", name, instanceNumber);
   tdm->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(tdm->physicalAddress, tdm->addressRangeSize,
 		  tdm->name) == NULL) {
@@ -288,8 +420,20 @@ int audio_tdm_probe(const char *name,
   platform_set_drvdata(pdev, tdm);
   tdm->pdev = pdev;
 
+  /* Initialize other resources */
+  spin_lock_init(&tdm->mutex);
+  tdm->opened = false;
+
   /* Reset the state of the tdm */
   reset_tdm(tdm);
+
+  /* Add as a character device to make the instance available for use */
+  cdev_init(&tdm->cdev, &tdm_fops);
+  tdm->cdev.owner = THIS_MODULE;
+  tdm->instanceNumber = instanceNumber;
+  kobject_set_name(&tdm->cdev.kobj, "%s.%d", tdm->name, tdm->instanceNumber);
+  cdev_add(&tdm->cdev, MKDEV(DRIVER_MAJOR, tdm->instanceNumber), 1);
+  instanceNumber++;
 
   /* Set up the sysfs class interface */
   tdm->tdmclass.name = tdm->name;
@@ -324,9 +468,15 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   struct resource *addressRange = &r_mem_struct;
   struct resource *irq          = &r_irq_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
-  const char *name = dev_name(&ofdev->dev);
+  const char *full_name = dev_name(&ofdev->dev);
+  const char *name;
   int rc = 0;
 
+  if ((name = strchr(full_name, '.')) == NULL) {
+	  name = full_name;
+  } else {
+	  ++name;
+  }
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
   if(rc) {
@@ -396,6 +546,7 @@ static int audio_tdm_platform_probe(struct platform_device *pdev) {
 
 /* This is exported to allow polymorphic drivers to invoke it. */
 int audio_tdm_remove(struct audio_tdm *tdm) {
+  cdev_del(&tdm->cdev);
   reset_tdm(tdm);
   iounmap(tdm->virtualAddress);
   release_mem_region(tdm->physicalAddress, tdm->addressRangeSize);
@@ -432,6 +583,12 @@ static int __init audio_tdm_driver_init(void)
   returnValue = of_register_platform_driver(&of_audio_tdm_driver);
 #endif
  
+  /* Allocate a range of major / minor device numbers for use */
+  instanceCount = 0;
+  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0), MAX_INSTANCES, DRIVER_NAME)) < 0) {
+    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
+  }
+
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&audio_tdm_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
@@ -443,6 +600,7 @@ static int __init audio_tdm_driver_init(void)
 
 static void __exit audio_tdm_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0), MAX_INSTANCES);
   /* Unregister as a platform device driver */
   platform_driver_unregister(&audio_tdm_driver);
 }
