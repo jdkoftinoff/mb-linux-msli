@@ -85,27 +85,7 @@ static void reset_mailbox(struct labx_mailbox *mailbox) {
   disable_mailbox(mailbox);
 }
 
-struct labx_mailbox* get_instance(const char *name) {
-  int i;
-  struct labx_mailbox *targetMailbox = NULL;
-
-  for (i = 0; i<MAX_MAILBOX_DEVICES; i++) {
-    if ((labx_mailboxes[i] != NULL) && (labx_mailboxes[i]->name == name))
-    {
-      /* printk("labx_mailbox: found %p\n", devices[i]);*/
-      targetMailbox = labx_mailboxes[i];
-      break;
-    }
-  }
-  return (targetMailbox);
-}
-
-void async_event_notify(struct labx_mailbox *mailbox) {
-
-  XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_TRIG_ASYNC_REG), ENABLE);
-}
- 
-/* Interrupt service r utine for the instance */
+/* Interrupt service routine for the instance */
 static irqreturn_t mailbox_interrupt(int irq, void *dev_id) {
   struct labx_mailbox *mailbox = (struct labx_mailbox*) dev_id;
   uint32_t maskedFlags;
@@ -113,10 +93,12 @@ static irqreturn_t mailbox_interrupt(int irq, void *dev_id) {
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
-  maskedFlags = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG));
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG));
+  
   maskedFlags &= irqMask;
-  XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), maskedFlags);
+  XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_FLAGS_REG), maskedFlags);
+  //XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), 0x00000000);
 
   /* Detect the host-to-supervisor message wait_received IRQ */
   if((maskedFlags & SUPRV_IRQ_0) != 0) {
@@ -145,10 +127,14 @@ static int netlink_thread(void *data)
     wait_event_interruptible(mailbox->messageReadQueue,
                              ((mailbox->messageReadyFlag == MESSAGE_READY) || (kthread_should_stop())));
 
+    if (kthread_should_stop()) break;
+
     __set_current_state(TASK_RUNNING);
 
+    /* Reset message ready flag */ 
+    mailbox->messageReadyFlag = MESSAGE_NOT_READY;
+    
     mailbox_event_send_request(mailbox);
-
     /* Before returning to waiting, optionally sleep a little bit and then
      * re-enable the IRQs which trigger us.  There should be no need to disable
      * interrupts to prevent a race condition since the only part of the ISR
@@ -165,9 +151,6 @@ static int netlink_thread(void *data)
     irqMask |= SUPRV_IRQ_0;
     XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), irqMask);
   } while (!kthread_should_stop());
-
-  /* Reset message ready flag after exiting the kernel thread */ 
-  mailbox->messageReadyFlag = MESSAGE_NOT_READY;
 
   return 0;
 }
@@ -262,6 +245,7 @@ static int mailbox_probe(const char *name,
   
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(mailbox->irq != NO_IRQ_SUPPLIED) {
+    XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), ALL_IRQS);
     XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_FLAGS_REG), ALL_IRQS);
   }
 
@@ -269,6 +253,7 @@ static int mailbox_probe(const char *name,
   for(i=0;i<MAX_MAILBOX_DEVICES;i++) {
     if(NULL == labx_mailboxes[i]) {
       labx_mailboxes[i] = mailbox;
+      printk("Adding mailbox: %s\n", labx_mailboxes[i]->name);
       break;
     }
   }

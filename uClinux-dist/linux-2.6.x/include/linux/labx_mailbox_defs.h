@@ -34,15 +34,15 @@
 /* Constant and type definitions for the message mailbox */
 #define NAME_MAX_SIZE    (256)
 
+/* Maximum size, in words, of a single message packet */
+#define MAX_MESSAGE_PACKET_WORDS (256)
+
 /* Structure type definition for encapsulating a message */
 #define MAX_MESSAGE_DATA 1024
 typedef struct {
   uint32_t  length;
-  uint32_t *messageContent;
+  uint32_t messageContent[MAX_MESSAGE_PACKET_WORDS];
 } MessageData;
-
-/* Maximum size, in words, of a single message packet */
-#define MAX_MESSAGE_PACKET_WORDS (256)
 
 /* Mailbox events Generic Netlink family name, version, and multicast groups */
 #define LABX_MAILBOX_EVENTS_FAMILY_NAME     "MAILBOX_EVTS"
@@ -60,19 +60,13 @@ enum {
 };
 #define LABX_MAILBOX_EVENTS_C_MAX (__LABX_MAILBOX_EVENTS_C_MAX - 1)
 
-/* Constant enumeration defining a message packet */
-enum {
-  LABX_MAILBOX_MESSAGE_A_PACKET,
-  LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH,
-  LABX_MAILBOX_MESSAGE_PACKET_A_WORDS,
-  __LABX_MAILBOX_MESAGE_PACKET_A_MAX,
-};
-#define LABX_MAILBOX_MESSAGE_PACKET_A_MAX (__LABX_MAILBOX_MESSAGE_PACKET_A_MAX - 1)
-
 /* Netlink family attributes */
 enum {
   LABX_MAILBOX_EVENTS_A_UNSPEC,
   LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE,
+  LABX_MAILBOX_MESSAGE_A_PACKET,
+  LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH,
+  LABX_MAILBOX_MESSAGE_PACKET_A_WORDS,
   __LABX_MAILBOX_EVENTS_A_MAX,
 };
 #define LABX_MAILBOX_EVENTS_A_MAX (__LABX_MAILBOX_EVENTS_A_MAX - 1)
