@@ -1,5 +1,6 @@
+
 /*
- *  linux/drivers/char/labx_mailbox_netlink.c
+ *  linux/drivers/misc/labx/labx_mailbox_netlink.c
  *
  *  Lab X Technologies Mailbox driver
  *  Mailbox Generic Netlink interface
@@ -67,11 +68,25 @@ static struct genl_multicast_group mailbox_mcast = {
   .name = LABX_MAILBOX_EVENTS_GROUP,
 };
 
+struct labx_mailbox* get_instance(const char name[]) {
+  int i;
+  struct labx_mailbox *targetMailbox = NULL;
+
+  for (i = 0; i<MAX_MAILBOX_DEVICES; i++) {
+    if ((labx_mailboxes[i] != NULL) && (!strcmp(labx_mailboxes[i]->name, name)))
+    {
+      targetMailbox = labx_mailboxes[i];
+      break;
+    }
+  }
+  return (targetMailbox);
+}
+
 int mailbox_event_send_request(struct labx_mailbox *mailbox) {
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
-  uint32_t messageLength;
+  uint32_t msgLengthBytes, msgLengthWords;
   struct nlattr *packetNesting;
   uint32_t wordIndex;
   int32_t nestIndex;
@@ -92,11 +107,12 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
   }
 
   /* Write the mailbox device to identify the message source */
-  returnValue = nla_put_u32(skb, LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE, (uint32_t)mailbox->name);
+  returnValue = nla_put_string(skb, LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE, mailbox->name);
   if(returnValue != 0) goto fail;
 
   /* Read the mailbox message length */ 
-  messageLength = (((XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_MSG_LEN_REG)))/ + 3)/4);  
+  msgLengthBytes = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_MSG_LEN_REG));
+  msgLengthWords = (msgLengthBytes+3)/4;
 
   /* Each packet is itself a nested table of words; begin the nesting */
   packetNesting = nla_nest_start(skb, LABX_MAILBOX_MESSAGE_A_PACKET);
@@ -105,15 +121,18 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
   /* Write the length of the packet and then its raw words */
   returnValue = nla_put_u32(skb, 
                             LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH, 
-                            messageLength);
+                            msgLengthWords);
   if(returnValue != 0) goto fail;
 
   nestIndex = LABX_MAILBOX_MESSAGE_PACKET_A_WORDS;
-  for(wordIndex = 0; wordIndex < messageLength; wordIndex++) {
-    returnValue = nla_put_u32(skb, nestIndex++, XIo_In32(MSG_RAM_BASE(mailbox)+(wordIndex)));
+  for(wordIndex = 0; wordIndex < msgLengthWords; wordIndex++) {
+    returnValue = nla_put_u32(skb, nestIndex++, XIo_In32(MSG_RAM_BASE(mailbox)+(wordIndex*4)));
+    DBG("Read %08X from 0x%08X\n", XIo_In32(MSG_RAM_BASE(mailbox)+(wordIndex*4)),
+      (MSG_RAM_BASE(mailbox) + (wordIndex*4)));
     if(returnValue != 0) goto fail;
   }
-      
+  printk("\n");
+     
   /* Close the nesting for the message packet */
   nla_nest_end(skb, packetNesting);
 
@@ -158,7 +177,7 @@ int mailbox_event_send_device(struct labx_mailbox *mailbox) {
   }
 
   /* Write the mailbox device to identify the message source */
-  returnValue = nla_put_u32(skb, LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE, (uint32_t)mailbox->name);
+  returnValue = nla_put_string(skb, LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE, mailbox->name);
   if(returnValue != 0) goto fail;
 
   /* Finalize the message and multicast it */
@@ -186,7 +205,6 @@ static int mailbox_event_announce_cb(struct sk_buff *skb, struct genl_info *info
 
   for (i = 0; i<MAX_MAILBOX_DEVICES; i++) {
     if(labx_mailboxes[i] != NULL) {
-      //printk("labx_mailbox: found %p\n", labx_mailboxes[i]);
       enable_mailbox(labx_mailboxes[i]);
       mailbox_event_send_device(labx_mailboxes[i]);
     }
@@ -195,50 +213,58 @@ static int mailbox_event_announce_cb(struct sk_buff *skb, struct genl_info *info
 }
 
 static int mailbox_event_shutdown_cb(struct sk_buff *skb, struct genl_info *info) {
+  char targetName[NAME_MAX_SIZE];
   struct labx_mailbox *targetMailbox;
 
-  targetMailbox = get_instance(nla_data(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
+  nla_strlcpy(targetName, info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE], nla_len(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
+  targetMailbox = get_instance(targetName);
   disable_mailbox(targetMailbox);
 
   return 0;
 }
 
 static int mailbox_event_queue_cb(struct sk_buff *skb, struct genl_info *info) {
+  char targetName[NAME_MAX_SIZE];
   struct labx_mailbox *targetMailbox;
 
-  targetMailbox = get_instance(nla_data(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
-  async_event_notify(targetMailbox);
+  nla_strlcpy(targetName, info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE], nla_len(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
+  targetMailbox = get_instance(targetName);
+
+  XIo_Out32(REGISTER_ADDRESS(targetMailbox, SUPRV_TRIG_ASYNC_REG), ENABLE);
   return 0;
 }
 
-static int mailbox_event_response_cb(struct sk_buff *skb, struct genl_info *info, struct nlmsghdr *nlh) {
-  MessageData *mailboxMessage = NULL;
+static int mailbox_event_response_cb(struct sk_buff *skb, struct genl_info *info) {
+  MessageData mailboxMessage; 
   struct labx_mailbox *targetMailbox;
-  struct nlattr *attr = (void*)nlh + NLMSG_LENGTH(GENL_HDRLEN);
-  struct nlattr *tb[LABX_MAILBOX_EVENTS_A_MAX + 1];
-  struct nlattr *tbMessagePacket[MAX_MESSAGE_PACKET_WORDS + 2];  
-  int attrlen = nlh->nlmsg_len - NLMSG_LENGTH(GENL_HDRLEN);
   uint32_t wordIndex;
-
-  nla_parse(tb, LABX_MAILBOX_EVENTS_A_MAX, attr, attrlen, NULL);
-
-  targetMailbox = get_instance(nla_data(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
+  uint32_t msgPayloadSize;
+  uint32_t *msgPayloadPtr;
+  char targetName[NAME_MAX_SIZE];
  
-  nla_parse_nested(tbMessagePacket, MAX_MESSAGE_PACKET_WORDS, tb[LABX_MAILBOX_MESSAGE_A_PACKET], NULL);
- 
-  mailboxMessage->length = nla_get_u32(tbMessagePacket[LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH]);
+  //uint32_t i;
+  //uint8_t *buf = (uint8_t*)nlmsg_data(info->nlhdr);
+  //for(i = 0; i < info->nlhdr->nlmsg_len; i++) {
+  //  printk("0x%02X ", *(buf++));
+  //}
 
-  if(mailboxMessage->length <= MAX_MESSAGE_PACKET_WORDS) {
-    for(wordIndex = 0; wordIndex < mailboxMessage->length; wordIndex++){
-      mailboxMessage->messageContent[wordIndex] =
-            nla_get_u32(tbMessagePacket[LABX_MAILBOX_MESSAGE_PACKET_A_WORDS + wordIndex]);
-     }
+  nla_strlcpy(targetName, info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE], nla_len(info->attrs[LABX_MAILBOX_EVENTS_A_MAILBOX_DEVICE]));
+  targetMailbox = get_instance(targetName);
+ 
+  mailboxMessage.length = nla_get_u32(info->attrs[LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH]);
+
+  if(mailboxMessage.length <= MAX_MESSAGE_PACKET_WORDS) { 
+    msgPayloadSize = nla_len(info->attrs[LABX_MAILBOX_MESSAGE_PACKET_A_WORDS]);
+    msgPayloadPtr = (uint32_t *)nla_data(info->attrs[LABX_MAILBOX_MESSAGE_PACKET_A_WORDS]);
+    memcpy(mailboxMessage.messageContent, msgPayloadPtr, msgPayloadSize);
 
     DBG("Writing IDL response to mailbox\n");
-    for(wordIndex = 0; wordIndex < mailboxMessage->length; wordIndex++) {
-      XIo_Out32(MSG_RAM_BASE(targetMailbox)+(wordIndex), ((uint32_t*)mailboxMessage->messageContent)[wordIndex]);
+    for(wordIndex = 0; wordIndex < mailboxMessage.length; wordIndex++) {
+      DBG("Message: 0x%08X\n", mailboxMessage.messageContent[wordIndex]);
+      XIo_Out32(MSG_RAM_BASE(targetMailbox)+(wordIndex*4), ((uint32_t*)mailboxMessage.messageContent)[wordIndex]);
     }
-    XIo_Out32(REGISTER_ADDRESS(targetMailbox, HOST_MSG_LEN_REG), mailboxMessage->length);
+    DBG("Message response length: 0x%04X\n", mailboxMessage.length);
+    XIo_Out32(REGISTER_ADDRESS(targetMailbox, HOST_MSG_LEN_REG), (mailboxMessage.length*4));
   }
   return 0;
 }

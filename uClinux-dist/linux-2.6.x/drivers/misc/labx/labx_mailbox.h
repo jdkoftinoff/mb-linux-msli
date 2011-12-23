@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/char/labx_mailbox.h
+ *  linux/drivers/misc/labx/labx_mailbox.h
  *
  *  LABX mailbox peripheral driver
  *
@@ -41,7 +41,7 @@
  */
 
 #define REGISTER_RANGE      (0x0)
-#define MSG_RAM_RANGE       (0x200)
+#define MSG_RAM_RANGE       (0x800)
 
 /* Global control registers */
 #define SUPRV_CONTROL_REG        (0x000)
@@ -107,9 +107,6 @@ struct labx_mailbox {
 extern struct labx_mailbox* labx_mailboxes[MAX_MAILBOX_DEVICES];
 extern void enable_mailbox(struct labx_mailbox *mailbox);
 extern void disable_mailbox(struct labx_mailbox *mailbox);
-extern void async_event_notify(struct labx_mailbox *mailbox);
-extern struct labx_mailbox* get_instance(const char* name);
-
 
 /* From labx_mailbox_netlink.c */
 extern int register_mailbox_netlink(void);
