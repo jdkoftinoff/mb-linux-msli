@@ -911,6 +911,8 @@ static int __init ptp_driver_init(void)
 
 static void __exit ptp_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
   /* Unregister Generic Netlink family */
   unregister_ptp_netlink();
 

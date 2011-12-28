@@ -3,4 +3,4 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 echo "Setting hostname: "
-hostname AVBX 
+hostname ITHD 

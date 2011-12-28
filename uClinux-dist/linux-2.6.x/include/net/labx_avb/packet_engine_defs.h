@@ -652,6 +652,19 @@ typedef struct {
 
 #define IOC_GET_RED_SWITCH_STATUS        _IOR(RED_SWITCH_IOC_CHAR, 0x03, uint32_t*)
 
+/* I/O control commands and structures specific to the audio tdm hardware */
+typedef struct {
+  uint32_t versionMajor;
+  uint32_t versionMinor;
+  uint32_t maxChannels;
+  uint32_t lrPolarity;
+  uint32_t i2sAlign;
+} AudioTdmControl;
+
+#define AUDIO_TDM_IOC_CHAR          ('t')
+#define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x01, AudioTdmControl)
+#define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
+
 /* Audio Depacketizer events Generic Netlink family name, version, and multicast groups */
 #define AUDIO_DEPACKETIZER_EVENTS_FAMILY_NAME     "AUD_DEPKT_EVTS"
 #define AUDIO_DEPACKETIZER_EVENTS_FAMILY_VERSION  1

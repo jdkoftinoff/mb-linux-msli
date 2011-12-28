@@ -2,5 +2,6 @@
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
-echo "Setting hostname: "
-hostname AVBX 
+echo "Starting thttpd: "
+thttpd -c *.cgi &
+
