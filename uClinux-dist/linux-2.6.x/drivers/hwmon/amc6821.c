@@ -979,7 +979,11 @@ static int amc6821_init_client(struct i2c_client *client)
 		config &= ~AMC6821_CONF2_RTFIE;
 		config &= ~AMC6821_CONF2_LTOIE;
 		config &= ~AMC6821_CONF2_RTOIE;
+		#ifdef CONFIG_AMC6821_TACH_MODE
+		config |= AMC6821_CONF2_TACH_MODE;
+		#else
 		config &= ~AMC6821_CONF2_TACH_MODE;
+		#endif
 		config |= AMC6821_CONF2_TACH_EN;
 		if (i2c_smbus_write_byte_data(client,
 				AMC6821_REG_CONF2, config)) {

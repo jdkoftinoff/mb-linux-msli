@@ -95,12 +95,7 @@ static int ptp_device_open(struct inode *inode, struct file *filp)
   /* Lock the mutex and ensure there is only one client */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  if(ptp->opened) {
-    returnValue = -1;
-  } else {
-    ptp->opened = true;
-  }
-
+  ptp->opened++;
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 
@@ -114,7 +109,7 @@ static int ptp_device_release(struct inode *inode, struct file *filp)
 
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  ptp->opened = false;
+  ptp->opened--;
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
   return(0);
@@ -911,6 +906,8 @@ static int __init ptp_driver_init(void)
 
 static void __exit ptp_driver_exit(void)
 {
+  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
+
   /* Unregister Generic Netlink family */
   unregister_ptp_netlink();
 

@@ -233,7 +233,12 @@ config ISL29003
 	  This driver can also be built as a module.  If so, the module
 	  will be called isl29003.
 
+config LABX_MAILBOX
+        tristate "Lab X mailbox device"
+        depends on OF && (PPC_OF || MICROBLAZE)
+        help
+          Select this to enable support for host-to-supervisory communication.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
-
 endif # MISC_DEVICES
