@@ -32,6 +32,8 @@
 #include <linux/platform_device.h>
 
 #include "mv88e6350R.h"
+#include "mv88e6350R_defs.h"
+
 /* Driver name */
 #define DRIVER_NAME "mv88e6350R"
 
@@ -44,12 +46,9 @@ static uint32_t instanceCount;
 #define NAME_MAX_SIZE    (256)
 
 
-#define REG_PORT(p)		(0x10 + (p))
-#define REG_GLOBAL		0x1b
-#define REG_GLOBAL2		0x1c
-
-
 /* 88E6350R ports assigned to the two CPU ports */
+#define CAL_ICS_EXT_PORT_0 (0)
+#define CAL_ICS_EXT_PORT_1 (1)
 #define CAL_ICS_CPU_PORT_0 (5)
 #define CAL_ICS_CPU_PORT_1 (6)
 
@@ -99,22 +98,22 @@ static uint32_t instanceCount;
 #define CAL_ICS_COPPER_PORTS (2)
 
 
-typedef char  MV_8;
-typedef unsigned char	MV_U8;
+typedef char           MV_8;
+typedef unsigned char  MV_U8;
 
-typedef int		MV_32;
-typedef unsigned int	MV_U32;
+typedef int            MV_32;
+typedef unsigned int   MV_U32;
 
-typedef short		MV_16;
-typedef unsigned short	MV_U16;
+typedef short          MV_16;
+typedef unsigned short MV_U16;
 
 /* Per-port switch registers */
-#define MV_SWITCH_PORT_CONTROL_REG				0x04
-#define MV_SWITCH_PORT_VMAP_REG					0x06
-#define MV_SWITCH_PORT_VID_REG					0x07
+#define MV_SWITCH_PORT_CONTROL_REG 0x04
+#define MV_SWITCH_PORT_VMAP_REG    0x06
+#define MV_SWITCH_PORT_VID_REG     0x07
 
 /* Port LED control register and indirect registers */
-#define MV_SWITCH_PORT_LED_CTRL_REG             0x16
+#define MV_SWITCH_PORT_LED_CTRL_REG              0x16
 #  define MV_SWITCH_LED_CTRL_UPDATE     0x8000
 #  define MV_SWITCH_LED_CTRL_PTR_MASK      0x7
 #  define MV_SWITCH_LED_CTRL_PTR_SHIFT      12
@@ -138,7 +137,7 @@ typedef unsigned short	MV_U16;
      (regValue & MV_SWITCH_LED_CTRL_DATA_MASK))
 
 /* E6350R-related */
-#define MV_E6350R_MAX_PORTS_NUM					7
+#define MV_E6350R_MAX_PORTS_NUM 7
 
 #define XPAR_XPS_GPIO_0_BASEADDR 0x820F0000
 #define LABX_MDIO_ETH_BASEADDR 0x82050000
@@ -157,10 +156,7 @@ typedef unsigned short	MV_U16;
 #  define MDIO_DIVISOR_MASK  (0x0000003F)
 #  define MDIO_ENABLED       (0x00000040)
 
-
-
-
-/* Performs a register write to a PHY */
+/* Performs a register write to a switch register */
 void REG_WRITE(int phy_addr, int reg_addr, int phy_data)
 {
   unsigned int addr;
@@ -175,7 +171,7 @@ void REG_WRITE(int phy_addr, int reg_addr, int phy_data)
   while(*((volatile unsigned int *) addr) & PHY_MDIO_BUSY);
 }
 
-/* Performs a register read from a PHY */
+/* Performs a register read from a switch register */
 unsigned int REG_READ(int phy_addr, int reg_addr)
 {
   unsigned int addr;
@@ -192,80 +188,82 @@ unsigned int REG_READ(int phy_addr, int reg_addr)
   return(readValue);
 }
 
+/* Performs a register write to a switch PHY register */
+void REG_PHY_WRITE(int phy_addr, int reg_addr, int phy_data)
+{
+  REG_WRITE(MV_REG_GLOBAL2, 25, phy_data);
+  REG_WRITE(MV_REG_GLOBAL2, 24, 0x9400 | (phy_addr << 5) | reg_addr);
+  while (REG_READ(MV_REG_GLOBAL2, 24) & 0x8000); // Should only take a read or two...
+}
 
+/* Performs a register read from a switch PHY register */
+unsigned int REG_PHY_READ(int phy_addr, int reg_addr)
+{
+  REG_WRITE(MV_REG_GLOBAL2, 24, 0x9800 | (phy_addr << 5) | reg_addr);
+  while (REG_READ(MV_REG_GLOBAL2, 24) & 0x8000); // Should only take a read or two...
+  return REG_READ(MV_REG_GLOBAL2, 25);
+}
 
-static void switchVlanInit(
-						               MV_U32 switchCpuPort0,
-						               MV_U32 switchCpuPort1,
+static void switchVlanInit(MV_U32 switchCpuPort0,
+                           MV_U32 switchCpuPort1,
                            MV_U32 switchMaxPortsNum,
                            MV_U32 switchEnabledPortsMask)
 {
   MV_U32 prt;
-	MV_U16 reg;
+  MV_U16 reg;
 
-	MV_U16 cpu_vid = 0x1;
+  MV_U16 cpu_vid = 0x1;
 
-
-	/* Setting  Port default priority for all ports to zero, set default VID=0x1 */
-    for(prt=0; prt < switchMaxPortsNum; prt++) {
-      if (((1 << prt)& switchEnabledPortsMask)) {
-		    reg = REG_READ (REG_PORT(prt),MV_SWITCH_PORT_VID_REG);
-		    reg &= ~0xefff;
-		    reg |= cpu_vid;
-		    REG_WRITE (REG_PORT(prt),
-                                 MV_SWITCH_PORT_VID_REG,reg);
-        printk("Yi Cao: set default priority of port %d\n", prt);
-      }
-	}
-
+  /* Setting  Port default priority for all ports to zero, set default VID=0x1 */
+  for(prt=0; prt < switchMaxPortsNum; prt++) {
+    if (((1 << prt) & switchEnabledPortsMask)) {
+      reg = REG_READ(MV_REG_PORT(prt), MV_SWITCH_PORT_VID_REG);
+      reg &= ~0xefff;
+      reg |= cpu_vid;
+      REG_WRITE(MV_REG_PORT(prt), MV_SWITCH_PORT_VID_REG, reg);
+    }
+  }
 	
   /* 
    *  set Ports VLAN Mapping.
-   *	
    */
   
   /* port 0 is mapped to port 5 (CPU Port) */  
-  reg = REG_READ ( REG_PORT(0),MV_SWITCH_PORT_VMAP_REG);  
+  reg = REG_READ(MV_REG_PORT(CAL_ICS_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG);  
   reg &= ~0x00ff;
   reg |= 0x20;
-  REG_WRITE ( REG_PORT(0),
-                       MV_SWITCH_PORT_VMAP_REG,reg); 
-  printk("VLAN map for port 0 = 0x%08X\n", reg);  
+  REG_WRITE(MV_REG_PORT(CAL_ICS_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG, reg); 
+  printk("VLAN map for port %d = 0x%08X\n", CAL_ICS_EXT_PORT_0, reg);
+
   /* port 1 is mapped to port 6 (CPU Port) */
-  reg = REG_READ ( REG_PORT(1),MV_SWITCH_PORT_VMAP_REG);  
+  reg = REG_READ(MV_REG_PORT(CAL_ICS_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG);  
   reg &= ~0x00ff;
   reg |= 0x40;
-  REG_WRITE ( REG_PORT(1),
-                       MV_SWITCH_PORT_VMAP_REG,reg);                 
-  printk("VLAN map for port 1 = 0x%08X\n", reg);                            
-	/* port 5 (CPU Port) is mapped to port 0*/
-	reg = REG_READ ( REG_PORT(switchCpuPort0),MV_SWITCH_PORT_VMAP_REG);
-	reg &= ~0x00ff;
-	reg |= 0x01;
-	REG_WRITE ( REG_PORT(switchCpuPort0),
-                         MV_SWITCH_PORT_VMAP_REG,reg);
+  REG_WRITE(MV_REG_PORT(CAL_ICS_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG, reg);
+  printk("VLAN map for port %d = 0x%08X\n", CAL_ICS_EXT_PORT_0, reg);
+
+  /* port 5 (CPU Port) is mapped to port 0*/
+  reg = REG_READ(MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG);
+  reg &= ~0x00ff;
+  reg |= 0x01;
+  REG_WRITE(MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG, reg);
   printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort0, reg);
+
   /* port 6 (CPU Port) is mapped to port 1*/
-	reg = REG_READ ( REG_PORT(switchCpuPort1),MV_SWITCH_PORT_VMAP_REG);
-	reg &= ~0x00ff;
-	reg |= 0x02;
-	REG_WRITE ( REG_PORT(switchCpuPort1),
-                         MV_SWITCH_PORT_VMAP_REG,reg);
+  reg = REG_READ(MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG);
+  reg &= ~0x00ff;
+  reg |= 0x02;
+  REG_WRITE(MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG, reg);
   printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort1, reg);
 
-    /*enable only appropriate ports to forwarding mode*/
-    for(prt=0; prt < switchMaxPortsNum; prt++) {
-
-      if ((1 << prt)& switchEnabledPortsMask) {
-        reg = REG_READ ( REG_PORT(prt),MV_SWITCH_PORT_CONTROL_REG);
-        reg |= 0x3;
-        REG_WRITE ( REG_PORT(prt),MV_SWITCH_PORT_CONTROL_REG,reg);
-        printk("Yi Cao: set forwarding mode of port %d\n", prt);
-
-      }
+  /* enable only appropriate ports to forwarding mode */
+  for(prt=0; prt < switchMaxPortsNum; prt++) {
+    if ((1 << prt)& switchEnabledPortsMask) {
+      reg = REG_READ(MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG);
+      reg |= 0x3;
+      REG_WRITE(MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG, reg);
     }
-
-	return;
+  }
 }
 
 static void mv88e6350R_hard_reset(void)
@@ -292,8 +290,6 @@ static void mv88e6350R_hard_reset(void)
   /* set bit 20 as 0, so PHY_RESET_n=1, free up PHY_Reset_n */
   reg &= ~0x4;
   *((unsigned long *)(XPAR_XPS_GPIO_0_BASEADDR)) = reg;
-  
-  
 }
 
 /*
@@ -318,12 +314,6 @@ static int mvEthSwitch_open(struct inode *inode, struct file *filp)
     mvEthSwitch->opened = true;
   }
 
-  /* Invoke the open() operation on the derived driver, if there is one */
-  if((mvEthSwitch->derivedFops != NULL) && 
-     (mvEthSwitch->derivedFops->open != NULL)) {
-    mvEthSwitch->derivedFops->open(inode, filp);
-  }
-
   spin_unlock_irqrestore(&mvEthSwitch->mutex, flags);
   preempt_enable();
   
@@ -338,12 +328,6 @@ static int mvEthSwitch_release(struct inode *inode, struct file *filp)
   preempt_disable();
   spin_lock_irqsave(&mvEthSwitch->mutex, flags);
   mvEthSwitch->opened = false;
-
-  /* Invoke the release() operation on the derived driver, if there is one */
-  if((mvEthSwitch->derivedFops != NULL) && 
-     (mvEthSwitch->derivedFops->release != NULL)) {
-    mvEthSwitch->derivedFops->release(inode, filp);
-  }
 
   spin_unlock_irqrestore(&mvEthSwitch->mutex, flags);
   preempt_enable();
@@ -365,57 +349,82 @@ static int mvEthSwitch_ioctl(struct inode *inode,
   */
   switch(command) {
       
-  case 0: //InDiscards Frame counter
+  case IOC_MV_MDIO_REG_READ:
     {
-      port = *((uint32_t*)arg);
+      struct mv_mdio mdio;
+      if(copy_from_user(&mdio, (void __user*)arg, sizeof(struct mv_mdio)) != 0) {
+        return(-EFAULT);
+      }
 
-      /* Get the stream status, then copy into the userspace pointer */
-      /* read the high 16 bit of the InDiscards Frame Counter */
-      Value = REG_READ ( REG_PORT(port),0x11); 
-      /* read the lower 16 bit */
-      Value = (Value << 16) | REG_READ ( REG_PORT(port),0x10);
+      printk("Reading addr %d, reg %d, page %d\n", mdio.addr, mdio.reg, mdio.page);
+
+      if (mdio.addr < 0x06) { // PHY registers must be accessed indirectly
+        if (mdio.page != MV_MDIO_NO_PAGE) {
+          REG_PHY_WRITE(mdio.addr, 0x16, mdio.page);
+          printk("REG PAGE addr %d = %d\n", mdio.addr, REG_PHY_READ(mdio.addr, 0x16));
+        }
+        mdio.data = REG_PHY_READ(mdio.addr, mdio.reg);
+      } else {
+        mdio.data = REG_READ(mdio.addr, mdio.reg);
+      }
       
-      if(copy_to_user((void __user*)arg, &Value, 
-                      sizeof(uint32_t)) != 0) {
+      printk("REG addr %d reg %d = %04X\n", mdio.addr, mdio.reg, mdio.data);
+
+      if(copy_to_user((void __user*)arg, &mdio, sizeof(struct mv_mdio)) != 0) {
         return(-EFAULT);
       }
     }
     break;
-    
-  case 1: //InFiltered Frame Counter
+
+  case IOC_MV_MDIO_REG_WRITE:
     {
-      port = *((uint32_t*)arg);
-
-      /* Get the stream status, then copy into the userspace pointer */
-      Value = REG_READ ( REG_PORT(port),0x12); 
-
-      if(copy_to_user((void __user*)arg, &Value, 
-                      sizeof(uint32_t)) != 0) {
+      struct mv_mdio mdio;
+      if(copy_from_user(&mdio, (void __user*)arg, sizeof(struct mv_mdio)) != 0) {
         return(-EFAULT);
+      }
+      printk("Writing addr %d, reg %d, page %d, value %d\n", mdio.addr, mdio.reg, mdio.page, mdio.data);
+
+      if (mdio.addr < 0x06) { // PHY registers must be accessed indirectly
+        if (mdio.page != MV_MDIO_NO_PAGE) {
+          REG_PHY_WRITE(mdio.addr, 0x16, mdio.page);
+          printk("REG PAGE addr %d = %d\n", mdio.addr, REG_PHY_READ(mdio.addr, 0x16));
+        }
+        printk("REG addr %d reg %d = %04X\n", mdio.addr, mdio.reg, REG_PHY_READ(mdio.addr, mdio.reg));
+        REG_PHY_WRITE(mdio.addr, mdio.reg, mdio.data);
+        printk("REG addr %d reg %d = %04X after write\n", mdio.addr, mdio.reg, REG_PHY_READ(mdio.addr, mdio.reg));
+      } else {
+        REG_WRITE(mdio.addr, mdio.reg, mdio.data);
       }
     }
     break;
-    
-  case 2: //OutFiltered Frame Counter
+
+  case IOC_MV_MDIO_REG_MODIFY:
     {
-      port = *((uint32_t*)arg);
-
-      /* Get the stream status, then copy into the userspace pointer */
-      Value = REG_READ ( REG_PORT(port),0x13); 
-
-      if(copy_to_user((void __user*)arg, &Value, 
-                      sizeof(uint32_t)) != 0) {
+      struct mv_mdio_rmw mdio;
+      if(copy_from_user(&mdio, (void __user*)arg, sizeof(struct mv_mdio_rmw)) != 0) {
         return(-EFAULT);
+      }
+      printk("Modifying addr %d, reg %d, page %d, ormask 0x%X, andmask 0x%X\n", mdio.addr, mdio.reg, mdio.page, mdio.ormask, mdio.andmask);
+
+      if (mdio.addr < 0x06) { // PHY registers must be accessed indirectly
+        if (mdio.page != MV_MDIO_NO_PAGE) {
+          REG_PHY_WRITE(mdio.addr, 0x16, mdio.page);
+          printk("REG PAGE addr %d = %d\n", mdio.addr, REG_PHY_READ(mdio.addr, 0x16));
+        }
+        printk("REG addr %d reg %d = %04X\n", mdio.addr, mdio.reg, REG_PHY_READ(mdio.addr, mdio.reg));
+        REG_PHY_WRITE(mdio.addr, mdio.reg, (REG_PHY_READ(mdio.addr, mdio.reg) & mdio.andmask) | mdio.ormask);
+        printk("REG addr %d reg %d = %04X after modify\n", mdio.addr, mdio.reg, REG_PHY_READ(mdio.addr, mdio.reg));
+      } else {
+        REG_WRITE(mdio.addr, mdio.reg, (REG_READ(mdio.addr, mdio.reg) & mdio.andmask) | mdio.ormask);
       }
     }
     break;
+
   default:
-      if((mvEthSwitch->derivedFops != NULL) && 
-         (mvEthSwitch->derivedFops->ioctl != NULL)) {
-        returnValue = mvEthSwitch->derivedFops->ioctl(inode, filp, command, arg);
-      } else returnValue = -EINVAL;  
-  
+    returnValue = -EINVAL;
+    break;
   }
+
   /* Return an error code appropriate to the command */
   return(returnValue);
 }
@@ -428,93 +437,85 @@ static struct file_operations mvEthSwitch_fops = {
   .owner   = THIS_MODULE,
 };
 
-
-
 static int mv88e6350R_probe(struct platform_device *pdev)
 {
-	MV_U32 portIndex;
-	MV_U16 reg, saved_g1reg4;
-	struct mvEthSwitch *mvEthSwitch;
+  MV_U32 portIndex;
+  MV_U16 reg, saved_g1reg4;
+  struct mvEthSwitch *mvEthSwitch;
 	
-	mv88e6350R_hard_reset();
-	msleep(2);
+  mv88e6350R_hard_reset();
+  msleep(2);
  
-  REG_WRITE( 
-             REG_PORT(CAL_ICS_CPU_PORT_0), 
-             PHYS_CTRL_REG,
-             CAL_ICS_CPU_PORT_0_PHYS_CTRL);
+  REG_WRITE(MV_REG_PORT(CAL_ICS_CPU_PORT_0), 
+            PHYS_CTRL_REG,
+            CAL_ICS_CPU_PORT_0_PHYS_CTRL);
 
-                        
-	REG_WRITE( 
-             REG_PORT(CAL_ICS_CPU_PORT_1), 
-             PHYS_CTRL_REG,
-             CAL_ICS_CPU_PORT_1_PHYS_CTRL);
+  REG_WRITE(MV_REG_PORT(CAL_ICS_CPU_PORT_1), 
+            PHYS_CTRL_REG,
+            CAL_ICS_CPU_PORT_1_PHYS_CTRL);
 
-	/* Init vlan LAN0-3 <-> CPU port egiga0 */
+  /* Init vlan LAN0-3 <-> CPU port egiga0 */
   printk("CPU port is on 88E6350R port %d and %d\n", CAL_ICS_CPU_PORT_0, CAL_ICS_CPU_PORT_1);
-	switchVlanInit(
-                   CAL_ICS_CPU_PORT_0,
-                   CAL_ICS_CPU_PORT_1,
-                   MV_E6350R_MAX_PORTS_NUM,
-                   CAL_ICS_ENABLED_PORTS);
 
-	/* Disable PPU */
-	saved_g1reg4 = REG_READ(REG_GLOBAL,0x4);
-	REG_WRITE(REG_GLOBAL,0x4,0x0);
+  switchVlanInit(CAL_ICS_CPU_PORT_0,
+                 CAL_ICS_CPU_PORT_1,
+                 MV_E6350R_MAX_PORTS_NUM,
+                 CAL_ICS_ENABLED_PORTS);
 
+  /* Disable PPU */
+  saved_g1reg4 = REG_READ(MV_REG_GLOBAL,0x4);
+  REG_WRITE(MV_REG_GLOBAL,0x4,0x0);
 
-	for(portIndex = 0; portIndex < MV_E6350R_MAX_PORTS_NUM; portIndex++) {
-      /* Reset PHYs for all but the port to the CPU */
-      if((portIndex != CAL_ICS_CPU_PORT_0) && (portIndex != CAL_ICS_CPU_PORT_1)) {
-        printk("Yi Cao: reset phy of port %d\n", portIndex);
-        REG_WRITE(portIndex, 0, 0x9140);
-      }
+  for(portIndex = 0; portIndex < MV_E6350R_MAX_PORTS_NUM; portIndex++) {
+    /* Reset PHYs for all but the port to the CPU */
+    if((portIndex != CAL_ICS_CPU_PORT_0) && (portIndex != CAL_ICS_CPU_PORT_1)) {
+      printk("Yi Cao: reset phy of port %d\n", portIndex);
+      REG_WRITE(portIndex, 0, 0x9140);
     }
+  }
 
-    /* Initialize LED control registers
-     *
-     * Specifically, Titanium-411 is designed to display per-port status on the
-     * front panel using LED columns COL_0 and COL_1:
-     *
-     * Green -   1 Gbit Link Up
-     * Amber - 100 Mbit Link Up
-     * Red   -  10 Mbit Link Up
-     *
-     * Regardless of color, activity is indicated by blinking.
-     *
-     * On the back panel, LED columns COL_2 and COL_3 reflect status via light
-     * pipes co-located above each port, with the exception of switch port 4,
-     * which is denoted as "Port 5 - SFP Port" on the enclosure.  The SFP port
-     * has a vertical two-LED stack reflecting the same:
-     *
-     * Green - 1 Gbit Link Up
-     * Red   - Any Link Up / Activity (blink)
-     *
-     * This functionality is enabled through the use of the LED control 
-     * registers within the 88E6350R switch chip.
-     */
-    for(portIndex = 0; portIndex < CAL_ICS_COPPER_PORTS; portIndex++) {
-      printk("Yi Cao: set up the LED of port %d\n",portIndex); 
-      REG_WRITE( 
-                          REG_PORT(portIndex),
-                          MV_SWITCH_PORT_LED_CTRL_REG,
-                          MV_SWITCH_LED_WRITE(MV_SWITCH_LED_01_CTRL_REG, 
-                                              (MV_SWITCH_LED1_100M_10M_ACT | MV_SWITCH_LED0_1G_100M_ACT)));
-      REG_WRITE( 
-                          REG_PORT(portIndex),
-                          MV_SWITCH_PORT_LED_CTRL_REG,
-                          MV_SWITCH_LED_WRITE(MV_SWITCH_LED_23_CTRL_REG, 
-                                              (MV_SWITCH_LED3_LINK_ACT | MV_SWITCH_LED2_1G_LINK)));
-      REG_WRITE( 
-                          REG_PORT(portIndex),
-                          MV_SWITCH_PORT_LED_CTRL_REG,
-                          MV_SWITCH_LED_WRITE(MV_SWITCH_LED_SPECIAL_CTRL_REG, 
-                                              MV_SWITCH_LED_SPECIAL_NONE));
-    }
+  /* Initialize LED control registers
+   *
+   * Specifically, Titanium-411 is designed to display per-port status on the
+   * front panel using LED columns COL_0 and COL_1:
+   *
+   * Green -   1 Gbit Link Up
+   * Amber - 100 Mbit Link Up
+   * Red   -  10 Mbit Link Up
+   *
+   * Regardless of color, activity is indicated by blinking.
+   *
+   * On the back panel, LED columns COL_2 and COL_3 reflect status via light
+   * pipes co-located above each port, with the exception of switch port 4,
+   * which is denoted as "Port 5 - SFP Port" on the enclosure.  The SFP port
+   * has a vertical two-LED stack reflecting the same:
+   *
+   * Green - 1 Gbit Link Up
+   * Red   - Any Link Up / Activity (blink)
+   *
+   * This functionality is enabled through the use of the LED control 
+   * registers within the 88E6350R switch chip.
+   */
+  for(portIndex = 0; portIndex < CAL_ICS_COPPER_PORTS; portIndex++) {
+    REG_WRITE(MV_REG_PORT(portIndex),
+              MV_SWITCH_PORT_LED_CTRL_REG,
+              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_01_CTRL_REG, 
+                                  (MV_SWITCH_LED1_100M_10M_ACT | MV_SWITCH_LED0_1G_100M_ACT)));
 
-	/* Enable PHY Polling Unit (PPU) */
-	saved_g1reg4 |= 0x4000;
-	REG_WRITE(REG_GLOBAL,0x4,saved_g1reg4);
+    REG_WRITE(MV_REG_PORT(portIndex),
+              MV_SWITCH_PORT_LED_CTRL_REG,
+              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_23_CTRL_REG, 
+                                  (MV_SWITCH_LED3_LINK_ACT | MV_SWITCH_LED2_1G_LINK)));
+
+    REG_WRITE(MV_REG_PORT(portIndex),
+              MV_SWITCH_PORT_LED_CTRL_REG,
+              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_SPECIAL_CTRL_REG,
+                                  MV_SWITCH_LED_SPECIAL_NONE));
+  }
+
+  /* Enable PHY Polling Unit (PPU) */
+  saved_g1reg4 |= 0x4000;
+  REG_WRITE(MV_REG_GLOBAL,0x4,saved_g1reg4);
 	
   /* Create and populate a device structure */
   mvEthSwitch = (struct mvEthSwitch*) kmalloc(sizeof(struct mvEthSwitch), GFP_KERNEL);
@@ -531,7 +532,7 @@ static int mv88e6350R_probe(struct platform_device *pdev)
   platform_set_drvdata(pdev, mvEthSwitch);
   mvEthSwitch->pdev = pdev;
   
-	/* Add as a character device to make the instance available for use */
+  /* Add as a character device to make the instance available for use */
   cdev_init(&mvEthSwitch->cdev, &mvEthSwitch_fops);
   mvEthSwitch->cdev.owner = THIS_MODULE;
   
@@ -542,9 +543,8 @@ static int mv88e6350R_probe(struct platform_device *pdev)
   return 0;
 }
 
-
 static struct platform_driver mv88e6350R_switch_driver = {
-	.probe		= mv88e6350R_probe,
+  .probe = mv88e6350R_probe,
   .driver = {
     .name = DRIVER_NAME,
   }
@@ -563,17 +563,17 @@ static int __init mv88e6350R_init(void)
   }
 
 
-	if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
+  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
     printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
   }
   
-	return 0;
+  return 0;
 }
 module_init(mv88e6350R_init);
 
 static void __exit mv88e6350R_cleanup(void)
 {
   unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
-	platform_driver_unregister(&mv88e6350R_switch_driver);
+  platform_driver_unregister(&mv88e6350R_switch_driver);
 }
 module_exit(mv88e6350R_cleanup);
