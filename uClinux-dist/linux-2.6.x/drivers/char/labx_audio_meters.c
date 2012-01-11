@@ -128,13 +128,14 @@ static int labx_audio_meters_ioctl_cdev(struct inode *inode, struct file *filp,
     break;
 
   case IOC_AM_GET_METER_COUNT:
-    if (copy_to_user(&audio_meters_pdev->numChannels, (void __user*)arg, sizeof(u32)) != 0) {
+    if (copy_to_user((void __user*)arg, &audio_meters_pdev->numChannels, sizeof(u32)) != 0) {
       return (-EFAULT);
     }
     break;
 
   case IOC_AM_READ_METERS:
     {
+      u32 timeout = 1000000;
       u32 meterDataCount = 0;
       u32 meterDataValue = 0;
 
@@ -153,12 +154,17 @@ static int labx_audio_meters_ioctl_cdev(struct inode *inode, struct file *filp,
       XIo_Out32(AUDIO_METERS_REGISTER(audio_meters_pdev, AUDIO_METERS_VALUE_REG), 0);
 
       /* Wait for meter data to be ready. TODO: use the interrupt instead of this spin-loop */
-      while ((XIo_In32(AUDIO_METERS_REGISTER(audio_meters_pdev, AUDIO_METERS_STATUS_REG)) & AUDIO_METERS_STATUS_READY) == 0);
+      while ((XIo_In32(AUDIO_METERS_REGISTER(audio_meters_pdev, AUDIO_METERS_STATUS_REG)) & AUDIO_METERS_STATUS_READY) == 0) {
+        if (timeout-- == 0) {
+          printk("Meter read timeout\n");
+          break;
+        }
+      }
 
-      while(meterDataCount > 0) {
+      while(meterDataCount-- > 0) {
         meterDataValue = XIo_In32(AUDIO_METERS_REGISTER(audio_meters_pdev, AUDIO_METERS_VALUE_REG));
 
-        if(copy_to_user(&meterDataValue, (void __user*)arg, sizeof(u32)) != 0) {
+        if(copy_to_user((void __user*)arg, &meterDataValue, sizeof(u32)) != 0) {
           return(-EFAULT);
         }
         arg += sizeof(u32);
