@@ -609,6 +609,9 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
       pointers[i] = kmalloc(alloc->size, GFP_DMA);
     }
 
+    /* Zero out the buffers */
+    memset(pointers[i], 0, alloc->size);
+
     if (NULL == pointers[i])
     {
       for (j=0; j<i; j++)
