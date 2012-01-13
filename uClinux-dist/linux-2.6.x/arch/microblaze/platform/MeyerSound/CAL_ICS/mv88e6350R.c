@@ -30,6 +30,8 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/platform_device.h>
+#include <linux/phy.h>
+
 
 #include "mv88e6350R.h"
 #include "mv88e6350R_defs.h"
@@ -202,6 +204,111 @@ unsigned int REG_PHY_READ(int phy_addr, int reg_addr)
   REG_WRITE(MV_REG_GLOBAL2, 24, 0x9800 | (phy_addr << 5) | reg_addr);
   while (REG_READ(MV_REG_GLOBAL2, 24) & 0x8000); // Should only take a read or two...
   return REG_READ(MV_REG_GLOBAL2, 25);
+}
+
+static int marvell_config_aneg(struct phy_device *phydev)
+{
+  return 0;
+}
+
+static int marvell_read_status(struct phy_device *phydev)
+{
+  unsigned int portStatusReg = REG_READ(MV_PORT_REG(phydev->phyaddr), 0x00);
+
+  switch((portStatusReg >> 8) & 0x3) {
+    case 0: phydev->speed = SPEED_10; break;
+    case 1: phydev->speed = SPEED_100; break;
+    case 2: phydev->speed = SPEED_1000; break;
+    default: printk("88E6350R unknown speeed\n"); break;
+  }
+
+  phydev->duplex = (portStatusReg >> 10) ? DUPLEX_FULL : DUPLEX_HALF;
+  phydev->link = (portStatusReg >> 11) & 1;
+
+  return 0;
+}
+
+static struct phy_driver phy_driver = {
+	.phy_id = 0x01410e70,
+	.phy_id_mask = 0xfffffff0,
+	.name = "Marvell 88E6350R",
+	.features = PHY_GBIT_FEATURES,
+	.flags = 0,
+	.config_aneg = &marvell_config_aneg,
+	.read_status = &marvell_read_status,
+	.driver = { .owner = THIS_MODULE },
+};
+
+static void mv88e6350R_free_mdio_bus(struct mii_bus *bus)
+{
+}
+
+int mv88e6350R_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
+{
+  return REG_PHY_READ(phy_id, regnum);
+}
+
+int mv88e6350R_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
+{
+  REG_PHY_WRITE(phy_id, regnum, val);
+  return 0;
+}
+
+int mv88e6350R_mdio_reset(struct mii_bus *bus)
+{
+  return 0;
+}
+
+int mv88e6350R_mdio_bus_init(struct device *dev)
+{
+  struct mii_bus *new_bus;
+  int ret = -ENOMEM;
+  int i;
+  static int mdio_phy_irqs[PHY_MAX_ADDR] = {};
+
+  new_bus = mdiobus_alloc();
+  if (!new_bus) {
+    printk("Failed mdiobus_alloc(), returning\n");
+    goto out_free_bus;
+  }
+
+  new_bus->read = mv88e6350R_mdio_read;
+  new_bus->write = mv88e6350R_mdio_write;
+  new_bus->reset = mv88e6350R_mdio_reset;
+
+  new_bus->name = "MV88E6350R MDIO Bus";
+  ret = -ENODEV;
+
+  new_bus->phy_mask = ~3;
+  new_bus->irq = mdio_phy_irqs;
+  new_bus->parent = dev;
+
+  if (new_bus->phy_mask == ~0) {
+    goto out_free_bus;
+  }
+
+  for (i = 0; i < PHY_MAX_ADDR; i++) {
+    if (!new_bus->irq[i]) {
+      new_bus->irq[i] = PHY_POLL;
+    }
+  }
+
+  snprintf(new_bus->id, MII_BUS_ID_SIZE, "%s", "mv88e6350r");
+
+  ret = mdiobus_register(new_bus);
+  if (ret)
+  {
+    printk("Failed mdiobus_register() \n");
+    goto out_free_bus;
+  }
+
+  return 0;
+
+out_free_bus:
+  printk("%s: Failed\n",__func__);
+  mv88e6350R_free_mdio_bus(new_bus);
+
+  return ret;
 }
 
 static void switchVlanInit(MV_U32 switchCpuPort0,
@@ -469,7 +576,6 @@ static int mv88e6350R_probe(struct platform_device *pdev)
   for(portIndex = 0; portIndex < MV_E6350R_MAX_PORTS_NUM; portIndex++) {
     /* Reset PHYs for all but the port to the CPU */
     if((portIndex != CAL_ICS_CPU_PORT_0) && (portIndex != CAL_ICS_CPU_PORT_1)) {
-      printk("Yi Cao: reset phy of port %d\n", portIndex);
       REG_WRITE(portIndex, 0, 0x9140);
     }
   }
@@ -540,6 +646,8 @@ static int mv88e6350R_probe(struct platform_device *pdev)
   kobject_set_name(&mvEthSwitch->cdev.kobj, "%s.%d", mvEthSwitch->name, mvEthSwitch->instanceNumber);
   cdev_add(&mvEthSwitch->cdev, MKDEV(DRIVER_MAJOR, mvEthSwitch->instanceNumber), 1);
 	
+  (void)phy_driver_register(&phy_driver);
+  (void)mv88e6350R_mdio_bus_init(&mvEthSwitch->pdev->dev);
   return 0;
 }
 
@@ -573,6 +681,7 @@ module_init(mv88e6350R_init);
 
 static void __exit mv88e6350R_cleanup(void)
 {
+  phy_driver_unregister(&phy_driver);
   unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES);
   platform_driver_unregister(&mv88e6350R_switch_driver);
 }
