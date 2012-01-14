@@ -213,7 +213,7 @@ static int marvell_config_aneg(struct phy_device *phydev)
 
 static int marvell_read_status(struct phy_device *phydev)
 {
-  unsigned int portStatusReg = REG_READ(MV_PORT_REG(phydev->phyaddr), 0x00);
+  unsigned int portStatusReg = REG_READ(MV_REG_PORT(phydev->addr), 0x00);
 
   switch((portStatusReg >> 8) & 0x3) {
     case 0: phydev->speed = SPEED_10; break;
