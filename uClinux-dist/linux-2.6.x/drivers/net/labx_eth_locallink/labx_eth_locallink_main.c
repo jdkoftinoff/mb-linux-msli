@@ -1531,17 +1531,7 @@ static void FifoRecvHandler(unsigned long p)
 		if(lp->cur_speed == 10000) printk("Yi Cao: rx packets: %d\n", lp->stats.rx_packets);
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += len;
-#if 0
-		printk("Got %d Rx:\n", len);
-		{
-		  int idx;
-		  for(idx = 0; idx < len; idx++) {
-		    printk("%02X ", skb->data[idx]);
-		    if((idx % 16) == 15) printk("\n");
-		  }
-		  printk("\n");
-		}
-#endif
+
 		skb_put(skb, len);	/* Tell the skb how much data we got. */
 		skb->dev = dev;		/* Fill out required meta-data. */
 		skb->protocol = eth_type_trans(skb, dev);

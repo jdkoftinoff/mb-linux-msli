@@ -64,12 +64,6 @@ struct mvEthSwitch {
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
-
-  /* File operations and private data for a polymorphic
-   * driver to use
-   */
-  struct file_operations *derivedFops;
-  void *derivedData;
 };
 
 #endif

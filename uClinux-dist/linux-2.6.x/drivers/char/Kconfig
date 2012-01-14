@@ -1117,6 +1117,11 @@ config LABX_LOCAL_AUDIO
 	help
 	  Select this to enable a misc device node to use for talking to Local Audio hardware.
 
+config LABX_AUDIO_METERS
+	bool "Lab X Audio Meters character device"
+	help
+	  Select this to enable a misc device node to use for talking to Audio Meter hardware.
+
 config DEVPORT
 	bool
 	depends on !M68K
@@ -1148,12 +1153,6 @@ config MEYER_SMPTE
 	depends on OF && (PPC_OF || MICROBLAZE)
 	help
 	  Meyer Sound SMPTE interface"
-
-config LABX_MAILBOX
-	tristate "Lab X mailbox device"
-        depends on OF && (PPC_OF || MICROBLAZE)
-        help
-          Select this to enable support for host-to-supervisory communication.
 
 endmenu
 

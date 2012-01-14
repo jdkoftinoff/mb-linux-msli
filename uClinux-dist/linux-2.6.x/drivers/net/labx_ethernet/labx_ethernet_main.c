@@ -1882,8 +1882,16 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
   pdata->phy_name[0] = '\0';
   mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-controller", NULL);
   if(!mdio_controller_handle) {
-    dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-bus-name", NULL);
+    if (!mdio_controller_handle) {
+      dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    } else {
+      /* PHY's MDIO bus specified by name */
+      snprintf(pdata->phy_name, BUS_ID_SIZE, "%s:%02x", (const char*)mdio_controller_handle, phy_addr);
+      printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
+    }
   } else {
+    /* PHY's MDIO bus specified by the connected ethernet device */
     mdio_controller_node = of_find_node_by_phandle(*mdio_controller_handle);
     if (!mdio_controller_node) {
       dev_warn(&ofdev->dev, "no MDIO connection found.\n");

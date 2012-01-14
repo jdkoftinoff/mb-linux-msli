@@ -135,17 +135,18 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev_scarf,c,153,0 \
-	spidev_aes,c,153,1 \
-	spidev_oled,c,153,2
+	spidev_scarf_global,c,153,0 \
+	spidev_scarf_local,c,153,1 \
+	spidev_aes,c,153,2 \
+	spidev_oled,c,153,3
 endif
 
 # Add the AVB packet engine device nodes
-DEVICES += packetizer0,c,250,0
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
+DEVICES += packetizer0,c,230,0
+DEVICES += depacketizer0,c,232,0
+DEVICES += depacketizer1,c,232,1
 DEVICES += redswitch0,c,248,0
-DEVICES += ptp0,c,253,0
+DEVICES += ptp0,c,233,0
 
 # Add the CAL sample_pointers peripheral device node
 DEVICES += samplepointers0,c,251,0
