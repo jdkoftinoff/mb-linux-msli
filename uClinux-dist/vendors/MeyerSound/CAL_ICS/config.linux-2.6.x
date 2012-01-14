@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
+# Fri Jan 13 18:11:38 2012
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -379,6 +380,7 @@ CONFIG_M25PXX_USE_FAST_READ=y
 # CONFIG_MTD_UBI is not set
 CONFIG_OF_DEVICE=y
 CONFIG_OF_GPIO=y
+CONFIG_OF_I2C=y
 CONFIG_OF_SPI=y
 # CONFIG_PARPORT is not set
 CONFIG_BLK_DEV=y
@@ -450,6 +452,7 @@ CONFIG_LABX_AVB=y
 CONFIG_LABX_AUDIO_PACKETIZER=y
 CONFIG_LABX_AUDIO_DEPACKETIZER=y
 CONFIG_LABX_AUDIO_DEPACKETIZER_DMA=y
+CONFIG_LABX_AUDIO_TDM=y
 # CONFIG_XILINX_LLTEMAC is not set
 # CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII is not set
 CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII=y
@@ -563,8 +566,55 @@ CONFIG_LABX_AUDIO_METERS=y
 # CONFIG_I2S_GNET is not set
 # CONFIG_XILINX_MAILBOX is not set
 # CONFIG_MEYER_SMPTE is not set
-# CONFIG_LABX_MAILBOX is not set
-# CONFIG_I2C is not set
+CONFIG_I2C=y
+CONFIG_I2C_BOARDINFO=y
+CONFIG_I2C_CHARDEV=y
+# CONFIG_I2C_HELPER_AUTO is not set
+
+#
+# I2C Algorithms
+#
+# CONFIG_I2C_ALGOBIT is not set
+# CONFIG_I2C_ALGOPCF is not set
+# CONFIG_I2C_ALGOPCA is not set
+CONFIG_XILINX_IIC=y
+
+#
+# I2C Hardware Bus support
+#
+
+#
+# I2C system bus drivers (mostly embedded / system-on-chip)
+#
+# CONFIG_I2C_GPIO is not set
+# CONFIG_I2C_OCORES is not set
+# CONFIG_I2C_SIMTEC is not set
+
+#
+# External I2C/SMBus adapter drivers
+#
+# CONFIG_I2C_PARPORT_LIGHT is not set
+# CONFIG_I2C_TAOS_EVM is not set
+
+#
+# Other I2C/SMBus bus drivers
+#
+# CONFIG_I2C_PCA_PLATFORM is not set
+# CONFIG_I2C_STUB is not set
+
+#
+# Miscellaneous I2C Chip support
+#
+# CONFIG_DS1682 is not set
+# CONFIG_SENSORS_PCF8574 is not set
+# CONFIG_PCF8575 is not set
+# CONFIG_SENSORS_PCA9539 is not set
+# CONFIG_SENSORS_MAX6875 is not set
+# CONFIG_SENSORS_TSL2550 is not set
+# CONFIG_I2C_DEBUG_CORE is not set
+# CONFIG_I2C_DEBUG_ALGO is not set
+# CONFIG_I2C_DEBUG_BUS is not set
+# CONFIG_I2C_DEBUG_CHIP is not set
 CONFIG_SPI=y
 # CONFIG_SPI_MAILBOX is not set
 # CONFIG_SPI_DEBUG is not set
@@ -595,6 +645,9 @@ CONFIG_GPIO_XILINX=y
 #
 # I2C GPIO expanders:
 #
+# CONFIG_GPIO_MAX732X is not set
+# CONFIG_GPIO_PCA953X is not set
+# CONFIG_GPIO_PCF857X is not set
 
 #
 # PCI GPIO expanders:
@@ -624,7 +677,13 @@ CONFIG_SSB_POSSIBLE=y
 # CONFIG_MFD_CORE is not set
 # CONFIG_MFD_SM501 is not set
 # CONFIG_HTC_PASIC3 is not set
+# CONFIG_TPS65010 is not set
+# CONFIG_TWL4030_CORE is not set
 # CONFIG_MFD_TMIO is not set
+# CONFIG_PMIC_DA903X is not set
+# CONFIG_MFD_WM8400 is not set
+# CONFIG_MFD_WM8350_I2C is not set
+# CONFIG_MFD_PCF50633 is not set
 # CONFIG_REGULATOR is not set
 
 #
