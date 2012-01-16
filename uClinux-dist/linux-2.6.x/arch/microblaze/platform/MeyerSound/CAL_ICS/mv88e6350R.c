@@ -213,9 +213,20 @@ static int marvell_config_aneg(struct phy_device *phydev)
 
 static int marvell_read_status(struct phy_device *phydev)
 {
-  unsigned int portStatusReg = REG_READ(MV_PORT_REG(phydev->phyaddr), 0x00);
+  /* External PHY routed to the corresponding internal port */
+  unsigned int portStatusReg = REG_READ(MV_REG_PORT(phydev->addr), 0x00);
+  /* Internal MAC hooked up to the FPGA */
+  unsigned int internalPort = (phydev->addr == CAL_ICS_EXT_PORT_0) ? CAL_ICS_CPU_PORT_0 : CAL_ICS_CPU_PORT_1;
+  unsigned int physicalControlReg = REG_READ(MV_REG_PORT(internalPort), 0x01);
+  unsigned int phySpeed = (portStatusReg >> 8) & 3;
 
-  switch((portStatusReg >> 8) & 0x3) {
+  if (phySpeed != (physicalControlReg & 3)) {
+    /* Adjust the CPU port speed to match the external PHY speed */
+    REG_WRITE(MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0023) | 0x0010 | phySpeed); /* Link down, new speed */
+    REG_WRITE(MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0003) | 0x0030 | phySpeed); /* Link up */
+  }
+
+  switch(phySpeed) {
     case 0: phydev->speed = SPEED_10; break;
     case 1: phydev->speed = SPEED_100; break;
     case 2: phydev->speed = SPEED_1000; break;
