@@ -8,6 +8,11 @@
 
 menu "Core Applications"
 
+config USER_CAL_DSP
+    bool "cal-dspd server - cal-dsp"
+    help
+      Include server for Meyer Sound CAL DSP card
+
 config USER_LIBTC
     bool "libtc - timecode/midi server"
     help

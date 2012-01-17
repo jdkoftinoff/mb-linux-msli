@@ -1,0 +1,6 @@
+#! /bin/sh
+
+while true; do
+	/bin/cal-dspd "--listen.host=::" ${CAL_DSPD_PARAMS} </dev/null
+	sleep 2
+done

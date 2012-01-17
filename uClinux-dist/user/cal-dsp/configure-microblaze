@@ -1,0 +1,55 @@
+#! /bin/bash -e
+
+relative_dir="$(dirname "$0")"
+
+microsupport_dir="${relative_dir}/../microsupport"
+
+mkdir -p microsupport
+cd microsupport
+"../$microsupport_dir/configure" \
+ "--compiler-prefix=mb-" \
+ "--release=1" \
+ "--debug=0" \
+ "--cross-compiling=1" \
+ "--target-platform-linux=1" \
+ "--target-platform-posix=1" \
+ "--compiler-frontend-cc=ucfront-gcc" \
+ "--compiler-frontend-cxx=ucfront-g++" \
+ "--link-flags=-Wl,-elf2flt" \
+ "--variant=dmitri-io" \
+"$@" && make
+cd ..
+
+avbc_dir="${relative_dir}/../avbc"
+
+mkdir -p avbc
+cd avbc
+"../$microsupport_dir/configure" \
+ "--compiler-prefix=mb-" \
+ "--release=1" \
+ "--debug=0" \
+ "--cross-compiling=1" \
+ "--target-platform-linux=1" \
+ "--target-platform-posix=1" \
+ "--compiler-frontend-cc=ucfront-gcc" \
+ "--compiler-frontend-cxx=ucfront-g++" \
+ "--link-flags=-Wl,-elf2flt" \
+ "--variant=dmitri-io" \
+"$@" && make
+cd ..
+
+
+"$relative_dir/configure" \
+ "--compiler-prefix=mb-" \
+ "--release=1" \
+ "--debug=0" \
+ "--cross-compiling=1" \
+ "--target-platform-linux=1" \
+ "--target-platform-posix=1" \
+ "--compiler-frontend-cc=ucfront-gcc" \
+ "--compiler-frontend-cxx=ucfront-g++" \
+ "--link-flags=-Wl,-elf2flt" \
+ "--variant=dmitri-io" \
+ "--us-config=$PWD/microsupport/microsupport-config" \
+ "--avbc-config=$PWD/microsupport/avbc-config" \
+"$@"
