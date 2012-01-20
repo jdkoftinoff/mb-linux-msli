@@ -11,6 +11,7 @@ CONFIG_DISTVERSION="4.0"
 #
 # Force build (normally built when required)
 #
+CONFIG_LIB_MICROSUPPORT=y
 # CONFIG_LIB_AVDECC is not set
 # CONFIG_LIB_BITVECTOR is not set
 CONFIG_LIB_UCLIBCPP=y
@@ -74,6 +75,7 @@ CONFIG_LIB_LIBDAEMON=y
 #
 # Core Applications
 #
+CONFIG_USER_CAL_DSP=y
 # CONFIG_USER_LIBTC is not set
 CONFIG_USER_TI_SRC4392=y
 CONFIG_USER_CAL_OLED=y
