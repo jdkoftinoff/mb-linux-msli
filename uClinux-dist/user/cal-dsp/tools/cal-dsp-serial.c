@@ -10,14 +10,16 @@
 #include <fcntl.h>
 
 enum {
-    DSP1,DSP1_AMP1,DSP1_AMP2,
+    DSP1,
+    DSP_DEV_COUNT,
+    DSP1_AMP1,DSP1_AMP2,
     DSP2,DSP2_AMP1,DSP2_AMP2,
-    DSP3,DSP3_AMP1,DSP3_AMP2,
-    DSP_DEV_COUNT
+    DSP3,DSP3_AMP1,DSP3_AMP2
 };
 
 int main( int US_UNUSED(argc), const char **argv )
 {
+    struct timeval t;
     int fd[DSP_DEV_COUNT];
     fd_set read_fds;
     fd_set write_fds;
@@ -28,6 +30,7 @@ int main( int US_UNUSED(argc), const char **argv )
     int rv,event_count,i;
     const char * dsp_dev[DSP_DEV_COUNT] = {
             "/dev/dsp1",
+#if 0
             "/dev/dsp1_amp1",
             "/dev/dsp1_amp2",
             "/dev/dsp2",
@@ -36,11 +39,12 @@ int main( int US_UNUSED(argc), const char **argv )
             "/dev/dsp3",
             "/dev/dsp3_amp1",
             "/dev/dsp3_amp2"
+#endif
         };
     FD_ZERO(&read_fds);
     FD_ZERO(&write_fds);
     for(i=0;i<DSP_DEV_COUNT;i++) {
-        fd[i] = open(dsp_dev[i], O_RDWR | O_NONBLOCK);
+        fd[i] = open(dsp_dev[i], O_RDWR);
         if(fd[i]<0) {
           printf("could not open %s\n",dsp_dev[i]);
           while(--i>=0) {
@@ -58,7 +62,11 @@ int main( int US_UNUSED(argc), const char **argv )
     event_count=0;
     
     while(event_count<10) {
-        rv = select(fd[DSP_DEV_COUNT-1],&read_fds,&write_fds,NULL,NULL);
+        printf("waiting for event\n");
+        t.tv_sec=4;
+        t.tv_usec=0;
+        rv = select(fd[DSP_DEV_COUNT-1],&read_fds,&write_fds,NULL,&t);
+        printf("got event\n");
         event_count+=rv;
         if(rv==-1)
         {
@@ -67,6 +75,7 @@ int main( int US_UNUSED(argc), const char **argv )
         }
         for(i=0;i<DSP_DEV_COUNT;i++) {
             if(FD_ISSET(fd[i],&read_fds)) {
+                printf("readable\n");
                 if(read(fd[i],&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
                     printf("could not read from %s:%d\n",dsp_dev[i],fd[i]);
                     exit(1);
@@ -78,6 +87,7 @@ int main( int US_UNUSED(argc), const char **argv )
                 count_in[i]++;
             }
             if(FD_ISSET(fd[i],&write_fds)) {
+                printf("writeable\n");
                 if(write(fd[i],&count_out[i],sizeof(uint8_t)) != sizeof(uint8_t)) {
                     printf("could not write to %s:%d\n",dsp_dev[i],fd[i]);
                     exit(1);
