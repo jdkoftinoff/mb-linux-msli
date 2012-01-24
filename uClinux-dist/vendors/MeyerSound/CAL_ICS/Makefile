@@ -76,6 +76,20 @@ DEVICES +=   \
 	mtd13,c,90,26 	mtdr13,c,90,27	mtdblock13,b,31,13	\
 	mtd14,c,90,26 	mtdr14,c,90,29	mtdblock14,b,31,14
 
+ifdef CONFIG_I2C_SERIAL
+DEVICES += 	\
+    dsp1,c,254,0 \
+    dsp1_amp1,c,254,1 \
+    dsp1_amp2,c,254,2 \
+    dsp2,c,254,3 \
+    dsp2_amp1,c,254,4 \
+    dsp2_amp1,c,254,5 \
+    dsp3,c,254,6 \
+    dsp3_amp1,c,254,7 \
+    dsp3_amp1,c,254,8
+endif
+
+
 ifdef CONFIG_MICROBLAZE_FSLFIFO
 DEVICES += 	\
 	fslfifo0,c,10,192 fslfifo1,c,10,193 fslfifo2,c,10,194		\
