@@ -46,12 +46,6 @@
 #define TX_IN (dev->tx_in&TX_MASK)
 #define TX_OUT (dev->tx_out&TX_MASK)
 
-
-
-/* 
-   shared static data:
-   array of used minor numbers and lock for  adding/removing those numbers
-*/
 static unsigned major=0,ndevs=0;
 static unsigned char minors[DEVICES_COUNT];
 static DEFINE_SPINLOCK(static_dev_lock);
@@ -68,10 +62,6 @@ struct i2c_serial
   wait_queue_head_t txq;
 
   int write_count;
-  /* 
-     the following arrays only gets updated for read/write operations,
-     and only for registers that are involved in it
-  */
 #if (RX_BUFFER_BITS<=8)
   uint8_t rx_in;
   uint8_t rx_out;
@@ -88,16 +78,16 @@ struct i2c_serial
   uint16_t tx_in;
   uint16_t tx_out;
 #endif
-  uint16_t tx_buffer[1<<TX_BUFFER_BITS];
+  uint8_t tx_buffer[1<<TX_BUFFER_BITS];
 
 };
 
-/* file operations */
 static int i2c_serial_open(struct inode *inode, struct file *filp)
 {
   struct i2c_serial *dev;
   dev=container_of(inode->i_cdev,struct i2c_serial,cdev);
   filp->private_data=dev;
+  init_MUTEX(&dev->sem);
   init_waitqueue_head(&dev->rxq);
   init_waitqueue_head(&dev->txq);
   return 0;
@@ -108,23 +98,39 @@ static int i2c_serial_release(struct inode *inode, struct file *filp)
   return 0;
 }
 
+void loopback_test(struct i2c_serial * dev) {
+    while(
+          ((dev->tx_in&TX_MASK)!=(dev->tx_out&TX_MASK)) &&
+          (((dev->rx_in+1)&RX_MASK)!=(dev->rx_out&RX_MASK)) ) {
+            dev->rx_buffer[dev->rx_in&RX_MASK]=dev->tx_buffer[dev->tx_out&TX_MASK];
+            printk(KERN_INFO "looping back [%02x]=[%02x]\n",
+                dev->rx_buffer[dev->rx_in&RX_MASK],
+                dev->tx_buffer[dev->tx_out&TX_MASK]);
+            dev->rx_in++;
+            dev->tx_out++;
+    }
+    printk(KERN_INFO "rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d\n",dev->rx_in,dev->rx_out,dev->tx_in,dev->tx_out);
+}
 
-static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
+
+static unsigned int i2c_serial_poll(struct file *filp, struct poll_table_struct *wait)
 {
   struct i2c_serial *dev;
   unsigned int mask = 0;
+  printk(KERN_INFO "poll\n");
   if(filp->private_data==NULL)
     return 0;
   dev=(struct i2c_serial*)filp->private_data;
   down(&dev->sem);
+  loopback_test(dev);
   poll_wait(filp, &dev->rxq, wait);
   poll_wait(filp, &dev->txq, wait);
-  if((dev->rx_in&RX_MASK)==(dev->rx_out&RX_MASK))
+  if((dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK))
   {
     mask |= POLLIN | POLLRDNORM; /* readable */
   }
-  if((((dev->tx_in+1)&TX_MASK)==(dev->tx_out&TX_MASK)) ||
-     (((dev->tx_in+2)&TX_MASK)==(dev->tx_out&TX_MASK)))
+  if((((dev->tx_in+1)&TX_MASK)!=(dev->tx_out&TX_MASK)) &&
+     (((dev->tx_in+2)&TX_MASK)!=(dev->tx_out&TX_MASK)))
   {
     mask |= POLLOUT | POLLWRNORM; /* writeable */
   }
@@ -133,17 +139,14 @@ static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
 }
 
 static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
-			       size_t count,loff_t *offset)
+                               size_t count,loff_t *offset)
 {
   struct i2c_serial *dev;
   unsigned int i;
+  char * ptr_src;
   char str[100];
   dev=(struct i2c_serial*)filp->private_data;
   
-  /* 
-     determine the amount of data that can be read
-     and its mapping to the regs
-  */
   if(down_interruptible(&dev->sem))
     return -ERESTARTSYS;
 
@@ -152,19 +155,19 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
   {
     while(((dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK)) && (i<count))
     {
-//      if(i>=offset)
-//      {
-        if(copy_to_user(&buf[i],(char*)&dev->rx_buffer[dev->rx_out&RX_MASK],1))
-        {
-          up(&dev->sem);
-          return -EFAULT;
-        }
-//      } else {
-//      }
+      ptr_src=(char*)&dev->rx_buffer[dev->rx_out&RX_MASK];
+      if(copy_to_user(&buf[i],ptr_src,1))
+      {
+        up(&dev->sem);
+        return -EFAULT;
+      }
+      printk(KERN_INFO "read [%02x]\n",*ptr_src);
       i++;
       dev->rx_out++;
+      loopback_test(dev);
     }
 
+    break;
     if(i<count)
     {
       up(&dev->sem);
@@ -172,34 +175,26 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
         return i;
       else
       {
+        printk(KERN_INFO "read blocking\n");
         if(wait_event_interruptible(dev->rxq,(dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK)))
           return -EINTR;
         if(down_interruptible(&dev->sem))
           return -EINTR;
+        printk(KERN_INFO "read unblocking\n");
       }
     }
   }
   up(&dev->sem);
+  printk(KERN_INFO "read done\n");
   return(i);
-#if 0
-  snprintf(str,sizeof(str),"[%d]",dev->write_count);
-  str[sizeof(str)-1]='\0';
-  if(count<(strlen(str)+1)) {
-    str[count-1]='\0';
-  } else {
-    count=strlen(str)+1;
-  }
-  copy_to_user(buf,str,count);
-  up(&dev->sem);
-  return i;
-#endif
 }
 
 static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
-				size_t count,loff_t *offset)
+                                size_t count,loff_t *offset)
 {
   struct i2c_serial *dev;
   unsigned int i;
+  char * ptr_dst;
 
   dev=(struct i2c_serial*)filp->private_data;
 
@@ -213,13 +208,16 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
           (((dev->tx_in+1)&TX_MASK)!=(dev->tx_out&TX_MASK)) &&
           (((dev->tx_in+2)&TX_MASK)!=(dev->tx_out&TX_MASK)))
     {
-      if(copy_from_user((char*)&dev->tx_buffer[dev->tx_in&TX_MASK],&buf[i],1))
+      ptr_dst=(char*)&dev->tx_buffer[dev->tx_in&TX_MASK];
+      if(copy_from_user(ptr_dst,&buf[i],1))
       {
         up(&dev->sem);
         return -EFAULT;
       }
       i++;
       dev->tx_in++;
+      printk(KERN_INFO "write [%02x]\n",*ptr_dst);
+      loopback_test(dev);
     }
     if(i==0)
     {
@@ -242,7 +240,6 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
   return i;
 }
 
-
 static struct file_operations i2c_serial_fops =
   {
     .owner = THIS_MODULE,
@@ -253,10 +250,8 @@ static struct file_operations i2c_serial_fops =
     .release = i2c_serial_release,
   };
 
-
-/* device initialization and exit */
 static int __devinit i2c_serial_probe(struct of_device *ofdev,
-				      const struct of_device_id *match)
+                                      const struct of_device_id *match)
 {
   struct i2c_serial *i2c_serial_data;
   struct resource res;
@@ -268,14 +263,14 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
   if(retval)
     {
       printk(KERN_ERR "%s: I/O memory resource is missing\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       return retval;
     }
   i2c_serial_data = kzalloc(sizeof(*i2c_serial_data), GFP_KERNEL);
   if(!i2c_serial_data)
     {
       printk(KERN_ERR "%s: Failed to allocate device data\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       return -ENOMEM;
     }
 
@@ -286,7 +281,7 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
     {
       spin_unlock_irqrestore(&static_dev_lock,flags);
       printk(KERN_ERR "%s: %d devices already allocated\n",
-	     dev_name(&ofdev->dev),DEVICES_COUNT);
+             dev_name(&ofdev->dev),DEVICES_COUNT);
       kfree(i2c_serial_data);
       return -ENODEV;
     }
@@ -305,7 +300,7 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
   if(!request_mem_region(res.start,resource_size(&res),dev_name(&ofdev->dev)))
     {
       printk(KERN_ERR "%s: I/O memory region busy\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       kfree(i2c_serial_data);
       return -EBUSY;
     }
@@ -314,7 +309,7 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
   if(!i2c_serial_data->base)
     {
       printk(KERN_ERR "%s: Unable to map I/O memory region\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
      release_mem_region(res.start,resource_size(&res));
      kfree(i2c_serial_data);
       return -EIO;
@@ -323,11 +318,11 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
   init_MUTEX(&i2c_serial_data->sem);
 
   retval=cdev_add(&i2c_serial_data->cdev,
-		  MKDEV(major,i2c_serial_data->minor),1);
+                  MKDEV(major,i2c_serial_data->minor),1);
   if(retval)
     {
       printk(KERN_ERR "%s: Unable to register device\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       iounmap(i2c_serial_data->base);
       release_mem_region(res.start,resource_size(&res));
       kfree(i2c_serial_data);
@@ -335,7 +330,7 @@ static int __devinit i2c_serial_probe(struct of_device *ofdev,
     }
 
   printk(KERN_INFO "%s: i2c serial device initialized, device (%d,%d)\n",
-	 dev_name(&ofdev->dev),major,i2c_serial_data->minor);
+         dev_name(&ofdev->dev),major,i2c_serial_data->minor);
   return 0;
 }
 
@@ -365,8 +360,8 @@ static int __devexit i2c_serial_remove(struct of_device *ofdev)
 
 /* Match table for of_platform binding */
 static struct of_device_id __devinitdata i2c_serial_match[] = {
-	{ .compatible = "xlnx,xps-iic-2.03.a", },
-	{},
+        { .compatible = "xlnx,xps-iic-2.03.a", },
+        {},
 };
 MODULE_DEVICE_TABLE(of, i2c_serial_match);
 
@@ -389,7 +384,7 @@ static int __init i2c_serial_init(void)
   if(retval)
     {
       printk(KERN_ERR "%s: Can't allocate major/minor device numbers\n",
-	     DRIVER_NAME);
+             DRIVER_NAME);
       return retval;
     }
 
@@ -398,7 +393,7 @@ static int __init i2c_serial_init(void)
   if(retval)
     {
       printk(KERN_ERR "%s: Can't register driver\n",
-	     DRIVER_NAME);
+             DRIVER_NAME);
       return retval;
     }
   return 0;
