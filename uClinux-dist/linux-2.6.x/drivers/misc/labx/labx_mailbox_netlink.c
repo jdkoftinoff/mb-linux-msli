@@ -131,7 +131,7 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
       (MSG_RAM_BASE(mailbox) + (wordIndex*4)));
     if(returnValue != 0) goto fail;
   }
-  printk("\n");
+  DBG("\n");
      
   /* Close the nesting for the message packet */
   nla_nest_end(skb, packetNesting);
