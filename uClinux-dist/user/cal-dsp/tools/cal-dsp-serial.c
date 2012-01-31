@@ -65,7 +65,7 @@ int main( int US_UNUSED(argc), const char **argv )
         printf("waiting for event\n");
         t.tv_sec=4;
         t.tv_usec=0;
-        rv = select(fd[DSP_DEV_COUNT-1],&read_fds,&write_fds,NULL,&t);
+        rv = select(fd[DSP_DEV_COUNT-1]+1,&read_fds,&write_fds,NULL,&t);
         printf("got event\n");
         event_count+=rv;
         if(rv==-1)
@@ -85,6 +85,8 @@ int main( int US_UNUSED(argc), const char **argv )
                     count_in[i]=in;
                 }
                 count_in[i]++;
+            } else {
+                FD_SET(fd[i],&read_fds);
             }
             if(FD_ISSET(fd[i],&write_fds)) {
                 printf("writeable\n");
@@ -93,6 +95,8 @@ int main( int US_UNUSED(argc), const char **argv )
                     exit(1);
                 }
                 count_out[i]++;
+            } else {
+                FD_SET(fd[i],&write_fds);
             }
         }
     }
