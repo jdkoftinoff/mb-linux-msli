@@ -60,6 +60,31 @@ static unsigned char minors[DEVICES_COUNT];
 static DEFINE_SPINLOCK(static_dev_lock);
 static DECLARE_MUTEX(cfg_sem);
 static bool resources_loaded;
+static struct i2c_serial * all_serial_data[DEVICES_COUNT];
+
+const uint8_t address_vs_minor[DEVICES_COUNT] = {
+        0x12+(0x10*1)+0,
+        0x12+(0x10*1)+1,
+        0x12+(0x10*1)+2,
+        0x12+(0x10*2)+0,
+        0x12+(0x10*2)+1,
+        0x12+(0x10*2)+2,
+        0x12+(0x10*3)+0,
+        0x12+(0x10*3)+1,
+        0x12+(0x10*3)+2
+    };
+
+static uint8_t find_minor(uint8_t address) {
+    int i;
+    for(i=0;i<DEVICES_COUNT;i++) {
+        if(address_vs_minor[i]==address) {
+            return(i);
+        }
+    }
+    return(0);
+}
+
+#define ADDRESS_TO_I2C_ADDRESS(ADDRESS) ((ADDRESS&0x70)+2)
 
 struct i2c_serial
 {
@@ -135,36 +160,36 @@ void loopback_test(struct i2c_serial * i2c_serial_data) {
 }
 
 struct xiic_data {
-	int index;		/* index taken from platform_device */
-	struct completion complete;	/* for waiting for interrupts */
-	u32 base;		/* base memory address */
-	unsigned int irq;	/* device IRQ number    */
+     int index;          /* index taken from platform_device */
+     struct completion complete;   /* for waiting for interrupts */
+     u32 base;      /* base memory address */
+     unsigned int irq;   /* device IRQ number    */
     volatile u32 transmit_intr_flag;   /* semaphore across task and interrupt - ECM */
     volatile u32 receive_intr_flag;   /* semaphore across task and interrupt - ECM */
     volatile u32 status_intr_flag;   /* semaphore across task and interrupt - ECM */
-	/*
-	 * The underlying OS independent code needs space as well.  A
-	 * pointer to the following XIic structure will be passed to
-	 * any XIic_ function that requires it.  However, we treat the
-	 * data as an opaque object in this file (meaning that we never
-	 * reference any of the fields inside of the structure).
-	 */
-	XIic Iic;
+     /*
+      * The underlying OS independent code needs space as well.  A
+      * pointer to the following XIic structure will be passed to
+      * any XIic_ function that requires it.  However, we treat the
+      * data as an opaque object in this file (meaning that we never
+      * reference any of the fields inside of the structure).
+      */
+     XIic Iic;
 
-	/*
-	 * The following bit fields are used to keep track of what
-	 * all has been done to initialize the xiic_dev to make
-	 * error handling out of probe() easier.
-	 */
-	unsigned int reqirq:1;	/* Has request_irq() been called? */
-	unsigned int remapped:1;	/* Has ioremap() been called? */
-	unsigned int started:1;	/* Has XIic_Start() been called? */
-	unsigned int added:1;	/* Has i2c_add_adapter() been called? */
+     /*
+      * The following bit fields are used to keep track of what
+      * all has been done to initialize the xiic_dev to make
+      * error handling out of probe() easier.
+      */
+     unsigned int reqirq:1;   /* Has request_irq() been called? */
+     unsigned int remapped:1; /* Has ioremap() been called? */
+     unsigned int started:1;  /* Has XIic_Start() been called? */
+     unsigned int added:1;    /* Has i2c_add_adapter() been called? */
 };
 
 
 static struct xiic_data * i2c_dev_data;
-static uint8_t receive_buffer[1];
+static uint8_t receive_buffer[0x100];
 static uint8_t xxx[255];
 static uint8_t arr[1];
 
@@ -177,30 +202,43 @@ static uint8_t arr[1];
  */
 static irqreturn_t xiic_interrupt(int irq, void *dev_id)
 {
-	struct xiic_data *dev = dev_id;
+     struct xiic_data *dev = dev_id;
 
-	XIic_InterruptHandler(&dev->Iic);
-	return IRQ_HANDLED;
+     XIic_InterruptHandler(&dev->Iic);
+     return IRQ_HANDLED;
 }
 
 static void RecvHandler(void *CallBackRef, int ByteCount) {
-  struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
-  bool wakeup;
+    struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
+    int i;
 
-  if(ByteCount==0) {
-    i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=receive_buffer[0];
-    i2c_serial_data->rx_in++;
-    wakeup=true;
-  }
-  if(wakeup) {
-    wake_up(&i2c_serial_data->rxq);
-  }
-  printk(KERN_INFO "RecvHandler -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d ByteCount:%d\n",
-        i2c_serial_data->rx_in,
-        i2c_serial_data->rx_out,
-        i2c_serial_data->tx_in,
-        i2c_serial_data->tx_out,
-        ByteCount);
+    if(i2c_dev_data==NULL) {
+        return;
+    }
+    i=0;
+    while(((sizeof(receive_buffer)-(ByteCount+i))>0) &&
+         (((i2c_serial_data->rx_in+1)&RX_MASK)!=(i2c_serial_data->rx_out&RX_MASK))) {
+        if(i==0) {
+            i2c_serial_data=all_serial_data[find_minor(receive_buffer[i])];
+            if(i2c_serial_data==NULL) {
+               return;
+            }
+        } else {
+            i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=receive_buffer[i];
+            i2c_serial_data->rx_in++;
+        }
+        i++;
+    }
+    printk(KERN_INFO "got data\n");
+    if(i>0) {
+      wake_up(&i2c_serial_data->rxq);
+    }
+    printk(KERN_INFO "RecvHandler [[ rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d ByteCount:%d\n",
+          i2c_serial_data->rx_in,
+          i2c_serial_data->rx_out,
+          i2c_serial_data->tx_in,
+          i2c_serial_data->tx_out,
+          ByteCount);
 }
 
 static void SendHandler(void *CallBackRef, int ByteCount) {
@@ -643,6 +681,10 @@ static int __devinit i2c_serial_probe(struct of_device *pdev,
 
   retval=load_i2c_resources(pdev);
 
+  if(minor<DEVICES_COUNT) {
+    all_serial_data[i2c_serial_data->minor]=i2c_serial_data;
+  }
+
   printk(KERN_INFO "%s: i2c serial device initialized, device (%d,%d)\n",
          dev_name(&pdev->dev),major,i2c_serial_data->minor);
 
@@ -665,7 +707,7 @@ static int __devexit i2c_serial_remove(struct of_device *pdev)
           /* The bus was busy.  Retry. */
           printk(KERN_WARNING
                  "%s #%d: Could not stop device.  Will retry.\n",
-                 dev_name(pdev->dev), i2c_dev_data->index);
+                 dev_name(&pdev->dev), i2c_dev_data->index);
           set_current_state(TASK_INTERRUPTIBLE);
           schedule_timeout(HZ / 2);
       }
@@ -689,6 +731,9 @@ static int __devexit i2c_serial_remove(struct of_device *pdev)
   printk(KERN_INFO "%s: removed i2c serial device %d:%d\n",
          dev_name(&pdev->dev),major,i2c_serial_data->minor);
 
+  if(i2c_serial_data->minor<DEVICES_COUNT) {
+    all_serial_data[i2c_serial_data->minor]=NULL;
+  }
   kfree(i2c_serial_data);
   return 0;
 }
