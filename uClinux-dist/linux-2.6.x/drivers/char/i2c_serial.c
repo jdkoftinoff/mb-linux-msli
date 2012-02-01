@@ -61,7 +61,6 @@ static DEFINE_SPINLOCK(static_dev_lock);
 static DECLARE_MUTEX(cfg_sem);
 static bool resources_loaded;
 
-/* device data structure */
 struct i2c_serial
 {
   void __iomem *base;
@@ -135,9 +134,7 @@ void loopback_test(struct i2c_serial * i2c_serial_data) {
         i2c_serial_data->tx_out);
 }
 
-/* Our private per device data. */
 struct xiic_data {
-//	struct i2c_adapter adap;	/* The Linux I2C core data  */
 	int index;		/* index taken from platform_device */
 	struct completion complete;	/* for waiting for interrupts */
 	u32 base;		/* base memory address */
@@ -239,8 +236,6 @@ static void StatusHandler(void * CallBackRef, int Event)
              XIIC_CR_ENABLE_DEVICE_MASK);
     XIic_WriteIisr(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
     XIic_WriteIier(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
-//    XIIC_WRITE_IISR(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
-//    XIIC_WRITE_IIER(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
     i2c_dev_data->Iic.BNBOnly = TRUE;
   }
   else if (Event == XII_BUS_NOT_BUSY_EVENT) {
@@ -465,11 +460,7 @@ static int __devinit xilinx_iic_setup(
     }
     memset(dev, 0, sizeof(struct xiic_data));
 
-#if 0
-    dev_set_drvdata(device, dev);
-#else
     i2c_dev_data = dev;
-#endif
 
     i2c_dev_data->irq = r_irq->start;
 
@@ -518,8 +509,6 @@ static int __devinit xilinx_iic_setup(
         goto out;
     }
     i2c_dev_data->reqirq = 1;
-#if 0
-#endif
 
     if (XIic_Start(&i2c_dev_data->Iic) != XST_SUCCESS) {
         printk(KERN_INFO  "could not start device\n");
@@ -529,45 +518,10 @@ static int __devinit xilinx_iic_setup(
     i2c_dev_data->started = 1;
 
     /* Now tell the core I2C code about our new device. */
-
-#if 0
-    strcpy(i2c_dev_data->adap.name, "i2c_serial");
-    i2c_dev_data->adap.dev.of_node = node;
-    i2c_dev_data->adap.algo = &xiic_algo;
-    i2c_dev_data->adap.algo_data = NULL;
-    i2c_dev_data->adap.timeout = XIIC_TIMEOUT;
-    i2c_dev_data->adap.retries = XIIC_RETRY;
-    error = i2c_add_adapter(&i2c_dev_data->adap);
-
-    if (error) {
-        printk(KERN_INFO  "could not add i2c adapter\n");
-        goto out;
-    }
-    i2c_dev_data->added = 1;
-
-#endif
     printk(KERN_INFO "%s #%d at 0x%08X mapped to 0x%08X, irq=%d\n",
            dev_name(device), i2c_dev_data->index,
            i2c_dev_data->base, (unsigned int)i2c_dev_data->Iic.BaseAddress, i2c_dev_data->irq);
 
-#if 0
-    if (scan) {
-        scan_results = xilinx_iic_do_scan(dev);
-        if (scan_results) {
-            printk(scan_results);
-            kfree(scan_results);
-        }
-    }
-#endif
-    
-#if 0
-    of_register_i2c_devices(&i2c_dev_data->adap, node);
-
-    error = device_create_file(device, &dev_attr_scan);
-      out:
-    if (error)
-        xilinx_iic_remove(device);
-#endif
       out2:
     return error;
       out:
@@ -629,31 +583,18 @@ static int __devinit load_i2c_resources(struct of_device *ofdev) {
 static int __devinit i2c_serial_probe(struct of_device *pdev,
                       const struct of_device_id *match)
 {
-    u32 ten_bit_addr, gpo_width;
-    struct resource r_irq_struct;
-    struct resource r_mem_struct;
+  u32 ten_bit_addr, gpo_width;
+  struct resource r_irq_struct;
+  struct resource r_mem_struct;
 
-    struct resource *r_irq = &r_irq_struct; /* Interrupt resources */
-    struct resource *r_mem = &r_mem_struct; /* IO mem resources */
+  struct resource *r_irq = &r_irq_struct; /* Interrupt resources */
+  struct resource *r_mem = &r_mem_struct; /* IO mem resources */
 
   struct i2c_serial *i2c_serial_data;
-#if 0
-  struct resource res;
-#endif
   int retval;
   unsigned int minor;
   unsigned long flags;
 
-
-#if 0
-  retval=of_address_to_resource(ofdev->node,0,&res);
-  if(retval)
-    {
-      printk(KERN_ERR "%s: I/O memory resource is missing\n",
-             dev_name(&ofdev->dev));
-      return retval;
-    }
-#endif
   i2c_serial_data = kzalloc(sizeof(*i2c_serial_data), GFP_KERNEL);
   if(!i2c_serial_data)
     {
@@ -685,28 +626,6 @@ static int __devinit i2c_serial_probe(struct of_device *pdev,
 
   dev_set_drvdata(&pdev->dev,i2c_serial_data);
 
-#if 0
-  if(!request_mem_region(res.start,resource_size(&res),dev_name(&ofdev->dev)))
-    {
-      printk(KERN_ERR "%s: I/O memory region busy\n",
-             dev_name(&ofdev->dev));
-      kfree(i2c_serial_data);
-      return -EBUSY;
-    }
-
-  i2c_serial_data->base = ioremap(res.start,resource_size(&res));
-  if(!i2c_serial_data->base)
-    {
-      printk(KERN_ERR "%s: Unable to map I/O memory region\n",
-             dev_name(&ofdev->dev));
-     release_mem_region(res.start,resource_size(&res));
-     kfree(i2c_serial_data);
-      return -EIO;
-    }
-
-//  init_MUTEX(&i2c_serial_data->sem);
-#endif
-
   retval=cdev_add(&i2c_serial_data->cdev,
                   MKDEV(major,i2c_serial_data->minor),1);
   if(retval)
@@ -714,9 +633,6 @@ static int __devinit i2c_serial_probe(struct of_device *pdev,
       printk(KERN_ERR "%s: Unable to register device\n",
              dev_name(&pdev->dev));
       iounmap(i2c_serial_data->base);
-#if 0
-      release_mem_region(res.start,resource_size(&res));
-#endif
       kfree(i2c_serial_data);
       return -ENODEV;
     }
@@ -740,67 +656,40 @@ static int __devexit i2c_serial_remove(struct of_device *pdev)
   struct xiic_data *dev;
 
   dev=i2c_dev_data;
-
-#if 0
-  struct resource res;
-  unsigned long flags;
-#endif
-
   i2c_serial_data = dev_get_drvdata(&pdev->dev);
 
 
-    /* Tell the Xilinx code to take this IIC interface down. */
-    if (i2c_dev_data->started) {
-        while (XIic_Stop(&i2c_dev_data->Iic) != XST_SUCCESS) {
-            /* The bus was busy.  Retry. */
-#if 0
-            printk(KERN_WARNING
-                   "%s #%d: Could not stop device.  Will retry.\n",
-                   i2c_dev_data->adap.name, i2c_dev_data->index);
-#endif
-            set_current_state(TASK_INTERRUPTIBLE);
-            schedule_timeout(HZ / 2);
-        }
-    }
+  /* Tell the Xilinx code to take this IIC interface down. */
+  if (i2c_dev_data->started) {
+      while (XIic_Stop(&i2c_dev_data->Iic) != XST_SUCCESS) {
+          /* The bus was busy.  Retry. */
+          printk(KERN_WARNING
+                 "%s #%d: Could not stop device.  Will retry.\n",
+                 dev_name(pdev->dev), i2c_dev_data->index);
+          set_current_state(TASK_INTERRUPTIBLE);
+          schedule_timeout(HZ / 2);
+      }
+  }
 
-    /*
-     * Now that the Xilinx code isn't using the IRQ or registers,
-     * unmap the registers and free the IRQ.
-     */
-    if (i2c_dev_data->remapped) {
-        iounmap((void *)i2c_dev_data->Iic.BaseAddress);
-    }
+  /*
+  * Now that the Xilinx code isn't using the IRQ or registers,
+  * unmap the registers and free the IRQ.
+  */
+  if (i2c_dev_data->remapped) {
+      iounmap((void *)i2c_dev_data->Iic.BaseAddress);
+  }
+  if (i2c_dev_data->reqirq) {
+      disable_irq(i2c_dev_data->irq);
+      free_irq(i2c_dev_data->irq, dev);
+  }
+  kfree(dev);
 
-    if (i2c_dev_data->reqirq) {
-        disable_irq(i2c_dev_data->irq);
-        free_irq(i2c_dev_data->irq, dev);
-    }
-
-#if 0
-    device_remove_file(device, &dev_attr_scan);
-#endif
-    kfree(dev);
-
-
-#if 0
-  spin_lock_irqsave(&static_dev_lock,flags);
-  minors[i2c_serial_data->minor]=0;
-  spin_unlock_irqrestore(&static_dev_lock,flags);
-
-#endif
   cdev_del(&i2c_serial_data->cdev);
-#if 0
-  iounmap(i2c_serial_data->base);
-
-  if(!of_address_to_resource(ofdev->node,0,&res))
-    release_mem_region(res.start,resource_size(&res));
-#endif
 
   printk(KERN_INFO "%s: removed i2c serial device %d:%d\n",
          dev_name(&pdev->dev),major,i2c_serial_data->minor);
 
   kfree(i2c_serial_data);
-
   return 0;
 }
 
