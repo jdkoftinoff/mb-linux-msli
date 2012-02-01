@@ -371,6 +371,7 @@ static void NotAddrAsSlaveHandler(XIic *InstancePtr)
 	u32 CntlReg;
 	u8 BytesToRead;
 	u8 LoopCnt;
+    int savedCount;
 
 	/*
 	 * Disable NAAS so that the condition will not continue to interrupt
@@ -408,6 +409,7 @@ static void NotAddrAsSlaveHandler(XIic *InstancePtr)
 		}
 	}
 
+    savedCount=InstancePtr->RecvByteCount;
 	InstancePtr->RecvByteCount = 0;
 	/*
 	 * Flush Rx FIFO should slave Rx had a problem, sent No ack but
@@ -456,7 +458,7 @@ static void NotAddrAsSlaveHandler(XIic *InstancePtr)
 		XIic_WriteIier(InstancePtr->BaseAddress,
 					(Status & ~XIIC_INTR_RX_FULL_MASK));
 		InstancePtr->RecvHandler(InstancePtr->RecvCallBackRef,
-					 InstancePtr->RecvByteCount);
+					 savedCount);
 	}
 	return;
 }
