@@ -55,37 +55,6 @@
 #define TX_IN (dev->tx_in&TX_MASK)
 #define TX_OUT (dev->tx_out&TX_MASK)
 
-static unsigned major=0,ndevs=0;
-static unsigned char minors[DEVICES_COUNT];
-static DEFINE_SPINLOCK(static_dev_lock);
-static DECLARE_MUTEX(cfg_sem);
-static bool resources_loaded;
-static struct i2c_serial * all_serial_data[DEVICES_COUNT];
-
-const uint8_t address_vs_minor[DEVICES_COUNT] = {
-        0x12+(0x10*1)+0,
-        0x12+(0x10*1)+1,
-        0x12+(0x10*1)+2,
-        0x12+(0x10*2)+0,
-        0x12+(0x10*2)+1,
-        0x12+(0x10*2)+2,
-        0x12+(0x10*3)+0,
-        0x12+(0x10*3)+1,
-        0x12+(0x10*3)+2
-    };
-
-static uint8_t find_minor(uint8_t address) {
-    int i;
-    for(i=0;i<DEVICES_COUNT;i++) {
-        if(address_vs_minor[i]==address) {
-            return(i);
-        }
-    }
-    return(0);
-}
-
-#define ADDRESS_TO_I2C_ADDRESS(ADDRESS) ((ADDRESS&0x70)+2)
-
 struct i2c_serial
 {
   void __iomem *base;
@@ -117,6 +86,38 @@ struct i2c_serial
 
 };
 
+
+static unsigned major=0,ndevs=0;
+static unsigned char minors[DEVICES_COUNT];
+static DEFINE_SPINLOCK(static_dev_lock);
+static DECLARE_MUTEX(cfg_sem);
+static bool resources_loaded;
+static struct i2c_serial * all_serial_data[DEVICES_COUNT];
+
+const uint8_t address_vs_minor[DEVICES_COUNT] = {
+        0x12+(0x10*1)+0,
+        0x12+(0x10*1)+1,
+        0x12+(0x10*1)+2,
+        0x12+(0x10*2)+0,
+        0x12+(0x10*2)+1,
+        0x12+(0x10*2)+2,
+        0x12+(0x10*3)+0,
+        0x12+(0x10*3)+1,
+        0x12+(0x10*3)+2
+    };
+
+static uint8_t find_minor(uint8_t address) {
+    int i;
+    for(i=0;i<DEVICES_COUNT;i++) {
+        if(address_vs_minor[i]==address) {
+            return(i);
+        }
+    }
+    return(0);
+}
+
+#define ADDRESS_TO_I2C_ADDRESS(ADDRESS) ((ADDRESS&0x70)+2)
+
 static int i2c_serial_open(struct inode *inode, struct file *filp)
 {
   struct i2c_serial *dev;
@@ -130,6 +131,7 @@ static int i2c_serial_release(struct inode *inode, struct file *filp)
 {
   return 0;
 }
+static int RecvHandlerDrop;
 
 void loopback_test(struct i2c_serial * i2c_serial_data) {
 #if 0
@@ -152,11 +154,12 @@ void loopback_test(struct i2c_serial * i2c_serial_data) {
         printk(KERN_INFO "sent wake up!!! %p\n",&i2c_serial_data->rxq);
     }
 #endif
-    printk(KERN_INFO "poll -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d\n",
+    printk(KERN_INFO "loop -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d drop:%d\n",
         i2c_serial_data->rx_in,
         i2c_serial_data->rx_out,
         i2c_serial_data->tx_in,
-        i2c_serial_data->tx_out);
+        i2c_serial_data->tx_out,
+        RecvHandlerDrop);
 }
 
 struct xiic_data {
@@ -208,6 +211,7 @@ static irqreturn_t xiic_interrupt(int irq, void *dev_id)
      return IRQ_HANDLED;
 }
 
+
 static void RecvHandler(void *CallBackRef, int ByteCount) {
     struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
     int i;
@@ -216,29 +220,35 @@ static void RecvHandler(void *CallBackRef, int ByteCount) {
         return;
     }
     i=0;
-    while(((sizeof(receive_buffer)-(ByteCount+i))>0) &&
-         (((i2c_serial_data->rx_in+1)&RX_MASK)!=(i2c_serial_data->rx_out&RX_MASK))) {
+    while(((sizeof(receive_buffer)-(ByteCount+i))>0)) {
         if(i==0) {
             i2c_serial_data=all_serial_data[find_minor(receive_buffer[i])];
             if(i2c_serial_data==NULL) {
                return;
             }
         } else {
-            i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=receive_buffer[i];
-            i2c_serial_data->rx_in++;
+            if(((i2c_serial_data->rx_in+1)&RX_MASK)!=(i2c_serial_data->rx_out&RX_MASK)) {
+               i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=receive_buffer[i];
+               i2c_serial_data->rx_in++;
+            } else {
+               RecvHandlerDrop++;
+//               printk(KERN_INFO "drop in RecvHandler\n");
+            }
         }
         i++;
     }
-    printk(KERN_INFO "got data\n");
-    if(i>0) {
+//    printk(KERN_INFO "got data\n");
+    if(i>1) {
       wake_up(&i2c_serial_data->rxq);
     }
-    printk(KERN_INFO "RecvHandler [[ rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d ByteCount:%d\n",
-          i2c_serial_data->rx_in,
-          i2c_serial_data->rx_out,
-          i2c_serial_data->tx_in,
-          i2c_serial_data->tx_out,
-          ByteCount);
+/*
+    printk(KERN_INFO "RecvHandler -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d ByteCount:%d\n",
+          i2c_serial_data->rx_in&0xff,
+          i2c_serial_data->rx_out&0xff,
+          i2c_serial_data->tx_in&0xff,
+          i2c_serial_data->tx_out&0xff,
+          ByteCount&0xff);
+*/
 }
 
 static void SendHandler(void *CallBackRef, int ByteCount) {
@@ -358,12 +368,11 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
         up(&dev->sem);
         return -EFAULT;
       }
-      printk(KERN_INFO "read [%02x]\n",*ptr_src);
       i++;
       dev->rx_out++;
-      loopback_test(dev);
       f=true;
     }
+    loopback_test(dev);
 
     if(!f)
     {
@@ -425,9 +434,9 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
       i++;
       i2c_serial_data->tx_in++;
       printk(KERN_INFO "write [%02x]\n",*ptr_dst);
-      loopback_test(i2c_serial_data);
       f=true;
     }
+    loopback_test(i2c_serial_data);
     if(!f)
     {
       up(&i2c_serial_data->sem);
@@ -446,11 +455,21 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
     } else {
 
     if(!XIic_IsIicBusy(&i2c_dev_data->Iic)) {
-      j=0;
+      j=1;
       while((i2c_serial_data->tx_out&TX_MASK)!=(i2c_serial_data->tx_in&TX_MASK) && (j<sizeof(xxx))) {
         xxx[j++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
       }
-      XIic_MasterSend(&i2c_dev_data->Iic, xxx, j);
+      if(j>1) {
+        xxx[0]=address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT];
+        XIic_SetAddress(&i2c_dev_data->Iic, XII_ADDR_TO_SEND_TYPE, ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]));
+        XIic_MasterSend(&i2c_dev_data->Iic, xxx, j);
+        printk(KERN_INFO "write to i2c:%02x, dev:%02x, %d\n",
+               ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]),
+               address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT],
+               j);
+      }
+    } else {
+      /* setup the interrupt not busy interrupt and flush out any left over transmits */
     }
 
         break;
