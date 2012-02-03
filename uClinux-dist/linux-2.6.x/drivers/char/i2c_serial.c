@@ -44,8 +44,8 @@
 #define DRIVER_NAME "i2c_serial"
 #define DEVICES_COUNT 9
 
-#define RX_BUFFER_BITS 8
-#define TX_BUFFER_BITS 8
+#define RX_BUFFER_BITS 9
+#define TX_BUFFER_BITS 9
 
 #define RX_MASK ((1<<RX_BUFFER_BITS)-1)
 #define RX_IN (dev->rx_in&RX_MASK)
@@ -133,35 +133,6 @@ static int i2c_serial_release(struct inode *inode, struct file *filp)
 }
 static int RecvHandlerDrop;
 
-void loopback_test(struct i2c_serial * i2c_serial_data) {
-#if 0
-    bool wakeup;
-    wakeup=false;
-    while(
-          ((i2c_serial_data->tx_in&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) &&
-          (((i2c_serial_data->rx_in+1)&RX_MASK)!=(i2c_serial_data->rx_out&RX_MASK)) ) {
-            i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out&TX_MASK];
-            printk(KERN_INFO "looping back [%02x]=[%02x]\n",
-                i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK],
-                i2c_serial_data->tx_buffer[i2c_serial_data->tx_out&TX_MASK]);
-            i2c_serial_data->rx_in++;
-            i2c_serial_data->tx_out++;
-            wakeup=true;
-    }
-    if(wakeup) {
-        wake_up(&i2c_serial_data->rxq);
-        wake_up(&i2c_serial_data->txq);
-        printk(KERN_INFO "sent wake up!!! %p\n",&i2c_serial_data->rxq);
-    }
-#endif
-    printk(KERN_INFO "loop -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d drop:%d\n",
-        i2c_serial_data->rx_in,
-        i2c_serial_data->rx_out,
-        i2c_serial_data->tx_in,
-        i2c_serial_data->tx_out,
-        RecvHandlerDrop);
-}
-
 struct xiic_data {
      int index;          /* index taken from platform_device */
      struct completion complete;   /* for waiting for interrupts */
@@ -232,23 +203,13 @@ static void RecvHandler(void *CallBackRef, int ByteCount) {
                i2c_serial_data->rx_in++;
             } else {
                RecvHandlerDrop++;
-//               printk(KERN_INFO "drop in RecvHandler\n");
             }
         }
         i++;
     }
-//    printk(KERN_INFO "got data\n");
     if(i>1) {
       wake_up(&i2c_serial_data->rxq);
     }
-/*
-    printk(KERN_INFO "RecvHandler -- rx_in:%d, rx_out:%d tx_in:%d, tx_out:%d ByteCount:%d\n",
-          i2c_serial_data->rx_in&0xff,
-          i2c_serial_data->rx_out&0xff,
-          i2c_serial_data->tx_in&0xff,
-          i2c_serial_data->tx_out&0xff,
-          ByteCount&0xff);
-*/
 }
 
 static void SendHandler(void *CallBackRef, int ByteCount) {
@@ -259,15 +220,13 @@ static void SendHandler(void *CallBackRef, int ByteCount) {
   if(XIic_IsIicBusy(&i2c_dev_data->Iic)) {
     return;
   }
-//  if(ByteCount==0) {
-      i=0;
-      while((i2c_serial_data->tx_in&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) {
-        xxx[i++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
-      }
-      if(i>0) {
-        XIic_MasterSend(&i2c_dev_data->Iic, xxx, i);
-      }
-//  }
+  i=0;
+  while((i2c_serial_data->tx_in&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) {
+    xxx[i++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
+  }
+  if(i>0) {
+    XIic_MasterSend(&i2c_dev_data->Iic, xxx, i);
+  }
 }
 
 uint8_t test;
@@ -325,7 +284,6 @@ static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
     return 0;
   dev=(struct i2c_serial*)filp->private_data;
   down(&dev->sem);
-  loopback_test(dev);
   poll_wait(filp, &dev->rxq, wait);
   poll_wait(filp, &dev->txq, wait);
   if((dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK))
@@ -372,7 +330,6 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
       dev->rx_out++;
       f=true;
     }
-    loopback_test(dev);
 
     if(!f)
     {
@@ -400,7 +357,6 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
     }
   }
   up(&dev->sem);
-  printk(KERN_INFO "read done\n");
   return(i);
 }
 
@@ -433,10 +389,9 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
       }
       i++;
       i2c_serial_data->tx_in++;
-      printk(KERN_INFO "write [%02x]\n",*ptr_dst);
+      //printk(KERN_INFO "write [%02x]\n",(*ptr_dst)&0xff);
       f=true;
     }
-    loopback_test(i2c_serial_data);
     if(!f)
     {
       up(&i2c_serial_data->sem);
@@ -463,10 +418,10 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
         xxx[0]=address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT];
         XIic_SetAddress(&i2c_dev_data->Iic, XII_ADDR_TO_SEND_TYPE, ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]));
         XIic_MasterSend(&i2c_dev_data->Iic, xxx, j);
-        printk(KERN_INFO "write to i2c:%02x, dev:%02x, %d\n",
-               ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]),
-               address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT],
-               j);
+//        printk(KERN_INFO "write to i2c:%02x, dev:%02x, %d\n",
+//               ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]),
+//               address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT],
+//               j);
       }
     } else {
       /* setup the interrupt not busy interrupt and flush out any left over transmits */
