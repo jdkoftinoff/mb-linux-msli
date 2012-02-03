@@ -1,9 +1,283 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <strings.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/select.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <signal.h>
 
-int main( int US_UNUSED(argc), const char **argv )
+#define DEVICES_COUNT 9
+#define NCLIENTS_MAX 20
+#define INPUT_BUFFER_SIZE 4096
+#define OUTPUT_BUFFER_SIZE 256
+
+static const char * device_names[DEVICES_COUNT] = {
+    "/dev/dsp1",
+    "/dev/dsp1_amp1",
+    "/dev/dsp1_amp2",
+    "/dev/dsp2",
+    "/dev/dsp2_amp1",
+    "/dev/dsp2_amp2",
+    "/dev/dsp3",
+    "/dev/dsp3_amp1",
+    "/dev/dsp3_amp2"
+};
+static const int server_port[DEVICES_COUNT] = {
+    1310,
+    1311,
+    1312,
+    1320,
+    1321,
+    1322,
+    1330,
+    1331,
+    1332
+};
+
+/* do nothing on alarm */
+void alarmfunc(int n)
 {
+}
+
+struct network_client
+{
+//  char inputbuffer[INPUT_BUFFER_SIZE+1];
+  int output_buffer_size;
+  char *outputbuffer;
+  int client_socket;
+  int inputbufferlen;
+  int outputbufferlen;
+  int disconnectflag;
+//  short int gsb_status;
+//  short int gnet_status;
+//  unsigned char *gnet_write_buffer;
+//  int gnet_write_buffer_len;
+//  int gnet_write_buffer_alloc;
+//  int gnet_write_offset;
+//  int reboot_device;
+//  struct resources_list read_resources;
+//  struct resources_list write_resources;
+//  struct resources_list monitored_resources;
+};
+static int dev_fd[DEVICES_COUNT];
+static int dev_pipe[DEVICES_COUNT][2];
+static int socket_fd[DEVICES_COUNT];
+static struct network_client clients[DEVICES_COUNT][NCLIENTS_MAX];
+static int nclients_total;
+static int dev_nclients[DEVICES_COUNT];
+
+int main( int argc, const char **argv )
+{
+    struct timeval t;
+    int i,j;
     bool r=false;
-    return r;
+    struct sockaddr_in client_addr;
+    struct sockaddr_in server_addr;
+    fd_set read_fds;
+    fd_set write_fds;
+    int fl;
+    int max_fd;
+    uint8_t in;
+    int rv;
+    socklen_t addrlen;
+    int client_socket;
+    int fd;
+    int read_fd;
+    int write_fd;
+
+    max_fd=0;
+    nclients_total=0;
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+    /* disable SIGPIPE handler, network errors are not fatal */
+    signal(SIGPIPE,SIG_IGN);
+  
+    /* call empty handler on alarm (and interrupt pending blocking i/o) */
+    signal(SIGALRM,alarmfunc);
+
+    for(i=0;i<DEVICES_COUNT;i++) {
+        dev_fd[i]=open(device_names[i],O_RDWR|O_NONBLOCK);
+        socket_fd[i]=socket(AF_INET,SOCK_STREAM,0);
+        if(socket_fd[i]<0) {
+          perror("Can't create server socket");
+          close(dev_fd[i]);
+          i--;
+          break;
+        }
+        memset(&server_addr,0,sizeof(server_addr));
+        server_addr.sin_family=PF_INET;
+        server_addr.sin_addr.s_addr=htonl(INADDR_ANY);
+        server_addr.sin_port=htons(server_port[i]);
+        if(bind(socket_fd[i],(struct sockaddr*)&server_addr, sizeof(server_addr)))
+          {
+            perror("Can't bind server socket");
+            break;
+          }
+        if(listen(socket_fd[i],10))
+          {
+            perror("Can't listen on server socket");
+            break;
+          }
+        fl=fcntl(socket_fd[i],F_GETFL,0);
+        fcntl(socket_fd[i],F_SETFL,fl|O_NONBLOCK);
+        dev_nclients[i]=0;
+
+        if(socket_fd[i]>max_fd) {
+            max_fd=socket_fd[i];
+        }
+        if(dev_fd[i]>max_fd) {
+            max_fd=dev_fd[i];
+        }
+        FD_SET(socket_fd[i],&read_fds);
+        //FD_SET(socket_fd[i],&write_fds);
+        FD_SET(dev_fd[i],&read_fds);
+        //FD_SET(dev_fd[i],&write_fds);
+    }
+    if(i<DEVICES_COUNT) {
+        for(;i>=0;i--) {
+            close(dev_fd[i]);
+            close(socket_fd[i]);
+        }
+        return(1);
+    }
+    while(1) {
+        printf("waiting for event\n");
+        t.tv_sec=4;
+        t.tv_usec=0;
+        rv = select(max_fd+nclients_total+1+5,&read_fds,&write_fds,NULL,&t);
+        printf("got event\n");
+        for(i=0;i<DEVICES_COUNT;i++) {
+            fd=socket_fd[i];
+            if(FD_ISSET(fd,&read_fds)) {
+                addrlen=sizeof(client_addr);
+                client_socket=accept(socket_fd[i], (struct sockaddr*)&client_addr, &addrlen);
+                if(client_socket>=0) {
+                    if(nclients_total<NCLIENTS_MAX)
+                    {
+                      fl=fcntl(client_socket,F_GETFL,0);
+                      fcntl(client_socket,F_SETFL,fl|O_NONBLOCK);
+                      memset(&clients[i][dev_nclients[i]],0, sizeof(struct network_client));
+
+                      clients[i][dev_nclients[i]].client_socket=client_socket;
+                      clients[i][dev_nclients[i]].outputbuffer=
+                        (char*)malloc(OUTPUT_BUFFER_SIZE);
+                      if(clients[i][dev_nclients[i]].outputbuffer)
+                        {
+                          clients[i][dev_nclients[i]].output_buffer_size=
+                            OUTPUT_BUFFER_SIZE;
+                        }
+                      else
+                        {
+                          clients[i][dev_nclients[i]].disconnectflag=1;
+                        }
+
+                      printf("client connected to %s\n",device_names[i]);
+
+                      if(clients[i][dev_nclients[i]].client_socket>max_fd) {
+                        max_fd=clients[i][dev_nclients[i]].client_socket;
+                      }
+                      fd=clients[i][dev_nclients[i]].client_socket;
+                      FD_CLR(fd,&read_fds);
+                      dev_nclients[i]++;
+                      nclients_total++;
+                    }
+                  else
+                    {
+                    printf("could not connect to client");
+                    close(client_socket);
+                    }
+                }
+            } else {
+                fd=socket_fd[i];
+                FD_SET(fd,&read_fds);
+
+            }
+            
+            for(j=0;j<dev_nclients[i];j++) {
+                read_fd=clients[i][j].client_socket;
+                write_fd=dev_fd[i];
+                while(FD_ISSET(read_fd,&read_fds) && FD_ISSET(write_fd,&write_fds)) {
+                    if(read(read_fd,&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
+                        printf("could not read from client %d for %s\n",j,device_names[i]);
+                    }
+                    if(write(write_fd,&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
+                        printf("could not write to device %s:%d\n",device_names[i],write_fd);
+                        break;
+                    }
+                }
+                if(FD_ISSET(read_fd,&read_fds)) {
+                    FD_SET(write_fd,&write_fds);
+                }
+                if(FD_ISSET(write_fd,&write_fds)) {
+                    FD_SET(read_fd,&read_fds);
+                }
+            }
+
+            read_fd=dev_fd[i];
+            while(FD_ISSET(read_fd,&read_fds) && FD_ISSET(write_fd,&write_fds)) {
+                if(read(read_fd,&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
+                    printf("could not read from device %d for %s\n",read_fd,device_names[i]);
+                }
+                for(j=0;j<dev_nclients[i];j++) {
+                    write_fd=clients[i][j].client_socket;
+                    if(write(write_fd,&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
+                        printf("could not write to client %d %s\n",j,device_names[i]);
+                        break;
+                    }
+                    if(FD_ISSET(write_fd,&write_fds)) {
+                        FD_SET(read_fd,&read_fds);
+                    }
+                }
+                if(FD_ISSET(read_fd,&read_fds)) {
+                    FD_SET(write_fd,&write_fds);
+                }
+            }
+
+
+#if 0
+            read_fd=dev_fd[i];
+            write_fd=clients[i][j].client_socket;
+            if(FD_ISSET(dev_fd[i],&read_fds)) {
+                if(read(dev_fd[i],&in,sizeof(uint8_t)) != sizeof(uint8_t)) {
+                    printf("could not read from %s:%d\n",device_names[i],dev_fd[i]);
+                    break;
+                }
+                printf("device %d readable [%02x]\n",i,in&0xff);
+            } else {
+                FD_SET(dev_fd[i],&read_fds);
+            }
+#endif
+
+#if 0
+            if(FD_ISSET(socket_fd[i],&write_fds)) {
+                if(write(fd[i],&count_out[i],sizeof(uint8_t)) != sizeof(uint8_t)) {
+                    printf("could not write to %s:%d\n",dsp_dev[i],fd[i]);
+                    exit(1);
+                }
+                count_out[i]++;
+            } else {
+                FD_SET(fd[i],&write_fds);
+            }
+#endif
+
+        }
+    }
+    for(i=0;i<DEVICES_COUNT;i++) {
+        for(j=0;j<dev_nclients[i];j++) {
+            close(clients[i][j].client_socket);
+        }
+        close(socket_fd[i]);
+        close(dev_fd[i]);
+    }
+    return 0;
 }
 
