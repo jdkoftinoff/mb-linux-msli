@@ -83,10 +83,10 @@ DEVICES += 	\
     dsp1_amp2,c,254,2 \
     dsp2,c,254,3 \
     dsp2_amp1,c,254,4 \
-    dsp2_amp1,c,254,5 \
+    dsp2_amp2,c,254,5 \
     dsp3,c,254,6 \
     dsp3_amp1,c,254,7 \
-    dsp3_amp1,c,254,8
+    dsp3_amp2,c,254,8
 endif
 
 
