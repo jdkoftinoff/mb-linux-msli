@@ -197,7 +197,7 @@ int main( int argc, const char **argv )
                         max_fd=clients[i][dev_nclients[i]].client_socket;
                       }
                       fd=clients[i][dev_nclients[i]].client_socket;
-                      FD_CLR(fd,&read_fds);
+                      FD_SET(fd,&read_fds);
                       dev_nclients[i]++;
                       nclients_total++;
                     }
