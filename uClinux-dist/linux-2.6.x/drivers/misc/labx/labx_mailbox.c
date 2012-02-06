@@ -59,7 +59,7 @@ void disable_mailbox(struct labx_mailbox *mailbox) {
 
   DBG("Disabling the mailbox\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG));
-  controlRegister &= ~MAILBOX_ENABLE;
+  controlRegister &= ~(MAILBOX_ENABLE | MAILBOX_API_ENABLE);
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG), controlRegister);
   DBG("Mailbox disabled\n");
 }
@@ -70,8 +70,9 @@ void enable_mailbox(struct labx_mailbox *mailbox) {
 
   DBG("Enabling the mailbox\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG));
-  controlRegister |= MAILBOX_ENABLE;
+  controlRegister |= (MAILBOX_ENABLE | MAILBOX_API_ENABLE);
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG), controlRegister);
+  DBG("Mailbox enabled\n")
 }
 
 /* Resets the state of the passed instance */
