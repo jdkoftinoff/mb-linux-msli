@@ -96,9 +96,6 @@ int main( int argc, const char **argv )
     int rv;
     socklen_t addrlen;
     int client_socket;
-    int fd;
-    int read_fd;
-    int write_fd;
     int read_count;
     int x;
 
@@ -167,8 +164,44 @@ int main( int argc, const char **argv )
         if((x++&0x1f)==0)
             printf("\n");
         for(i=0;i<DEVICES_COUNT;i++) {
-            fd=socket_fd[i];
-            if(FD_ISSET(fd,&read_fds)) {
+            for(j=0;j<dev_nclients[i];j++) {
+                if(FD_ISSET(clients[i][j].client_socket,&read_fds) /* && FD_ISSET(dev_fd[i],&write_fds) */) {
+                    if((read_count=read(clients[i][j].client_socket,in,sizeof(in))) <= 0) {
+                        FD_CLR(clients[i][j].client_socket,&read_fds);
+                        printf("could not read from client %d for %s\n",j,device_names[i]);
+                        close(clients[i][j].client_socket);
+                        dev_nclients[i]--;
+                        nclients_total--;
+                        printf("%s now has %d clients, total clients is %d\n",device_names[i],dev_nclients[i],nclients_total);
+                        break;
+                    }
+                    if(write(dev_fd[i],in,read_count) != read_count) {
+                        printf("could not write to device %s:%d\n",device_names[i],dev_fd[i]);
+                        break;
+                    }
+                }
+                FD_SET(clients[i][j].client_socket,&read_fds);
+            }
+
+            if(FD_ISSET(dev_fd[i],&read_fds)) {
+                if((read_count=read(dev_fd[i],&in,sizeof(in))) <= 0) {
+                    printf("could not read from device %d for %s\n",dev_fd[i],device_names[i]);
+                }
+                for(j=0;j<dev_nclients[i];j++) {
+                    if(write(clients[i][j].client_socket,&in,read_count) != read_count) {
+                        FD_CLR(dev_fd[i],&read_fds);
+                        printf("could not write to client %d %s\n",j,device_names[i]);
+                        close(clients[i][j].client_socket);
+                        dev_nclients[i]--;
+                        nclients_total--;
+                        printf("%s now has %d clients, total clients is %d\n",device_names[i],dev_nclients[i],nclients_total);
+                        break;
+                    }
+                }
+            }
+            FD_SET(dev_fd[i],&read_fds);
+
+            if(FD_ISSET(socket_fd[i],&read_fds)) {
                 addrlen=sizeof(client_addr);
                 client_socket=accept(socket_fd[i], (struct sockaddr*)&client_addr, &addrlen);
                 if(client_socket>=0) {
@@ -177,27 +210,12 @@ int main( int argc, const char **argv )
                       fl=fcntl(client_socket,F_GETFL,0);
                       fcntl(client_socket,F_SETFL,fl|O_NONBLOCK);
                       memset(&clients[i][dev_nclients[i]],0, sizeof(struct network_client));
-
                       clients[i][dev_nclients[i]].client_socket=client_socket;
-                      clients[i][dev_nclients[i]].outputbuffer=
-                        (char*)malloc(OUTPUT_BUFFER_SIZE);
-                      if(clients[i][dev_nclients[i]].outputbuffer)
-                        {
-                          clients[i][dev_nclients[i]].output_buffer_size=
-                            OUTPUT_BUFFER_SIZE;
-                        }
-                      else
-                        {
-                          clients[i][dev_nclients[i]].disconnectflag=1;
-                        }
-
                       printf("client connected to %s\n",device_names[i]);
-
                       if(clients[i][dev_nclients[i]].client_socket>max_fd) {
                         max_fd=clients[i][dev_nclients[i]].client_socket;
                       }
-                      fd=clients[i][dev_nclients[i]].client_socket;
-                      FD_SET(fd,&read_fds);
+                      FD_SET(clients[i][dev_nclients[i]].client_socket,&read_fds);
                       dev_nclients[i]++;
                       nclients_total++;
                     }
@@ -208,51 +226,8 @@ int main( int argc, const char **argv )
                     }
                 }
             } else {
-                fd=socket_fd[i];
-                FD_SET(fd,&read_fds);
-
+                FD_SET(socket_fd[i],&read_fds);
             }
-            
-            for(j=0;j<dev_nclients[i];j++) {
-                read_fd=clients[i][j].client_socket;
-                write_fd=dev_fd[i];
-                if(FD_ISSET(read_fd,&read_fds) /* && FD_ISSET(write_fd,&write_fds) */) {
-                    if((read_count=read(read_fd,in,sizeof(in))) <= 0) {
-                        FD_CLR(read_fd,&read_fds);
-                        printf("could not read from client %d for %s\n",j,device_names[i]);
-                        close(clients[i][j].client_socket);
-                        dev_nclients[i]--;
-                        nclients_total--;
-                        printf("%s now has %d clients, total clients is %d\n",device_names[i],dev_nclients[i],nclients_total);
-                        break;
-                    }
-                    if(write(write_fd,in,read_count) != read_count) {
-                        printf("could not write to device %s:%d\n",device_names[i],write_fd);
-                        break;
-                    }
-                }
-                FD_SET(read_fd,&read_fds);
-            }
-
-            read_fd=dev_fd[i];
-            if(FD_ISSET(read_fd,&read_fds)) {
-                if((read_count=read(read_fd,&in,sizeof(in))) <= 0) {
-                    printf("could not read from device %d for %s\n",read_fd,device_names[i]);
-                }
-                for(j=0;j<dev_nclients[i];j++) {
-                    write_fd=clients[i][j].client_socket;
-                    if(write(write_fd,&in,read_count) != read_count) {
-                        FD_CLR(read_fd,&read_fds);
-                        printf("could not write to client %d %s\n",j,device_names[i]);
-                        close(clients[i][j].client_socket);
-                        dev_nclients[i]--;
-                        nclients_total--;
-                        printf("%s now has %d clients, total clients is %d\n",device_names[i],dev_nclients[i],nclients_total);
-                        break;
-                    }
-                }
-            }
-            FD_SET(read_fd,&read_fds);
         }
     }
     for(i=0;i<DEVICES_COUNT;i++) {
