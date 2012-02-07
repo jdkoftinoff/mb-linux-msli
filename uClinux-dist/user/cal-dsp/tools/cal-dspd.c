@@ -156,13 +156,9 @@ int main( int argc, const char **argv )
         return(1);
     }
     while(!cleanexit) {
-        //printf("waiting for event\n");
         t.tv_sec=4;
         t.tv_usec=0;
         rv = select(max_fd+nclients_total+1+5,&read_fds,&write_fds,NULL,&t);
-        printf(".");
-        if((x++&0x1f)==0)
-            printf("\n");
         for(i=0;i<DEVICES_COUNT;i++) {
             for(j=0;j<dev_nclients[i];j++) {
                 if(FD_ISSET(clients[i][j].client_socket,&read_fds) /* && FD_ISSET(dev_fd[i],&write_fds) */) {
