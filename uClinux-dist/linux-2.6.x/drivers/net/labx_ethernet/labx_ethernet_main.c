@@ -350,30 +350,6 @@ static inline int _labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
   return status;
 }
 
-static inline u16 _labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
-{
-  u16 speed;
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  speed = labx_eth_GetOperatingSpeed(InstancePtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  return speed;
-}
-
-static inline void _labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_SetOperatingSpeed(InstancePtr, Speed);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  /* We need a delay after we set the speed. Otherwise the PHY will not be ready. */
-  udelay(10000);
-}
-
 static inline void _labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
 {
   unsigned long flags;

@@ -310,6 +310,7 @@ void labx_eth_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
 	u32 Reg;
 
+        printk("Resetting\n");
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
 #if 0
@@ -1175,9 +1176,14 @@ void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "labx_eth_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
+
 	/* Set register and return */
 	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_EMMC_OFFSET, EmmcReg);
+
+	/* Reset Tx/Rx since the speed changed */
+	labx_eth_Reset(InstancePtr, XTE_NORESET_HARD);
+
 	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOperatingSpeed: done\n");
 }
 
