@@ -474,6 +474,9 @@ int write_block(int h_out,u32 block_start,u32 block_size,int outputtype)
 	      skip=current_write_offset-(segments[i].offset
 					 +segments[i].size_padded);
 	      count=sizeof(image_segment_header)-skip;
+	      if(current_write_offset+count>block_start+block_size)
+		count=block_start+block_size-current_write_offset;
+
 	      segmentheader.image_segment_type=
 		htonl(segments[i+1].image_segment_type);
 	      segmentheader.size_padded=
