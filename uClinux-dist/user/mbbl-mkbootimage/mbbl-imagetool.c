@@ -474,6 +474,9 @@ int write_block(int h_out,u32 block_start,u32 block_size,int outputtype)
 	      skip=current_write_offset-(segments[i].offset
 					 +segments[i].size_padded);
 	      count=sizeof(image_segment_header)-skip;
+	      if(current_write_offset+count>block_start+block_size)
+		count=block_start+block_size-current_write_offset;
+
 	      segmentheader.image_segment_type=
 		htonl(segments[i+1].image_segment_type);
 	      segmentheader.size_padded=
@@ -696,7 +699,7 @@ static unsigned char fieldbuffer[256];
 static char *msg_invalid_format="Invalid Xilinx bitstream file format: %s\n";
 
 /* add a bitstream file, as a segment */
-int add_bit_file_segment(char *name)
+int add_bit_file_segment(char *name,int invert_bitstream)
 {
   int h,data_found;
   size_t l,datalen;
@@ -915,10 +918,14 @@ int add_bit_file_segment(char *name)
     }
   close(h);
 
-  /* invert bits in bitstream */
-  for(i=BITSTREAM_IMAGE_HEADER_SIZE;i<datalen+BITSTREAM_IMAGE_HEADER_SIZE;i++)
+  if(invert_bitstream)
     {
-      data[i]=invertbits(data[i]);
+      /* invert bits in bitstream */
+      for(i=BITSTREAM_IMAGE_HEADER_SIZE;
+	  i<datalen+BITSTREAM_IMAGE_HEADER_SIZE;i++)
+	{
+	  data[i]=invertbits(data[i]);
+	}
     }
 
   /*
@@ -1372,22 +1379,22 @@ void usage(void)
 "mbbl-imagetool -- boot image maker for MBBL\n"
 "Usage:\n"
 "Write image from files:\n"
-"mbbl-imagetool [-s <address>] \\\n"
+"mbbl-imagetool [-N] [-s <address>] \\\n"
 "               [-b <bitstream>] [-e <bootloader>] -d <fdt> \\\n"
 "               [-i <identity>] -k <kernel> -r <ramdisk> \\\n"
 "               [-l <logo>] [-f <font>] -o <image> [options]\n"
 "or\n"
-"mbbl-imagetool [--start=<address>] \\\n"
+"mbbl-imagetool [--noinvert] [--start=<address>] \\\n"
 "               [--bit=<bitstream>] [--exec=<bootloader>] --dtb=<fdt> \\\n"
 "               [--id=<identity>] --kernel=<kernel> --ramdisk=<ramdisk> \\\n"
 "               [--logo=<logo>] [--font=<font>] --out=<image>\n\n"
 "Read image, extract files:\n"
-"mbbl-imagetool [-s <address>] \\\n"
+"mbbl-imagetool [-N] [-s <address>] \\\n"
 "               [-b <bitstream>] [-e <bootloader>] [-d <fdt>] \\\n"
 "               [-i <identity>] [-k <kernel>] [-r <ramdisk>] \\\n"
 "               [-l <logo>] [-f <font>] -I <image> [options]\n"
 "or\n"
-"mbbl-imagetool [--start=<address>] \\\n"
+"mbbl-imagetool [--noinvert] [--start=<address>] \\\n"
 "               [--bit=<bitstream>] [--exec=<bootloader>] [--dtb=<fdt>] \\\n"
 "               [--id=<identity>] [--kernel=<kernel>] [--ramdisk=<ramdisk>] "
 "\\\n"
@@ -1511,7 +1518,7 @@ int main(int argc,char **argv)
   int segment_index;
   int h,opt,optindex,n,i,j,k,h_fdt,h_out,err,
     chosen_offset,bootargslen,restart,found_index,retval,
-    outputtype=OUTPUT_TYPE_FILE;
+    outputtype=OUTPUT_TYPE_FILE,invert_bitstream=1;
   long fdt_len,fdt_old_size,identity_len;
   u32 bad_start,bad_end,ramdisk_new_offset,ramdisk_new_offset_kb,
     bootargsstring_new_len;
@@ -1535,10 +1542,11 @@ int main(int argc,char **argv)
     {"font",1,NULL,'f'},
     {"input",1,NULL,'I'},
     {"out",1,NULL,'o'},
+    {"noinvert",0,NULL,'N'},
     {NULL,0,NULL,'\0'}
   };
 
-  char *optstring="s:B:b:d:e:i:k:r:l:f:o:I:";
+  char *optstring="s:B:b:d:e:i:k:r:l:f:o:I:N";
 
   enum{
     OPER_OUTPUT,
@@ -1678,6 +1686,9 @@ int main(int argc,char **argv)
 	    }
 	  image_oper=(opt=='o')?OPER_OUTPUT:OPER_INPUT;
 	  bootimage_name=strdup(optarg);
+	  break;
+	case 'N':
+	  invert_bitstream=0;
 	  break;
 	default:
 	  usage();
@@ -1864,7 +1875,8 @@ int main(int argc,char **argv)
 		      h_out=-1;
 		    }
 		  if(h_out>=0
-		     &&(copydata(h_out,h,bitstream_size,1,0)!=bitstream_size))
+		     &&(copydata(h_out,h,bitstream_size,invert_bitstream,0)
+			!=bitstream_size))
 		    {
 		      fprintf(stderr,"Can't write bitstream file\n");
 		      close(h_out);
@@ -2159,7 +2171,8 @@ int main(int argc,char **argv)
 	  /* bitstream (optional) */
 	  if(bitstream_name)
 	    {
-	      segment_index=add_bit_file_segment(bitstream_name);
+	      segment_index=add_bit_file_segment(bitstream_name,
+						 invert_bitstream);
 	      /* add_bit_file_segment() reports its errors by itself */
 	      if(segment_index<0)
 		{
