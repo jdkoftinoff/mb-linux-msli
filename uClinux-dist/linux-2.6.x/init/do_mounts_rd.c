@@ -23,16 +23,21 @@ int rd_open(const char *path,int flags,mode_t mode)
   fd=sys_open(path,flags,mode);
 
   if(fd<0){
+#ifdef CONFIG_RAMDISK_PRELOADED
     if(rd_start_flag){
       /* no ramdisk device, last-resort attempt -- image may be preloaded
          at this fixed address */
-      rd_start=ioremap(0x97c00000,0x400000);
-      rd_end=rd_start+0x400000;
+      rd_start=ioremap(CONFIG_RAMDISK_PRELOADED_ADDRESS,
+                       CONFIG_RAMDISK_PRELOADED_SIZE);
+      rd_end=rd_start+CONFIG_RAMDISK_PRELOADED_SIZE;
       rd_ptr=rd_start;
       rd_start_flag=0;
     }else{
       rd_failed=1;
     }
+#else
+    rd_failed=1;
+#endif
   }
   return fd;
 }
@@ -225,6 +230,7 @@ done:
 	return nblocks;
 }
 
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 typedef enum {
   PROGRESS_COLOR_GREEN,
   PROGRESS_COLOR_RED,
@@ -339,6 +345,7 @@ int __init rd_display_progress(int fd, int n,progress_color_t color)
 
   return 0;
 }
+#endif
 
 int __init rd_create_char_dev(char *name, dev_t dev)
 {
@@ -349,7 +356,10 @@ int __init rd_create_char_dev(char *name, dev_t dev)
 int __init rd_load_image(char *from)
 {
 	int res = 0;
-	int in_fd, out_fd, progress_fd;
+	int in_fd, out_fd;
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+	int progress_fd;
+#endif
 	unsigned long rd_blocks, devblocks;
 	int nblocks, i, disk;
 	char *buf = NULL;
@@ -359,10 +369,13 @@ int __init rd_load_image(char *from)
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 #endif
 
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 	/* device to display progress indicator or messages */
-        rd_create_char_dev("/dev/progress",MKDEV(153,0));
+        rd_create_char_dev("/dev/progress",
+			   MKDEV(CONFIG_RAMDISK_PROGRESS_DEVICE_MAJOR,
+				 CONFIG_RAMDISK_PROGRESS_DEVICE_MINOR));
 	progress_fd=sys_open("/dev/progress",O_WRONLY,0);
-
+#endif
 	out_fd = sys_open("/dev/ram", O_RDWR, 0);
 	if (out_fd < 0)
 		goto out;
@@ -370,12 +383,16 @@ int __init rd_load_image(char *from)
 	printk(KERN_ALERT "Opening ramdisk image at %s\n",from);
 	in_fd = rd_open(from, O_RDONLY, 0);
 	if (in_fd < 0 && rd_failed) {
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 	  rd_display_progress(progress_fd,4,PROGRESS_COLOR_RED);
+#endif
 	  printk(KERN_ALERT "No ramdisk image\n");
 		goto noclose_input;
 	}
 
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 	rd_display_progress(progress_fd,4,PROGRESS_COLOR_GREEN);
+#endif
 
 	nblocks = identify_ramdisk_image(in_fd, in_fd>=0?rd_image_start:0, &decompressor);
 	if (nblocks < 0)
@@ -384,7 +401,9 @@ int __init rd_load_image(char *from)
 	if (nblocks == 0) {
 		if (crd_load(in_fd, out_fd, decompressor) == 0)
 			goto successful_load;
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 		rd_display_progress(progress_fd,5,PROGRESS_COLOR_RED);
+#endif
 		goto done;
 	}
 
@@ -466,15 +485,19 @@ int __init rd_load_image(char *from)
 
 successful_load:
 	res = 1;
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 	rd_display_progress(progress_fd,5,PROGRESS_COLOR_GREEN);
+#endif
 done:
 	rd_close(in_fd);
 noclose_input:
 	sys_close(out_fd);
 out:
 	kfree(buf);
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
 	if(progress_fd>=0) sys_close(progress_fd);
 	sys_unlink("/dev/progress");
+#endif
 	sys_unlink("/dev/ram");
 	return res;
 }
@@ -483,9 +506,14 @@ int __init rd_load_disk(int n)
 {
 	if (rd_prompt)
 		change_floppy("root floppy disk to be loaded into RAM disk");
+
+#ifdef CONFIG_RAMDISK_ALT_BOOT_DEVICE
         sys_unlink("/dev/root");
-        create_dev("/dev/root",MKDEV(31,0) /* mtd */);
-        /* create_dev("/dev/root",ROOT_DEV);*/
+        create_dev("/dev/root",MKDEV(CONFIG_RAMDISK_ALT_BOOT_DEVICE_MAJOR,
+				     CONFIG_RAMDISK_ALT_BOOT_DEVICE_MINOR));
+#else
+        create_dev("/dev/root", ROOT_DEV);
+#endif
 	create_dev("/dev/ram", MKDEV(RAMDISK_MAJOR, n));
 	return rd_load_image("/dev/root");
 }

@@ -1042,6 +1042,63 @@ config SLOW_WORK
 
 	  See Documentation/slow-work.txt.
 
+config RAMDISK_PRELOADED
+	bool "Load last-resort ramdisk from predefined address" if BLK_DEV_RAM
+	default n
+	help
+	  If ramdisk is not present on the boot device, look for it at
+	  the predefined address.
+
+config RAMDISK_PRELOADED_ADDRESS
+	hex "Address of the preloaded ramdisk" if RAMDISK_PRELOADED
+	default "0x97c00000"
+	help
+	  Address where ramdisk is preloaded.
+
+config RAMDISK_PRELOADED_SIZE
+	hex "Size of the preloaded ramdisk" if RAMDISK_PRELOADED
+	default "0x400000"
+	help
+	  Size of the preloaded ramdisk.
+
+config RAMDISK_ALT_BOOT_DEVICE
+	bool "Specify the device for loading floppy-style ramdisk" if BLK_DEV_RAM
+	default n
+	help
+	  Specify the device (by major and minor numbers) for loading the ramdisk
+	  in a floppy-like manner.
+
+config RAMDISK_ALT_BOOT_DEVICE_MAJOR
+	hex "Major device number for floppy-like ramdisk" if RAMDISK_ALT_BOOT_DEVICE
+	default "0x1f"
+	help
+	  Ramdisk will be loaded from device with this major number.
+
+config RAMDISK_ALT_BOOT_DEVICE_MINOR
+	hex "Minor device number for floppy-like ramdisk" if RAMDISK_ALT_BOOT_DEVICE
+	default "0x00"
+	help
+	  Ramdisk will be loaded from device with this minor number.
+
+config RAMDISK_DISPLAY_PROGRESS
+	bool "Display boot progress on NKK ISC15ANP4 button" if BLK_DEV_RAM
+	default n
+	help
+	   Display boot progress on SPI-connected NKK ISC15ANP4 button when used
+	   with MBBL bootloader.
+
+config RAMDISK_PROGRESS_DEVICE_MAJOR
+	hex "Major device number for NKK ISC15ANP4 button" if RAMDISK_DISPLAY_PROGRESS
+	default "0x99"
+	help
+	  Major device number for SPI connection to the button.
+
+config  RAMDISK_PROGRESS_DEVICE_MINOR
+	hex "Minor device number for NKK ISC15ANP4 button" if RAMDISK_DISPLAY_PROGRESS
+	default "0x00"
+	help
+	  Minor device number for SPI connection to the button.
+
 endmenu		# General setup
 
 config HAVE_GENERIC_DMA_COHERENT
