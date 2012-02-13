@@ -284,6 +284,9 @@ typedef struct {
 /* I/O control to get the current lock state */
 #define IOC_PTP_GET_RTC_LOCKED _IOR('p', 0x1d, uint32_t)
 
+/* AS Grandmaster */
+#define IOC_PTP_GET_AS_GRANDMASTER  _IOR('p', 0x1e, PtpProperties)
+
 /* PTP events Generic Netlink family name, version, and multicast groups */
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
 #define PTP_EVENTS_FAMILY_VERSION  1
