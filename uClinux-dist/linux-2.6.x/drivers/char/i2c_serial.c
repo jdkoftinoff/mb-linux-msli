@@ -35,17 +35,25 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/xilinx_devices.h>
+#include <linux/ctype.h>
 
 #include "xbasic_types.h"
 #include "xiic.h"
 #include "xiic_i.h"
 
+//#define DEBUG
+#ifdef DEBUG
+#define DEBUG_PRINTK(...) printk( KERN_INFO __VA_ARGS__)
+#else
+#define DEBUG_PRINTK(...)
+#endif
+
 
 #define DRIVER_NAME "i2c_serial"
 #define DEVICES_COUNT 9
 
-#define RX_BUFFER_BITS 9
-#define TX_BUFFER_BITS 9
+#define RX_BUFFER_BITS 8
+#define TX_BUFFER_BITS 8
 
 #define RX_MASK ((1<<RX_BUFFER_BITS)-1)
 #define RX_IN (dev->rx_in&RX_MASK)
@@ -67,32 +75,31 @@ struct i2c_serial
 
   int write_count;
 #if (RX_BUFFER_BITS<=8)
-  volatile uint8_t rx_in;
-  volatile uint8_t rx_out;
+  uint8_t rx_in;
+  uint8_t rx_out;
 #else
-  volatile uint16_t rx_in;
-  volatile uint16_t rx_out;
+  uint16_t rx_in;
+  uint16_t rx_out;
 #endif
   uint8_t rx_buffer[1<<RX_BUFFER_BITS];
 
 #if (TX_BUFFER_BITS<=8)
-  volatile uint8_t tx_in;
-  volatile uint8_t tx_out;
+  uint8_t tx_in;
+  uint8_t tx_out;
 #else
-  volatile uint16_t tx_in;
-  volatile uint16_t tx_out;
+  uint16_t tx_in;
+  uint16_t tx_out;
 #endif
   uint8_t tx_buffer[1<<TX_BUFFER_BITS];
 
 };
-
 
 static unsigned major=0,ndevs=0;
 static unsigned char minors[DEVICES_COUNT];
 static DEFINE_SPINLOCK(static_dev_lock);
 static DECLARE_MUTEX(cfg_sem);
 static bool resources_loaded;
-static struct i2c_serial * all_serial_data[DEVICES_COUNT];
+static struct i2c_serial * all_serial_data[DEVICES_COUNT+1];
 
 const uint8_t address_vs_minor[DEVICES_COUNT] = {
         0x12+(0x10*1)+0,
@@ -105,16 +112,6 @@ const uint8_t address_vs_minor[DEVICES_COUNT] = {
         0x12+(0x10*3)+1,
         0x12+(0x10*3)+2
     };
-
-static uint8_t find_minor(uint8_t address) {
-    int i;
-    for(i=0;i<DEVICES_COUNT;i++) {
-        if(address_vs_minor[i]==address) {
-            return(i);
-        }
-    }
-    return(0);
-}
 
 #define ADDRESS_TO_I2C_ADDRESS(ADDRESS) ((ADDRESS&0x70)+2)
 
@@ -131,16 +128,12 @@ static int i2c_serial_release(struct inode *inode, struct file *filp)
 {
   return 0;
 }
-static int RecvHandlerDrop;
 
 struct xiic_data {
      int index;          /* index taken from platform_device */
      struct completion complete;   /* for waiting for interrupts */
      u32 base;      /* base memory address */
      unsigned int irq;   /* device IRQ number    */
-    volatile u32 transmit_intr_flag;   /* semaphore across task and interrupt - ECM */
-    volatile u32 receive_intr_flag;   /* semaphore across task and interrupt - ECM */
-    volatile u32 status_intr_flag;   /* semaphore across task and interrupt - ECM */
      /*
       * The underlying OS independent code needs space as well.  A
       * pointer to the following XIic structure will be passed to
@@ -158,123 +151,182 @@ struct xiic_data {
      unsigned int reqirq:1;   /* Has request_irq() been called? */
      unsigned int remapped:1; /* Has ioremap() been called? */
      unsigned int started:1;  /* Has XIic_Start() been called? */
-     unsigned int added:1;    /* Has i2c_add_adapter() been called? */
 };
 
-
 static struct xiic_data * i2c_dev_data;
-static uint8_t receive_buffer[0x100];
-static uint8_t xxx[255];
-static uint8_t arr[1];
+static uint8_t slot_temp[3];
 
-/*
- * This routine is registered with the OS as the function to call when
- * the IIC interrupts.  It in turn, calls the Xilinx OS independent
- * interrupt function.  The Xilinx OS independent interrupt function
- * will in turn call any callbacks that we have registered for various
- * conditions.
- */
+static inline void isr_read_rx_fifo(uint32_t base_address) {
+    static struct i2c_serial * i2c_serial_data;
+    uint8_t ch,nibble,slot,address;
+    uint8_t bytes_in_fifo;
+    bytes_in_fifo = XIic_ReadReg(base_address, XIIC_RFO_REG_OFFSET) + 1;
+    while(bytes_in_fifo-- && ((XIic_ReadReg(base_address, XIIC_SR_REG_OFFSET)&XIIC_SR_RX_FIFO_EMPTY_MASK)!=XIIC_SR_RX_FIFO_EMPTY_MASK)) {
+        ch=XIic_ReadReg(base_address, XIIC_DRR_REG_OFFSET);
+        nibble=(ch>>4)&0xf;
+        slot=(ch>>2)&0x3;
+        address=(ch>>0)&0x3;
+        if(slot==3) { /* valid slots are 0,1,2 */
+            printk( KERN_INFO "invalid slot\n");
+            slot=0;
+        }
+        if(address==0) {
+            slot_temp[slot] =(nibble<<4);
+        } else {
+            slot_temp[slot]|=nibble<<0;
+            i2c_serial_data=all_serial_data[(slot*3)+address-1];
+            i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=slot_temp[slot];
+            i2c_serial_data->rx_in++;
+            wake_up(&i2c_serial_data->rxq);
+        }
+    }
+}
+
 static irqreturn_t xiic_interrupt(int irq, void *dev_id)
 {
-     struct xiic_data *dev = dev_id;
-
-     XIic_InterruptHandler(&dev->Iic);
-     return IRQ_HANDLED;
-}
-
-
-static void RecvHandler(void *CallBackRef, int ByteCount) {
-    struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
-    int i;
-
-    if(i2c_dev_data==NULL) {
-        return;
+    struct xiic_data *dev = dev_id;
+    uint32_t status;
+    uint32_t interrupt_status;
+    uint32_t clear;
+    uint32_t base_address;
+    static int tx_index;
+    
+    base_address=dev->Iic.BaseAddress;
+    interrupt_status =  XIic_ReadIisr(base_address) & XIic_ReadIier(base_address);
+    if(interrupt_status==0) {
+        return IRQ_HANDLED;
     }
-    i=0;
-    while(((sizeof(receive_buffer)-(ByteCount+i))>0)) {
-        if(i==0) {
-            i2c_serial_data=all_serial_data[find_minor(receive_buffer[i])];
-            if(i2c_serial_data==NULL) {
-               return;
-            }
+    clear=0;
+    status = XIic_ReadReg(base_address, XIIC_SR_REG_OFFSET);
+    if(interrupt_status & XIIC_INTR_ARB_LOST_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_ARB_LOST_MASK %d\n",tx_index);
+        status = XIic_ReadReg(base_address, XIIC_CR_REG_OFFSET);
+        XIic_WriteReg(base_address, XIIC_CR_REG_OFFSET, status | XIIC_CR_TX_FIFO_RESET_MASK);
+        XIic_WriteReg(base_address, XIIC_CR_REG_OFFSET, status );
+        while( all_serial_data[tx_index] && ((all_serial_data[tx_index]->tx_in&TX_MASK) != (all_serial_data[tx_index]->tx_out&TX_MASK)) ) {
+            all_serial_data[tx_index]->tx_out++;
+            wake_up(&all_serial_data[tx_index]->txq);
+        }
+#if 0
+        wake_up(&all_serial_data[tx_index]->txq);
+#endif
+        XIic_DisableIntr(base_address,
+                XIIC_INTR_ARB_LOST_MASK|
+                XIIC_INTR_TX_ERROR_MASK|
+                XIIC_INTR_TX_EMPTY_MASK|
+                XIIC_INTR_TX_HALF_MASK);
+        XIic_EnableIntr(i2c_dev_data->Iic.BaseAddress,
+                XIIC_INTR_BNB_MASK);
+        clear = XIIC_INTR_ARB_LOST_MASK;
+    } else if(interrupt_status & XIIC_INTR_TX_ERROR_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_TX_ERROR_MASK %d\n",tx_index);
+        status = XIic_ReadReg(base_address, XIIC_CR_REG_OFFSET);
+        XIic_WriteReg(base_address, XIIC_CR_REG_OFFSET, status | XIIC_CR_TX_FIFO_RESET_MASK);
+        XIic_WriteReg(base_address, XIIC_CR_REG_OFFSET, status );
+        while( all_serial_data[tx_index] && ((all_serial_data[tx_index]->tx_in&TX_MASK) != (all_serial_data[tx_index]->tx_out&TX_MASK)) ) {
+            all_serial_data[tx_index]->tx_out++;
+            wake_up(&all_serial_data[tx_index]->txq);
+        }
+        XIic_DisableIntr(base_address,
+                XIIC_INTR_ARB_LOST_MASK|
+                XIIC_INTR_TX_ERROR_MASK|
+                XIIC_INTR_TX_EMPTY_MASK|
+                XIIC_INTR_TX_HALF_MASK);
+        XIic_EnableIntr(base_address,
+                XIIC_INTR_BNB_MASK);
+        clear = XIIC_INTR_TX_ERROR_MASK;
+    } else if(interrupt_status & XIIC_INTR_NAAS_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_NAAS_MASK %d\n",tx_index);
+        isr_read_rx_fifo(base_address);
+        XIic_DisableIntr(base_address,
+                XIIC_INTR_NAAS_MASK|
+                XIIC_INTR_RX_FULL_MASK);
+        XIic_EnableIntr(base_address,
+                XIIC_INTR_AAS_MASK|
+                XIIC_INTR_BNB_MASK);
+        clear = XIIC_INTR_NAAS_MASK;
+    } else if(interrupt_status & XIIC_INTR_RX_FULL_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_RX_FULL_MASK %d\n",tx_index);
+        if(status & XIIC_SR_ADDR_AS_SLAVE_MASK) {
+            isr_read_rx_fifo(base_address);
         } else {
-            if(((i2c_serial_data->rx_in+1)&RX_MASK)!=(i2c_serial_data->rx_out&RX_MASK)) {
-               i2c_serial_data->rx_buffer[i2c_serial_data->rx_in&RX_MASK]=receive_buffer[i];
-               i2c_serial_data->rx_in++;
+            printk( KERN_INFO "master rx full\n");
+        }
+        clear = XIIC_INTR_RX_FULL_MASK;
+    } else if(interrupt_status & XIIC_INTR_AAS_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_AAS_MASK %d\n",tx_index);
+        XIic_DisableIntr(base_address,
+                XIIC_INTR_AAS_MASK|
+                XIIC_INTR_BNB_MASK|
+                XIIC_INTR_ARB_LOST_MASK|
+                XIIC_INTR_TX_ERROR_MASK|
+                XIIC_INTR_TX_EMPTY_MASK|
+                XIIC_INTR_TX_HALF_MASK);
+        XIic_EnableIntr(base_address,
+                XIIC_INTR_RX_FULL_MASK|
+                XIIC_INTR_NAAS_MASK);
+        clear = XIIC_INTR_AAS_MASK;
+    } else if(interrupt_status & (XIIC_INTR_TX_EMPTY_MASK|XIIC_INTR_TX_HALF_MASK)) {
+        DEBUG_PRINTK("XIIC_INTR_TX_EMPTY_MASK %d\n",tx_index);
+        while( all_serial_data[tx_index] && ((all_serial_data[tx_index]->tx_in&TX_MASK) != (all_serial_data[tx_index]->tx_out&TX_MASK)) ) {
+            if((XIic_ReadReg(base_address,XIIC_TFO_REG_OFFSET)+1)!=IIC_TX_FIFO_DEPTH) {
+                if( (all_serial_data[tx_index]->tx_in&TX_MASK) == ((all_serial_data[tx_index]->tx_out+1)&TX_MASK) ) { /* last byte */
+                    DEBUG_PRINTK("XIIC_INTR_TX_EMPTY_MASK last %d\n",tx_index);
+                    XIic_WriteReg(base_address, XIIC_DTR_REG_OFFSET,all_serial_data[tx_index]->tx_buffer[all_serial_data[tx_index]->tx_out&TX_MASK]|XIIC_TX_DYN_STOP_MASK);
+                } else {
+                    XIic_WriteReg(base_address, XIIC_DTR_REG_OFFSET,all_serial_data[tx_index]->tx_buffer[all_serial_data[tx_index]->tx_out&TX_MASK]);
+                }
+                all_serial_data[tx_index]->tx_out++;
             } else {
-               RecvHandlerDrop++;
+                break;
             }
         }
-        i++;
+        if(all_serial_data[tx_index] && ((all_serial_data[tx_index]->tx_in&TX_MASK) == (all_serial_data[tx_index]->tx_out&TX_MASK)) ) {
+            XIic_DisableIntr(base_address,
+                    XIIC_INTR_ARB_LOST_MASK|
+                    XIIC_INTR_TX_ERROR_MASK|
+                    XIIC_INTR_TX_EMPTY_MASK|
+                    XIIC_INTR_TX_HALF_MASK);
+            wake_up(&all_serial_data[tx_index]->txq);
+        }
+        interrupt_status = XIic_ReadIisr(base_address);
+        clear = interrupt_status & (XIIC_INTR_TX_EMPTY_MASK|XIIC_INTR_TX_HALF_MASK);
+    } else if(interrupt_status & XIIC_INTR_BNB_MASK) {
+        DEBUG_PRINTK("XIIC_INTR_BNB_MASK %d\n",tx_index);
+#if 0
+        isr_read_rx_fifo(base_address);
+        XIic_DisableIntr(base_address,
+                XIIC_INTR_NAAS_MASK|
+                XIIC_INTR_RX_FULL_MASK);
+        XIic_EnableIntr(base_address,
+                XIIC_INTR_AAS_MASK);
+        if(all_serial_data[tx_index]) {
+            wake_up(&all_serial_data[tx_index]->txq);
+        }
+#endif
+        for(tx_index=0;tx_index<DEVICES_COUNT;tx_index++) {
+            if( (all_serial_data[tx_index]->tx_in&TX_MASK) != (all_serial_data[tx_index]->tx_out&TX_MASK) ) {
+                DEBUG_PRINTK("XIIC_INTR_BNB_MASK start %d\n",tx_index);
+                XIic_WriteReg(base_address, XIIC_DTR_REG_OFFSET,(ADDRESS_TO_I2C_ADDRESS(address_vs_minor[all_serial_data[tx_index]->minor%DEVICES_COUNT])<<1)&0xfe);
+                XIic_WriteReg(base_address, XIIC_DTR_REG_OFFSET,address_vs_minor[all_serial_data[tx_index]->minor%DEVICES_COUNT]);
+                XIic_ClearEnableIntr(base_address,
+                    XIIC_INTR_ARB_LOST_MASK|
+                    XIIC_INTR_TX_ERROR_MASK|
+                    XIIC_INTR_TX_EMPTY_MASK|
+                    XIIC_INTR_TX_HALF_MASK);
+                XIic_WriteReg(base_address, XIIC_CR_REG_OFFSET, XIic_ReadReg(base_address, XIIC_CR_REG_OFFSET) | (XIIC_CR_MSMS_MASK | XIIC_CR_DIR_IS_TX_MASK));
+                break;
+            }
+        }
+        if(tx_index==DEVICES_COUNT) { /* no data to send */
+            DEBUG_PRINTK("XIIC_INTR_BNB_MASK quit %d\n",tx_index);
+            XIic_DisableIntr(base_address, XIIC_INTR_BNB_MASK);
+        }
+        clear = XIIC_INTR_BNB_MASK;
     }
-    if(i>1) {
-      wake_up(&i2c_serial_data->rxq);
-    }
+    XIic_WriteIisr(base_address, clear);
+    return IRQ_HANDLED;
 }
-
-static void SendHandler(void *CallBackRef, int ByteCount) {
-  struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
-  bool wakeup;
-  int i;
-
-  if(XIic_IsIicBusy(&i2c_dev_data->Iic)) {
-    return;
-  }
-  i=0;
-  while((i2c_serial_data->tx_in&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) {
-    xxx[i++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
-  }
-  if(i>0) {
-    XIic_MasterSend(&i2c_dev_data->Iic, xxx, i);
-  }
-}
-
-uint8_t test;
-
-static void StatusHandler(void * CallBackRef, int Event)
-{
-  struct i2c_serial * i2c_serial_data = (struct i2c_serial *)CallBackRef;
-  int i;
-  /*
-   * Check whether the Event is to write or read the data from the slave.
-   */
-  if (Event == XII_ARB_LOST_EVENT) {
-    XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_CR_REG_OFFSET,
-             XIIC_CR_ENABLE_DEVICE_MASK);
-    XIic_WriteIisr(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
-    XIic_WriteIier(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
-    i2c_dev_data->Iic.BNBOnly = TRUE;
-  }
-  else if (Event == XII_BUS_NOT_BUSY_EVENT) {
-//    int8_t StatusRegister;
-    if((i2c_serial_data->tx_in&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) { /* there is a byte to be sent */
-      //XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_CR_REG_OFFSET, 0x0);
-      //XIic_Start(&i2c_dev_data->Iic);
-      i=0;
-      while((i2c_serial_data->tx_out&TX_MASK)<(i2c_serial_data->tx_in&TX_MASK)) {
-        xxx[i++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
-      }
-      if(i>0) {
-      XIic_MasterSend(&i2c_dev_data->Iic, xxx, i);
-      }
-    }
-  }
-  else if (Event == XII_MASTER_WRITE_EVENT) {
-    /*
-     * Its a Write request from Master.
-     */
-    XIic_SlaveRecv(&i2c_dev_data->Iic,receive_buffer,sizeof(receive_buffer));
-  }
-  else {
-    /*
-     * Its a Read request from the master.
-     */
-    arr[0]=test;
-    XIic_SlaveSend(&i2c_dev_data->Iic, arr, sizeof(arr));
-  }
-}
-
-
 
 static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
 {
@@ -290,8 +342,7 @@ static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
   {
     mask |= POLLIN | POLLRDNORM; /* readable */
   }
-  if((((dev->tx_in+1)&TX_MASK)!=(dev->tx_out&TX_MASK)) &&
-     (((dev->tx_in+2)&TX_MASK)!=(dev->tx_out&TX_MASK)))
+  if(((dev->tx_in+1)&TX_MASK)!=(dev->tx_out&TX_MASK))
   {
     mask |= POLLOUT | POLLWRNORM; /* writeable */
   }
@@ -299,13 +350,12 @@ static unsigned int i2c_serial_poll(struct file *filp, poll_table *wait)
   return(mask);
 }
 
-
 static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
                                size_t count,loff_t *offset)
 {
   struct i2c_serial *dev;
   unsigned int i;
-  char * ptr_src;
+  uint8_t * ptr_src;
   bool f;
   int r;
 
@@ -321,6 +371,7 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
     while(((dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK)) && (i<count))
     {
       ptr_src=(char*)&dev->rx_buffer[dev->rx_out&RX_MASK];
+
       if(copy_to_user(&buf[i],ptr_src,1))
       {
         up(&dev->sem);
@@ -335,10 +386,8 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
     {
       up(&dev->sem);
       if(filp->f_flags & O_NONBLOCK) {
-        printk(KERN_INFO "non blocking read returns nothing\n");
         return i;
       } else {
-        printk(KERN_INFO "read blocking: %p\n",&dev->rxq);
         r=wait_event_interruptible(dev->rxq,((dev->rx_in&RX_MASK)!=(dev->rx_out&RX_MASK)));
         if(r < 0) {
           if (r == -ERESTARTSYS) {
@@ -350,7 +399,6 @@ static ssize_t i2c_serial_read(struct file *filp, char __user *buf,
         }
         if(down_interruptible(&dev->sem))
           return -EINTR;
-        printk(KERN_INFO "read unblocking\n");
       }
     } else {
         break;
@@ -364,7 +412,7 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
                                 size_t count,loff_t *offset)
 {
   struct i2c_serial *i2c_serial_data;
-  unsigned int i,j;
+  unsigned int i;
   char * ptr_dst;
   bool f;
 
@@ -377,9 +425,7 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
   while(i<count)
   {
     f=false;
-    while((i<count) &&
-          (((i2c_serial_data->tx_in+1)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) &&
-          (((i2c_serial_data->tx_in+2)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)))
+    while((i<count) && (((i2c_serial_data->tx_in+1)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)))
     {
       ptr_dst=(char*)&i2c_serial_data->tx_buffer[i2c_serial_data->tx_in&TX_MASK];
       if(copy_from_user(ptr_dst,&buf[i],1))
@@ -389,7 +435,6 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
       }
       i++;
       i2c_serial_data->tx_in++;
-      //printk(KERN_INFO "write [%02x]\n",(*ptr_dst)&0xff);
       f=true;
     }
     if(!f)
@@ -399,34 +444,13 @@ static ssize_t i2c_serial_write(struct file *filp, const char __user *buf,
         return i;
       else
       {
-        break;
-        if(wait_event_interruptible(i2c_serial_data->txq,
-            ((((i2c_serial_data->tx_in+1)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)) &&
-             (((i2c_serial_data->tx_in+2)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)))))
+        if(wait_event_interruptible(i2c_serial_data->txq,((((i2c_serial_data->tx_in+1)&TX_MASK)!=(i2c_serial_data->tx_out&TX_MASK)))))
           return -EINTR;
         if(down_interruptible(&i2c_serial_data->sem))
           return -EINTR;
       }
     } else {
-
-    if(!XIic_IsIicBusy(&i2c_dev_data->Iic)) {
-      j=1;
-      while((i2c_serial_data->tx_out&TX_MASK)!=(i2c_serial_data->tx_in&TX_MASK) && (j<sizeof(xxx))) {
-        xxx[j++]=i2c_serial_data->tx_buffer[i2c_serial_data->tx_out++&TX_MASK];
-      }
-      if(j>1) {
-        xxx[0]=address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT];
-        XIic_SetAddress(&i2c_dev_data->Iic, XII_ADDR_TO_SEND_TYPE, ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]));
-        XIic_MasterSend(&i2c_dev_data->Iic, xxx, j);
-//        printk(KERN_INFO "write to i2c:%02x, dev:%02x, %d\n",
-//               ADDRESS_TO_I2C_ADDRESS(address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT]),
-//               address_vs_minor[i2c_serial_data->minor%DEVICES_COUNT],
-//               j);
-      }
-    } else {
-      /* setup the interrupt not busy interrupt and flush out any left over transmits */
-    }
-
+        XIic_EnableIntr(i2c_dev_data->Iic.BaseAddress, XIIC_INTR_BNB_MASK);
         break;
     }
   }
@@ -458,7 +482,6 @@ static int __devinit xilinx_iic_setup(
     struct i2c_serial *i2c_serial_data;
     XIic_Config xiic_cfg;
     struct xiic_data *dev;
-    char *scan_results;
     int error;
 
     error=0;
@@ -495,24 +518,16 @@ static int __devinit xilinx_iic_setup(
     xiic_cfg.Has10BitAddr = (int)ten_bit_addr;
     xiic_cfg.GpOutWidth = (u8)gpo_width;
 
+
+    i2c_dev_data->Iic.BaseAddress=xiic_cfg.BaseAddress;
+
     /* Tell the Xilinx code to bring this IIC interface up. */
-    if (XIic_CfgInitialize(&i2c_dev_data->Iic, &xiic_cfg, xiic_cfg.BaseAddress) !=
-        XST_SUCCESS) {
-        up(&cfg_sem);
-        printk(KERN_INFO  "could not initialize device.\n");
-        error = -ENODEV;
-        goto out;
-    }
+    XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_RESETR_OFFSET, XIIC_RESET_MASK);
+
     up(&cfg_sem);
-    XIic_SetRecvHandler(&i2c_dev_data->Iic, (void *)i2c_serial_data, RecvHandler);
-    XIic_SetSendHandler(&i2c_dev_data->Iic, (void *)i2c_serial_data, SendHandler);
-    XIic_SetStatusHandler(&i2c_dev_data->Iic, (void *)i2c_serial_data, StatusHandler);
-    XIic_SlaveInclude();
-    XIic_MultiMasterInclude();
 
-    XIic_SetAddress(&i2c_dev_data->Iic, XII_ADDR_TO_RESPOND_TYPE, 0x12);
-    XIic_SetAddress(&i2c_dev_data->Iic, XII_ADDR_TO_SEND_TYPE, 0x32);
-
+    XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_ADR_REG_OFFSET, 0x12<<1);
+    XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_RFD_REG_OFFSET, IIC_RX_FIFO_DEPTH - 1);
 
     /* Grab the IRQ */
     error = request_irq(i2c_dev_data->irq, xiic_interrupt, 0, dev_name(device), i2c_dev_data);
@@ -522,11 +537,13 @@ static int __devinit xilinx_iic_setup(
     }
     i2c_dev_data->reqirq = 1;
 
-    if (XIic_Start(&i2c_dev_data->Iic) != XST_SUCCESS) {
-        printk(KERN_INFO  "could not start device\n");
-        error = -ENODEV;
-        goto out;
-    }
+    XIic_WriteIier(i2c_dev_data->Iic.BaseAddress, 0);
+    XIic_ClearIntr(i2c_dev_data->Iic.BaseAddress, 0xFFFFFFFF);
+    XIic_EnableIntr(i2c_dev_data->Iic.BaseAddress,
+            XIIC_INTR_AAS_MASK);
+    XIic_WriteReg(i2c_dev_data->Iic.BaseAddress, XIIC_CR_REG_OFFSET, XIIC_CR_ENABLE_DEVICE_MASK);
+    XIic_IntrGlobalEnable(i2c_dev_data->Iic.BaseAddress);
+
     i2c_dev_data->started = 1;
 
     /* Now tell the core I2C code about our new device. */
@@ -549,7 +566,6 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
     return FALSE;
   }
 }
-
 
 static int __devinit load_i2c_resources(struct of_device *ofdev) {
     u32 ten_bit_addr, gpo_width;
@@ -595,13 +611,6 @@ static int __devinit load_i2c_resources(struct of_device *ofdev) {
 static int __devinit i2c_serial_probe(struct of_device *pdev,
                       const struct of_device_id *match)
 {
-  u32 ten_bit_addr, gpo_width;
-  struct resource r_irq_struct;
-  struct resource r_mem_struct;
-
-  struct resource *r_irq = &r_irq_struct; /* Interrupt resources */
-  struct resource *r_mem = &r_mem_struct; /* IO mem resources */
-
   struct i2c_serial *i2c_serial_data;
   int retval;
   unsigned int minor;
@@ -657,6 +666,7 @@ static int __devinit i2c_serial_probe(struct of_device *pdev,
 
   if(minor<DEVICES_COUNT) {
     all_serial_data[i2c_serial_data->minor]=i2c_serial_data;
+    all_serial_data[i2c_serial_data->minor+1]=NULL;
   }
 
   printk(KERN_INFO "%s: i2c serial device initialized, device (%d,%d)\n",
@@ -674,19 +684,21 @@ static int __devexit i2c_serial_remove(struct of_device *pdev)
   dev=i2c_dev_data;
   i2c_serial_data = dev_get_drvdata(&pdev->dev);
 
-
   /* Tell the Xilinx code to take this IIC interface down. */
   if (i2c_dev_data->started) {
-      while (XIic_Stop(&i2c_dev_data->Iic) != XST_SUCCESS) {
-          /* The bus was busy.  Retry. */
-          printk(KERN_WARNING
-                 "%s #%d: Could not stop device.  Will retry.\n",
-                 dev_name(&pdev->dev), i2c_dev_data->index);
-          set_current_state(TASK_INTERRUPTIBLE);
-          schedule_timeout(HZ / 2);
+      while(1) {
+          XIic_IntrGlobalDisable(i2c_dev_data->Iic.BaseAddress);
+          if((XIic_ReadReg(i2c_dev_data->Iic.BaseAddress, XIIC_CR_REG_OFFSET)&XIIC_CR_MSMS_MASK) || (XIic_ReadReg(i2c_dev_data->Iic.BaseAddress, XIIC_SR_REG_OFFSET)&XIIC_SR_ADDR_AS_SLAVE_MASK)) {
+              /* The bus was busy.  Retry. */
+              printk(KERN_WARNING "%s #%d: Could not stop device.  Will retry.\n", dev_name(&pdev->dev), i2c_dev_data->index);
+              set_current_state(TASK_INTERRUPTIBLE);
+              schedule_timeout(HZ / 2);
+          } else {
+              XIic_IntrGlobalEnable(i2c_dev_data->Iic.BaseAddress);
+          }
       }
   }
-
+      
   /*
   * Now that the Xilinx code isn't using the IRQ or registers,
   * unmap the registers and free the IRQ.
@@ -754,7 +766,6 @@ static int __init i2c_serial_init(void)
 
 static void __exit i2c_serial_exit(void)
 {
-  int i;
   unregister_chrdev_region(MKDEV(major,0),DEVICES_COUNT);
   of_unregister_platform_driver(&i2c_serial_driver);
 }
