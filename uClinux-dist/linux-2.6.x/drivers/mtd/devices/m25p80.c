@@ -27,7 +27,7 @@
 
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
-
+#include <linux/mtd/spi_otp.h>
 
 #define FLASH_PAGESIZE		256
 
@@ -43,6 +43,7 @@
 #define	OPCODE_CHIP_ERASE	0xc7	/* Erase whole flash chip */
 #define	OPCODE_SE		0xd8	/* Sector erase (usually 64KiB) */
 #define	OPCODE_RDID		0x9f	/* Read JEDEC ID */
+#define OPCODE_OTPR             0x4b    /* Read data in the OTP memory space */
 
 /* Status Register bits. */
 #define	SR_WIP			1	/* Write in progress */
@@ -63,6 +64,12 @@
 #else
 #define OPCODE_READ 	OPCODE_NORM_READ
 #define FAST_READ_DUMMY_BYTE 0
+#endif
+
+#ifdef CONFIG_MTD_SPI_OTP
+static struct mtd_info *aMtd;
+#define OTP_REGION_OFFSET 0x010
+#define N_OTP_ADDRESSES 30
 #endif
 
 /****************************************************************************/
@@ -291,6 +298,7 @@ static int m25p80_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct spi_transfer t[2];
 	struct spi_message m;
 
+	aMtd = mtd;
 	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%08x, len %zd\n",
 			dev_name(&flash->spi->dev), __func__, "from",
 			(u32)from, len);
@@ -454,6 +462,96 @@ static int m25p80_write(struct mtd_info *mtd, loff_t to, size_t len,
 	return 0;
 }
 
+#ifdef CONFIG_MTD_SPI_OTP
+static int m25p80_otp_read(struct mtd_info *mtd, loff_t from, size_t len, 
+			size_t *retlen, u_char *buf)
+{
+        struct m25p *flash = mtd_to_m25p(mtd);
+        struct spi_transfer t[2];
+        struct spi_message m;
+
+        //printk("%s: %s %s 0x%08x, len %zd\n",
+        //                dev_name(&flash->spi->dev), __func__, "from",
+        //                (u32)from, len);
+
+        /* sanity checks */
+        if (!len)
+                return 0;
+
+        if (from + len > flash->mtd.size)
+                return -EINVAL;
+
+        spi_message_init(&m);
+        memset(t, 0, (sizeof t));
+
+        /* NOTE:
+         * OPCODE_FAST_READ (if available) is faster.
+         * Should add 1 byte DUMMY_BYTE.
+         */
+        t[0].tx_buf = flash->command;
+        t[0].len = CMD_SIZE + FAST_READ_DUMMY_BYTE;
+        spi_message_add_tail(&t[0], &m);
+
+        t[1].rx_buf = buf;
+        t[1].len = len;
+        spi_message_add_tail(&t[1], &m);
+
+        /* Byte count starts at zero. */
+        if (retlen)
+                *retlen = 0;
+
+        mutex_lock(&flash->lock);
+
+        /* Wait till previous write/erase is done. */
+        if (wait_till_ready(flash)) {
+                /* REVISIT status return?? */
+                mutex_unlock(&flash->lock);
+                return 1;
+        }
+
+        /* Set up the write data buffer. */
+        flash->command[0] = OPCODE_OTPR;
+        flash->command[1] = from >> 16;
+        flash->command[2] = from >> 8;
+        flash->command[3] = from;
+
+        spi_sync(flash->spi, &m);
+
+        *retlen = m.actual_length - CMD_SIZE - FAST_READ_DUMMY_BYTE;
+
+        mutex_unlock(&flash->lock);
+
+        return 0;
+}
+
+int read_otp_reg(otp_register addr, securityword_t *otp)
+{
+        size_t retlen = 0;
+	uint32_t otpbase = 0x00;
+	uint32_t readbytes = 0;
+
+        if (addr >= N_OTP_ADDRESSES) {
+                return 0;
+	}
+
+	if (addr == REGISTER31) {
+		readbytes = 10;
+	} else { 
+		readbytes = 16;
+	}
+
+	if (addr < 16) {
+		otpbase = 0x114;
+	} else {
+		otpbase = 0x216;
+	}
+	
+	m25p80_otp_read(aMtd, (otpbase+(addr*OTP_REGION_OFFSET)), readbytes, &retlen, ((u_char *)otp));
+       
+        return 1;
+} 
+EXPORT_SYMBOL(read_otp_reg);
+#endif
 
 /****************************************************************************/
 

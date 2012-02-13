@@ -46,6 +46,11 @@
 #include <linux/mtd/cfi_otp.h>
 #endif
 
+#ifdef CONFIG_MTD_SPI_OTP
+// for boards with SPI OTP reg
+#include <linux/mtd/spi_otp.h>
+#endif
+
 #ifdef CONFIG_OF
 // For open firmware.
 #include <linux/of_device.h>
@@ -614,6 +619,79 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
   return IRQ_HANDLED;
 }
 
+static int xenet_set_mac_address(struct net_device *dev, void *p)
+{
+  struct net_local *lp = netdev_priv(dev);
+  struct sockaddr * addr = p;
+  int err = 0;
+
+  if (!is_valid_ether_addr(addr->sa_data))
+    return -EINVAL;
+
+  /*printk("dev->dev_addr MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 dev->dev_addr[0], dev->dev_addr[1],
+	 dev->dev_addr[2], dev->dev_addr[3],
+	 dev->dev_addr[4], dev->dev_addr[5]);
+  printk("addr->sa_data MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 addr->sa_data[0], addr->sa_data[1],
+	 addr->sa_data[2], addr->sa_data[3],
+	 addr->sa_data[4], addr->sa_data[5]);*/
+  memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+
+  _labx_eth_Stop(&lp->Emac);
+
+  if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
+    printk(KERN_ERR "labx_ethernet: could not set MAC address.\n");
+    err = -EIO;
+  }
+
+  if (dev->flags & IFF_UP)
+    {
+      _labx_eth_Start(&lp->Emac);
+    }
+
+  return err;
+}
+
+#if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
+static int base_otp_reg = REGISTER1;
+module_param(base_otp_reg, int, 0);
+MODULE_PARM_DESC(base_otp_reg, "OTP base register (register containing address for eth0)");
+static int otp_assign_mac_address(void *private_data)
+{
+    struct net_device *ndev = (struct net_device *)private_data;
+    securityword_t otp_mac;
+    struct sockaddr addr;
+    int otpIndex;
+
+    if (sscanf(ndev->name, "eth%d", &otpIndex) == 1) {
+    	read_otp_reg(base_otp_reg + otpIndex, &otp_mac);
+	} else {
+	    otp_mac[0] = 0xff;
+	}
+	if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
+			((otp_mac[2] != 0 && otp_mac[2] != 0xFF) ||
+			(otp_mac[3] != 0 && otp_mac[3] != 0xFF) ||
+			(otp_mac[4] != 0 && otp_mac[4] != 0xFF) ||
+			(otp_mac[5] != 0 && otp_mac[5] != 0xFF) ||
+			(otp_mac[6] != 0 && otp_mac[6] != 0xFF) ||
+			(otp_mac[7] != 0 && otp_mac[7] != 0xFF) )) {
+		addr.sa_data[0] = otp_mac[2];
+		addr.sa_data[1] = otp_mac[3];
+		addr.sa_data[2] = otp_mac[4];
+		addr.sa_data[3] = otp_mac[5];
+		addr.sa_data[4] = otp_mac[6];
+		addr.sa_data[5] = otp_mac[7];
+        printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from OTP flash\n",
+            ndev->name, (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
+            (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
+            (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
+    	xenet_set_mac_address(ndev, &addr);
+    }
+	return 0;
+}
+#endif
+
 /*
  * Q:
  * Why doesn't this linux driver use an interrupt handler for the TEMAC itself?
@@ -679,6 +757,19 @@ static int xenet_open(struct net_device *dev)
 
   INIT_LIST_HEAD(&(lp->rcv));
   INIT_LIST_HEAD(&(lp->xmit));
+
+#if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
+  /* Run otp_assign_mac_address() as a thread, because we may not have the OTP
+   * Flash initialized by the time we get here, and the thread can just wait for it.
+   */
+  kthread_run(otp_assign_mac_address, dev, "otp_assign_mac_address thread");
+#endif
+
+  /*printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
+	 ndev->name,
+	 pdata->mac_addr[0], pdata->mac_addr[1],
+	 pdata->mac_addr[2], pdata->mac_addr[3],
+	 pdata->mac_addr[4], pdata->mac_addr[5]); */
 
   /* Set the MAC address each time opened. */
   if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
@@ -848,40 +939,6 @@ static void xenet_set_multicast_list(struct net_device *dev)
     {
       _labx_eth_Start(&lp->Emac);
     }
-}
-
-static int xenet_set_mac_address(struct net_device *dev, void *p)
-{
-  struct net_local *lp = netdev_priv(dev);
-  struct sockaddr * addr = p;
-  int err = 0;
-
-  if (!is_valid_ether_addr(addr->sa_data))
-    return -EINVAL;
-
-  /*printk("dev->dev_addr MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
-	 dev->dev_addr[0], dev->dev_addr[1],
-	 dev->dev_addr[2], dev->dev_addr[3],
-	 dev->dev_addr[4], dev->dev_addr[5]);
-  printk("addr->sa_data MAC address is %02X:%02X:%02X:%02X:%02X:%02X\n",
-	 addr->sa_data[0], addr->sa_data[1],
-	 addr->sa_data[2], addr->sa_data[3],
-	 addr->sa_data[4], addr->sa_data[5]);*/
-  memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
-
-  _labx_eth_Stop(&lp->Emac);
-
-  if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
-    printk(KERN_ERR "labx_ethernet: could not set MAC address.\n");
-    err = -EIO;
-  }
-
-  if (dev->flags & IFF_UP)
-    {
-      _labx_eth_Start(&lp->Emac);
-    }
-
-  return err;
 }
 
 static int xenet_change_mtu(struct net_device *dev, int new_mtu)
@@ -1523,45 +1580,6 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
   return(IRQ_HANDLED);
 }
 
-#ifdef CONFIG_MTD_CFI_OTP_USER
-static int base_otp_reg = REGISTER1;
-module_param(base_otp_reg, int, 0);
-MODULE_PARM_DESC(base_otp_reg, "OTP base register (register containing address for eth0)");
-static int otp_assign_mac_address(void *private_data)
-{
-	struct net_device *ndev = (struct net_device *)private_data;
-    securityword_t otp_mac;
-    struct sockaddr addr;
-    int otpIndex;
-
-    if (sscanf(ndev->name, "eth%d", &otpIndex) == 1) {
-    	read_otp_reg(base_otp_reg + otpIndex, &otp_mac);
-	} else {
-	    otp_mac[0] = 0xff;
-	}
-	if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
-			((otp_mac[2] != 0 && otp_mac[2] != 0xFF) ||
-			(otp_mac[3] != 0 && otp_mac[3] != 0xFF) ||
-			(otp_mac[4] != 0 && otp_mac[4] != 0xFF) ||
-			(otp_mac[5] != 0 && otp_mac[5] != 0xFF) ||
-			(otp_mac[6] != 0 && otp_mac[6] != 0xFF) ||
-			(otp_mac[7] != 0 && otp_mac[7] != 0xFF) )) {
-		addr.sa_data[0] = otp_mac[2];
-		addr.sa_data[1] = otp_mac[3];
-		addr.sa_data[2] = otp_mac[4];
-		addr.sa_data[3] = otp_mac[5];
-		addr.sa_data[4] = otp_mac[6];
-		addr.sa_data[5] = otp_mac[7];
-        printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from OTP flash\n",
-            ndev->name, (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
-            (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
-            (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
-    	xenet_set_mac_address(ndev, &addr);
-    }
-	return 0;
-}
-
-#endif
 /** Shared device initialization code */
 static int xtenet_setup(struct device *dev,
                         struct resource *r_mem,
@@ -1661,18 +1679,6 @@ static int xtenet_setup(struct device *dev,
     rc = -EIO;
     goto error;
   }
-
-#ifdef CONFIG_MTD_CFI_OTP_USER
-  /* Run otp_assign_mac_address() as a thread, because we may not have the OTP
-   * Flash initialized by the time we get here, and the thread can just wait for it.
-   */
-  kthread_run(otp_assign_mac_address, ndev, "otp_assign_mac_address thread");
-#endif
-  /*printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
-	 ndev->name,
-	 pdata->mac_addr[0], pdata->mac_addr[1],
-	 pdata->mac_addr[2], pdata->mac_addr[3],
-	 pdata->mac_addr[4], pdata->mac_addr[5]); */
 
   lp->max_frame_size = XTE_MAX_JUMBO_FRAME_SIZE;
   if (ndev->mtu > XTE_JUMBO_MTU)
