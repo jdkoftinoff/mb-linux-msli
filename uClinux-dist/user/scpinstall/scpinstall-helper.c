@@ -10,6 +10,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define LOG_FILENAME "/tmp/flash-update.log"
 #define LOCK_FILENAME "/tmp/flash-update.lock"
@@ -31,11 +32,12 @@ int write_log_message(int h,char *text,int percentage)
 
 int main(int argc,char **argv,char **env)
 {
-  char dirbuffer[24];
-  char *exec_argv[24];
+  static char dirbuffer[24];
+  static char *exec_argv[25];
+  static char link_buf[128];
   pid_t pid;
   int status;
-  int i,log_file,lock_file,install_firmware=0;
+  int i,log_file,lock_file,link_len,install_firmware=0;
   struct stat statbuf;
 
   if(argc!=1)
@@ -192,6 +194,18 @@ int main(int argc,char **argv,char **env)
 	      exec_argv[i++]="16x24-font.bin.gz";
 	    }
 	}
+
+      /* check if /dev/mtd0 is an SPI flash device */
+      link_len=readlink("/sys/class/mtd/mtd0",link_buf,sizeof(link_buf)-1);
+      if(link_len>0)
+	{
+	  link_buf[link_len]=0;
+	  if(strstr(link_buf,".xps-spi/"))
+	    {
+	      exec_argv[i++]="-N";
+	    }
+	}
+
       exec_argv[i]=NULL;
 
       write_log_message(log_file,"Writing",5);

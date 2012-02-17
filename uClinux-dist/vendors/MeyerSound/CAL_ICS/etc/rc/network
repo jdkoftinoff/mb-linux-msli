@@ -5,11 +5,6 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin
 echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
 
-# Call a script located on the read-write Flash filesystem to
-# permit users to easily modify the persistent network settings
-echo "Calling platform-specific network script"
-/mnt/config/scripts/network_config
-
 mkdir /var/tmp/dhcpc
 mkdir /var/lib
 mkdir /var/tmp/avahi
@@ -20,3 +15,29 @@ mkdir /var/tmp/avahi/services
 /bin/dhcpcd -t0 eth0 &
 /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
 /bin/inetd &
+
+# Call a script located on the read-write Flash filesystem to
+# permit users to easily modify the persistent network settings
+
+echo "Calling platform-specific network script"
+
+if [ -x /mnt/config/scripts/network_config ]
+  then
+  /mnt/config/scripts/network_config
+  else
+  if [ ! -f /etc/persist/config/CAL_ICSPlatform.xml ]
+    then
+    mkdir /etc/persist/config 2>/dev/null
+    cp /etc/config.orig/CAL_ICSPlatform.xml /etc/persist/config/CAL_ICSPlatform.xml
+  fi
+
+  XMLFILE=/etc/persist/config/CAL_ICSPlatform.xml
+  
+  if [ -f /etc/persist/bin/avbd ]
+    then
+    AVBDFILE=/etc/persist/bin/avbd
+    else
+    AVBDFILE=/usr/bin/avbd
+  fi
+  $AVBDFILE platformFile=$XMLFILE &
+fi

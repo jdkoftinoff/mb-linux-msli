@@ -384,6 +384,11 @@ static void switchVlanInit(MV_U32 switchCpuPort0,
   }
 }
 
+static void mv88e6350R_mdio_init(void)
+{
+  *(volatile unsigned int *)(LABX_MDIO_ETH_BASEADDR + MAC_MDIO_CONFIG_REG) = (LABX_ETHERNET_MDIO_DIV & MDIO_DIVISOR_MASK) | MDIO_ENABLED;
+}
+
 static void mv88e6350R_hard_reset(void)
 { 
   unsigned long reg;
@@ -561,7 +566,12 @@ static int mv88e6350R_probe(struct platform_device *pdev)
   MV_U16 reg, saved_g1reg4;
   struct mvEthSwitch *mvEthSwitch;
 	
-  mv88e6350R_hard_reset();
+/*
+  FIXME: reset replaced with MDIO initialization,
+  with assumption that reset already happened in bootloader
+ */
+  /*mv88e6350R_hard_reset();*/
+  mv88e6350R_mdio_init();
   msleep(2);
  
   REG_WRITE(MV_REG_PORT(CAL_ICS_CPU_PORT_0), 

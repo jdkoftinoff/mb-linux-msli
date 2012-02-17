@@ -2,6 +2,11 @@
 # Makefile -- Build instructions for Meyer Sound CAL ICS MicroBlaze system
 #
 
+#default RELEASE_VERSION to current date if RELEASE_VERSION is not set
+ifndef RELEASE_VERSION
+	RELEASE_VERSION := $(shell date +%Y%m%d)
+endif
+
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
@@ -151,9 +156,8 @@ ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
 	spidev_scarf_global,c,153,0 \
 	spidev_scarf_local,c,153,1 \
-	spidev_scarf_dspblock,c,153,2 \
-	spidev_aes,c,153,3 \
-	spidev_oled,c,153,4
+	spidev_aes,c,153,2 \
+	spidev_oled,c,153,3
 endif
 
 # Add the AVB packet engine device nodes
@@ -192,6 +196,11 @@ romfs:
 	done
 	for i in $(DIRS); do $(MAKE) -C $$i romfs || exit $? ; done
 
+	mkdir -p $(ROMFSDIR)/etc
+	echo "version = $(RELEASE_VERSION)" > $(ROMFSDIR)/etc/firmware_version
+	echo -n "date = " >> $(ROMFSDIR)/etc/firmware_version
+	date >> $(ROMFSDIR)/etc/firmware_version
+
 	mkdir -p $(ROMFSDIR)/etc/init.d
 	mkdir -p $(ROMFSDIR)/etc/rc.d
 	mkdir -p $(ROMFSDIR)/dev/pts
@@ -202,7 +211,10 @@ romfs:
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
 	$(ROMFSINST) -s /var/tmp/dhcpc/resolv.conf /etc/resolv.conf
 	$(ROMFSINST) -s /var/tmp/avahi /etc/avahi
+	$(ROMFSINST) -s /var/tmp/identity /etc/identity
+	$(ROMFSINST) -s /var/tmp/persist /etc/persist
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
+	$(ROMFSINST) $(COMMON)/etc/hosts /etc/hosts
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S10hostname
