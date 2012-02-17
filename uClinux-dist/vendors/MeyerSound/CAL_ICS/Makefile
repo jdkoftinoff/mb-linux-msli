@@ -154,8 +154,9 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev_scarf_global,c,153,0 \
-	spidev_scarf_local,c,153,1 \
+	spidev_scarf_dspblock,c,153,0 \
+	spidev_scarf_global,c,153,1 \
+	spidev_scarf_local,c,153,2 \
 	spidev_aes,c,153,2 \
 	spidev_oled,c,153,3
 endif
