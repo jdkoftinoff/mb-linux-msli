@@ -37,13 +37,6 @@
 /* Maximum error, in nanoseconds, tolerated before the time is reset */
 #define RESET_THRESHOLD_NS  (100000)
 
-/* Enumerated type identifying the results of a BMCA comparison */
-typedef enum {
-  IS_PRESENT_MASTER,
-  RETAIN_PRESENT_MASTER,
-  REPLACE_PRESENT_MASTER
-} BmcaResult;
-
 /* Function Prototypes */
 uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
 void tasklet_init(struct tasklet_struct *t, void (*func)(unsigned long),unsigned long data);
@@ -56,55 +49,46 @@ static void timer_state_task(unsigned long data) {
   uint32_t newMaster;
   int i;
 
-  /* We behave differently as a master than as a slave */
-  switch(ptp->presentRole) {
-  case PTP_MASTER:
-    {
-      for (i=0; i<ptp->numPorts; i++) {
-        /* Send ANNOUNCE and SYNC messages at their rate if we're a master */
-        ptp->ports[i].announceCounter++;
-        if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
-          ptp->ports[i].announceCounter = 0;
-          transmit_announce(ptp, i);
-        }
-
-        ptp->ports[i].syncCounter++;
-        if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
-          ptp->ports[i].syncCounter = 0;
-          transmit_sync(ptp, i);
-          if(ptp->rtcChangesAllowed) {
-            /* Periodically update the RTC to get update listeners to
-               notice (IE when they are not coasting) */
-            set_rtc_increment(ptp, &ptp->nominalIncrement);
-          }
-        }
+  for (i=0; i<ptp->numPorts; i++) {
+    switch(ptp->ports[i].selectedRole) {
+    case PTP_MASTER:
+      /* Send ANNOUNCE and SYNC messages at their rate for a master port */
+      ptp->ports[i].announceCounter++;
+      if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
+        ptp->ports[i].announceCounter = 0;
+        ptp->ports[i].newInfo = FALSE;
+        transmit_announce(ptp, i);
       }
 
-      /* Always flag the RTC offset as valid, and zero since we're the master */
-      preempt_disable();
-      spin_lock_irqsave(&ptp->mutex, flags);
-      ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-      ptp->rtcLastOffset      = 0;
-      spin_unlock_irqrestore(&ptp->mutex, flags);
-      preempt_enable();
-    }
-    break;
+      ptp->ports[i].syncCounter++;
+      if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
+        ptp->ports[i].syncCounter = 0;
+        transmit_sync(ptp, i);
+        if(ptp->rtcChangesAllowed) {
+          /* Periodically update the RTC to get update listeners to
+             notice (IE when they are not coasting) */
+          set_rtc_increment(ptp, &ptp->nominalIncrement);
+        }
+      }
+      break;
 
-  case PTP_SLAVE:
+    case PTP_SLAVE:
     {
       uint32_t timeoutTicks;
 
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      timeoutTicks = ANNOUNCE_INTERVAL_TICKS(ptp, ptp->presentMasterPort.portNumber-1) * ptp->ports[ptp->presentMasterPort.portNumber-1].announceReceiptTimeout;
-      if(++ptp->announceTimeoutCounter >= timeoutTicks) {
+      timeoutTicks = ANNOUNCE_INTERVAL_TICKS(ptp, i) * ptp->ports[i].announceReceiptTimeout;
+      if(++ptp->ports[i].announceTimeoutCounter >= timeoutTicks) {
+        PortAnnounceInformation_StateMachine(ptp, i);
+#if 0
         /* We haven't received an ANNOUNCE message from our master in too long, presume
          * we've become a master so we participate in BMCA again.
          */
         ptp->presentRole = PTP_MASTER;
         copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
-        ptp->announceTimeoutCounter = 0;
+        ptp->ports[i].announceTimeoutCounter = 0;
         ptp->newMaster              = TRUE;
 
         /* Do not permit the RTC to change until userspace permits it, and also
@@ -121,11 +105,13 @@ static void timer_state_task(unsigned long data) {
          * userspace of the Grandmaster change and then wait for an ioctl()
          * which says it's okay to do so.
          */
-
+#endif
         /* Update stats */
-        for (i=0; i<ptp->numPorts; i++) {
-          ptp->ports[i].stats.announceReceiptTimeoutCount++;
-        }
+        ptp->ports[i].stats.announceReceiptTimeoutCount++;
+      }
+      timeoutTicks = SYNC_INTERVAL_TICKS(ptp, i);
+      if(++ptp->ports[i].syncTimeoutCounter >= timeoutTicks && ptp->gmPresent) {
+        PortAnnounceInformation_StateMachine(ptp, i);
       }
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
@@ -142,8 +128,8 @@ static void timer_state_task(unsigned long data) {
       /* Transmit an ANNOUNCE immediately to speed things along if we've switched our
        * port to the master state.
        */
-      if(ptp->presentRole == PTP_MASTER) {
-        printk("PTP master\n");
+      if(ptp->ports[i].selectedRole == PTP_MASTER) {
+        printk("PTP master (port %d)\n", i);
         for (i=0; i<ptp->numPorts; i++) {
           ptp->ports[i].announceCounter    = 0;
           ptp->ports[i].announceSequenceId = 0x0000;
@@ -154,23 +140,32 @@ static void timer_state_task(unsigned long data) {
          * delay mechanism
          */
         if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
-          for (i=0; i<ptp->numPorts; i++) {
-            /* Increment the delay request counter and see if it's time to
-             * send one to the master.
-             */
-            if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS)) {
-              ptp->ports[i].delayReqCounter = 0;
-              transmit_delay_request(ptp, i);
-            }
+          /* Increment the delay request counter and see if it's time to
+           * send one to the master.
+           */
+          if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS)) {
+            ptp->ports[i].delayReqCounter = 0;
+            transmit_delay_request(ptp, i);
           }
         }
       } /* if(still a slave) */
     }
     break;
 
-  default:
-    /* "Passive"; do nothing */
-    break;
+    default:
+      /* "Passive"; do nothing */
+      break;
+    }
+  }
+
+  if (ptp->gmPriority == &ptp->systemPriority) {
+    /* Always flag the RTC offset as valid, and zero since we're the master */
+    preempt_disable();
+    spin_lock_irqsave(&ptp->mutex, flags);
+    ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+    ptp->rtcLastOffset      = 0;
+    spin_unlock_irqrestore(&ptp->mutex, flags);
+    preempt_enable();
   }
 
   for (i=0; i<ptp->numPorts; i++)
@@ -214,111 +209,22 @@ static void timer_state_task(unsigned long data) {
   ptp->rtcLastLockState = ptp->rtcLockState;
 }
 
-/* Runs the Best Master Clock Algorithm (BMCA) between the passed master and challenger.
- * Returns nonzero if the challenger should become the new master.
- *
- * NOTE - This implementation does not (yet) handle multiple ports and the accompanying
- *        logic to determine which port is better by topology with respect to the master.
- */
-static BmcaResult bmca_comparison(PtpProperties *presentMaster,
-  PtpPortProperties *presentMasterPort, PtpProperties *challenger,
-  PtpPortProperties *challengerPort) {
-
-  PtpClockQuality *challengerQuality = &challenger->grandmasterClockQuality;
-  PtpClockQuality *presentQuality = &challenger->grandmasterClockQuality;
-
-  int32_t identityComparison;
-
-#if 0
-  printk("BMCA: CHAL: P1 %d, CC %d, CA %d, LV %d, P2 %d, GMID %02X%02X%02X%02X%02X%02X%02X%02X, SR %d, PN %d\n",
-    challenger->grandmasterPriority1, challengerQuality->clockClass, challengerQuality->clockAccuracy,
-    challengerQuality->offsetScaledLogVariance, challenger->grandmasterPriority2,
-    challenger->grandmasterIdentity[0], challenger->grandmasterIdentity[1], challenger->grandmasterIdentity[2],
-    challenger->grandmasterIdentity[3], challenger->grandmasterIdentity[4], challenger->grandmasterIdentity[5],
-    challenger->grandmasterIdentity[6], challenger->grandmasterIdentity[7], challengerPort->stepsRemoved,
-    challengerPort->portNumber);
-  printk("BMCA: PRES: P1 %d, CC %d, CA %d, LV %d, P2 %d, GMID %02X%02X%02X%02X%02X%02X%02X%02X, SR %d, PN %d\n",
-    presentMaster->grandmasterPriority1, presentQuality->clockClass, presentQuality->clockAccuracy,
-    presentQuality->offsetScaledLogVariance, presentMaster->grandmasterPriority2,
-    presentMaster->grandmasterIdentity[0], presentMaster->grandmasterIdentity[1], presentMaster->grandmasterIdentity[2],
-    presentMaster->grandmasterIdentity[3], presentMaster->grandmasterIdentity[4], presentMaster->grandmasterIdentity[5],
-    presentMaster->grandmasterIdentity[6], presentMaster->grandmasterIdentity[7], presentMasterPort->stepsRemoved,
-    presentMasterPort->portNumber);
-#endif
-
-  /* Begin by comparing grandmaster priority 1; lower value is higher priority */
-  if(challenger->grandmasterPriority1 < presentMaster->grandmasterPriority1) {
-    return REPLACE_PRESENT_MASTER;
-  } else if(challenger->grandmasterPriority1 > presentMaster->grandmasterPriority1) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Priority 1 identical, compare clock quality - again, lower is "better". */
-  if(challengerQuality->clockClass < presentQuality->clockClass) {
-    return REPLACE_PRESENT_MASTER;
-  } else if(challengerQuality->clockClass > presentQuality->clockClass) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Clock class equal, go to accuracy */
-  if(challengerQuality->clockAccuracy < presentQuality->clockAccuracy) {
-    return REPLACE_PRESENT_MASTER;
-  } else if(challengerQuality->clockAccuracy > presentQuality->clockAccuracy) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Accuracy identical, go to offset scaled log variance */
-  if(challengerQuality->offsetScaledLogVariance < presentQuality->offsetScaledLogVariance) {
-    return REPLACE_PRESENT_MASTER;
-  } else if(challengerQuality->offsetScaledLogVariance > presentQuality->offsetScaledLogVariance) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Log variance identical, compare priority 2 - again, lower is "better". */
-  if(challenger->grandmasterPriority2 < presentMaster->grandmasterPriority2) {
-    return REPLACE_PRESENT_MASTER;
-  } else if(challenger->grandmasterPriority2 > presentMaster->grandmasterPriority2) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Clock settings completely identical, compare MAC addresses as a tie-breaker */
-  identityComparison =
-    compare_clock_identity(challenger->grandmasterIdentity, presentMaster->grandmasterIdentity);
-  if (identityComparison < 0) {
-    /* The new announce message has a lower MAC address, it becomes the master */
-    return REPLACE_PRESENT_MASTER;
-  } else if (identityComparison > 0) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* If we are still tied here, then we are down to picking between our local ports */
-  /* First check hops to master - lower is better */
-  if (challengerPort->stepsRemoved < presentMasterPort->stepsRemoved) {
-    return REPLACE_PRESENT_MASTER;
-  } else if (challengerPort->stepsRemoved > presentMasterPort->stepsRemoved) {
-    return RETAIN_PRESENT_MASTER;
-  }
-
-  /* Hops identical. Select lowest port number */
-  if (challengerPort->portNumber < presentMasterPort->portNumber) {
-    return REPLACE_PRESENT_MASTER;
-  } else if (challengerPort->portNumber > presentMasterPort->portNumber) {
-    return RETAIN_PRESENT_MASTER;
-  }
-  
-  /* This is the same master on the same port. No change. */
-  return IS_PRESENT_MASTER;
-}
-
 /* Processes a newly-received ANNOUNCE packet for the passed instance */
 static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
+#if 0
   PtpProperties properties;
   PtpPortProperties portProperties;
   unsigned long flags;
   uint32_t byteIndex;
+#endif
 
   ptp->ports[port].stats.rxAnnounceCount++;
 
+  ptp->ports[port].rcvdAnnouncePtr = rxBuffer;
+
+  PortAnnounceReceive_StateMachine(ptp, port);
+
+#if 0
   /* Extract the properties of the port which sent the message, and compare 
    * them to those of the present master to determine what to do.
    */
@@ -330,7 +236,6 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *
     {
       //printk("BMCA: Is present master.\n");
       /* A message from our fearless leader; reset its timeout counter */
-      ptp->announceTimeoutCounter = 0;
     } 
     break;
     
@@ -342,7 +247,6 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *
       ptp->presentRole = PTP_SLAVE;
       copy_ptp_properties(&ptp->presentMaster, &properties);
       copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
-      ptp->announceTimeoutCounter = 0;
       ptp->slaveDebugCounter      = 0;
 
       /* Do not permit the RTC to change until userspace permits it, and also
@@ -389,23 +293,24 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *
   } /* switch(BMCA comparison) */
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
+#endif
 }
 
 /* Processes a newly-received SYNC packet for the passed instance */
 static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
-  uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
+  PtpPortIdentity rxIdentity;
 
   ptp->ports[port].stats.rxSyncCount++;
+  ptp->ports[port].syncTimeoutCounter = 0;
 
   /* Only process this packet if we are a slave and it has come from the master
    * we're presently respecting.  If we're the master, spanning tree should prevent
    * us from ever seeing our own SYNC packets, but better safe than sorry.
    */
-  get_rx_mac_address(ptp, port, rxBuffer, rxMacAddress);
-  if((ptp->presentRole == PTP_SLAVE) && 
-     (compare_mac_addresses(rxMacAddress, ptp->presentMasterPort.sourceMacAddress) == 0) &&
-     (ptp->presentMasterPort.portNumber == (port + 1))) {
+  get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
+     (0 == memcmp(&rxIdentity, &ptp->gmPriority->sourcePortIdentity, sizeof(PtpPortIdentity)))) {
     PtpTime tempTimestamp;
     PtpTime correctionField;
     PtpTime correctedTimestamp;
@@ -431,7 +336,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
 /* Processes a newly-received FUP packet for the passed instance */
 static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
-  uint8_t rxMacAddress[MAC_ADDRESS_BYTES];
+  PtpPortIdentity rxIdentity;
 
   ptp->ports[port].stats.rxFollowupCount++;
 
@@ -440,10 +345,9 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
    * - This is from our master
    * - The sequence ID matches the last valid SYNC message
    */
-  get_rx_mac_address(ptp, port, rxBuffer, rxMacAddress);
-  if((ptp->presentRole == PTP_SLAVE) && 
-     (compare_mac_addresses(rxMacAddress, ptp->presentMasterPort.sourceMacAddress) == 0) &&
-     (ptp->presentMasterPort.portNumber == (port + 1)) &&
+  get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
+     (0 == memcmp(&rxIdentity, &ptp->gmPriority->sourcePortIdentity, sizeof(PtpPortIdentity))) &&
      ptp->ports[port].syncSequenceIdValid && 
      (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == ptp->ports[port].syncSequenceId)) {
     PtpTime syncTxTimestamp;
@@ -525,7 +429,7 @@ static void process_rx_signaling(struct ptp_device *ptp, uint32_t port, uint8_t 
 /* Processes a newly-received DELAY_REQ packet for the passed instance */
 static void process_rx_delay_req(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer) {
   /* Only react to these messages if we are the master */
-  if(ptp->presentRole == PTP_MASTER) {
+  if(ptp->ports[port].selectedRole == PTP_MASTER) {
     /* React to the reception of a delay request by simply transmitting a delay
      * response back to the slave.
      */
@@ -554,8 +458,7 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint8_t
                      txRequestingPortId);
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_REQ_BUFFER);
-  if((ptp->presentRole == PTP_SLAVE) && 
-     (compare_mac_addresses(rxMacAddress, ptp->presentMasterPort.sourceMacAddress) == 0) &&
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
      (compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0) &&
      (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == 
       get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer))) {
@@ -824,12 +727,13 @@ void init_state_machines(struct ptp_device *ptp) {
   /* Initialize the Rx state machine, presuming we are a master; set the nominal
    * RTC increment, enabling the counter.
    */
-  ptp->presentRole = PTP_MASTER;
-  copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
-  copy_ptp_port_properties(&ptp->presentMasterPort, &ptp->ports[0].portProperties);
+  ptp->portRoleSelection_State = PortRoleSelection_INIT_BRIDGE;
+  PortRoleSelection_StateMachine(ptp);
+  //ptp->presentRole = PTP_MASTER;
+  //copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
+  //copy_ptp_port_properties(&ptp->presentMasterPort, &ptp->ports[0].portProperties);
   ptp->newMaster              = TRUE;
   ptp->rtcChangesAllowed      = TRUE;
-  ptp->announceTimeoutCounter = 0;
 
   ptp->masterRateRatio = 0;
   ptp->masterRateRatioValid = FALSE;
@@ -841,6 +745,8 @@ void init_state_machines(struct ptp_device *ptp) {
     ptp->ports[i].syncTimestampsValid     = 0;
     ptp->ports[i].delayReqTimestampsValid = 0;
     ptp->ports[i].neighborPropDelay       = 0;
+    ptp->ports[i].announceTimeoutCounter  = 0;
+    ptp->ports[i].syncTimeoutCounter      = 0;
   }
 
   ptp->integral       = 0;

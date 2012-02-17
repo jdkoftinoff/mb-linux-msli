@@ -204,37 +204,30 @@ void ptp_start_service(struct ptp_device *ptp) {
 }
 
 static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
-  
+ 
+  struct ptp_port *pPort = &ptp->ports[port];
+
   memcpy(&dataSet->clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
   dataSet->portNumber              = port + 1;
   
-  if (!ptp->ports[port].portEnabled) {
-    dataSet->portRole = PTP_DISABLED;
-  } else if (ptp->presentRole == PTP_MASTER) {
-    dataSet->portRole = PTP_MASTER;
-  } else if ((ptp->presentRole == PTP_SLAVE) &&
-           (ptp->presentMasterPort.portNumber == dataSet->portNumber)) {
-    dataSet->portRole = PTP_SLAVE;
-  } else {
-    dataSet->portRole = PTP_PASSIVE;
-  }
-  dataSet->pttPortEnabled                 = ptp->ports[port].pttPortEnabled;
-  dataSet->isMeasuringDelay               = ptp->ports[port].isMeasuringDelay;
-  dataSet->asCapable                      = ptp->ports[port].asCapable;
-  dataSet->neighborPropDelay              = ptp->ports[port].neighborPropDelay;
-  dataSet->neighborPropDelayThresh        = ptp->ports[port].neighborPropDelayThresh;
+  dataSet->portRole                       = pPort->selectedRole;
+  dataSet->pttPortEnabled                 = pPort->pttPortEnabled;
+  dataSet->isMeasuringDelay               = pPort->isMeasuringDelay;
+  dataSet->asCapable                      = pPort->asCapable;
+  dataSet->neighborPropDelay              = pPort->neighborPropDelay;
+  dataSet->neighborPropDelayThresh        = pPort->neighborPropDelayThresh;
   dataSet->delayAsymmetry                 = 0;
-  dataSet->neighborRateRatio              = ptp->ports[port].neighborRateRatio;
-  dataSet->initialLogAnnounceInterval     = ptp->ports[port].initialLogAnnounceInterval;
-  dataSet->currentLogAnnounceInterval     = ptp->ports[port].currentLogAnnounceInterval;
-  dataSet->announceReceiptTimeout         = ptp->ports[port].announceReceiptTimeout;
-  dataSet->initialLogSyncInterval         = ptp->ports[port].initialLogSyncInterval;
-  dataSet->currentLogSyncInterval         = ptp->ports[port].currentLogSyncInterval;
-  dataSet->syncReceiptTimeout             = ptp->ports[port].syncReceiptTimeout;
+  dataSet->neighborRateRatio              = pPort->neighborRateRatio;
+  dataSet->initialLogAnnounceInterval     = pPort->initialLogAnnounceInterval;
+  dataSet->currentLogAnnounceInterval     = pPort->currentLogAnnounceInterval;
+  dataSet->announceReceiptTimeout         = pPort->announceReceiptTimeout;
+  dataSet->initialLogSyncInterval         = pPort->initialLogSyncInterval;
+  dataSet->currentLogSyncInterval         = pPort->currentLogSyncInterval;
+  dataSet->syncReceiptTimeout             = pPort->syncReceiptTimeout;
   dataSet->syncReceiptTimeoutTimeInterval = 0; /* TODO */
-  dataSet->initialLogPdelayReqInterval    = ptp->ports[port].initialLogPdelayReqInterval;
-  dataSet->currentLogPdelayReqInterval    = ptp->ports[port].currentLogPdelayReqInterval;
-  dataSet->allowedLostResponses           = ptp->ports[port].allowedLostResponses;
+  dataSet->initialLogPdelayReqInterval    = pPort->initialLogPdelayReqInterval;
+  dataSet->currentLogPdelayReqInterval    = pPort->currentLogPdelayReqInterval;
+  dataSet->allowedLostResponses           = pPort->allowedLostResponses;
   dataSet->versionNumber                  = 2;
   dataSet->nup                            = 0;
   dataSet->ndown                          = 0;
@@ -298,6 +291,16 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
        */
       ptp->rtcLockTicks   = (ptp->properties.lockTimeMsec / PTP_TIMER_TICK_MS);
       ptp->rtcUnlockTicks = (ptp->properties.unlockTimeMsec / PTP_TIMER_TICK_MS);
+
+      /* Update the system priority vector to match the new properties */
+      ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
+      ptp->systemPriority.rootSystemIdentity.clockQuality  = ptp->properties.grandmasterClockQuality;
+      ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
+      memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+      ptp->systemPriority.stepsRemoved                     = 0;
+      memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+      ptp->systemPriority.sourcePortIdentity.portNumber    = 0;
+      ptp->systemPriority.portNumber                       = 0;
 
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();

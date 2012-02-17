@@ -152,7 +152,9 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
   uint8_t *txBuffer;
   uint32_t wordOffset;
   uint32_t packetWord;
-  PtpClockQuality *quality;
+  uint32_t i;
+  PtpSystemIdentity *identity = &ptp->gmPriority->rootSystemIdentity;
+  PtpClockQuality   *quality = &identity->clockQuality;
 
   /* Clear out all dynamic fields and populate static ones with properties from
    * the PTP device structure.
@@ -168,44 +170,44 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
   packetWord = (ptp->properties.currentUtcOffset & 0x0000FFFF);
   write_packet(txBuffer, &wordOffset, packetWord);
 
-  /* Clear reserved, and set the grandmaster properties.  Initialize the stepsRemoved
-   * field to zero since the packet's source.
-   */
-  quality = &ptp->properties.grandmasterClockQuality;
-  packetWord = (ptp->properties.grandmasterPriority1 << 16);
+  /* Clear reserved, and set the grandmaster properties. */
+  packetWord = (identity->priority1 << 16);
   packetWord |= (quality->clockClass << 8);
   packetWord |= quality->clockAccuracy;
   write_packet(txBuffer, &wordOffset, packetWord);
   packetWord = (quality->offsetScaledLogVariance << 16);
-  packetWord |= (ptp->properties.grandmasterPriority2 << 8);
-  packetWord |= ptp->properties.grandmasterIdentity[0];
+  packetWord |= (identity->priority2 << 8);
+  packetWord |= identity->clockIdentity[0];
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = ((ptp->properties.grandmasterIdentity[1] << 24) | 
-                (ptp->properties.grandmasterIdentity[2] << 16) | 
-                (ptp->properties.grandmasterIdentity[3] << 8)  |
-                ptp->properties.grandmasterIdentity[4]);
+  packetWord = ((identity->clockIdentity[1] << 24) | 
+                (identity->clockIdentity[2] << 16) | 
+                (identity->clockIdentity[3] << 8)  |
+                 identity->clockIdentity[4]);
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = ((ptp->properties.grandmasterIdentity[5] << 24) | 
-                (ptp->properties.grandmasterIdentity[6] << 16) | 
-                (ptp->properties.grandmasterIdentity[7] << 8));
+  packetWord = ((identity->clockIdentity[5] << 24) | 
+                (identity->clockIdentity[6] << 16) | 
+                (identity->clockIdentity[7] << 8) |
+                (ptp->masterStepsRemoved >> 8));
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = (ptp->properties.timeSource << 16) | PATH_TRACE_TLV_TYPE;
+  packetWord = (ptp->masterStepsRemoved << 24) | 
+               (ptp->properties.timeSource << 16) |
+               PATH_TRACE_TLV_TYPE;
   write_packet(txBuffer, &wordOffset, packetWord);
 
-  /* Add the path trace TLV info. TODO: If we are ever forwarding
-     announce packets then this needs to be modified to include
-     incoming path entries. As a master we just need to have ours. */
-  packetWord = ((1/*entries*/*8) << 16) |
-               (ptp->properties.grandmasterIdentity[0] << 8) |
-               ptp->properties.grandmasterIdentity[1];
-  write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = (ptp->properties.grandmasterIdentity[2] << 24) |
-               (ptp->properties.grandmasterIdentity[3] << 16) |
-               (ptp->properties.grandmasterIdentity[4] << 8) |
-               ptp->properties.grandmasterIdentity[5];
-  write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = (ptp->properties.grandmasterIdentity[6] << 24) |
-               (ptp->properties.grandmasterIdentity[7] << 16);
+  /* Add the path trace TLV info. */
+  packetWord = ((ptp->pathTraceLength*8) << 16);
+  for (i=0; i<ptp->pathTraceLength; i++) {
+    packetWord |= (ptp->pathTrace[i][0] << 8) |
+                   ptp->pathTrace[i][1];
+    write_packet(txBuffer, &wordOffset, packetWord);
+    packetWord = (ptp->pathTrace[i][2] << 24) |
+                 (ptp->pathTrace[i][3] << 16) |
+                 (ptp->pathTrace[i][4] << 8) |
+                  ptp->pathTrace[i][5];
+    write_packet(txBuffer, &wordOffset, packetWord);
+    packetWord = (ptp->pathTrace[i][6] << 24) |
+                 (ptp->pathTrace[i][7] << 16);
+  }
   write_packet(txBuffer, &wordOffset, packetWord);
 }
 
@@ -550,7 +552,7 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   uint8_t *txBuffer;
 
   /* Update the sequence ID */
-  txBuffer = get_output_buffer(ptp,port,PTP_TX_ANNOUNCE_BUFFER);
+  txBuffer = get_output_buffer(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].announceSequenceId++);
 
   /* Update the origin timestamp with the present state of the RTC */
@@ -774,27 +776,56 @@ uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuff
   return(messageType);
 }
 
+uint16_t get_rx_announce_steps_removed(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
+  uint16_t stepsRemoved = 0;
+  uint32_t wordOffset = STEPS_REMOVED_OFFSET;
+  uint32_t packetWord;
+  packetWord = read_packet(rxBuffer, &wordOffset);
+  stepsRemoved = (packetWord & 0xFF) << 8;
+  packetWord = read_packet(rxBuffer, &wordOffset);
+  stepsRemoved |= ((packetWord >> 24) & 0xFF);
+  return stepsRemoved;
+}
+
+uint16_t get_rx_announce_path_trace(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer, PtpClockIdentity *pathTrace) {
+  uint16_t pathTraceLength = 0;
+  uint32_t wordOffset = PATH_TRACE_OFFSET;
+  uint32_t packetWord;
+  uint32_t i;
+
+  /* Get the path trace TLV info. */
+  packetWord = read_packet(rxBuffer, &wordOffset);
+  pathTraceLength = (packetWord >> 16) / 8;
+  for (i=0; i<pathTraceLength && i<PTP_MAX_PATH_TRACE; i++) {
+    pathTrace[i][0] = (packetWord >> 8) & 0xFF;
+    pathTrace[i][1] = packetWord & 0xFF;
+    packetWord = read_packet(rxBuffer, &wordOffset);
+    pathTrace[i][2] = (packetWord >> 24) & 0xFF;
+    pathTrace[i][3] = (packetWord >> 16) & 0xFF;
+    pathTrace[i][4] = (packetWord >> 8) & 0xFF;
+    pathTrace[i][5] =  packetWord & 0xFF;
+    packetWord = read_packet(rxBuffer, &wordOffset);
+    pathTrace[i][6] = (packetWord >> 24) & 0xFF;
+    pathTrace[i][7] = (packetWord >> 16) & 0xFF;
+  }
+  
+  return pathTraceLength;
+}
+
 /* Extracts the contents of an ANNOUNCE message into the passed properties structure.
  * The message should already be ascertained to be an ANNOUNCE, this method will not
  * re-check.
  */
 void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer,
-  PtpProperties *properties, PtpPortProperties *portProperties) {
+  PtpPriorityVector *pv) {
 
   uint32_t wordOffset;
   uint32_t packetWord;
 
-  /* Extract the source address of the packet */
-  wordOffset = SOURCE_MAC_OFFSET;
-  packetWord = read_packet(rxBuffer, &wordOffset);
-  portProperties->sourceMacAddress[0] = ((packetWord >> 8) & 0x0FF);
-  portProperties->sourceMacAddress[1] = (packetWord & 0x0FF);
-  packetWord = read_packet(rxBuffer, &wordOffset);
-  portProperties->sourceMacAddress[2] = ((packetWord >> 24) & 0x0FF);
-  portProperties->sourceMacAddress[3] = ((packetWord >> 16) & 0x0FF);
-  portProperties->sourceMacAddress[4] = ((packetWord >> 8) & 0x0FF);
-  portProperties->sourceMacAddress[5] = (packetWord & 0x0FF);
+  /* Get the source port identity*/
+  get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&pv->sourcePortIdentity);
 
+#if 0
   /* Exract the domain number */
   wordOffset = DOMAIN_NUMBER_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
@@ -804,32 +835,35 @@ void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer,
   wordOffset = UTC_OFFSET_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
   properties->currentUtcOffset = (packetWord & 0x0FFFF);
+#endif
 
   /* Extract the grandmaster priorities and clock quality */
   wordOffset = GM_PRIORITY1_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  properties->grandmasterPriority1 = ((packetWord >> 16) & 0x0FF);
-  properties->grandmasterClockQuality.clockClass = ((packetWord >> 8) & 0x0FF);
-  properties->grandmasterClockQuality.clockAccuracy = (packetWord & 0x0FF);
+  pv->rootSystemIdentity.priority1 = ((packetWord >> 16) & 0xFF);
+  pv->rootSystemIdentity.clockQuality.clockClass = ((packetWord >> 8) & 0xFF);
+  pv->rootSystemIdentity.clockQuality.clockAccuracy = (packetWord & 0xFF);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  properties->grandmasterClockQuality.offsetScaledLogVariance = ((packetWord >> 16) & 0x0FFFF);
-  properties->grandmasterPriority2 = ((packetWord >> 8) & 0x0FF);
-  properties->grandmasterIdentity[0] = (packetWord & 0x0FF);
+  pv->rootSystemIdentity.clockQuality.offsetScaledLogVariance = cpu_to_be16((packetWord >> 16) & 0xFFFF);
+  pv->rootSystemIdentity.priority2 = ((packetWord >> 8) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[0] = (packetWord & 0xFF);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  properties->grandmasterIdentity[1] = ((packetWord >> 24) & 0x0FF);
-  properties->grandmasterIdentity[2] = ((packetWord >> 16) & 0x0FF);
-  properties->grandmasterIdentity[3] = ((packetWord >> 8) & 0x0FF);
-  properties->grandmasterIdentity[4] = (packetWord & 0x0FF);
+  pv->rootSystemIdentity.clockIdentity[1] = ((packetWord >> 24) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[2] = ((packetWord >> 16) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[3] = ((packetWord >> 8) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[4] = (packetWord & 0xFF);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  properties->grandmasterIdentity[5] = ((packetWord >> 24) & 0x0FF);
-  properties->grandmasterIdentity[6] = ((packetWord >> 16) & 0x0FF);
-  properties->grandmasterIdentity[7] = ((packetWord >> 8) & 0x0FF);
+  pv->rootSystemIdentity.clockIdentity[5] = ((packetWord >> 24) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[6] = ((packetWord >> 16) & 0xFF);
+  pv->rootSystemIdentity.clockIdentity[7] = ((packetWord >> 8) & 0xFF);
+  pv->stepsRemoved        = (packetWord & 0xFF) << 8;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  properties->timeSource = ((packetWord >> 16) & 0x0FF);
+  pv->stepsRemoved       |= ((packetWord >> 24) & 0xFF);
+  pv->stepsRemoved        = cpu_to_be16(pv->stepsRemoved);
+  //properties->timeSource = ((packetWord >> 16) & 0xFF);
 
   /* Port number is 1 based and is the port it came in on */
-  portProperties->portNumber = port + 1;
-  portProperties->stepsRemoved = 0; /* TODO - where do we get this from? */
+  pv->portNumber = port + 1;
 }
 
 /* Gets the MAC address from a received packet */
