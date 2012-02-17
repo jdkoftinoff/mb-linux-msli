@@ -765,12 +765,6 @@ static int xenet_open(struct net_device *dev)
   kthread_run(otp_assign_mac_address, dev, "otp_assign_mac_address thread");
 #endif
 
-  /*printk("%s: MAC address is now %02X:%02X:%02X:%02X:%02X:%02X\n",
-	 ndev->name,
-	 pdata->mac_addr[0], pdata->mac_addr[1],
-	 pdata->mac_addr[2], pdata->mac_addr[3],
-	 pdata->mac_addr[4], pdata->mac_addr[5]); */
-
   /* Set the MAC address each time opened. */
   if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
     printk(KERN_ERR "%s: labx_ethernet: could not set MAC address.\n",

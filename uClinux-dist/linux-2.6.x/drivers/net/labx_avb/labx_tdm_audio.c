@@ -23,9 +23,12 @@
  *
  */
 
+#include "linux/labx_tdm_audio_defs.h"
 #include <asm/io.h>
-#include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/miscdevice.h>
+#include <linux/labx_local_audio.h>
+#include <linux/labx_local_audio_defs.h>
 #include <linux/highmem.h>
 #include <linux/platform_device.h>
 #include <xio.h>
@@ -35,6 +38,50 @@
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
+
+typedef struct {
+  u32 TdmLaneCount;
+  u32 TdmSlotDensity;
+  u32 TdmNumStreams;
+} labx_tdm_Config;
+
+#define NO_IRQ_SUPPLIED   (-1)
+struct audio_tdm {
+  /* Misc device */
+  struct miscdevice miscdev;  
+
+  /* Pointer back to the platform device */
+  struct platform_device *pdev;
+  struct class tdmclass;
+
+  /* Mutex for the device instance */
+  spinlock_t mutex;
+  bool opened;
+  
+/* File operations and private data for a polymorphic
+   * driver to use
+   */
+  struct file_operations *derivedFops;
+  void *derivedData;
+    
+  /* Name for use in identification */
+  char name[NAME_MAX_SIZE];
+  /* Device version */
+  uint32_t version;
+  
+  /* Physical and virtual base address */
+  uintptr_t      physicalAddress;
+  uintptr_t      addressRangeSize;
+  void __iomem  *virtualAddress;
+
+  /* Interrupt request number */
+  int32_t irq;
+
+  uint32_t initialVal;
+
+  /* Hardware configuration */
+  labx_tdm_Config Config;
+};
 
 // There's a single register, at offset 0x00000008 (byte address, is actually register 0x02 in 32-bit offset-speak)
 //
@@ -48,48 +95,23 @@
 /* Global control registers */
 #define TDM_CONTROL_REG       (0x02)
 #  define TDM_BIT_ALIGNMENT_LEFT_JUSTIFIED   (0x0)
-#  define TDM_BIT_ALIGNMENT_I2S_DELAYED   (0x200)
-#  define TDM_LRCLK_RISING_EDGE_CH0   (0x0)
-#  define TDM_LRCLK_FALLING_EDGE_CH0   (0x100)
-#  define TDM_NUM_AUDIO_CHANNELS_MASK  (0x7F)
+#  define TDM_BIT_ALIGNMENT_I2S_DELAYED      (0x200)
+#  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
+#  define TDM_LRCLK_FALLING_EDGE_CH0         (0x100)
+#  define TDM_NUM_AUDIO_CHANNELS_MASK        (0x7F)
 
-#define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->virtualAddress | (offset << 2))
+#define TDM_STREAM_MAP_REG     (0x03)
+#  define MAP_SWAP_BANK      (0x80000000)
+#  define MAP_CHANNEL_MASK   (0x003F0000)
+#  define MAP_CHANNEL_SHIFT  (16)
+#  define MAP_STREAM_MASK    (0x0000003F)
 
-#define NAME_MAX_SIZE    (256)
-#define NO_IRQ_SUPPLIED   (-1)
-struct audio_tdm {
-  /* Pointer back to the platform device */
-  struct platform_device *pdev;
-  struct class tdmclass;
+#define STREAM_MAP_BANKS  (2)
 
-  /* Character device data */
-  struct cdev cdev;
-  uint32_t    instanceNumber;
-  /* Mutex for the device instance */
-  spinlock_t mutex;
-  bool opened;
-  /* File operations and private data for a polymorphic
-   * driver to use
-   */
-  struct file_operations *derivedFops;
-  void *derivedData;
-
-  /* Name for use in identification */
-  char name[NAME_MAX_SIZE];
-  /* Device version */
-  uint32_t version;
-
-  /* Physical and virtual base address */
-  uintptr_t      physicalAddress;
-  uintptr_t      addressRangeSize;
-  void __iomem  *virtualAddress;
-
-  /* Interrupt request number */
-  int32_t irq;
-
-  uint32_t initialVal;
-};
+/* Number of audio channels emitted from memory by this peripheral;
+ * 7 streams of 60 channels each.
+ */
+#define LABX_TDM_NUM_CHANNELS  (64)
 
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
@@ -100,11 +122,9 @@ struct audio_tdm {
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
-/* Major device number for the driver */
-#define DRIVER_MAJOR 244
 
 /* Maximum number of redundancy_switchs and instance count */
-#define MAX_INSTANCES 64
+#define MAX_INSTANCES 16
 static uint32_t instanceCount;
 
 #if 0
@@ -112,6 +132,14 @@ static uint32_t instanceCount;
 #else
 #define DBG(f, x...)
 #endif
+
+#define REGISTER_ADDRESS(device, offset) \
+  ((uintptr_t)device->virtualAddress | (offset << 2))
+
+/* Buffer for storing stream map entries */
+static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
+static uint8_t MAP_MUTE_MODE_SHIFT = 0x00;
+static struct audio_tdm* devices[MAX_INSTANCES] = {};
 
 /*
  * Character device hook functions
@@ -122,9 +150,26 @@ static int tdm_open(struct inode *inode, struct file *filp)
   struct audio_tdm *tdm;
   unsigned long flags;
   int returnValue = 0;
+  int deviceIndex;
 
-  tdm = container_of(inode->i_cdev, struct audio_tdm, cdev);
-  filp->private_data = tdm;
+  /* Search for the device amongst those which successfully were probed */
+  for(deviceIndex = 0; deviceIndex < MAX_INSTANCES; deviceIndex++) {
+    if ((devices[deviceIndex] != NULL) && (devices[deviceIndex]->miscdev.minor == iminor(inode))) {
+      /* Retain the device pointer within the file pointer for future navigation */
+      filp->private_data = devices[deviceIndex];
+      break;
+    }
+  }
+
+  /* Ensure the device was actually found */
+  if(deviceIndex >= MAX_INSTANCES) {
+    printk(KERN_WARNING DRIVER_NAME ": Could not find device for node (%d, %d)\n",
+           imajor(inode), iminor(inode));
+    return(-ENODEV);
+  }
+
+  /* TODO - Ensure the local audio hardware is reset */
+  tdm = (struct audio_tdm*)filp->private_data;
 
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
@@ -167,6 +212,59 @@ static int tdm_release(struct inode *inode, struct file *filp)
   return(0);
 }
 
+static void configure_auto_mute(struct audio_tdm *tdm,
+                                AutoMuteConfig *autoMuteConfig) {
+  uint32_t entryIndex;
+  uint32_t bankIndex;
+  uint32_t entryWord;
+  uint32_t numChannels;
+
+  /* Grab the TDM mode */  
+  numChannels = (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG))) & TDM_NUM_AUDIO_CHANNELS_MASK;
+
+  /* Set the shift value for the muting on load */
+  if(MAP_MUTE_MODE_SHIFT == 0x00) {
+    if(tdm->Config.TdmNumStreams == 8) {
+      MAP_MUTE_MODE_SHIFT = 0x03;
+    } else if(tdm->Config.TdmNumStreams == 16) {
+      MAP_MUTE_MODE_SHIFT = 0x04;
+    } else if(tdm->Config.TdmNumStreams == 32) {
+      MAP_MUTE_MODE_SHIFT = 0x05;
+    } else {
+      MAP_MUTE_MODE_SHIFT = 0x06;
+    }
+  }
+
+  /* Set any new stream map entries in both banks */
+  for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
+    for(entryIndex = 0; entryIndex < autoMuteConfig->numMapEntries; entryIndex++) {
+      StreamMapEntry *entryPtr = &(autoMuteConfig->mapEntries[entryIndex]);
+
+      /* Each entry consists of a map from a TDM channel to its stream */
+      entryWord = (((((entryPtr->tdmChannel/(numChannels/tdm->Config.TdmLaneCount)) 
+        * tdm->Config.TdmSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->Config.TdmLaneCount)))
+            << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
+
+
+      if(entryPtr->avbStream != AVB_STREAM_NONE) {
+        entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+        entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);
+      }
+      else {
+        entryWord |= AVB_STREAM_RESET;
+        entryWord |= (AUTO_MUTE_ALWAYS << MAP_MUTE_MODE_SHIFT);      
+      }
+
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), entryWord);
+    }
+
+    /* The same register address is overloaded for the bank swap operation;
+     * simply hit the appropriate control bit and the map load function is suppressed
+     */
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), MAP_SWAP_BANK);
+  }
+}
+
 /* I/O control operations for the driver */
 static int tdm_ioctl(struct inode *inode,
                                    struct file *filp,
@@ -206,6 +304,30 @@ static int tdm_ioctl(struct inode *inode,
       }
     break;
 
+  case IOC_CONFIG_AUTO_MUTE:
+    {
+      AutoMuteConfig autoMuteConfig;
+
+      /* First copy the main configuration structure */
+      if(copy_from_user(&autoMuteConfig, (void __user*)arg, sizeof(autoMuteConfig)) != 0) {
+        return(-EFAULT);
+      }
+ 
+      /* Sanity-check the number of map entries user space is attempting to
+       * configure in this single call, then copy them to the statically-
+       * allocated buffer for this purpose.
+       */
+      if(autoMuteConfig.numMapEntries > MAX_MAP_ENTRIES) return(-EFAULT);
+      if(copy_from_user(mapEntryBuffer, (void __user*)autoMuteConfig.mapEntries,
+                        (autoMuteConfig.numMapEntries * sizeof(StreamMapEntry))) != 0) {
+        return(-EFAULT);
+      }
+      autoMuteConfig.mapEntries = mapEntryBuffer;
+      configure_auto_mute(tdm, &autoMuteConfig);
+    }
+    break;
+
+
   default:
     /* We don't recognize this command; give our derived driver's ioctl()
      * a crack at it, if one exists.
@@ -230,9 +352,22 @@ static struct file_operations tdm_fops = {
 
 /* Resets the state of the passed instance */
 static void reset_tdm(struct audio_tdm *tdm) {
+  uint32_t bankIndex;
+  uint32_t channelIndex;
 
   /* Restore the instance registers to initial values */
   XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), tdm->initialVal);
+
+  /* Clear any old assignments from the auto-mute stream map; all channels
+   * are presumed to have no valid stream assignment.
+   */
+  for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
+    for(channelIndex = 0; channelIndex < LABX_TDM_NUM_CHANNELS; channelIndex++) {
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG),
+                (channelIndex << MAP_CHANNEL_SHIFT));
+    }
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), MAP_SWAP_BANK);
+  }
   return;
 }
 
@@ -331,22 +466,24 @@ int audio_tdm_probe(const char *name,
                     struct resource *addressRange,
                     struct resource *irq,
                     void *derivedData,
-                    struct audio_tdm **newInstance) {
+                    struct audio_tdm **newInstance,
+                    struct labx_tdm_platform_data *pdata) {
   struct audio_tdm *tdm;
   unsigned int versionMajor;
   unsigned int versionMinor;
   unsigned int versionCompare;
   int returnValue;
-  static unsigned int instanceNumber=0;
+  uint32_t deviceIndex;
 
   /* Create and populate a device structure */
-  tdm = (struct audio_tdm*) kmalloc(sizeof(struct audio_tdm), GFP_KERNEL);
+  tdm = (struct audio_tdm*) kzalloc(sizeof(struct audio_tdm), GFP_KERNEL);
   if(!tdm) return(-ENOMEM);
 
   /* Request and map the device's I/O memory region into uncacheable space */
   tdm->physicalAddress = addressRange->start;
   tdm->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-  snprintf(tdm->name, NAME_MAX_SIZE, "%s.%ld", name, instanceNumber);
+
+  snprintf(tdm->name, NAME_MAX_SIZE, "%s%u", name, instanceCount++);
   tdm->name[NAME_MAX_SIZE - 1] = '\0';
   if(request_mem_region(tdm->physicalAddress, tdm->addressRangeSize,
 		  tdm->name) == NULL) {
@@ -360,6 +497,11 @@ int audio_tdm_probe(const char *name,
     returnValue = -ENOMEM;
     goto release;
   }
+
+  printk("TDM virtualAddress = 0x%08X, phys = 0x%08X, size = 0x%08X\n",
+         (uint32_t) tdm->virtualAddress,
+         (uint32_t) tdm->physicalAddress,
+         (uint32_t) tdm->addressRangeSize);
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied.
    * For now, there is no TDM IRQ, so this is unused.
@@ -416,10 +558,6 @@ int audio_tdm_probe(const char *name,
   printk("No interrupts supported\n");
 #endif
 
-  /* Provide navigation between the device structures */
-  platform_set_drvdata(pdev, tdm);
-  tdm->pdev = pdev;
-
   /* Initialize other resources */
   spin_lock_init(&tdm->mutex);
   tdm->opened = false;
@@ -427,13 +565,20 @@ int audio_tdm_probe(const char *name,
   /* Reset the state of the tdm */
   reset_tdm(tdm);
 
-  /* Add as a character device to make the instance available for use */
-  cdev_init(&tdm->cdev, &tdm_fops);
-  tdm->cdev.owner = THIS_MODULE;
-  tdm->instanceNumber = instanceNumber;
-  kobject_set_name(&tdm->cdev.kobj, "%s.%d", tdm->name, tdm->instanceNumber);
-  cdev_add(&tdm->cdev, MKDEV(DRIVER_MAJOR, tdm->instanceNumber), 1);
-  instanceNumber++;
+  /* Add as a misc device */
+  tdm->miscdev.minor = MISC_DYNAMIC_MINOR;
+  tdm->miscdev.name = tdm->name;
+  tdm->miscdev.fops = &tdm_fops;
+  returnValue = misc_register(&tdm->miscdev);
+  if (returnValue) {
+    printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
+    goto unmap;
+  }
+
+  /* Provide navigation between the device structures */
+  platform_set_drvdata(pdev, tdm);
+  tdm->pdev = pdev;
+  dev_set_drvdata(tdm->miscdev.this_device, tdm);
 
   /* Set up the sysfs class interface */
   tdm->tdmclass.name = tdm->name;
@@ -442,10 +587,30 @@ int audio_tdm_probe(const char *name,
   tdm->tdmclass.class_attrs = audio_tdm_class_attrs;
   returnValue = class_register(&tdm->tdmclass);
 
-  /* Return success, setting the return pointer if valid */
-  if(newInstance != NULL) {
-	  *newInstance = tdm;
+  /* Setup the Config structure */
+  tdm->Config.TdmLaneCount = pdata->lane_count;
+  tdm->Config.TdmSlotDensity = pdata->slot_density;
+  tdm->Config.TdmNumStreams = pdata->num_streams;
+
+  /* Locate and occupy the first available device index for future navigation in
+   * the call to tdm_open()
+   */
+  for (deviceIndex = 0; deviceIndex < MAX_INSTANCES; deviceIndex++) {
+    if (NULL == devices[deviceIndex]) {
+      devices[deviceIndex] = tdm;
+      break;
+    }
   }
+
+  /* Ensure that we haven't been asked to probe for too many devices */
+  if(deviceIndex >= MAX_INSTANCES) {
+    printk(KERN_WARNING DRIVER_NAME ": Maximum device count (%d) exceeded during probe\n",
+           MAX_INSTANCES);
+    goto unmap;
+  }
+
+  /* Return success, setting the return pointer if valid */
+  if(newInstance != NULL) *newInstance = tdm;
   return(returnValue);
 
  unmap:
@@ -458,6 +623,16 @@ int audio_tdm_probe(const char *name,
 }
 
 #ifdef CONFIG_OF
+static u32 get_u32(struct of_device *ofdev, const char *s) {
+  u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+  if(p) {
+    return *p;
+  } else {
+    dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
+    return FALSE;
+  }
+}
+
 static int audio_tdm_platform_remove(struct platform_device *pdev);
 
 /* Probe for registered devices */
@@ -471,6 +646,12 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   const char *full_name = dev_name(&ofdev->dev);
   const char *name;
   int rc = 0;
+
+  struct labx_tdm_platform_data pdata_struct = {};
+
+  struct labx_tdm_platform_data *pdata = &pdata_struct;
+
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n",ofdev->node->name);
 
   if ((name = strchr(full_name, '.')) == NULL) {
 	  name = full_name;
@@ -490,8 +671,12 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
     irq = NULL;
   }
 
+  pdata_struct.lane_count   = get_u32(ofdev, "xlnx,tdm-lane-count");
+  pdata_struct.num_streams  = get_u32(ofdev, "xlnx,num-streams");
+  pdata_struct.slot_density = get_u32(ofdev, "xlnx,tdm-slot-density");
+
   /* Dispatch to the generic function */
-  return(audio_tdm_probe(name, pdev, addressRange, irq, NULL, NULL));
+  return(audio_tdm_probe(name, pdev, addressRange, irq, NULL, NULL, pdata));
 }
 
 static int __devexit audio_tdm_of_remove(struct of_device *dev)
@@ -541,16 +726,26 @@ static int audio_tdm_platform_probe(struct platform_device *pdev) {
   irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 
   /* Dispatch to the generic function */
-  return(audio_tdm_probe(pdev->name, pdev, addressRange, irq, NULL, NULL));
+  return(audio_tdm_probe(pdev->name, pdev, addressRange, irq, NULL, NULL, NULL));
 }
 
 /* This is exported to allow polymorphic drivers to invoke it. */
 int audio_tdm_remove(struct audio_tdm *tdm) {
-  cdev_del(&tdm->cdev);
+  int deviceIndex;
+  
   reset_tdm(tdm);
   iounmap(tdm->virtualAddress);
   release_mem_region(tdm->physicalAddress, tdm->addressRangeSize);
   kfree(tdm);
+
+  misc_deregister(&tdm->miscdev);
+
+  for (deviceIndex = 0; deviceIndex < MAX_INSTANCES; deviceIndex++) {
+    if (tdm == devices[deviceIndex]) {
+      devices[deviceIndex] = NULL;
+      break;
+    }
+  }
   return(0);
 }
 
@@ -568,7 +763,7 @@ static struct platform_driver audio_tdm_driver = {
   .probe  = audio_tdm_platform_probe,
   .remove = audio_tdm_platform_remove,
   .driver = {
-    .name = DRIVER_NAME,
+  .name = DRIVER_NAME,
   }
 };
 
@@ -582,12 +777,9 @@ static int __init audio_tdm_driver_init(void)
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_audio_tdm_driver);
 #endif
- 
-  /* Allocate a range of major / minor device numbers for use */
+
+  /* Initialize the instance counter */ 
   instanceCount = 0;
-  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0), MAX_INSTANCES, DRIVER_NAME)) < 0) {
-    printk(KERN_INFO DRIVER_NAME "Failed to allocate character device range\n");
-  }
 
   /* Register as a platform device driver */
   if((returnValue = platform_driver_register(&audio_tdm_driver)) < 0) {
@@ -600,7 +792,6 @@ static int __init audio_tdm_driver_init(void)
 
 static void __exit audio_tdm_driver_exit(void)
 {
-  unregister_chrdev_region(MKDEV(DRIVER_MAJOR, 0), MAX_INSTANCES);
   /* Unregister as a platform device driver */
   platform_driver_unregister(&audio_tdm_driver);
 }
