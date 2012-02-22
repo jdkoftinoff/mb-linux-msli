@@ -30,6 +30,12 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+/* Definitions for operating contexts */
+#  define TDM_BIT_ALIGNMENT_LEFT_JUSTIFIED   (0x0)
+#  define TDM_BIT_ALIGNMENT_I2S_DELAYED      (0x200)
+#  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
+#  define TDM_LRCLK_FALLING_EDGE_CH0         (0x100)
+
 /* Special definition to indicate "no stream assigned" to a TDM output */
 #define AVB_STREAM_NONE  (0xFFFFFFFF)
 #define AVB_STREAM_RESET (0x00000000)
@@ -57,11 +63,25 @@ typedef struct {
   StreamMapEntry *mapEntries;
 } AutoMuteConfig;
 
-#define IOC_CONFIG_AUTO_MUTE      _IOR('l', 0x01, AutoMuteConfig)
 
 struct labx_tdm_platform_data {
   uint8_t lane_count;
   uint8_t num_streams;
   uint8_t slot_density;
 };
+
+/* I/O control commands and structures specific to the audio tdm hardware */
+typedef struct {
+  uint32_t versionMajor;
+  uint32_t versionMinor;
+  uint32_t maxChannels;
+  uint32_t lrPolarity;
+  uint32_t i2sAlign;
+} AudioTdmControl;
+
+#define AUDIO_TDM_IOC_CHAR          ('t')
+#define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x01, AudioTdmControl)
+#define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
+#define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
+
 #endif

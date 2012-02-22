@@ -32,7 +32,6 @@
 #include <linux/highmem.h>
 #include <linux/platform_device.h>
 #include <xio.h>
-#include <net/labx_avb/packet_engine_defs.h>
 
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
@@ -94,10 +93,6 @@ struct audio_tdm {
 //           -- Bits[6:0] - Number of audio channels (8, 16, 32 or 64 are the only valid number of input channels)
 /* Global control registers */
 #define TDM_CONTROL_REG       (0x02)
-#  define TDM_BIT_ALIGNMENT_LEFT_JUSTIFIED   (0x0)
-#  define TDM_BIT_ALIGNMENT_I2S_DELAYED      (0x200)
-#  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
-#  define TDM_LRCLK_FALLING_EDGE_CH0         (0x100)
 #  define TDM_NUM_AUDIO_CHANNELS_MASK        (0x7F)
 
 #define TDM_STREAM_MAP_REG     (0x03)
@@ -290,7 +285,7 @@ static int tdm_ioctl(struct inode *inode,
     break;
 
   case IOC_SET_AUDIO_TDM_CONTROL:
-      if(copy_from_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
+      if(copy_from_user(&tdmControl, (void __user*)arg, sizeof(AudioTdmControl)) != 0) {
         return(-EFAULT);
       }
       if (tdmControl.maxChannels != 0) {
