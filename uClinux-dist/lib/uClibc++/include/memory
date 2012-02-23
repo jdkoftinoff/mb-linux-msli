@@ -58,7 +58,7 @@ public:
 	const_pointer address(const_reference r) const { return &r; }
 	
 	allocator() throw(){}
-	template <class U> allocator(const allocator<U>& ) throw();
+	template <class U> allocator(const allocator<U>& ) throw() {}
 	~allocator() throw(){}
 
 	//Space for n Ts
