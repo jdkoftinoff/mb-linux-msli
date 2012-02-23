@@ -1256,6 +1256,7 @@ int main(int argc, char **argv)
 
       if(!network_on)
 	{
+#if 0
 	  /* check if any network interface got an ipv4 address */
 	  ipaddr=my_eth_address("eth0",4);
 	  if(!*ipaddr)
@@ -1263,6 +1264,7 @@ int main(int argc, char **argv)
 	  
 	  if(!stat("/var/tmp/status/no-ip-address",&statbuf)||*ipaddr)
 	    {
+#endif
 	      ipv4addr_0[0]='\0';
 	      ipv6addr_0[0]='\0';
 	      ipv4addr_1[0]='\0';
@@ -1278,7 +1280,9 @@ int main(int argc, char **argv)
 		  
 		  oled_send_image(text_image,-16,0);
 		}
+#if 0
 	    }
+#endif
 	}
       else
 	{
