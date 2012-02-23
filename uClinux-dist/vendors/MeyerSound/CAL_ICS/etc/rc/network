@@ -4,16 +4,10 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
+ifconfig eth0 up
+ifconfig eth1 up
 
-mkdir /var/tmp/dhcpc
 mkdir /var/lib
-mkdir /var/tmp/avahi
-mkdir /var/tmp/avahi/services
-/bin/cp /etc/avahi.orig/avahi-daemon.conf /etc/avahi.orig/avahi-autoipd.action  /var/tmp/avahi
-/bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
-/bin/avahi-daemon >/dev/null 2>&1 &
-/bin/dhcpcd -t0 eth0 &
-/bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
 /bin/inetd &
 
 # Call a script located on the read-write Flash filesystem to
@@ -21,9 +15,9 @@ mkdir /var/tmp/avahi/services
 
 echo "Calling platform-specific network script"
 
-if [ -x /mnt/config/scripts/network_config ]
+if [ -x /etc/persist/config/network_config ]
   then
-  /mnt/config/scripts/network_config
+  /etc/persist/config/network_config
   else
   if [ ! -f /etc/persist/config/CAL_ICSPlatform.xml ]
     then
