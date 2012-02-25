@@ -97,7 +97,6 @@ dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
 dir_4_$(CONFIG_LIB_MICROSUPPORT) += microsupport
-dir_5_$(CONFIG_LIB_AVDECC)   += avdecc
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
