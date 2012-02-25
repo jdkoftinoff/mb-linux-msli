@@ -13,26 +13,6 @@ config USER_CAL_DSP
     help
       Include server for Meyer Sound CAL DSP card
 
-config USER_LIBTC
-    bool "libtc - timecode/midi server"
-    help
-      Include the MIDI and Timecode server for Meyer Sound D-Mitri IO modules
-
-config USER_IO_OSC
-    bool "io-oscd server - io-osc"
-    depends on USER_GSBD
-    depends on USER_LIBTC
-    depends on LIB_MICROSUPPORT
-    help
-      Include the Open Sound Control server for Meyer Sound D-Mitri IO modules
-
-config USER_AVBWEB
-    bool "avbweb server"
-    depends on LIB_MICROSUPPORT
-    depends on LIB_IEEE1722_1
-    help
-      Include the avb controller web app server
-
 config USER_TI_SRC4392
 	bool "Ti SRC4392 setup for AES interface of CAL ICS"
 	help
