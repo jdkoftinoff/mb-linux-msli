@@ -1,9 +1,0 @@
-#!/bin/sh
-
-while true; do
-  echo "starting avahi-daemon"
-  avahi-daemon >/dev/null
-  echo "avahi-daemon ended"
-  sleep 1
-done
-
