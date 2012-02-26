@@ -10,13 +10,6 @@ menu "Library Configuration"
 
 comment "Force build (normally built when required)"
 
-config LIB_MICROSUPPORT
-    bool "microsupport library - microsupport"
-    default n
-    help
-      Include the microsupport C library for allocator, network, osc/midi protocols
-      see http://github.com/jdkoftinoff/microsupport for more information
-
 config LIB_BITVECTOR
 	bool "Build bit vector"
 	default n
