@@ -34,12 +34,10 @@ dir_  =
 
 dir_$(CONFIG_JFFS_FS)                       += mtd-utils
 dir_$(CONFIG_JFFS2_FS)                      += mtd-utils
-dir_$(CONFIG_USER_CAL_DSP)                  += cal-dsp
 
 dir_$(CONFIG_USER_TI_SRC4392)               += ti-src4392
 dir_$(CONFIG_USER_CAL_OLED)                 += cal_oled
 dir_$(CONFIG_USER_DMITRIPANELD)             += dmitripaneld
-dir_$(CONFIG_USER_GSBD)                     += gsbd
 dir_$(CONFIG_USER_SCPINSTALL)               += scpinstall
 dir_$(CONFIG_USER_NANO)                     += nano
 dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty

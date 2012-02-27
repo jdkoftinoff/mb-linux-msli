@@ -8,11 +8,6 @@
 
 menu "Core Applications"
 
-config USER_CAL_DSP
-    bool "cal-dspd server - cal-dsp"
-    help
-      Include server for Meyer Sound CAL DSP card
-
 config USER_TI_SRC4392
 	bool "Ti SRC4392 setup for AES interface of CAL ICS"
 	help
@@ -27,11 +22,6 @@ config USER_DMITRIPANELD
 	bool "D-Mitri Panel daemon - dmitripaneld"
 	help
 	  Include the D-Mitri panel server.
-
-config USER_GSBD
-	bool "Galileo Serial Bus daemon - gsbd"
-	help
-	  Include Galileo Serial Bus daemon.
 
 config USER_SCPINSTALL
 	bool "scp installer"
