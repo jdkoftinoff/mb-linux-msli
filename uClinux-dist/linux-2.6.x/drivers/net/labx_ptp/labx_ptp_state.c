@@ -48,6 +48,15 @@ static void timer_state_task(unsigned long data) {
   unsigned long flags;
   uint32_t newMaster;
   int i;
+  int8_t reselect = 0;
+
+  /* Update port roles whenever any port is flagged for reselect */
+  for (i=0; i<ptp->numPorts; i++) {
+    reselect |= ptp->ports[i].reselect;
+  }
+  if (reselect) {
+    PortRoleSelection_StateMachine(ptp);
+  }
 
   for (i=0; i<ptp->numPorts; i++) {
     switch(ptp->ports[i].selectedRole) {
@@ -79,40 +88,8 @@ static void timer_state_task(unsigned long data) {
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      timeoutTicks = ANNOUNCE_INTERVAL_TICKS(ptp, i) * ptp->ports[i].announceReceiptTimeout;
-      if(++ptp->ports[i].announceTimeoutCounter >= timeoutTicks) {
-        PortAnnounceInformation_StateMachine(ptp, i);
-#if 0
-        /* We haven't received an ANNOUNCE message from our master in too long, presume
-         * we've become a master so we participate in BMCA again.
-         */
-        ptp->presentRole = PTP_MASTER;
-        copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
-        ptp->ports[i].announceTimeoutCounter = 0;
-        ptp->newMaster              = TRUE;
-
-        /* Do not permit the RTC to change until userspace permits it, and also
-         * reset the lock state
-         */
-        ptp->acquiring          = PTP_RTC_ACQUIRING;
-        ptp->rtcLockState       = PTP_RTC_UNLOCKED;
-        ptp->rtcLockCounter     = 0;
-        ptp->rtcChangesAllowed  = FALSE;
-        ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-        ptp->rtcLastOffset      = 0;
-
-        /* Don't set the RTC back to its nominal increment; we will notify
-         * userspace of the Grandmaster change and then wait for an ioctl()
-         * which says it's okay to do so.
-         */
-#endif
-        /* Update stats */
-        ptp->ports[i].stats.announceReceiptTimeoutCount++;
-      }
-      timeoutTicks = SYNC_INTERVAL_TICKS(ptp, i);
-      if(++ptp->ports[i].syncTimeoutCounter >= timeoutTicks && ptp->gmPresent) {
-        PortAnnounceInformation_StateMachine(ptp, i);
-      }
+      ++ptp->ports[i].announceTimeoutCounter;
+      ++ptp->ports[i].syncTimeoutCounter;
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
 
@@ -177,6 +154,9 @@ static void timer_state_task(unsigned long data) {
      */
     ptp->ports[i].pdelayIntervalTimer++;
     MDPdelayReq_StateMachine(ptp, i);
+
+    /* Update the PortAnnounceInformation state machine */
+    PortAnnounceInformation_StateMachine(ptp, i);
   }
 
   /* Test to see if the master is new from the last time we checked; if so,
@@ -697,31 +677,36 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->netlinkSequence  = 0;
 
   for(i=0; i<ptp->numPorts; i++) {
-    ptp->ports[i].announceCounter     = 0;
-    ptp->ports[i].announceSequenceId  = 0x0000;
-    ptp->ports[i].syncCounter         = 0;
-    ptp->ports[i].syncSequenceId      = 0x0000;
-    ptp->ports[i].syncSequenceIdValid = 0;
-    ptp->ports[i].delayReqCounter     = 0;
-    ptp->ports[i].delayReqSequenceId  = 0x0000;
+    struct ptp_port *pPort = &ptp->ports[i];
 
-    ptp->ports[i].currentLogSyncInterval = -3;
-    ptp->ports[i].initialLogSyncInterval = -3;
+    pPort->announceCounter     = 0;
+    pPort->announceSequenceId  = 0x0000;
+    pPort->syncCounter         = 0;
+    pPort->syncSequenceId      = 0x0000;
+    pPort->syncSequenceIdValid = 0;
+    pPort->delayReqCounter     = 0;
+    pPort->delayReqSequenceId  = 0x0000;
+
+    pPort->currentLogSyncInterval = -3;
+    pPort->initialLogSyncInterval = -3;
 
     /* TODO: check the ethernet port for link-up here to determine if it should be enabled */
-    ptp->ports[i].portEnabled = TRUE;
-    ptp->ports[i].pttPortEnabled = TRUE;
+    pPort->portEnabled = TRUE;
+    pPort->pttPortEnabled = TRUE;
 
-    ptp->ports[i].currentLogAnnounceInterval = 0;
-    ptp->ports[i].initialLogAnnounceInterval = 0;
+    pPort->currentLogAnnounceInterval = 0;
+    pPort->initialLogAnnounceInterval = 0;
 
-    ptp->ports[i].syncReceiptTimeout = 3;
-    ptp->ports[i].announceReceiptTimeout = 3;
+    pPort->syncReceiptTimeout = 3;
+    pPort->announceReceiptTimeout = 3;
 
     /* peer delay request state machine initialization */
-    ptp->ports[i].mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
-    ptp->ports[i].allowedLostResponses = 3;
-    ptp->ports[i].neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
+    pPort->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
+    pPort->allowedLostResponses = 3;
+    pPort->neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
+
+    /* PortAnnounceInformation state machine initializetion */
+    pPort->portAnnounceInformation_State = PortAnnounceInformation_BEGIN;
   }
 
   /* Initialize the Rx state machine, presuming we are a master; set the nominal
@@ -729,9 +714,6 @@ void init_state_machines(struct ptp_device *ptp) {
    */
   ptp->portRoleSelection_State = PortRoleSelection_INIT_BRIDGE;
   PortRoleSelection_StateMachine(ptp);
-  //ptp->presentRole = PTP_MASTER;
-  //copy_ptp_properties(&ptp->presentMaster, &ptp->properties);
-  //copy_ptp_port_properties(&ptp->presentMasterPort, &ptp->ports[0].portProperties);
   ptp->newMaster              = TRUE;
   ptp->rtcChangesAllowed      = TRUE;
 

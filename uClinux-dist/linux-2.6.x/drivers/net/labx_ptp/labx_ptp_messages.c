@@ -148,12 +148,12 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
 }
 
 /* Initializes the ANNOUNCE message transmit template */
-static void init_announce_template(struct ptp_device *ptp, uint32_t port) {
+static void init_announce_template(struct ptp_device *ptp, uint32_t port, PtpPriorityVector *pv) {
   uint8_t *txBuffer;
   uint32_t wordOffset;
   uint32_t packetWord;
   uint32_t i;
-  PtpSystemIdentity *identity = &ptp->gmPriority->rootSystemIdentity;
+  PtpSystemIdentity *identity = &pv->rootSystemIdentity;
   PtpClockQuality   *quality = &identity->clockQuality;
 
   /* Clear out all dynamic fields and populate static ones with properties from
@@ -361,7 +361,7 @@ void init_tx_templates(struct ptp_device *ptp, uint32_t port) {
    * constant data, this approach is more flexible and illustrates the packet
    * structure better.
    */
-  init_announce_template(ptp, port);
+  init_announce_template(ptp, port, &ptp->systemPriority);
   init_sync_template(ptp, port);
   init_fup_template(ptp, port);
   init_delay_request_template(ptp, port);
@@ -551,6 +551,9 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
   uint8_t *txBuffer;
 
+  /* Update with the current GM info and path vector */
+  init_announce_template(ptp, port, ptp->gmPriority);
+  
   /* Update the sequence ID */
   txBuffer = get_output_buffer(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].announceSequenceId++);
@@ -885,7 +888,7 @@ void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffe
 
 /* Gets the source port identity from a received packet */
 void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
-                        uint8_t * packetBuffer, uint8_t *sourcePortId) {
+                        uint8_t *packetBuffer, uint8_t *sourcePortId) {
   uint8_t *bufferBase;
   uint32_t wordOffset;
   uint32_t packetWord;

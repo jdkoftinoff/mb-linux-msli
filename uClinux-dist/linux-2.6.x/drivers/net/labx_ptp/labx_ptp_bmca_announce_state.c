@@ -27,7 +27,16 @@
 #include "labx_ptp.h"
 #include <xio.h>
 
-#if 1
+// Set this to one for BMCA debug messages
+#define BMCA_DEBUG 1
+
+#if BMCA_DEBUG
+#define BMCA_DBG(fmt, args...) printk(fmt, ##args)
+#else
+#define BMCA_DBG(fmt, args...)
+#endif
+
+#if BMCA_DEBUG
 static void print_priority_vector(const char* str, const PtpPriorityVector* pv) {
   printk("%s: P1 %d, CC %d, CA %d, LV %d, P2 %d, GMID %02X%02X%02X%02X%02X%02X%02X%02X, SR %d, SPID %02X%02X%02X%02X%02X%02X%02X%02X SPN %d, PN %d\n",
     str,
@@ -59,7 +68,7 @@ static BmcaResult bmca_comparison(PtpPriorityVector* presentMaster, PtpPriorityV
 
   int32_t comparison = memcmp(presentMaster, challenger, sizeof(PtpPriorityVector));
 
-#if 1
+#if BMCA_DEBUG
   print_priority_vector("BMCA: CHAL", challenger);
   print_priority_vector("BMCA: PRES", presentMaster);
   printk("BMCA: Result %d\n", comparison);
@@ -81,21 +90,32 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
   PtpClockIdentity pathTrace[PTP_MAX_PATH_TRACE];
   uint32_t         i;
 
-  get_rx_requesting_port_id(ptp, port, ptp->ports[port].rcvdAnnouncePtr, (uint8_t*)&sourcePortId);
+  get_source_port_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdAnnouncePtr, (uint8_t*)&sourcePortId);
+
+  BMCA_DBG("QA: port %d, Source port ID %02X%02X%02X%02X%02X%02X%02X%02X, PN %d\n", port,
+    sourcePortId.clockIdentity[0], sourcePortId.clockIdentity[1], sourcePortId.clockIdentity[2],
+    sourcePortId.clockIdentity[3], sourcePortId.clockIdentity[4], sourcePortId.clockIdentity[5],
+    sourcePortId.clockIdentity[6], sourcePortId.clockIdentity[7], __be16_to_cpu(sourcePortId.portNumber));
 
   if (0 == memcmp(sourcePortId.clockIdentity, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity))) {
     return FALSE;
   }
 
   stepsRemoved = get_rx_announce_steps_removed(ptp, port, ptp->ports[port].rcvdAnnouncePtr);
+
+  BMCA_DBG("QA: SR %d\n", stepsRemoved);
+  
   if (stepsRemoved > 255) {
     return FALSE;
   }
 
   pathTraceLength = get_rx_announce_path_trace(ptp, port, ptp->ports[port].rcvdAnnouncePtr, pathTrace);
 
+  BMCA_DBG("QA: PTL %d\n", pathTraceLength);
+
   for (i=0; i<pathTraceLength; i++) {
     if (0 == memcmp(pathTrace[i], ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity))) {
+      BMCA_DBG("QA: PT includes our clock\n");
       return FALSE;
     }
   }
@@ -114,6 +134,7 @@ void PortAnnounceReceive_StateMachine(struct ptp_device *ptp, uint32_t port)
   struct ptp_port *pPort = &ptp->ports[port];
 
   if (!pPort->portEnabled || !pPort->pttPortEnabled || !pPort->asCapable) {
+    BMCA_DBG("PAR: rejected %d %d %d (port %d)\n", pPort->portEnabled, pPort->pttPortEnabled, pPort->asCapable, port);
     pPort->rcvdMsg = FALSE;
   } else {
     pPort->rcvdMsg = qualifyAnnounce(ptp, port);
@@ -145,17 +166,21 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
 {
   struct ptp_port *pPort = &ptp->ports[port];
 
+  BMCA_DBG("PAI: Set State %d (port index %d)\n", newState, port);
+
   pPort->portAnnounceInformation_State = newState;
 
   switch (newState)
   {
     default:
+    case PortAnnounceInformation_BEGIN:
     case PortAnnounceInformation_DISABLED:
       pPort->rcvdMsg                = FALSE;
       pPort->announceTimeoutCounter = 0;
       pPort->infoIs                 = InfoIs_Disabled;
       pPort->reselect               = TRUE;
       pPort->selected               = FALSE;
+      memset(&pPort->portPriority, 0xFF, sizeof(PtpPriorityVector));
       break;
 
     case PortAnnounceInformation_AGED:
@@ -224,6 +249,10 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
       switch (pPort->portAnnounceInformation_State)
       {
         default:
+        case PortAnnounceInformation_BEGIN:
+          PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_DISABLED);
+          break;
+            
         case PortAnnounceInformation_DISABLED:
           if (pPort->portEnabled && pPort->pttPortEnabled && pPort->asCapable) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
@@ -255,11 +284,22 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
                       ((pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, port)) && ptp->gmPresent)) &&
                      !pPort->updtInfo && !pPort->rcvdMsg) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
+
+            /* Update stats */
+            if (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout) {
+              pPort->stats.announceReceiptTimeoutCount++;
+            }
           }
           break;
 
         case PortAnnounceInformation_RECEIVE:
-          pPort->rcvdInfo = rcvInfo(ptp, port);
+          if (pPort->rcvdInfo == SuperiorMasterInfo) {
+            PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_SUPERIOR_MASTER_PORT);
+          } else if (pPort->rcvdInfo == RepeatedMasterInfo) {
+            PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_REPEATED_MASTER_PORT);
+          } else { /* InferiorMasterInfo or OtherInfo */
+            PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_INFERIOR_MASTER_OR_OTHER_PORT);
+          }
           break;
       }
     }
@@ -382,6 +422,30 @@ static void updtRolesTree(struct ptp_device *ptp)
     ptp->pathTraceLength = 1;
     memcpy(&ptp->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
   }
+
+  if (0 != memcmp(ptp->gmPriority, &ptp->lastGmPriority, sizeof(PtpPriorityVector))) {
+    ptp->newMaster              = TRUE;
+
+    /* Do not permit the RTC to change until userspace permits it, and also
+     * reset the lock state
+     */
+    ptp->acquiring          = PTP_RTC_ACQUIRING;
+    ptp->rtcLockState       = PTP_RTC_UNLOCKED;
+    ptp->rtcLockCounter     = 0;
+    ptp->rtcChangesAllowed  = FALSE;
+    ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+    ptp->rtcLastOffset      = 0;
+#if BMCA_DEBUG
+    {
+      print_priority_vector("PRS: Previous Master ", &ptp->lastGmPriority);
+      print_priority_vector("PRS: Current  Master ", ptp->gmPriority);
+      int i;
+      for (i=0; i<ptp->numPorts; i++) {
+        printk("PRS: Port %d, Role %d\n", i, ptp->ports[i].selectedRole);
+      }
+    }
+#endif
+  }
 }
 
 static void setSelectedTree(struct ptp_device *ptp)
@@ -401,6 +465,8 @@ void PortRoleSelection_StateMachine(struct ptp_device *ptp)
   do
   {
     prevState = ptp->portRoleSelection_State;
+
+    BMCA_DBG("PRS: Current State %d\n", ptp->portRoleSelection_State);
 
     switch (ptp->portRoleSelection_State)
     {

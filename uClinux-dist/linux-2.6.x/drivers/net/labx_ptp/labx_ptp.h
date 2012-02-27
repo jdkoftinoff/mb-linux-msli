@@ -212,8 +212,8 @@
 #define GM_PRIORITY1_OFFSET                  (15 * BYTES_PER_WORD)
 #define CUMULATIVE_SCALED_RATE_OFFSET_OFFSET (17 * BYTES_PER_WORD)
 #define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
-#define STEPS_REMOVED_OFFSET                 (19 * BYTES_PER_WORD)
-#define PATH_TRACE_OFFSET                    (21 * BYTES_PER_WORD)
+#define STEPS_REMOVED_OFFSET                 (18 * BYTES_PER_WORD)
+#define PATH_TRACE_OFFSET                    (20 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
  * the data alignment from the network side to the host interface
@@ -263,7 +263,8 @@ typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSe
 } LinkDelaySyncIntervalSetting_State_t;
 
 /* 802.1AS PortAnnounceInformation state machine states */
-typedef enum { PortAnnounceInformation_DISABLED, PortAnnounceInformation_AGED,
+typedef enum { PortAnnounceInformation_BEGIN,
+  PortAnnounceInformation_DISABLED, PortAnnounceInformation_AGED,
   PortAnnounceInformation_UPDATE, PortAnnounceInformation_SUPERIOR_MASTER_PORT,
   PortAnnounceInformation_REPEATED_MASTER_PORT, PortAnnounceInformation_INFERIOR_MASTER_OR_OTHER_PORT,
   PortAnnounceInformation_CURRENT, PortAnnounceInformation_RECEIVE

@@ -457,8 +457,16 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     break;
 
   case IOC_PTP_GET_AS_GRANDMASTER:
-    if (0 != copy_to_user((void __user*)arg, &ptp->presentMaster, sizeof(PtpProperties))) {
-      return (-EFAULT);
+    {
+      PtpProperties presentMaster;
+      memset(&presentMaster, 0, sizeof(PtpProperties));
+      presentMaster.grandmasterPriority1    = ptp->systemPriority.rootSystemIdentity.priority1;
+      presentMaster.grandmasterClockQuality = ptp->systemPriority.rootSystemIdentity.clockQuality;
+      presentMaster.grandmasterPriority2    = ptp->systemPriority.rootSystemIdentity.priority2;
+      memcpy(presentMaster.grandmasterIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
+      if (0 != copy_to_user((void __user*)arg, &presentMaster, sizeof(PtpProperties))) {
+        return (-EFAULT);
+      }
     }
     break;
 
@@ -624,6 +632,19 @@ static int ptp_probe(const char *name,
   ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
 
   ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
+
+  /* Update the system priority vector to match the new properties */
+  ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
+  ptp->systemPriority.rootSystemIdentity.clockQuality  = ptp->properties.grandmasterClockQuality;
+  ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
+  memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+  ptp->systemPriority.stepsRemoved                     = 0;
+  memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+  ptp->systemPriority.sourcePortIdentity.portNumber    = 0;
+  ptp->systemPriority.portNumber                       = 0;
+
+  ptp->pathTraceLength = 1;
+  memcpy(&ptp->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
 
   for(i=0; i<ptp->numPorts; i++) {
     init_tx_templates(ptp, i);
