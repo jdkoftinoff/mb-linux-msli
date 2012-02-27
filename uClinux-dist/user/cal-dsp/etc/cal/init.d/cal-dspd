@@ -1,5 +1,0 @@
-#! /bin/sh
-
-mkdir -p /var/log
-
-/bin/cal-dspd-loop &
