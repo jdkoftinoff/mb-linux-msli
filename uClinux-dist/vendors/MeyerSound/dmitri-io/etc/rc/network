@@ -3,23 +3,6 @@
 /bin/ifconfig lo 127.0.0.1
 
 mkdir /var/tmp/status
-mkdir /var/tmp/dhcpc
 mkdir /var/lib
-mkdir /var/tmp/avahi
-mkdir /var/tmp/avahi/services
-/bin/cp /etc/avahi.orig/avahi-daemon.conf /etc/avahi.orig/avahi-autoipd.action  /var/tmp/avahi
-#/bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
-/bin/mv /var/boot-tmp/avahi-services/* /var/tmp/avahi/services/ > /dev/null 2>&1
-rmdir /var/boot-tmp/avahi-services >/dev/null 2>&1
-#a=`cat /proc/device-tree/aliases/ethernet0`                                 
-#b=`cat "/proc/device-tree/${a}/name"`                                       
-#if [ "$b" = "xps-ll-temac" ]                                                
-#    then                                                                          
-    /bin/avahi-daemon-loop &
-    /bin/dhcpcd -t0 eth0 &
-    /bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
-    /bin/inetd &
-#else
-#    /bin/ifconfig eth0 0.0.0.0 promisc
-#    touch /var/tmp/status/no-ip-address
-#fi
+/bin/inetd &
+

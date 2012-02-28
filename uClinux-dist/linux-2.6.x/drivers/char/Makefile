@@ -119,6 +119,10 @@ obj-$(CONFIG_I2S_SWITCH)	+= i2s_switch.o
 
 obj-$(CONFIG_I2S_GNET)		+= i2s_gnet.o
 
+obj-$(CONFIG_I2C_SERIAL)	+= i2c_serial_all.o
+
+i2c_serial_all-objs := i2c_serial.o
+
 obj-$(CONFIG_XILINX_MAILBOX)	+= xilinx_mailbox.o
 
 obj-$(CONFIG_MEYER_SMPTE)	+= meyer_smpte.o

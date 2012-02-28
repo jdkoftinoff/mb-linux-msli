@@ -8,6 +8,13 @@ mount -t proc proc /proc
 mount -t sysfs none /sys
 mount -t devpts none /dev/pts
 
+BUTTONS=`tr ' ' '\\n' < /proc/cmdline | grep BUTTONS | cut -d'=' -f2`
+export BUTTONS
+
+#FIXME -- does not work
+#echo "Locking flash:"
+#/bin/mtd-lock -l -d /dev/mtd0
+
 echo "Configuring devices: "
 echo -e "234\n249\n250\n251\n245\n255\n254" > /sys/class/gpio/export
 echo out > /sys/class/gpio/gpio234/direction
@@ -32,12 +39,19 @@ mkdir /var/run
 mkdir /var/tmp
 chmod 1777 /var/tmp
 
-echo "Running system startup scripts."
+if tr ' ' '\\n' < /proc/cmdline |grep "root=/dev/ram0" > /dev/null 2>&1 ; then
+    echo "Restoring persistent settings:"
+    mkdir /var/tmp/persist
+    touch /var/tmp/persist/environment
+    /bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
+  if [ "$BUTTONS" = "0x00" ]; then
+    . /var/tmp/persist/environment
+  fi
+fi
+echo "Running system startup scripts:"
 for i in /etc/rc.d/S*
 do
   if [ -x $i ]; then
     /bin/sh $i
   fi
 done
-
-

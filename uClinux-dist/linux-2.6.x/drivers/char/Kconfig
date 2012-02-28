@@ -1154,5 +1154,12 @@ config MEYER_SMPTE
 	help
 	  Meyer Sound SMPTE interface"
 
+config I2C_SERIAL
+	tristate "Meyer Sound I2C serial interface"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Meyer Sound I2C serial interface
+
+
 endmenu
 

@@ -966,7 +966,7 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
   unsigned char *identity_data_copy,*identity_ptr,
     *identity_key,*identity_key_end,
     *identity_value,identity_fdt_value[6],identity_new_value[6];
-  unsigned identity_new_value_u[6];
+  unsigned identity_new_value_u[6],val;
   const char *identity_fdt_path,*identity_fdt_ptr;
   char *identity_fdt_full_path;
 
@@ -1140,6 +1140,43 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
 					}
 				    }
 				  free(identity_fdt_full_path);
+				}
+			    }
+			}
+		    }
+		  else
+		    {
+		      if(!strcmp(identity_key,"serial"))
+			{
+			  n=sscanf((const char*)identity_value,"%i",&val);
+			  if(n==1)
+			    {
+			      identity_offset=fdt_path_offset(fdt_buf,
+							      "/chosen");
+			      if(identity_offset>=0)
+				{
+				  identity_property=
+				    fdt_get_property(fdt_buf,
+						     identity_offset,
+						     "serial-number",
+						     &identity_fdt_value_len);
+				  if(identity_property
+				     &&identity_fdt_value_len==4)
+				    /* 
+				       serial number is always
+				       4 bytes long
+				    */
+				    {
+				      identity_new_value[0]=(val>>24)&0xff;
+				      identity_new_value[1]=(val>>16)&0xff;
+				      identity_new_value[2]=(val>>8)&0xff;
+				      identity_new_value[3]=val&0xff;
+				      fdt_setprop_inplace(fdt_buf,
+							  identity_offset,
+							  "serial-number",
+							  &identity_new_value,
+							  4);
+				    }
 				}
 			    }
 			}
