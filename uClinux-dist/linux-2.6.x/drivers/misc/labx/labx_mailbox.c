@@ -47,11 +47,6 @@
 struct labx_mailbox* labx_mailboxes[MAX_MAILBOX_DEVICES] = {};
 static uint32_t instanceCount;
 
-/* Number of milliseconds to wait before permitting consecutive events from
- * being propagated up to userspace
- */
-#define EVENT_THROTTLE_MSECS (250)
-
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
 #else
@@ -64,7 +59,7 @@ void disable_mailbox(struct labx_mailbox *mailbox) {
 
   DBG("Disabling the mailbox\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG));
-  controlRegister &= ~MAILBOX_ENABLE;
+  controlRegister &= ~(MAILBOX_ENABLE | MAILBOX_API_ENABLE);
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG), controlRegister);
   DBG("Mailbox disabled\n");
 }
@@ -75,8 +70,9 @@ void enable_mailbox(struct labx_mailbox *mailbox) {
 
   DBG("Enabling the mailbox\n");
   controlRegister = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG));
-  controlRegister |= MAILBOX_ENABLE;
+  controlRegister |= (MAILBOX_ENABLE | MAILBOX_API_ENABLE);
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_CONTROL_REG), controlRegister);
+  DBG("Mailbox enabled\n")
 }
 
 /* Resets the state of the passed instance */
@@ -98,7 +94,6 @@ static irqreturn_t mailbox_interrupt(int irq, void *dev_id) {
   
   maskedFlags &= irqMask;
   XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_FLAGS_REG), maskedFlags);
-  //XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), 0x00000000);
 
   /* Detect the host-to-supervisor message wait_received IRQ */
   if((maskedFlags & SUPRV_IRQ_0) != 0) {
@@ -117,7 +112,6 @@ static irqreturn_t mailbox_interrupt(int irq, void *dev_id) {
 static int netlink_thread(void *data)
 {
   struct labx_mailbox *mailbox = (struct labx_mailbox*)data;
-  uint32_t irqMask;
 
   __set_current_state(TASK_RUNNING);
 
@@ -135,21 +129,6 @@ static int netlink_thread(void *data)
     mailbox->messageReadyFlag = MESSAGE_NOT_READY;
     
     mailbox_event_send_request(mailbox);
-    /* Before returning to waiting, optionally sleep a little bit and then
-     * re-enable the IRQs which trigger us.  There should be no need to disable
-     * interrupts to prevent a race condition since the only part of the ISR
-     * which modifies the IRQ mask is the servicing of the IRQs which are at
-     * present disabled.
-     *
-     * Inserting a delay here, in conjunction with the disabling of the event
-     * IRQ flags by the ISR, effectively limits the rate at which events can
-     * be generated and sent up to user space.  Using an ISR / waitqueue is,
-     * however, more responsive to occasional events than straight-up polling.
-     */
-    msleep(EVENT_THROTTLE_MSECS);
-    irqMask = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG));
-    irqMask |= SUPRV_IRQ_0;
-    XIo_Out32(REGISTER_ADDRESS(mailbox, SUPRV_IRQ_MASK_REG), irqMask);
   } while (!kthread_should_stop());
 
   return 0;

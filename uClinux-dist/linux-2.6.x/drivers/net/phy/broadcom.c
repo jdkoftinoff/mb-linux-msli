@@ -17,45 +17,49 @@
 #include <linux/module.h>
 #include <linux/phy.h>
 #include <linux/broadcom_leds.h>
+#include <linux/err.h>
 
-#define PHY_ID_BCM50610		0x0143bd60
-#define PHY_ID_BCM54610		0x0143bd63
+#define PHY_ID_BCM50610			0x0143bd60
+#define PHY_ID_BCM54610			0x0143bd63
 
-#define MII_BCM54XX_ECR		0x10	/* BCM54xx extended control register */
-#define MII_BCM54XX_ECR_IM	0x1000	/* Interrupt mask */
-#define MII_BCM54XX_ECR_IF	0x0800	/* Interrupt force */
+#define MII_BCM54XX_ECR			0x10	/* BCM54xx extended control register */
+#define MII_BCM54XX_ECR_IM		0x1000	/* Interrupt mask */
+#define MII_BCM54XX_ECR_IF		0x0800	/* Interrupt force */
 
-#define MII_BCM54XX_ESR		0x11	/* BCM54xx extended status register */
-#define MII_BCM54XX_ESR_IS	0x1000	/* Interrupt status */
+#define MII_BCM54XX_ESR			0x11	/* BCM54xx extended status register */
+#define MII_BCM54XX_ESR_IS		0x1000	/* Interrupt status */
 
-#define MII_BCM54XX_EXP_DATA	0x15	/* Expansion register data */
-#define MII_BCM54XX_EXP_SEL	0x17	/* Expansion register select */
-#define MII_BCM54XX_EXP_SEL_SSD	0x0e00	/* Secondary SerDes select */
-#define MII_BCM54XX_EXP_SEL_ER	0x0f00	/* Expansion register select */
+#define MII_BCM54XX_EXP_DATA		0x15	/* Expansion register data */
+#define MII_BCM54XX_EXP_SEL		0x17	/* Expansion register select */
+#define MII_BCM54XX_RCV_ERR_CNTR        0x12    /* Receive error counter */
+#define MII_BCM54XX_RCV_NOT_OK_CNTR	0x14    /* Receiver NOT_OK Counter */
+#define MII_BCM54XX_EXP_SEL_SSD		0x0e00	/* Secondary SerDes select */
+#define MII_BCM54XX_EXP_SEL_ER		0x0f00	/* Expansion register select */
 
-#define MII_BCM54XX_AUX_CTL	0x18	/* Auxiliary control register */
-#define MII_BCM54XX_ISR		0x1a	/* BCM54xx interrupt status register */
-#define MII_BCM54XX_IMR		0x1b	/* BCM54xx interrupt mask register */
-#define MII_BCM54XX_INT_CRCERR	0x0001	/* CRC error */
-#define MII_BCM54XX_INT_LINK	0x0002	/* Link status changed */
-#define MII_BCM54XX_INT_SPEED	0x0004	/* Link speed change */
-#define MII_BCM54XX_INT_DUPLEX	0x0008	/* Duplex mode changed */
-#define MII_BCM54XX_INT_LRS	0x0010	/* Local receiver status changed */
-#define MII_BCM54XX_INT_RRS	0x0020	/* Remote receiver status changed */
-#define MII_BCM54XX_INT_SSERR	0x0040	/* Scrambler synchronization error */
-#define MII_BCM54XX_INT_UHCD	0x0080	/* Unsupported HCD negotiated */
-#define MII_BCM54XX_INT_NHCD	0x0100	/* No HCD */
-#define MII_BCM54XX_INT_NHCDL	0x0200	/* No HCD link */
-#define MII_BCM54XX_INT_ANPR	0x0400	/* Auto-negotiation page received */
-#define MII_BCM54XX_INT_LC	0x0800	/* All counters below 128 */
-#define MII_BCM54XX_INT_HC	0x1000	/* Counter above 32768 */
-#define MII_BCM54XX_INT_MDIX	0x2000	/* MDIX status change */
-#define MII_BCM54XX_INT_PSERR	0x4000	/* Pair swap error */
+#define MII_BCM54XX_AUX_CTL		0x18	/* Auxiliary control register */
+#define MII_BCM54XX_ISR			0x1a	/* BCM54xx interrupt status register */
+#define MII_BCM54XX_IMR			0x1b	/* BCM54xx interrupt mask register */
+#define MII_BCM54XX_TEST_REG1		0x1e    /* BCM54xx test register 1 */
+#define MII_BCM54XX_INT_CRCERR		0x0001	/* CRC error */
+#define MII_BCM54XX_INT_LINK		0x0002	/* Link status changed */
+#define MII_BCM54XX_INT_SPEED		0x0004	/* Link speed change */
+#define MII_BCM54XX_INT_DUPLEX		0x0008	/* Duplex mode changed */
+#define MII_BCM54XX_INT_LRS		0x0010	/* Local receiver status changed */
+#define MII_BCM54XX_INT_RRS		0x0020	/* Remote receiver status changed */
+#define MII_BCM54XX_INT_SSERR		0x0040	/* Scrambler synchronization error */
+#define MII_BCM54XX_INT_UHCD		0x0080	/* Unsupported HCD negotiated */
+#define MII_BCM54XX_INT_NHCD		0x0100	/* No HCD */
+#define MII_BCM54XX_INT_NHCDL		0x0200	/* No HCD link */
+#define MII_BCM54XX_INT_ANPR		0x0400	/* Auto-negotiation page received */
+#define MII_BCM54XX_INT_LC		0x0800	/* All counters below 128 */
+#define MII_BCM54XX_INT_HC		0x1000	/* Counter above 32768 */
+#define MII_BCM54XX_INT_MDIX		0x2000	/* MDIX status change */
+#define MII_BCM54XX_INT_PSERR		0x4000	/* Pair swap error */
 
-#define MII_BCM54XX_SHD		0x1c	/* 0x1c shadow registers */
-#define MII_BCM54XX_SHD_WRITE	0x8000
-#define MII_BCM54XX_SHD_VAL(x)	((x & 0x1f) << 10)
-#define MII_BCM54XX_SHD_DATA(x)	((x & 0x3ff) << 0)
+#define MII_BCM54XX_SHD			0x1c	/* 0x1c shadow registers */
+#define MII_BCM54XX_SHD_WRITE		0x8000
+#define MII_BCM54XX_SHD_VAL(x)		((x & 0x1f) << 10)
+#define MII_BCM54XX_SHD_DATA(x)		((x & 0x3ff) << 0)
 
 // Control for PHY REG 0x00
 
@@ -78,6 +82,9 @@
 #define MII_BCM54XX_AUXCTL_SHDWSEL_MISC 	0x0007
 #define MII_BCM54XX_AUXCTL_SHDWSEL_AUXCTL	0x0000
 #define MII_BCM54XX_AUXCTL_SHDWSEL_PMII         0x0002
+
+// Control for CRC error counter selector
+#define MII_BCM54XX_RECEIVER_NOT_OK		0x8000
 
 /*
  * Broadcom LED source encodings.  These are used in BCM5461, BCM5481,
@@ -173,8 +180,10 @@ MODULE_DESCRIPTION("Broadcom PHY driver");
 MODULE_AUTHOR("Maciej W. Rozycki");
 MODULE_LICENSE("GPL");
 
+#define DRIVER_NAME "broadcom"
 #define MAX_LED_PHYS 8
 static struct phy_device *aPhys[MAX_LED_PHYS];
+static int phy_instances = 0;
 
 /*
  * Indirect register access functions for the 1000BASE-T/100BASE-TX/10BASE-T
@@ -359,11 +368,47 @@ static int bc5481_high_performance_enable;
 module_param(bc5481_high_performance_enable, int, 0);
 MODULE_PARM_DESC(bc5481_high_performance_enable, "Enable Broadcom 5481 high-performance behaviour");
 
+static ssize_t crc_error_counter_show(struct class *c, char *buf)
+{
+	int i;
+	int length = 0;
+
+	for(i = 0; i < phy_instances; i++)
+	{
+		length += snprintf(buf+length, PAGE_SIZE, "phy_addr: %p, eth%d: %d\n", aPhys[i], i, phy_read(aPhys[i], MII_BCM54XX_RCV_NOT_OK_CNTR));
+	}	
+        return (length);
+}
+
+static ssize_t rcv_error_counter_show(struct class *c, char *buf)
+{
+	int i;
+	int length = 0;
+
+	for(i = 0; i < phy_instances; i++)
+	{
+		length += snprintf(buf+length, PAGE_SIZE, "phy_addr: %p, eth%d: %d\n", aPhys[i], i, phy_read(aPhys[i], MII_BCM54XX_RCV_ERR_CNTR));
+	}	
+        return (length);
+}
+
+static struct class_attribute broadcom_class_attrs[] = {
+        __ATTR_RO(crc_error_counter),
+        __ATTR_RO(rcv_error_counter),
+        __ATTR_NULL,
+};
+
+static struct class broadcom_phy_class = {
+	.name = DRIVER_NAME,
+	.owner = THIS_MODULE,
+	.class_attrs = broadcom_class_attrs,
+};
+
 static int bcm54xx_config_init(struct phy_device *phydev)
 {
 	int reg, err, i;
 	u32 phyaddr;
-
+	
 	reg = phy_read(phydev, MII_BCM54XX_ECR);
 	if (reg < 0)
 		return reg;
@@ -430,6 +475,13 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		bc_phy_led_set(i, BC_PHY_LED4, led_default[3]);
 	}
 
+	// Enable full 16-bit CRC counter
+	reg = phy_read(phydev, MII_BCM54XX_TEST_REG1);
+	reg = reg | MII_BCM54XX_RECEIVER_NOT_OK;
+	phy_write(phydev, MII_BCM54XX_TEST_REG1, reg);
+	//printk("CRC error counter enable for %p: 0x%04X\n", aPhys[i], phy_read(phydev, MII_BCM54XX_TEST_REG1));
+
+	phy_instances++;
 	return 0;
 }
 
@@ -1004,7 +1056,8 @@ static int __init broadcom_init(void)
 	ret = phy_driver_register(&bcm57780_driver);
 	if (ret)
 		goto out_57780;
-	return ret;
+	class_register(&broadcom_phy_class);
+	return (ret);
 
 out_57780:
 	phy_driver_unregister(&bcm54610_driver);
@@ -1023,7 +1076,8 @@ out_5461:
 out_5421:
 	phy_driver_unregister(&bcm5411_driver);
 out_5411:
-	return ret;
+	class_register(&broadcom_phy_class);
+	return (ret);
 }
 
 static void __exit broadcom_exit(void)
@@ -1037,6 +1091,7 @@ static void __exit broadcom_exit(void)
 	phy_driver_unregister(&bcm5461_driver);
 	phy_driver_unregister(&bcm5421_driver);
 	phy_driver_unregister(&bcm5411_driver);
+	class_unregister(&broadcom_phy_class);
 }
 
 module_init(broadcom_init);

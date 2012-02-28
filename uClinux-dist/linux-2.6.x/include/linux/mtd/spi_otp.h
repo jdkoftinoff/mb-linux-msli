@@ -1,0 +1,39 @@
+/* Lab X SPI OTP Support */
+
+typedef enum otp_addr {
+  REGISTER1 = 0,
+  REGISTER2,
+  REGISTER3,
+  REGISTER4,
+  REGISTER5,
+  REGISTER6,
+  REGISTER7,
+  REGISTER8,
+  REGISTER9,
+  REGISTER10,
+  REGISTER11,
+  REGISTER12,
+  REGISTER13,
+  REGISTER14,
+  REGISTER15,
+  REGISTER16,
+  REGISTER17,
+  REGISTER18,
+  REGISTER19,
+  REGISTER20,
+  REGISTER21,
+  REGISTER22,
+  REGISTER23,
+  REGISTER24,
+  REGISTER25,
+  REGISTER26,
+  REGISTER27,
+  REGISTER28,
+  REGISTER29,
+  REGISTER30,
+  REGISTER31
+} otp_register;
+
+typedef uint8_t securityword_t[16];
+
+int read_otp_reg(otp_register addr, securityword_t *otp);

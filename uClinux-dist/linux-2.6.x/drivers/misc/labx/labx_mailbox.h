@@ -47,7 +47,10 @@
 #define SUPRV_CONTROL_REG        (0x000)
 #  define MAILBOX_DISABLE      	  (0x00)
 #  define MAILBOX_ENABLE      	  (0x01)
+#  define MAILBOX_API_ENABLE      (0x02)
+
 #  define ENABLE                  (0x01)
+#  define DISABLE                 (0x00)
 
 #define SUPRV_IRQ_MASK_REG   	      (0x001)
 #define SUPRV_IRQ_FLAGS_REG    	      (0x002)

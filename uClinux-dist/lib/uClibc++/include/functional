@@ -295,6 +295,20 @@ namespace std{
 		return pointer_to_binary_function<Arg1,Arg2,Result>(f);
 	}
 
+        template <class _Tp> struct _UCXXEXPORT _Identity
+                : public unary_function<_Tp,_Tp>
+        {
+                _Tp& operator()(_Tp& __x) const { return __x; }
+                const _Tp& operator()(const _Tp& __x) const { return __x; }
+        };
+
+        template <class _Pair> struct _UCXXEXPORT _Select1st
+                : public unary_function<_Pair, typename _Pair::first_type>
+        {
+                typename _Pair::first_type& operator()(_Pair& __x) const { return __x.first; }
+                const typename _Pair::first_type& operator()(const _Pair& __x) const { return __x.first; }
+        };
+
 	
 	template <class S, class T> class _UCXXEXPORT mem_fun_t
 		: public unary_function<T*, S>
