@@ -1,6 +1,8 @@
 #!/bin/sh
 
 /bin/ifconfig lo 127.0.0.1
+/bin/ifconfig eth0 0.0.0.0
+/bin/ifconfig eth1 0.0.0.0
 
 mkdir /var/tmp/status
 mkdir /var/lib
