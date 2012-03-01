@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_N_ROOT_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* find the n'th root of an integer 
  *
@@ -39,11 +40,11 @@ int mp_n_root (mp_int * a, mp_digit b, mp_int * c)
   }
 
   if ((res = mp_init (&t2)) != MP_OKAY) {
-    goto __T1;
+    goto LBL_T1;
   }
 
   if ((res = mp_init (&t3)) != MP_OKAY) {
-    goto __T2;
+    goto LBL_T2;
   }
 
   /* if a is negative fudge the sign but keep track */
@@ -56,52 +57,52 @@ int mp_n_root (mp_int * a, mp_digit b, mp_int * c)
   do {
     /* t1 = t2 */
     if ((res = mp_copy (&t2, &t1)) != MP_OKAY) {
-      goto __T3;
+      goto LBL_T3;
     }
 
     /* t2 = t1 - ((t1**b - a) / (b * t1**(b-1))) */
     
     /* t3 = t1**(b-1) */
     if ((res = mp_expt_d (&t1, b - 1, &t3)) != MP_OKAY) {   
-      goto __T3;
+      goto LBL_T3;
     }
 
     /* numerator */
     /* t2 = t1**b */
     if ((res = mp_mul (&t3, &t1, &t2)) != MP_OKAY) {    
-      goto __T3;
+      goto LBL_T3;
     }
 
     /* t2 = t1**b - a */
     if ((res = mp_sub (&t2, a, &t2)) != MP_OKAY) {  
-      goto __T3;
+      goto LBL_T3;
     }
 
     /* denominator */
     /* t3 = t1**(b-1) * b  */
     if ((res = mp_mul_d (&t3, b, &t3)) != MP_OKAY) {    
-      goto __T3;
+      goto LBL_T3;
     }
 
     /* t3 = (t1**b - a)/(b * t1**(b-1)) */
     if ((res = mp_div (&t2, &t3, &t3, NULL)) != MP_OKAY) {  
-      goto __T3;
+      goto LBL_T3;
     }
 
     if ((res = mp_sub (&t1, &t3, &t2)) != MP_OKAY) {
-      goto __T3;
+      goto LBL_T3;
     }
   }  while (mp_cmp (&t1, &t2) != MP_EQ);
 
   /* result can be off by a few so check */
   for (;;) {
     if ((res = mp_expt_d (&t1, b, &t2)) != MP_OKAY) {
-      goto __T3;
+      goto LBL_T3;
     }
 
     if (mp_cmp (&t2, a) == MP_GT) {
       if ((res = mp_sub_d (&t1, 1, &t1)) != MP_OKAY) {
-         goto __T3;
+         goto LBL_T3;
       }
     } else {
       break;
@@ -119,8 +120,13 @@ int mp_n_root (mp_int * a, mp_digit b, mp_int * c)
 
   res = MP_OKAY;
 
-__T3:mp_clear (&t3);
-__T2:mp_clear (&t2);
-__T1:mp_clear (&t1);
+LBL_T3:mp_clear (&t3);
+LBL_T2:mp_clear (&t2);
+LBL_T1:mp_clear (&t1);
   return res;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_n_root.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

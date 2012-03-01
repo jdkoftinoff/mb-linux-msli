@@ -7,7 +7,7 @@
 /* ie: ./encrypt blowfish story.txt story.ct */
 /* ./encrypt -d blowfish story.ct story.pt */
 
-#include <mycrypt.h>
+#include <tomcrypt.h>
 
 int errno;
 
@@ -68,6 +68,12 @@ void register_algs(void)
 #endif
 #ifdef SKIPJACK
   register_cipher (&skipjack_desc);
+#endif
+#ifdef KHAZAD
+  register_cipher (&khazad_desc);
+#endif
+#ifdef ANUBIS
+  register_cipher (&anubis_desc);
 #endif
 
    if (register_hash(&sha256_desc) == -1) {
@@ -164,7 +170,7 @@ int main(int argc, char *argv[])
          exit(-1);
       }
    
-      if ((errno = ctr_start(cipher_idx,IV,key,ks,0,&ctr)) != CRYPT_OK) {
+      if ((errno = ctr_start(cipher_idx,IV,key,ks,0,CTR_COUNTER_LITTLE_ENDIAN,&ctr)) != CRYPT_OK) {
          printf("ctr_start error: %s\n",error_to_string(errno));
          exit(-1);
       }
@@ -206,7 +212,7 @@ int main(int argc, char *argv[])
          exit(-1);
       }
 
-      if ((errno = ctr_start(cipher_idx,IV,key,ks,0,&ctr)) != CRYPT_OK) {
+      if ((errno = ctr_start(cipher_idx,IV,key,ks,0,CTR_COUNTER_LITTLE_ENDIAN,&ctr)) != CRYPT_OK) {
          printf("ctr_start error: %s\n",error_to_string(errno));
          exit(-1);
       }
@@ -229,3 +235,7 @@ int main(int argc, char *argv[])
    }
    return 0;
 }
+
+/* $Source: /cvs/libtom/libtomcrypt/demos/encrypt.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2005/08/04 20:43:50 $ */

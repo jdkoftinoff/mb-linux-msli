@@ -27,6 +27,15 @@
 
 #include "loginrec.h"
 #include "channel.h"
+#include "listener.h"
+
+struct exitinfo {
+
+	int exitpid; /* -1 if not exited */
+	int exitstatus;
+	int exitsignal;
+	int exitcore;
+};
 
 struct ChanSess {
 
@@ -38,16 +47,16 @@ struct ChanSess {
 	int slave;
 	unsigned char * tty;
 	unsigned char * term;
-	unsigned int termw, termh, termc, termr; /* width, height, col, rows */
 
 	/* exit details */
-	int exited;
-	int exitstatus;
-	int exitsignal;
-	unsigned char exitcore;
+	struct exitinfo exit;
+
+	/* Used to set $SSH_CONNECTION in the child session. 
+	Is only set temporarily before forking */
+	char *connection_string;
 	
 #ifndef DISABLE_X11FWD
-	int x11fd; /* set to -1 to indicate forwarding not established */
+	struct Listener * x11listener;
 	int x11port;
 	char * x11authprot;
 	char * x11authcookie;
@@ -55,10 +64,14 @@ struct ChanSess {
 	unsigned char x11singleconn;
 #endif
 
-#ifndef DISABLE_AGENTFWD
-	int agentfd;
+#ifdef ENABLE_SVR_AGENTFWD
+	struct Listener * agentlistener;
 	char * agentfile;
 	char * agentdir;
+#endif
+
+#ifdef ENABLE_SVR_PUBKEY_OPTIONS
+	char *original_command;
 #endif
 };
 
@@ -68,16 +81,24 @@ struct ChildPid {
 };
 
 
-void newchansess(struct Channel * channel);
-void chansessionrequest(struct Channel * channel);
-void closechansess(struct Channel * channel);
-void chansessinitialise();
-void send_msg_chansess_exitstatus(struct Channel * channel,
-		struct ChanSess * chansess);
-void send_msg_chansess_exitsignal(struct Channel * channel,
-		struct ChanSess * chansess);
 void addnewvar(const char* param, const char* var);
 
+void cli_send_chansess_request();
+void cli_tty_cleanup();
+void cli_chansess_winchange();
+#ifdef ENABLE_CLI_NETCAT
+void cli_send_netcat_request();
+#endif
+void cli_start_send_channel_request(struct Channel *channel, unsigned char *type);
 
+void svr_chansessinitialise();
+extern const struct ChanType svrchansess;
+
+struct SigMap {
+	int signal;
+	char* name;
+};
+
+extern const struct SigMap signames[];
 
 #endif /* _CHANSESSION_H_ */

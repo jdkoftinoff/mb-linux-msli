@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_RAND_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* makes a pseudo-random int of a given size */
 int
@@ -28,14 +29,14 @@ mp_rand (mp_int * a, int digits)
 
   /* first place a random non-zero digit */
   do {
-    d = ((mp_digit) abs (rand ()));
+    d = ((mp_digit) abs (rand ())) & MP_MASK;
   } while (d == 0);
 
   if ((res = mp_add_d (a, d, a)) != MP_OKAY) {
     return res;
   }
 
-  while (digits-- > 0) {
+  while (--digits > 0) {
     if ((res = mp_lshd (a, 1)) != MP_OKAY) {
       return res;
     }
@@ -47,3 +48,8 @@ mp_rand (mp_int * a, int digits)
 
   return MP_OKAY;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_rand.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

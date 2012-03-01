@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_TOOM_MUL_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,11 +12,16 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
-/* multiplication using the Toom-Cook 3-way algorithm */
+/* multiplication using the Toom-Cook 3-way algorithm 
+ *
+ * Much more complicated than Karatsuba but has a lower 
+ * asymptotic running time of O(N**1.464).  This algorithm is 
+ * only particularly useful on VERY large inputs 
+ * (we're talking 1000s of digits here...).
+*/
 int mp_toom_mul(mp_int *a, mp_int *b, mp_int *c)
 {
     mp_int w0, w1, w2, w3, w4, tmp1, tmp2, a0, a1, a2, b0, b1, b2;
@@ -270,3 +277,8 @@ ERR:
      return res;
 }     
      
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_toom_mul.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

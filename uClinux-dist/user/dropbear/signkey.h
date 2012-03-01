@@ -29,19 +29,35 @@
 #include "dss.h"
 #include "rsa.h"
 
+
+/* Sources for signing keys */
+typedef enum {
+	SIGNKEY_SOURCE_RAW_FILE,
+	SIGNKEY_SOURCE_AGENT,
+	SIGNKEY_SOURCE_INVALID,	
+} signkey_source;
+
 struct SIGN_key {
 
+	int type; /* The type of key (dss or rsa) */
+	signkey_source source;
+	char *filename;
+	/* the buffer? for encrypted keys, so we can later get
+	 * the private key portion */
+
 #ifdef DROPBEAR_DSS
-	dss_key * dsskey;
+	dropbear_dss_key * dsskey;
 #endif
 #ifdef DROPBEAR_RSA
-	rsa_key * rsakey;
+	dropbear_rsa_key * rsakey;
 #endif
 };
 
 typedef struct SIGN_key sign_key;
 
 sign_key * new_sign_key();
+const char* signkey_name_from_type(int type, int *namelen);
+int signkey_type_from_name(const char* name, int namelen);
 int buf_get_pub_key(buffer *buf, sign_key *key, int *type);
 int buf_get_priv_key(buffer* buf, sign_key *key, int *type);
 void buf_put_pub_key(buffer* buf, sign_key *key, int type);
@@ -52,7 +68,10 @@ void buf_put_sign(buffer* buf, sign_key *key, int type,
 #ifdef DROPBEAR_SIGNKEY_VERIFY
 int buf_verify(buffer * buf, sign_key *key, const unsigned char *data,
 		unsigned int len);
-char * sign_key_fingerprint(sign_key *key, int type);
+char * sign_key_fingerprint(unsigned char* keyblob, unsigned int keybloblen);
 #endif
+int cmp_base64_key(const unsigned char* keyblob, unsigned int keybloblen, 
+					const unsigned char* algoname, unsigned int algolen, 
+					buffer * line, char ** fingerprint);
 
 #endif /* _SIGNKEY_H_ */

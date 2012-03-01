@@ -25,20 +25,22 @@
 #include "includes.h"
 #include "buffer.h"
 #include "dbutil.h"
+#include "bignum.h"
 
-int donerandinit = 0;
+static int donerandinit = 0;
 
 /* this is used to generate unique output from the same hashpool */
-unsigned int counter = 0;
-#define MAX_COUNTER 1000000/* the max value for the counter, so it won't loop */
+static uint32_t counter = 0;
+/* the max value for the counter, so it won't integer overflow */
+#define MAX_COUNTER 1<<30 
 
-unsigned char hashpool[SHA1_HASH_SIZE];
+static unsigned char hashpool[SHA1_HASH_SIZE];
 
 #define INIT_SEED_SIZE 32 /* 256 bits */
 
 static void readrand(unsigned char* buf, unsigned int buflen);
 
-/* The basic setup is we read some data from DEV_URANDOM or PRNGD and hash it
+/* The basic setup is we read some data from /dev/(u)random or prngd and hash it
  * into hashpool. To read data, we hash together current hashpool contents,
  * and a counter. We feed more data in by hashing the current pool and new
  * data into the pool.
@@ -50,54 +52,64 @@ static void readrand(unsigned char* buf, unsigned int buflen);
 
 static void readrand(unsigned char* buf, unsigned int buflen) {
 
+	static int already_blocked = 0;
 	int readfd;
 	unsigned int readpos;
 	int readlen;
-#ifdef DROPBEAR_EGD
+#ifdef DROPBEAR_PRNGD_SOCKET
 	struct sockaddr_un egdsock;
 	char egdcmd[2];
 #endif
 
-#ifdef DROPBEAR_DEV_URANDOM
-	readfd = open(DEV_URANDOM, O_RDONLY);
+#ifdef DROPBEAR_RANDOM_DEV
+	readfd = open(DROPBEAR_RANDOM_DEV, O_RDONLY);
 	if (readfd < 0) {
-		dropbear_exit("couldn't open random device");
+		dropbear_exit("Couldn't open random device");
 	}
 #endif
 
-#ifdef DROPBEAR_EGD
-	memset((void*)&egdsock, 0x0, sizeof(egdsock));
-	egdsock.sun_family = AF_UNIX;
-	strlcpy(egdsock.sun_path, DROPBEAR_EGD_SOCKET,
-			sizeof(egdsock.sun_path));
+#ifdef DROPBEAR_PRNGD_SOCKET
+	readfd = connect_unix(DROPBEAR_PRNGD_SOCKET);
 
-	readfd = socket(PF_UNIX, SOCK_STREAM, 0);
 	if (readfd < 0) {
-		dropbear_exit("couldn't open random device");
-	}
-	/* todo - try various common locations */
-	if (connect(readfd, (struct sockaddr*)&egdsock, 
-			sizeof(struct sockaddr_un)) < 0) {
-		dropbear_exit("couldn't open random device");
+		dropbear_exit("Couldn't open random device");
 	}
 
 	if (buflen > 255)
-		dropbear_exit("can't request more than 255 bytes from egd");
+		dropbear_exit("Can't request more than 255 bytes from egd");
 	egdcmd[0] = 0x02;	/* blocking read */
 	egdcmd[1] = (unsigned char)buflen;
 	if (write(readfd, egdcmd, 2) < 0)
-		dropbear_exit("can't send command to egd");
+		dropbear_exit("Can't send command to egd");
 #endif
 
 	/* read the actual random data */
 	readpos = 0;
 	do {
+		if (!already_blocked)
+		{
+			int ret;
+			struct timeval timeout;
+			fd_set read_fds;
+
+			timeout.tv_sec = 2; /* two seconds should be enough */
+			timeout.tv_usec = 0;
+
+			FD_ZERO(&read_fds);
+			FD_SET(readfd, &read_fds);
+			ret = select(readfd + 1, &read_fds, NULL, NULL, &timeout);
+			if (ret == 0)
+			{
+				dropbear_log(LOG_INFO, "Warning: Reading the random source seems to have blocked.\nIf you experience problems, you probably need to find a better entropy source.");
+				already_blocked = 1;
+			}
+		}
 		readlen = read(readfd, &buf[readpos], buflen - readpos);
 		if (readlen <= 0) {
 			if (readlen < 0 && errno == EINTR) {
 				continue;
 			}
-			dropbear_exit("error reading random source");
+			dropbear_exit("Error reading random source");
 		}
 		readpos += readlen;
 	} while (readpos < buflen);
@@ -105,14 +117,15 @@ static void readrand(unsigned char* buf, unsigned int buflen) {
 	close (readfd);
 }
 
-/* initialise the prng from /dev/urandom or prngd */
+/* initialise the prng from /dev/(u)random or prngd */
 void seedrandom() {
 		
 	unsigned char readbuf[INIT_SEED_SIZE];
 
 	hash_state hs;
 
-	/* initialise so compilers will be happy about hashing it */
+	/* initialise so that things won't warn about
+	 * hashing an undefined buffer */
 	if (!donerandinit) {
 		m_burn(hashpool, sizeof(hashpool));
 	}
@@ -128,6 +141,29 @@ void seedrandom() {
 
 	counter = 0;
 	donerandinit = 1;
+}
+
+/* hash the current random pool with some unique identifiers
+ * for this process and point-in-time. this is used to separate
+ * the random pools for fork()ed processes. */
+void reseedrandom() {
+
+	pid_t pid;
+	hash_state hs;
+	struct timeval tv;
+
+	if (!donerandinit) {
+		dropbear_exit("seedrandom not done");
+	}
+
+	pid = getpid();
+	gettimeofday(&tv, NULL);
+
+	sha1_init(&hs);
+	sha1_process(&hs, (void*)hashpool, sizeof(hashpool));
+	sha1_process(&hs, (void*)&pid, sizeof(pid));
+	sha1_process(&hs, (void*)&tv, sizeof(tv));
+	sha1_done(&hs, hashpool);
 }
 
 /* return len bytes of pseudo-random data */
@@ -160,20 +196,36 @@ void genrandom(unsigned char* buf, unsigned int len) {
 	m_burn(hash, sizeof(hash));
 }
 
-/* Adds entropy to the PRNG state. As long as the hash is strong, then we
- * don't need to worry about entropy being added "diluting" the current
- * state - it should only make it stronger. */
-void addrandom(unsigned char* buf, unsigned int len) {
+/* Generates a random mp_int. 
+ * max is a *mp_int specifying an upper bound.
+ * rand must be an initialised *mp_int for the result.
+ * the result rand satisfies:  0 < rand < max 
+ * */
+void gen_random_mpint(mp_int *max, mp_int *rand) {
 
-	hash_state hs;
-	if (!donerandinit) {
-		dropbear_exit("seedrandom not done");
+	unsigned char *randbuf = NULL;
+	unsigned int len = 0;
+	const unsigned char masks[] = {0xff, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f};
+
+	const int size_bits = mp_count_bits(max);
+
+	len = size_bits / 8;
+	if ((size_bits % 8) != 0) {
+		len += 1;
 	}
 
-	sha1_init(&hs);
-	sha1_process(&hs, (void*)buf, len);
-	sha1_process(&hs, (void*)hashpool, sizeof(hashpool));
-	sha1_done(&hs, hashpool);
-	counter = 0;
+	randbuf = (unsigned char*)m_malloc(len);
+	do {
+		genrandom(randbuf, len);
+		/* Mask out the unrequired bits - mp_read_unsigned_bin expects
+		 * MSB first.*/
+		randbuf[0] &= masks[size_bits % 8];
 
+		bytes_to_mp(rand, randbuf, len);
+
+		/* keep regenerating until we get one satisfying
+		 * 0 < rand < max    */
+	} while (mp_cmp(rand, max) != MP_LT);
+	m_burn(randbuf, len);
+	m_free(randbuf);
 }

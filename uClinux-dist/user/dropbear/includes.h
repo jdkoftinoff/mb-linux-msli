@@ -38,13 +38,13 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <limits.h>
-#include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -56,8 +56,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <dirent.h>
-
-#include <arpa/inet.h>
+#include <time.h>
 
 #ifdef HAVE_UTMP_H
 #include <utmp.h>
@@ -78,6 +77,16 @@
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
+
+#include <arpa/inet.h>
+
+/* netbsd 1.6 needs this to be included before netinet/ip.h for some
+ * undocumented reason */
+#ifdef HAVE_NETINET_IN_SYSTM_H
+#include <netinet/in_systm.h>
+#endif
+
+#include <netinet/ip.h>
 
 #ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
@@ -111,10 +120,17 @@
 #include <libgen.h>
 #endif
 
-#include "libtomcrypt/mycrypt_custom.h"
+#ifdef BUNDLED_LIBTOM
+#include "libtomcrypt/src/headers/tomcrypt.h"
 #include "libtommath/tommath.h"
+#else
+#include <tomcrypt.h>
+#include <tommath.h>
+#endif
+
 
 #include "compat.h"
+#include "fake-rfc2553.h"
 
 #ifndef HAVE_UINT16_T
 #ifndef HAVE_U_INT16_T
@@ -125,6 +141,16 @@ typedef u_int16_t uint16_t;
 
 #ifndef LOG_AUTHPRIV
 #define LOG_AUTHPRIV LOG_AUTH
+#endif
+
+/* so we can avoid warnings about unused params (ie in signal handlers etc) */
+#ifdef UNUSED 
+#elif defined(__GNUC__) 
+# define UNUSED(x) UNUSED_ ## x __attribute__((unused)) 
+#elif defined(__LCLINT__) 
+# define UNUSED(x) /*@unused@*/ x 
+#else 
+# define UNUSED(x) x 
 #endif
 
 #endif /* _INCLUDES_H_ */

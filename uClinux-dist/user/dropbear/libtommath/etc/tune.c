@@ -1,6 +1,6 @@
 /* Tune the Karatsuba parameters
  *
- * Tom St Denis, tomstdenis@iahu.ca
+ * Tom St Denis, tomstdenis@gmail.com
  */
 #include <tommath.h>
 #include <time.h>
@@ -8,169 +8,135 @@
 /* how many times todo each size mult.  Depends on your computer.  For slow computers
  * this can be low like 5 or 10.  For fast [re: Athlon] should be 25 - 50 or so 
  */
-#define TIMES 50
+#define TIMES (1UL<<14UL)
+
+/* RDTSC from Scott Duplichan */
+static ulong64 TIMFUNC (void)
+   {
+   #if defined __GNUC__
+      #if defined(__i386__) || defined(__x86_64__)
+         unsigned long long a;
+         __asm__ __volatile__ ("rdtsc\nmovl %%eax,%0\nmovl %%edx,4+%0\n"::"m"(a):"%eax","%edx");
+         return a;
+      #else /* gcc-IA64 version */
+         unsigned long result;
+         __asm__ __volatile__("mov %0=ar.itc" : "=r"(result) :: "memory");
+         while (__builtin_expect ((int) result == -1, 0))
+         __asm__ __volatile__("mov %0=ar.itc" : "=r"(result) :: "memory");
+         return result;
+      #endif
+
+   // Microsoft and Intel Windows compilers
+   #elif defined _M_IX86
+     __asm rdtsc
+   #elif defined _M_AMD64
+     return __rdtsc ();
+   #elif defined _M_IA64
+     #if defined __INTEL_COMPILER
+       #include <ia64intrin.h>
+     #endif
+      return __getReg (3116);
+   #else
+     #error need rdtsc function for this build
+   #endif
+   }
 
 
 #ifndef X86_TIMER
 
 /* generic ISO C timer */
-ulong64 __T;
-void t_start(void) { __T = clock(); }
-ulong64 t_read(void) { return clock() - __T; }
+ulong64 LBL_T;
+void t_start(void) { LBL_T = TIMFUNC(); }
+ulong64 t_read(void) { return TIMFUNC() - LBL_T; }
 
 #else
 extern void t_start(void);
 extern ulong64 t_read(void);
 #endif
 
-ulong64
-time_mult (int max)
+ulong64 time_mult(int size, int s)
 {
-  int     x, y;
+  unsigned long     x;
   mp_int  a, b, c;
+  ulong64 t1;
 
   mp_init (&a);
   mp_init (&b);
   mp_init (&c);
 
-  t_start();
-  for (x = 32; x <= max; x += 4) {
-    mp_rand (&a, x);
-    mp_rand (&b, x);
-    for (y = 0; y < TIMES; y++) {
-      mp_mul (&a, &b, &c);
-    }
+  mp_rand (&a, size);
+  mp_rand (&b, size);
+
+  if (s == 1) { 
+      KARATSUBA_MUL_CUTOFF = size;
+  } else {
+      KARATSUBA_MUL_CUTOFF = 100000;
   }
+
+  t_start();
+  for (x = 0; x < TIMES; x++) {
+      mp_mul(&a,&b,&c);
+  }
+  t1 = t_read();
   mp_clear (&a);
   mp_clear (&b);
   mp_clear (&c);
-  return t_read();
+  return t1;
 }
 
-ulong64
-time_sqr (int max)
+ulong64 time_sqr(int size, int s)
 {
-  int     x, y;
+  unsigned long     x;
   mp_int  a, b;
+  ulong64 t1;
 
   mp_init (&a);
   mp_init (&b);
 
-  t_start();
-  for (x = 32; x <= max; x += 4) {
-    mp_rand (&a, x);
-    for (y = 0; y < TIMES; y++) {
-      mp_sqr (&a, &b);
-    }
+  mp_rand (&a, size);
+
+  if (s == 1) { 
+      KARATSUBA_SQR_CUTOFF = size;
+  } else {
+      KARATSUBA_SQR_CUTOFF = 100000;
   }
+
+  t_start();
+  for (x = 0; x < TIMES; x++) {
+      mp_sqr(&a,&b);
+  }
+  t1 = t_read();
   mp_clear (&a);
   mp_clear (&b);
-  return t_read();
+  return t1;
 }
 
 int
 main (void)
 {
-  int     best_kmult, best_tmult, best_ksquare, best_tsquare, counter;
-  ulong64 best, ti;
-  FILE   *log;
+  ulong64 t1, t2;
+  int x, y;
 
-  best_kmult = best_ksquare = best_tmult = best_tsquare = 0;
-  /* tune multiplication first */
-  
-  /* effectively turn TOOM off */
-  TOOM_SQR_CUTOFF = TOOM_MUL_CUTOFF = 100000;
-    
-  log = fopen ("mult.log", "w");
-  best = -1;
-  counter = 16;
-  for (KARATSUBA_MUL_CUTOFF = 8; KARATSUBA_MUL_CUTOFF <= 200; KARATSUBA_MUL_CUTOFF++) {
-    ti = time_mult (300);
-    printf ("%4d : %9llu            \r", KARATSUBA_MUL_CUTOFF, ti);
-    fprintf (log, "%d, %llu\n", KARATSUBA_MUL_CUTOFF, ti);
-    fflush (stdout);
-    if (ti < best) {
-      printf ("New best: %llu, %d         \r", ti, KARATSUBA_MUL_CUTOFF);
-      best = ti;
-      best_kmult = KARATSUBA_MUL_CUTOFF;
-      counter = 16;
-    } else if (--counter == 0) {
-       printf("No better found in 16 trials.\n");
-       break;
-    }
+  for (x = 8; ; x += 2) { 
+     t1 = time_mult(x, 0);
+     t2 = time_mult(x, 1);
+     printf("%d: %9llu %9llu, %9llu\n", x, t1, t2, t2 - t1);
+     if (t2 < t1) break;
   }
-  fclose (log);
-  printf("Karatsuba Multiplier Cutoff (KARATSUBA_MUL_CUTOFF) == %d\n", best_kmult);
-  
-  /* tune squaring */
-  log = fopen ("sqr.log", "w");
-  best = -1;
-  counter = 16;
-  for (KARATSUBA_SQR_CUTOFF = 8; KARATSUBA_SQR_CUTOFF <= 200; KARATSUBA_SQR_CUTOFF++) {
-    ti = time_sqr (300);
-    printf ("%4d : %9llu             \r", KARATSUBA_SQR_CUTOFF, ti);
-    fprintf (log, "%d, %llu\n", KARATSUBA_SQR_CUTOFF, ti);
-    fflush (stdout);
-    if (ti < best) {
-      printf ("New best: %llu, %d         \r", ti, KARATSUBA_SQR_CUTOFF);
-      best = ti;
-      best_ksquare = KARATSUBA_SQR_CUTOFF;
-      counter = 16;
-    } else if (--counter == 0) {
-       printf("No better found in 16 trials.\n");
-       break;
-    }
-  }
-  fclose (log);
-  printf("Karatsuba Squaring Cutoff (KARATSUBA_SQR_CUTOFF) == %d\n", best_ksquare);
-  
-  KARATSUBA_MUL_CUTOFF = best_kmult;
-  KARATSUBA_SQR_CUTOFF = best_ksquare;
-    
-  /* tune TOOM mult */
-  counter = 16;
-  log = fopen ("tmult.log", "w");
-  best = -1;
-  for (TOOM_MUL_CUTOFF = best_kmult*5; TOOM_MUL_CUTOFF <= 800; TOOM_MUL_CUTOFF++) {
-    ti = time_mult (1200);
-    printf ("%4d : %9llu          \r", TOOM_MUL_CUTOFF, ti);
-    fprintf (log, "%d, %llu\n", TOOM_MUL_CUTOFF, ti);
-    fflush (stdout);
-    if (ti < best) {
-      printf ("New best: %llu, %d         \r", ti, TOOM_MUL_CUTOFF);
-      best = ti;
-      best_tmult = TOOM_MUL_CUTOFF;
-      counter = 16;
-    } else if (--counter == 0) {
-       printf("No better found in 16 trials.\n");
-       break;
-    }
-  }
-  fclose (log);   
-  printf("Toom-Cook Multiplier Cutoff (TOOM_MUL_CUTOFF) == %d\n", best_tmult);
-  
-  /* tune TOOM sqr */
-  log = fopen ("tsqr.log", "w");
-  best = -1;
-  counter = 16;
-  for (TOOM_SQR_CUTOFF = best_ksquare*3; TOOM_SQR_CUTOFF <= 800; TOOM_SQR_CUTOFF++) {
-    ti = time_sqr (1200);
-    printf ("%4d : %9llu           \r", TOOM_SQR_CUTOFF, ti);
-    fprintf (log, "%d, %llu\n", TOOM_SQR_CUTOFF, ti);
-    fflush (stdout);
-    if (ti < best) {
-      printf ("New best: %llu, %d         \r", ti, TOOM_SQR_CUTOFF);
-      best = ti;
-      best_tsquare = TOOM_SQR_CUTOFF;
-      counter = 16;
-    } else if (--counter == 0) {
-       printf("No better found in 16 trials.\n");
-       break;
-    }
-  }
-  fclose (log);   
-  printf("Toom-Cook Squaring Cutoff (TOOM_SQR_CUTOFF) == %d\n", best_tsquare);
+  y = x;
 
+  for (x = 8; ; x += 2) { 
+     t1 = time_sqr(x, 0);
+     t2 = time_sqr(x, 1);
+     printf("%d: %9llu %9llu, %9llu\n", x, t1, t2, t2 - t1);
+     if (t2 < t1) break;
+  }
+  printf("KARATSUBA_MUL_CUTOFF = %d\n", y);
+  printf("KARATSUBA_SQR_CUTOFF = %d\n", x);
 
   return 0;
 }
+
+/* $Source: /cvs/libtom/libtommath/etc/tune.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:47 $ */

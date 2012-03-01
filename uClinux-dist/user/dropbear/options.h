@@ -1,26 +1,6 @@
-/*
- * Dropbear - a SSH2 server
- * 
+/* Dropbear SSH
  * Copyright (c) 2002,2003 Matt Johnston
- * All rights reserved.
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE. */
+ * All rights reserved. See LICENSE for the license. */
 
 #ifndef _OPTIONS_H_
 #define _OPTIONS_H_
@@ -30,8 +10,13 @@
  * parts are to allow for commandline -DDROPBEAR_XXX options etc.
  ******************************************************************/
 
-#ifndef DROPBEAR_PORT
-#define DROPBEAR_PORT 22
+#ifndef DROPBEAR_DEFPORT
+#define DROPBEAR_DEFPORT "22"
+#endif
+
+#ifndef DROPBEAR_DEFADDRESS
+/* Listen on all interfaces */
+#define DROPBEAR_DEFADDRESS ""
 #endif
 
 /* Default hostkey paths - these can be specified on the command line */
@@ -52,52 +37,80 @@
  *
  * Both of these flags can be defined at once, don't compile without at least
  * one of them. */
-// #define NON_INETD_MODE
+#define NON_INETD_MODE
 #define INETD_MODE
 
-/* Setting this disables the faster version of the modular exponentiation
- * bignum code. It saves ~5kB, but is perhaps 20% slower for public-key and key
- * exchange operations.  It is probably worth experimenting to decide if it's
- * worthwhile on your platform. */
+/* Setting this disables the fast exptmod bignum code. It saves ~5kB, but is
+ * perhaps 20% slower for pubkey operations (it is probably worth experimenting
+ * if you want to use this) */
 /*#define NO_FAST_EXPTMOD*/
 
 /* Set this if you want to use the DROPBEAR_SMALL_CODE option. This can save
- * several kB in binary size, however will make the symmetrical ciphers (AES,
- * DES etc) slower (perhaps by 50%). Recommended for most small systems. */
-#define DROPBEAR_SMALL_CODE
+several kB in binary size however will make the symmetrical ciphers and hashes
+slower, perhaps by 50%. Recommended for small systems that aren't doing
+much traffic. */
+/*#define DROPBEAR_SMALL_CODE*/
 
-/* Enable X11 Forwarding */
-// #define ENABLE_X11FWD
+/* Enable X11 Forwarding - server only */
+#define ENABLE_X11FWD
 
 /* Enable TCP Fowarding */
-/* OpenSSH's "-L" style forwarding (client port forwarded via server) */
-#define ENABLE_LOCALTCPFWD
-/* OpenSSH's "-R" style forwarding (server port forwarded via client) */
-#define ENABLE_REMOTETCPFWD
+/* 'Local' is "-L" style (client listening port forwarded via server)
+ * 'Remote' is "-R" style (server listening port forwarded via client) */
+
+#define ENABLE_CLI_LOCALTCPFWD
+#define ENABLE_CLI_REMOTETCPFWD
+
+#define ENABLE_SVR_LOCALTCPFWD
+#define ENABLE_SVR_REMOTETCPFWD
 
 /* Enable Authentication Agent Forwarding */
-#define ENABLE_AGENTFWD
+#define ENABLE_SVR_AGENTFWD
+#define ENABLE_CLI_AGENTFWD
+
+
+/* Note: Both ENABLE_CLI_PROXYCMD and ENABLE_CLI_NETCAT must be set to
+ * allow multihop dbclient connections */
+
+/* Allow using -J <proxycommand> to run the connection through a 
+   pipe to a program, rather the normal TCP connection */
+#define ENABLE_CLI_PROXYCMD
+
+/* Enable "Netcat mode" option. This will forward standard input/output
+ * to a remote TCP-forwarded connection */
+#define ENABLE_CLI_NETCAT
 
 /* Encryption - at least one required.
- * RFC Draft requires 3DES, and recommends Blowfish, AES128 & Twofish128 */
-// #define DROPBEAR_AES128_CBC
-#define DROPBEAR_BLOWFISH_CBC
-// #define DROPBEAR_TWOFISH128_CBC
-#define DROPBEAR_3DES_CBC
+ * Protocol RFC requires 3DES and recommends AES128 for interoperability.
+ * Including multiple keysize variants the same cipher 
+ * (eg AES256 as well as AES128) will result in a minimal size increase.*/
+#define DROPBEAR_AES128
+#define DROPBEAR_3DES
+#define DROPBEAR_AES256
+/* Compiling in Blowfish will add ~6kB to runtime heap memory usage */
+/*#define DROPBEAR_BLOWFISH*/
+#define DROPBEAR_TWOFISH256
+#define DROPBEAR_TWOFISH128
 
-/* Integrity - at least one required.
- * RFC Draft requires sha1-hmac, and recommends md5-hmac.
+/* Enable "Counter Mode" for ciphers. This is more secure than normal
+ * CBC mode against certain attacks. This adds around 1kB to binary 
+ * size and is recommended for most cases */
+#define DROPBEAR_ENABLE_CTR_MODE
+
+/* Message Integrity - at least one required.
+ * Protocol RFC requires sha1 and recommends sha1-96.
+ * sha1-96 may be of use for slow links, as it has a smaller overhead.
  *
- * Note: there's no point disabling sha1 to save space, since it's used in the
+ * Note: there's no point disabling sha1 to save space, since it's used
  * for the random number generator and public-key cryptography anyway.
  * Disabling it here will just stop it from being used as the integrity portion
  * of the ssh protocol.
  *
- * These are also used for key fingerprints in logs (when pubkey auth is used),
- * MD5 fingerprints are printed by default, however SHA1 fingerprints will be
- * generated otherwise. This isn't exactly optimal, although sha1 fingerprints
- * are not too hard to create from pubkeys if required. */
+ * These hashes are also used for public key fingerprints in logs.
+ * If you disable MD5, Dropbear will fall back to SHA1 fingerprints,
+ * which are not the standard form. */
 #define DROPBEAR_SHA1_HMAC
+#define DROPBEAR_SHA1_96_HMAC
 #define DROPBEAR_MD5_HMAC
 
 /* Hostkey/public key algorithms - at least one required, these are used
@@ -107,16 +120,31 @@
 #define DROPBEAR_RSA
 #define DROPBEAR_DSS
 
+/* RSA can be vulnerable to timing attacks which use the time required for
+ * signing to guess the private key. Blinding avoids this attack, though makes
+ * signing operations slightly slower. */
+#define RSA_BLINDING
+
 /* Define DSS_PROTOK to use PuTTY's method of generating the value k for dss,
  * rather than just from the random byte source. Undefining this will save you
  * ~4k in binary size with static uclibc, but your DSS hostkey could be exposed
- * if the random number source isn't good. In general this isn't required */
+ * if the random number source isn't good. It happened to Sony. 
+ * On systems with a decent random source this isn't required. */
 /* #define DSS_PROTOK */
 
-/* Whether to do reverse DNS lookups. This is advisable, though will add
- * code size with gethostbyname() etc, so for very small environments where
- * you are statically linking, you might want to undefine this */
-// #define DO_HOST_LOOKUP
+/* Control the memory/performance/compression tradeoff for zlib.
+ * Set windowBits=8 for least memory usage, see your system's
+ * zlib.h for full details.
+ * Default settings (windowBits=15) will use 256kB for compression
+ * windowBits=8 will use 129kB for compression.
+ * Both modes will use ~35kB for decompression (using windowBits=15 for
+ * interoperability) */
+#ifndef DROPBEAR_ZLIB_WINDOW_BITS
+#define DROPBEAR_ZLIB_WINDOW_BITS 15 
+#endif
+
+/* Whether to do reverse DNS lookups. */
+#define DO_HOST_LOOKUP
 
 /* Whether to print the message of the day (MOTD). This doesn't add much code
  * size */
@@ -127,37 +155,87 @@
 #define MOTD_FILENAME "/etc/motd"
 #endif
 
-/* Authentication types to enable, at least one required.
+/* Authentication Types - at least one required.
    RFC Draft requires pubkey auth, and recommends password */
-#define DROPBEAR_PASSWORD_AUTH
-#define DROPBEAR_PUBKEY_AUTH
 
-/* Random device to use - you must specify _one only_.
- * DEV_RANDOM is recommended on hosts with a good /dev/urandom, otherwise use
- * PRNGD and run prngd, specifying the socket. This device must be able to
- * produce a large amount of random data, so using /dev/random or Entropy
- * Gathering Daemon (egd) may result in halting, as it waits for more random
- * data */
-#define DROPBEAR_DEV_URANDOM /* use /dev/urandom */
+/* Note: PAM auth is quite simple and only works for PAM modules which just do
+ * a simple "Login: " "Password: " (you can edit the strings in svr-authpam.c).
+ * It's useful for systems like OS X where standard password crypts don't work
+ * but there's an interface via a PAM module. It won't work for more complex
+ * PAM challenge/response.
+ * You can't enable both PASSWORD and PAM. */
 
-/*#undef DROPBEAR_PRNGD */ /* use prngd socket - you must manually set up prngd
-							  to produce output */
-#ifndef DROPBEAR_PRNGD_SOCKET
-#define DROPBEAR_PRNGD_SOCKET "/var/run/dropbear-rng"
+#define ENABLE_SVR_PASSWORD_AUTH
+/* PAM requires ./configure --enable-pam */
+/*#define ENABLE_SVR_PAM_AUTH*/
+#define ENABLE_SVR_PUBKEY_AUTH
+
+/* Whether to take public key options in 
+ * authorized_keys file into account */
+#ifdef ENABLE_SVR_PUBKEY_AUTH
+#define ENABLE_SVR_PUBKEY_OPTIONS
 #endif
+
+/* Define this to allow logging in to accounts that have no password specified.
+ * Public key logins are allowed for blank-password accounts regardless of this
+ * setting.  PAM is not affected by this setting, it uses the normal pam.d
+ * settings ('nullok' option) */
+/* #define ALLOW_BLANK_PASSWORD */
+
+#define ENABLE_CLI_PASSWORD_AUTH
+#define ENABLE_CLI_PUBKEY_AUTH
+#define ENABLE_CLI_INTERACT_AUTH
+
+/* This variable can be used to set a password for client
+ * authentication on the commandline. Beware of platforms
+ * that don't protect environment variables of processes etc. Also
+ * note that it will be provided for all "hidden" client-interactive
+ * style prompts - if you want something more sophisticated, use 
+ * SSH_ASKPASS instead. Comment out this var to remove this functionality.*/
+#define DROPBEAR_PASSWORD_ENV "DROPBEAR_PASSWORD"
+
+/* Define this (as well as ENABLE_CLI_PASSWORD_AUTH) to allow the use of
+ * a helper program for the ssh client. The helper program should be
+ * specified in the SSH_ASKPASS environment variable, and dbclient
+ * should be run with DISPLAY set and no tty. The program should
+ * return the password on standard output */
+/*#define ENABLE_CLI_ASKPASS_HELPER*/
+
+/* Random device to use - define either DROPBEAR_RANDOM_DEV or
+ * DROPBEAR_PRNGD_SOCKET.
+ * DROPBEAR_RANDOM_DEV is recommended on hosts with a good /dev/(u)random,
+ * otherwise use run prngd (or egd if you want), specifying the socket. 
+ * The device will be queried for a few dozen bytes of seed a couple of times
+ * per session (or more for very long-lived sessions). */
+
+/* We'll use /dev/urandom by default, since /dev/random is too much hassle.
+ * If system developers aren't keeping seeds between boots nor getting
+ * any entropy from somewhere it's their own fault. */
+#define DROPBEAR_RANDOM_DEV "/dev/urandom"
+
+/* prngd must be manually set up to produce output */
+/*#define DROPBEAR_PRNGD_SOCKET "/var/run/dropbear-rng"*/
 
 /* Specify the number of clients we will allow to be connected but
  * not yet authenticated. After this limit, connections are rejected */
+/* The first setting is per-IP, to avoid denial of service */
+#ifndef MAX_UNAUTH_PER_IP
+#define MAX_UNAUTH_PER_IP 5
+#endif
+
+/* And then a global limit to avoid chewing memory if connections 
+ * come from many IPs */
 #ifndef MAX_UNAUTH_CLIENTS
 #define MAX_UNAUTH_CLIENTS 30
 #endif
 
-/* Maximum number of failed authentication tries */
+/* Maximum number of failed authentication tries (server option) */
 #ifndef MAX_AUTH_TRIES
 #define MAX_AUTH_TRIES 10
 #endif
 
-/* The file to store the daemon's process ID, for shutdown scripts etc */
+/* The default file to store the daemon's process ID, for shutdown
+   scripts etc. This can be overridden with the -P flag */
 #ifndef DROPBEAR_PIDFILE
 #define DROPBEAR_PIDFILE "/var/run/dropbear.pid"
 #endif
@@ -165,7 +243,7 @@
 /* The command to invoke for xauth when using X11 forwarding.
  * "-q" for quiet */
 #ifndef XAUTH_COMMAND
-#define XAUTH_COMMAND "/usr/X11R6/bin/xauth -q"
+#define XAUTH_COMMAND "/usr/bin/X11/xauth -q"
 #endif
 
 /* if you want to enable running an sftp server (such as the one included with
@@ -175,149 +253,49 @@
 #define SFTPSERVER_PATH "/usr/libexec/sftp-server"
 #endif
 
-/* This is used by the scp binary when used as a client binary */
-#define _PATH_SSH_PROGRAM "/usr/bin/ssh"
+/* This is used by the scp binary when used as a client binary. If you're
+ * not using the Dropbear client, you'll need to change it */
+#define _PATH_SSH_PROGRAM "/usr/bin/dbclient"
 
-/* Multi-purpose binary  configuration - if you want to make the combined
- * binary, first define DROPBEAR_MULTI, and then define which of the three
- * components you want. You should then compile Dropbear with 
- * "make clean; make dropbearmulti". You'll need to install the binary
- * manually, see MULTI for details */
+/* Whether to log commands executed by a client. This only logs the 
+ * (single) command sent to the server, not what a user did in a 
+ * shell/sftp session etc. */
+/* #define LOG_COMMANDS */
 
-/* #define DROPBEAR_MULTI */
-
-/* The three multi binaries: dropbear, dropbearkey, dropbearconvert
- * Comment out these if you don't want some of them */
-#define DBMULTI_DROPBEAR
-#define DBMULTI_KEY
-#define DBMULTI_CONVERT
-
-
-/*******************************************************************
- * You shouldn't edit below here unless you know you need to.
- *******************************************************************/
-
-#ifndef DROPBEAR_VERSION
-#define DROPBEAR_VERSION "0.43"
+/* Window size limits. These tend to be a trade-off between memory
+   usage and network performance: */
+/* Size of the network receive window. This amount of memory is allocated
+   as a per-channel receive buffer. Increasing this value can make a
+   significant difference to network performance. 24kB was empirically
+   chosen for a 100mbit ethernet network. The value can be altered at
+   runtime with the -W argument. */
+#ifndef DEFAULT_RECV_WINDOW
+#define DEFAULT_RECV_WINDOW 24576
+#endif
+/* Maximum size of a received SSH data packet - this _MUST_ be >= 32768
+   in order to interoperate with other implementations */
+#ifndef RECV_MAX_PAYLOAD_LEN
+#define RECV_MAX_PAYLOAD_LEN 32768
+#endif
+/* Maximum size of a transmitted data packet - this can be any value,
+   though increasing it may not make a significant difference. */
+#ifndef TRANS_MAX_PAYLOAD_LEN
+#define TRANS_MAX_PAYLOAD_LEN 16384
 #endif
 
-#define LOCAL_IDENT "SSH-2.0-dropbear_" DROPBEAR_VERSION
-#define PROGNAME "dropbear"
+/* Ensure that data is transmitted every KEEPALIVE seconds. This can
+be overridden at runtime with -K. 0 disables keepalives */
+#define DEFAULT_KEEPALIVE 0
 
-/* Spec recommends after one hour or 1 gigabyte of data. One hour
- * is a bit too verbose, so we try 8 hours */
-#ifndef KEX_REKEY_TIMEOUT
-#define KEX_REKEY_TIMEOUT (3600 * 8)
-#endif
-#ifndef KEX_REKEY_DATA
-#define KEX_REKEY_DATA (1<<30) /* 2^30 == 1GB, this value must be < INT_MAX */
-#endif
-/* Close connections to clients which haven't authorised after AUTH_TIMEOUT */
-#ifndef AUTH_TIMEOUT
-#define AUTH_TIMEOUT 300 /* we choose 5 minutes */
-#endif
+/* Ensure that data is received within IDLE_TIMEOUT seconds. This can
+be overridden at runtime with -I. 0 disables idle timeouts */
+#define DEFAULT_IDLE_TIMEOUT 0
 
-/* Minimum key sizes for DSS and RSA */
-#ifndef MIN_DSS_KEYLEN
-#define MIN_DSS_KEYLEN 512
-#endif
-#ifndef MIN_RSA_KEYLEN
-#define MIN_RSA_KEYLEN 512
-#endif
+/* The default path. This will often get replaced by the shell */
+#define DEFAULT_PATH "/usr/bin:/bin"
 
-#define MAX_BANNER_SIZE 2000 /* this is 25*80 chars, any more is foolish */
-
-#define DEV_URANDOM "/dev/urandom"
-
-/* the number of NAME=VALUE pairs to malloc for environ, if we don't have
- * the clearenv() function */
-#define ENV_SIZE 100
-
-#define MAX_CMD_LEN 1024 /* max length of a command */
-#define MAX_TERM_LEN 200 /* max length of TERM name */
-
-#define MAX_HOST_LEN 254 /* max hostname len for tcp fwding */
-#define MAX_IP_LEN 15 /* strlen("255.255.255.255") == 15 */
-
-#define DROPBEAR_MAX_PORTS 10 /* max number of ports which can be specified,
-								 ipv4 and ipv6 don't count twice */
-
-#define _PATH_TTY "/dev/tty"
-
-/* Timeouts in seconds */
-#define SELECT_TIMEOUT 20
-
-/* success/failure defines */
-#define DROPBEAR_SUCCESS 0
-#define DROPBEAR_FAILURE -1
-
-/* various algorithm identifiers */
-#define DROPBEAR_KEX_DH_GROUP1 0
-
-#define DROPBEAR_SIGNKEY_ANY 0
-#define DROPBEAR_SIGNKEY_RSA 1
-#define DROPBEAR_SIGNKEY_DSS 2
-
-#define DROPBEAR_COMP_NONE 0
-#define DROPBEAR_COMP_ZLIB 1
-
-/* Required for pubkey auth */
-#ifdef DROPBEAR_PUBKEY_AUTH
-#define DROPBEAR_SIGNKEY_VERIFY
-#endif
-
-/* SHA1 is 20 bytes == 160 bits */
-#define SHA1_HASH_SIZE 20
-/* SHA512 is 64 bytes == 512 bits */
-#define SHA512_HASH_SIZE 64
-/* MD5 is 16 bytes = 128 bits */
-#define MD5_HASH_SIZE 16
-
-/* largest of MD5 and SHA1 */
-#define MAX_MAC_LEN SHA1_HASH_SIZE
-
-
-#define MAX_KEY_LEN 24 /* 3DES requires a 24 byte key */
-#define MAX_IV_LEN 20 /* must be same as max blocksize, 
-						 and >= SHA1_HASH_SIZE */
-#define MAX_MAC_KEY 20
-
-#define MAX_NAME_LEN 64 /* maximum length of a protocol name, isn't
-						   explicitly specified for all protocols (just
-						   for algos) but seems valid */
-
-#define MAX_PROPOSED_ALGO 20
-
-/* size/count limits */
-#define MAX_LISTEN_ADDR 10
-
-#define MAX_PACKET_LEN 35000
-#define MIN_PACKET_LEN 16
-#define MAX_PAYLOAD_LEN 32768
-
-#define MAX_TRANS_PAYLOAD_LEN 32768
-#define MAX_TRANS_PACKET_LEN (MAX_TRANS_PAYLOAD_LEN+50)
-
-#define MAX_TRANS_WINDOW 500000000 /* 500MB is sufficient, stopping overflow */
-#define MAX_TRANS_WIN_INCR 500000000 /* overflow prevention */
-
-#define MAX_STRING_LEN 1400 /* ~= MAX_PROPOSED_ALGO * MAX_NAME_LEN, also
-							   is the max length for a password etc */
-
-#ifndef ENABLE_X11FWD
-#define DISABLE_X11FWD
-#endif
-
-#ifndef ENABLE_AGENTFWD
-#define DISABLE_AGENTFWD
-#endif
-
-#ifndef ENABLE_LOCALTCPFWD
-#define DISABLE_LOCALTCPFWD
-#endif
-
-#ifndef ENABLE_REMOTETCPFWD
-#define DISABLE_REMOTETCPFWD
-#endif
+/* Some other defines (that mostly should be left alone) are defined
+ * in sysoptions.h */
+#include "sysoptions.h"
 
 #endif /* _OPTIONS_H_ */

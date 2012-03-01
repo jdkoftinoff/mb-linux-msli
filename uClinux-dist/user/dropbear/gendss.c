@@ -33,19 +33,21 @@
 
 #define QSIZE 20 /* 160 bit */
 
+/* This is just a test */
+
 #ifdef DROPBEAR_DSS
 
-static void getq(dss_key *key);
-static void getp(dss_key *key, unsigned int size);
-static void getg(dss_key *key);
-static void getx(dss_key *key);
-static void gety(dss_key *key);
+static void getq(dropbear_dss_key *key);
+static void getp(dropbear_dss_key *key, unsigned int size);
+static void getg(dropbear_dss_key *key);
+static void getx(dropbear_dss_key *key);
+static void gety(dropbear_dss_key *key);
 
-dss_key * gen_dss_priv_key(unsigned int size) {
+dropbear_dss_key * gen_dss_priv_key(unsigned int size) {
 
-	dss_key *key;
+	dropbear_dss_key *key;
 
-	key = (dss_key*)m_malloc(sizeof(dss_key));
+	key = m_malloc(sizeof(*key));
 
 	key->p = (mp_int*)m_malloc(sizeof(mp_int));
 	key->q = (mp_int*)m_malloc(sizeof(mp_int));
@@ -66,7 +68,7 @@ dss_key * gen_dss_priv_key(unsigned int size) {
 	
 }
 
-static void getq(dss_key *key) {
+static void getq(dropbear_dss_key *key) {
 
 	char buf[QSIZE];
 
@@ -75,21 +77,21 @@ static void getq(dss_key *key) {
 	buf[0] |= 0x80; /* top bit high */
 	buf[QSIZE-1] |= 0x01; /* bottom bit high */
 
-	if (mp_read_unsigned_bin(key->q, buf, QSIZE) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
-		exit(1);
-	}
+	bytes_to_mp(key->q, buf, QSIZE);
 
 	/* 18 rounds are required according to HAC */
 	if (mp_prime_next_prime(key->q, 18, 0) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
+		fprintf(stderr, "DSS key generation failed\n");
 		exit(1);
 	}
 }
 
-static void getp(dss_key *key, unsigned int size) {
+static void getp(dropbear_dss_key *key, unsigned int size) {
 
-	mp_int tempX, tempC, tempP, temp2q;
+	DEF_MP_INT(tempX);
+	DEF_MP_INT(tempC);
+	DEF_MP_INT(tempP);
+	DEF_MP_INT(temp2q);
 	int result;
 	unsigned char *buf;
 
@@ -98,7 +100,7 @@ static void getp(dss_key *key, unsigned int size) {
 
 	/* 2*q */
 	if (mp_mul_d(key->q, 2, &temp2q) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
+		fprintf(stderr, "DSS key generation failed\n");
 		exit(1);
 	}
 	
@@ -111,54 +113,53 @@ static void getp(dss_key *key, unsigned int size) {
 		buf[0] |= 0x80; /* set the top bit high */
 
 		/* X is a random mp_int */
-		if (mp_read_unsigned_bin(&tempX, buf, size) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
-			exit(1);
-		}
+		bytes_to_mp(&tempX, buf, size);
 
 		/* C = X mod 2q */
 		if (mp_mod(&tempX, &temp2q, &tempC) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 
 		/* P = X - (C - 1) = X - C + 1*/
 		if (mp_sub(&tempX, &tempC, &tempP) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 		
 		if (mp_add_d(&tempP, 1, key->p) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 
 		/* now check for prime, 5 rounds is enough according to HAC */
 		/* result == 1  =>  p is prime */
 		if (mp_prime_is_prime(key->p, 5, &result) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 	} while (!result);
 
 	mp_clear_multi(&tempX, &tempC, &tempP, &temp2q, NULL);
+	m_burn(buf, size);
 	m_free(buf);
 }
 
-static void getg(dss_key * key) {
+static void getg(dropbear_dss_key * key) {
 
-	char printbuf[1000];
-	mp_int div, h, val;
+	DEF_MP_INT(div);
+	DEF_MP_INT(h);
+	DEF_MP_INT(val);
 
 	m_mp_init_multi(&div, &h, &val, NULL);
 
 	/* get div=(p-1)/q */
 	if (mp_sub_d(key->p, 1, &val) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
+		fprintf(stderr, "DSS key generation failed\n");
 		exit(1);
 	}
 	if (mp_div(&val, key->q, &div, NULL) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
+		fprintf(stderr, "DSS key generation failed\n");
 		exit(1);
 	}
 
@@ -167,46 +168,29 @@ static void getg(dss_key * key) {
 	do {
 		/* now keep going with g=h^div mod p, until g > 1 */
 		if (mp_exptmod(&h, &div, key->p, key->g) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 
 		if (mp_add_d(&h, 1, &h) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
+			fprintf(stderr, "DSS key generation failed\n");
 			exit(1);
 		}
 	
 	} while (mp_cmp_d(key->g, 1) != MP_GT);
 
-	mp_toradix(key->g, printbuf, 10);
-
 	mp_clear_multi(&div, &h, &val, NULL);
 }
 
-static void getx(dss_key *key) {
+static void getx(dropbear_dss_key *key) {
 
-	mp_int val;
-	char buf[QSIZE];
-	
-	m_mp_init(&val);
-	
-	do {
-		genrandom(buf, QSIZE);
-
-		if (mp_read_unsigned_bin(&val, buf, QSIZE) != MP_OKAY) {
-			fprintf(stderr, "dss key generation failed\n");
-		}
-	} while ((mp_cmp_d(&val, 1) == MP_GT) && (mp_cmp(&val, key->q) == MP_LT));
-
-	mp_copy(&val, key->x);
-	mp_clear(&val);
-
+	gen_random_mpint(key->q, key->x);
 }
 
-static void gety(dss_key *key) {
+static void gety(dropbear_dss_key *key) {
 
 	if (mp_exptmod(key->g, key->x, key->p, key->y) != MP_OKAY) {
-		fprintf(stderr, "dss key generation failed\n");
+		fprintf(stderr, "DSS key generation failed\n");
 		exit(1);
 	}
 }

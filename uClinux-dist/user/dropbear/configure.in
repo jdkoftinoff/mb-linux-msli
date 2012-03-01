@@ -1,10 +1,12 @@
 #                                               -*- Autoconf -*-
-# Process this file with autoconf to produce a configure script.
+# Process this file with autoconf and autoheader to produce a configure script.
 
-# This Autoconf file was cobbled from various locations.
+# This Autoconf file was cobbled from various locations. In particular, a bunch
+# of the platform checks have been taken straight from OpenSSH's configure.ac
+# Huge thanks to them for dealing with the horrible platform-specifics :)
 
 AC_PREREQ(2.50)
-AC_INIT(algo.c)
+AC_INIT(buffer.c)
 
 OLDCFLAGS=$CFLAGS
 # Checks for programs.
@@ -17,9 +19,12 @@ fi
 AC_SUBST(LD)	
 
 if test -z "$OLDCFLAGS" && test "$GCC" = "yes"; then
-	AC_MSG_RESULT(No \$CFLAGS set... using "-Os -W -Wall for GCC")
+	AC_MSG_NOTICE(No \$CFLAGS set... using "-Os -W -Wall" for GCC)
 	CFLAGS="-Os -W -Wall"
 fi
+
+# large file support is useful for scp
+AC_SYS_LARGEFILE
 
 # Host specific options
 # this isn't a definitive list of hosts, they are just added as required
@@ -50,10 +55,17 @@ case "$host" in
 
 *-*-aix*)
 	AC_DEFINE(AIX,,Using AIX)
+	# OpenSSH thinks it's broken. If it isn't, let me know.
+	AC_DEFINE(BROKEN_GETADDRINFO,,Broken getaddrinfo)
 	;;
 	
 *-*-hpux*)
 	LIBS="$LIBS -lsec"
+	# It's probably broken.
+	AC_DEFINE(BROKEN_GETADDRINFO,,Broken getaddrinfo)
+	;;
+*-dec-osf*)
+	AC_DEFINE(BROKEN_GETADDRINFO,,Broken getaddrinfo)
 	;;
 esac
 
@@ -66,11 +78,12 @@ dnl Can't use login() or logout() with uclibc
 AC_CHECK_DECL(__UCLIBC__, 
 	[
 	no_loginfunc_check=1
-	AC_MSG_RESULT(Using uClibc - login() and logout() probably don't work, so we won't use them.)
+	AC_MSG_NOTICE([Using uClibc - login() and logout() probably don't work, so we won't use them.])
 	],,,)
 
 # Checks for libraries.
-AC_CHECK_LIB(crypt, crypt, LIBS="$LIBS -lcrypt")
+AC_CHECK_LIB(crypt, crypt, CRYPTLIB="-lcrypt")
+AC_SUBST(CRYPTLIB)	
 
 # Check if zlib is needed
 AC_ARG_WITH(zlib,
@@ -95,16 +108,54 @@ AC_ARG_ENABLE(zlib,
 	[
 		if test "x$enableval" = "xno"; then
 			AC_DEFINE(DISABLE_ZLIB,, Use zlib)
-			AC_MSG_RESULT(Disabling zlib)
+			AC_MSG_NOTICE(Disabling zlib)
 		else
 			AC_CHECK_LIB(z, deflate, , AC_MSG_ERROR([*** zlib missing - install first or check config.log ***]))
-			AC_MSG_RESULT(Enabling zlib)
+			AC_MSG_NOTICE(Enabling zlib)
 		fi
 	],
 	[
 		# if not disabled, check for zlib
 		AC_CHECK_LIB(z, deflate, , AC_MSG_ERROR([*** zlib missing - install first or check config.log ***]))
-		AC_MSG_RESULT(Enabling zlib)
+		AC_MSG_NOTICE(Enabling zlib)
+	]
+)
+
+# Check if pam is needed
+AC_ARG_WITH(pam,
+	[  --with-pam=PATH        Use pam in PATH],
+	[
+		# option is given
+		if test -d "$withval/lib"; then
+			LDFLAGS="-L${withval}/lib ${LDFLAGS}"
+		else
+			LDFLAGS="-L${withval} ${LDFLAGS}"
+		fi
+		if test -d "$withval/include"; then
+			CPPFLAGS="-I${withval}/include ${CPPFLAGS}"
+		else
+			CPPFLAGS="-I${withval} ${CPPFLAGS}"
+		fi
+	]
+)
+
+
+AC_ARG_ENABLE(pam,
+	[  --enable-pam          Try to include PAM support],
+	[
+		if test "x$enableval" = "xyes"; then
+			AC_CHECK_LIB(pam, pam_authenticate, , AC_MSG_ERROR([*** PAM missing - install first or check config.log ***]))
+			AC_MSG_NOTICE(Enabling PAM)
+			AC_CHECK_FUNCS(pam_fail_delay)
+		else
+			AC_DEFINE(DISABLE_PAM,, Use PAM)
+			AC_MSG_NOTICE(Disabling PAM)
+		fi
+	],
+	[
+		# disable it by default
+		AC_DEFINE(DISABLE_PAM,, Use PAM)
+		AC_MSG_NOTICE(Disabling PAM)
 	]
 )
 
@@ -112,14 +163,14 @@ AC_ARG_ENABLE(openpty,
 	[  --disable-openpty       Don't use openpty, use alternative method],
 	[
 		if test "x$enableval" = "xno"; then
-			AC_MSG_RESULT(Not using openpty)
+			AC_MSG_NOTICE(Not using openpty)
 		else
-			AC_MSG_RESULT(Using openpty if available)
+			AC_MSG_NOTICE(Using openpty if available)
 			AC_SEARCH_LIBS(openpty, util, [AC_DEFINE(HAVE_OPENPTY,,Have openpty() function)])
 		fi
 	],
 	[
-		AC_MSG_RESULT(Using openpty if available)
+		AC_MSG_NOTICE(Using openpty if available)
 		AC_SEARCH_LIBS(openpty, util, [AC_DEFINE(HAVE_OPENPTY)])
 	]
 )
@@ -130,13 +181,13 @@ AC_ARG_ENABLE(syslog,
 	[
 		if test "x$enableval" = "xno"; then
 			AC_DEFINE(DISABLE_SYSLOG,, Using syslog)
-			AC_MSG_RESULT(Disabling syslog)
+			AC_MSG_NOTICE(Disabling syslog)
 		else
-			AC_MSG_RESULT(Enabling syslog)
+			AC_MSG_NOTICE(Enabling syslog)
 		fi
 	],
 	[
-		AC_MSG_RESULT(Enabling syslog)
+		AC_MSG_NOTICE(Enabling syslog)
 	]
 )
 
@@ -144,15 +195,15 @@ AC_ARG_ENABLE(shadow,
 	[  --disable-shadow        Don't use shadow passwords (if available)],
 	[
 		if test "x$enableval" = "xno"; then
-			AC_MSG_RESULT(Not using shadow passwords)
+			AC_MSG_NOTICE(Not using shadow passwords)
 		else
 			AC_CHECK_HEADERS([shadow.h])
-			AC_MSG_RESULT(Using shadow passwords if available)
+			AC_MSG_NOTICE(Using shadow passwords if available)
 		fi
 	],
 	[
 		AC_CHECK_HEADERS([shadow.h])
-		AC_MSG_RESULT(Using shadow passwords if available)
+		AC_MSG_NOTICE(Using shadow passwords if available)
 	]
 )
 			
@@ -160,7 +211,7 @@ AC_ARG_ENABLE(shadow,
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([fcntl.h limits.h netinet/in.h netinet/tcp.h stdlib.h string.h sys/socket.h sys/time.h termios.h unistd.h crypt.h pty.h ioctl.h libutil.h libgen.h inttypes.h stropts.h utmp.h utmpx.h lastlog.h paths.h util.h netdb.h])
+AC_CHECK_HEADERS([fcntl.h limits.h netinet/in.h netinet/tcp.h stdlib.h string.h sys/socket.h sys/time.h termios.h unistd.h crypt.h pty.h ioctl.h libutil.h libgen.h inttypes.h stropts.h utmp.h utmpx.h lastlog.h paths.h util.h netdb.h security/pam_appl.h pam/pam_appl.h netinet/in_systm.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -205,6 +256,84 @@ AC_CHECK_TYPE([socklen_t], ,[
 	[#include <sys/types.h>
 	#include <sys/socket.h>])
 
+# for the fake-rfc2553 stuff - straight from OpenSSH
+
+AC_CACHE_CHECK([for struct sockaddr_storage], ac_cv_have_struct_sockaddr_storage, [
+	AC_TRY_COMPILE(
+		[
+#include <sys/types.h>
+#include <sys/socket.h>
+		],
+		[ struct sockaddr_storage s; ],
+		[ ac_cv_have_struct_sockaddr_storage="yes" ],
+		[ ac_cv_have_struct_sockaddr_storage="no" ]
+	)
+])
+if test "x$ac_cv_have_struct_sockaddr_storage" = "xyes" ; then
+	AC_DEFINE(HAVE_STRUCT_SOCKADDR_STORAGE)
+fi
+
+AC_CACHE_CHECK([for struct sockaddr_in6], ac_cv_have_struct_sockaddr_in6, [
+	AC_TRY_COMPILE(
+		[
+#include <sys/types.h>
+#include <netinet/in.h>
+		],
+		[ struct sockaddr_in6 s; s.sin6_family = 0; ],
+		[ ac_cv_have_struct_sockaddr_in6="yes" ],
+		[ ac_cv_have_struct_sockaddr_in6="no" ]
+	)
+])
+if test "x$ac_cv_have_struct_sockaddr_in6" = "xyes" ; then
+	AC_DEFINE(HAVE_STRUCT_SOCKADDR_IN6,,Have struct sockaddr_in6)
+fi
+
+AC_CACHE_CHECK([for struct in6_addr], ac_cv_have_struct_in6_addr, [
+	AC_TRY_COMPILE(
+		[
+#include <sys/types.h>
+#include <netinet/in.h>
+		],
+		[ struct in6_addr s; s.s6_addr[0] = 0; ],
+		[ ac_cv_have_struct_in6_addr="yes" ],
+		[ ac_cv_have_struct_in6_addr="no" ]
+	)
+])
+if test "x$ac_cv_have_struct_in6_addr" = "xyes" ; then
+	AC_DEFINE(HAVE_STRUCT_IN6_ADDR,,Have struct in6_addr)
+fi
+
+AC_CACHE_CHECK([for struct addrinfo], ac_cv_have_struct_addrinfo, [
+	AC_TRY_COMPILE(
+		[
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+		],
+		[ struct addrinfo s; s.ai_flags = AI_PASSIVE; ],
+		[ ac_cv_have_struct_addrinfo="yes" ],
+		[ ac_cv_have_struct_addrinfo="no" ]
+	)
+])
+if test "x$ac_cv_have_struct_addrinfo" = "xyes" ; then
+	AC_DEFINE(HAVE_STRUCT_ADDRINFO,,Have struct addrinfo)
+fi
+
+
+# IRIX has a const char return value for gai_strerror()
+AC_CHECK_FUNCS(gai_strerror,[
+	AC_DEFINE(HAVE_GAI_STRERROR)
+	AC_TRY_COMPILE([
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+const char *gai_strerror(int);],[
+char *str;
+
+str = gai_strerror(0);],[
+		AC_DEFINE(HAVE_CONST_GAI_STRERROR_PROTO, 1,
+		[Define if gai_strerror() returns const char *])])])
 
 # for loginrec.c
 
@@ -217,9 +346,15 @@ AC_CHECK_MEMBERS([struct utmp.ut_host, struct utmp.ut_pid, struct utmp.ut_type, 
 
 AC_CHECK_MEMBERS([struct utmpx.ut_host, struct utmpx.ut_syslen, struct utmpx.ut_type, struct utmpx.ut_id, struct utmpx.ut_addr, struct utmpx.ut_addr_v6, struct utmpx.ut_time, struct utmpx.ut_tv],,,[
 #include <sys/types.h>
+#include <sys/socket.h>
 #if HAVE_UTMPX_H
 #include <utmpx.h>
 #endif
+])
+
+AC_CHECK_MEMBERS([struct sockaddr_storage.ss_family],,,[
+#include <sys/types.h>
+#include <sys/socket.h>
 ])
 
 AC_CHECK_FUNCS(endutent getutent getutid getutline pututline setutent)
@@ -227,6 +362,25 @@ AC_CHECK_FUNCS(utmpname)
 AC_CHECK_FUNCS(endutxent getutxent getutxid getutxline pututxline )
 AC_CHECK_FUNCS(setutxent utmpxname)
 AC_CHECK_FUNCS(logout updwtmp logwtmp)
+
+AC_ARG_ENABLE(bundled-libtom,
+	[  --enable-bundled-libtom       Use bundled libtomcrypt/libtommath even if a system version exists],
+	[ 
+		BUNDLED_LIBTOM=1
+		AC_MSG_NOTICE(Forcing bundled libtom*)
+	],
+	[
+		BUNDLED_LIBTOM=0
+		AC_CHECK_LIB(tomcrypt, register_cipher, , BUNDLED_LIBTOM=1)
+		AC_CHECK_LIB(tommath, mp_exptmod, , BUNDLED_LIBTOM=1)
+	]
+)
+
+if test $BUNDLED_LIBTOM = 1 ; then
+	AC_DEFINE(BUNDLED_LIBTOM,,Use bundled libtom) 
+fi
+
+AC_SUBST(BUNDLED_LIBTOM)
 
 dnl Added from OpenSSH 3.6.1p2's configure.ac
 
@@ -254,7 +408,7 @@ AC_ARG_ENABLE(wtmpx,
 AC_ARG_ENABLE(loginfunc,
 	[  --disable-loginfunc     Disable use of login() etc. [no]],
 	[ no_loginfunc_check=1
-	AC_MSG_RESULT(Not using login() etc) ]
+	AC_MSG_NOTICE(Not using login() etc) ]
 )
 AC_ARG_ENABLE(pututline,
 	[  --disable-pututline     Disable use of pututline() etc. ([uw]tmp) [no]],
@@ -462,7 +616,7 @@ AC_PROG_GCC_TRADITIONAL
 AC_FUNC_MEMCMP
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS([dup2 getspnam getusershell memset putenv select socket strdup clearenv strlcpy strlcat daemon basename _getpty ])
+AC_CHECK_FUNCS([dup2 getspnam getusershell memset putenv select socket strdup clearenv strlcpy strlcat daemon basename _getpty getaddrinfo freeaddrinfo getnameinfo])
 
 AC_SEARCH_LIBS(basename, gen, AC_DEFINE(HAVE_BASENAME))
 
@@ -471,7 +625,7 @@ if test -z "$no_ptmx_check" ; then
 	if test x"$cross_compiling" = x"no" ; then
 		AC_CHECK_FILE("/dev/ptmx", AC_DEFINE(USE_DEV_PTMX,,Use /dev/ptmx))
 	else
-		AC_MSG_RESULT(Not checking for /dev/ptmx, we're cross-compiling)
+		AC_MSG_NOTICE([Not checking for /dev/ptmx, we're cross-compiling])
 	fi
 fi
 
@@ -479,11 +633,70 @@ if test -z "$no_ptc_check" ; then
 	if test x"$cross_compiling" = x"no" ; then
 		AC_CHECK_FILE("/dev/ptc", AC_DEFINE(HAVE_DEV_PTS_AND_PTC,,Use /dev/ptc & /dev/pts))
 	else
-		AC_MSG_RESULT(Not checking for /dev/ptc & /dev/pts\, we're cross-compiling)
+		AC_MSG_NOTICE([Not checking for /dev/ptc & /dev/pts since we're cross-compiling])
 	fi
 fi
 
+AC_EXEEXT
+
+# XXX there must be a nicer way to do this
+AS_MKDIR_P(libtomcrypt/src/ciphers/aes)
+AS_MKDIR_P(libtomcrypt/src/ciphers/safer)
+AS_MKDIR_P(libtomcrypt/src/ciphers/twofish)
+AS_MKDIR_P(libtomcrypt/src/encauth/ccm)
+AS_MKDIR_P(libtomcrypt/src/encauth/eax)
+AS_MKDIR_P(libtomcrypt/src/encauth/gcm)
+AS_MKDIR_P(libtomcrypt/src/encauth/ocb)
+AS_MKDIR_P(libtomcrypt/src/hashes)
+AS_MKDIR_P(libtomcrypt/src/hashes/chc)
+AS_MKDIR_P(libtomcrypt/src/hashes/helper)
+AS_MKDIR_P(libtomcrypt/src/hashes/sha2)
+AS_MKDIR_P(libtomcrypt/src/hashes/whirl)
+AS_MKDIR_P(libtomcrypt/src/mac/hmac)
+AS_MKDIR_P(libtomcrypt/src/mac/omac)
+AS_MKDIR_P(libtomcrypt/src/mac/pelican)
+AS_MKDIR_P(libtomcrypt/src/mac/pmac)
+AS_MKDIR_P(libtomcrypt/src/mac/f9)
+AS_MKDIR_P(libtomcrypt/src/mac/xcbc)
+AS_MKDIR_P(libtomcrypt/src/math/fp)
+AS_MKDIR_P(libtomcrypt/src/misc/base64)
+AS_MKDIR_P(libtomcrypt/src/misc/crypt)
+AS_MKDIR_P(libtomcrypt/src/misc/mpi)
+AS_MKDIR_P(libtomcrypt/src/misc/pkcs5)
+AS_MKDIR_P(libtomcrypt/src/modes/cbc)
+AS_MKDIR_P(libtomcrypt/src/modes/cfb)
+AS_MKDIR_P(libtomcrypt/src/modes/ctr)
+AS_MKDIR_P(libtomcrypt/src/modes/ecb)
+AS_MKDIR_P(libtomcrypt/src/modes/ofb)
+AS_MKDIR_P(libtomcrypt/src/modes/f8)
+AS_MKDIR_P(libtomcrypt/src/modes/lrw)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/bit)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/choice)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/ia5)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/integer)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/object_identifier)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/octet)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/printable_string)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/sequence)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/short_integer)
+AS_MKDIR_P(libtomcrypt/src/pk/asn1/der/utctime)
+AS_MKDIR_P(libtomcrypt/src/pk/dh)
+AS_MKDIR_P(libtomcrypt/src/pk/dsa)
+AS_MKDIR_P(libtomcrypt/src/pk/ecc)
+AS_MKDIR_P(libtomcrypt/src/pk/pkcs1)
+AS_MKDIR_P(libtomcrypt/src/pk/rsa)
+AS_MKDIR_P(libtomcrypt/src/prng)
 AC_CONFIG_HEADER(config.h)
 AC_OUTPUT(Makefile)
-AC_MSG_RESULT()
-AC_MSG_RESULT(Now edit options.h to choose features.)
+AC_OUTPUT(libtomcrypt/Makefile)
+AC_OUTPUT(libtommath/Makefile)
+
+AC_MSG_NOTICE()
+if test $BUNDLED_LIBTOM = 1 ; then
+AC_MSG_NOTICE(Using bundled libtomcrypt and libtommath)
+else
+AC_MSG_NOTICE(Using system libtomcrypt and libtommath)
+fi
+
+AC_MSG_NOTICE()
+AC_MSG_NOTICE(Now edit options.h to choose features.)

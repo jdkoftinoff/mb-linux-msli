@@ -56,11 +56,20 @@
 
 #define MAX_FMT 100
 
-static void _dropbear_log(int priority, const char* format, va_list param);
-static void _dropbear_exit(int exitcode, const char* format, va_list param);
+static void generic_dropbear_exit(int exitcode, const char* format, 
+		va_list param) ATTRIB_NORETURN;
+static void generic_dropbear_log(int priority, const char* format, 
+		va_list param);
 
+void (*_dropbear_exit)(int exitcode, const char* format, va_list param) ATTRIB_NORETURN
+						= generic_dropbear_exit;
+void (*_dropbear_log)(int priority, const char* format, va_list param)
+						= generic_dropbear_log;
 
-int usingsyslog = 0; /* set by runopts, but required externally to sessions */
+#ifdef DEBUG_TRACE
+int debug_trace = 0;
+#endif
+
 #ifndef DISABLE_SYSLOG
 void startsyslog() {
 
@@ -89,37 +98,30 @@ void dropbear_exit(const char* format, ...) {
 	va_end(param);
 }
 
-/* failure exit - format must be <= 100 chars */
-static void _dropbear_exit(int exitcode, const char* format, va_list param) {
+static void generic_dropbear_exit(int exitcode, const char* format, 
+		va_list param) {
 
-	char fmtbuf[200];
+	char fmtbuf[300];
 
-	if (!sessinitdone) {
-		/* before session init */
-		snprintf(fmtbuf, sizeof(fmtbuf), 
-				"premature exit: %s", format);
-	} else if (ses.authstate.authdone) {
-		/* user has authenticated */
-		snprintf(fmtbuf, sizeof(fmtbuf),
-				"exit after auth (%s): %s", 
-				ses.authstate.printableuser, format);
-	} else if (ses.authstate.printableuser) {
-		/* we have a potential user */
-		snprintf(fmtbuf, sizeof(fmtbuf), 
-				"exit before auth (user '%s', %d fails): %s",
-				ses.authstate.printableuser, ses.authstate.failcount, format);
-	} else {
-		/* before userauth */
-		snprintf(fmtbuf, sizeof(fmtbuf), 
-				"exit before auth: %s", format);
-	}
+	snprintf(fmtbuf, sizeof(fmtbuf), "Exited: %s", format);
 
 	_dropbear_log(LOG_INFO, fmtbuf, param);
 
-	/* must be after using username etc */
-	session_cleanup();
-
 	exit(exitcode);
+}
+
+void fail_assert(const char* expr, const char* file, int line) {
+	dropbear_exit("Failed assertion (%s:%d): `%s'", file, line, expr);
+}
+
+static void generic_dropbear_log(int UNUSED(priority), const char* format, 
+		va_list param) {
+
+	char printbuf[1024];
+
+	vsnprintf(printbuf, sizeof(printbuf), format, param);
+
+	fprintf(stderr, "%s\n", printbuf);
 
 }
 
@@ -133,104 +135,511 @@ void dropbear_log(int priority, const char* format, ...) {
 	va_end(param);
 }
 
-/* priority is priority as with syslog() */
-static void _dropbear_log(int priority, const char* format, va_list param) {
-
-	char printbuf[1024];
-	char datestr[20];
-	time_t timesec;
-	int havetrace = 0;
-
-	vsnprintf(printbuf, sizeof(printbuf), format, param);
-
-#ifndef DISABLE_SYSLOG
-	if (usingsyslog) {
-		syslog(priority, "%s", printbuf);
-	}
-#endif
-
-	/* if we are using DEBUG_TRACE, we want to print to stderr even if
-	 * syslog is used, so it is included in error reports */
-#ifdef DEBUG_TRACE
-	havetrace = 1;
-#endif
-
-	if (!usingsyslog || havetrace)
-	{
-		timesec = time(NULL);
-		if (strftime(datestr, sizeof(datestr), "%b %d %H:%M:%S", 
-					localtime(&timesec)) == 0) {
-			datestr[0] = '?'; datestr[1] = '\0';
-		}
-		fprintf(stderr, "[%d] %s %s\r\n", getpid(), datestr, printbuf);
-	}
-}
 
 #ifdef DEBUG_TRACE
 void dropbear_trace(const char* format, ...) {
 
 	va_list param;
 
+	if (!debug_trace) {
+		return;
+	}
+
 	va_start(param, format);
-	fprintf(stderr, "TRACE: ");
+	fprintf(stderr, "TRACE (%d): ", getpid());
 	vfprintf(stderr, format, param);
 	fprintf(stderr, "\n");
 	va_end(param);
 }
 #endif /* DEBUG_TRACE */
 
+static void set_sock_priority(int sock) {
+
+	int val;
+
+	/* disable nagle */
+	val = 1;
+	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void*)&val, sizeof(val));
+
+	/* set the TOS bit for either ipv4 or ipv6 */
+#ifdef IPTOS_LOWDELAY
+	val = IPTOS_LOWDELAY;
+#if defined(IPPROTO_IPV6) && defined(IPV6_TCLASS)
+	setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (void*)&val, sizeof(val));
+#endif
+	setsockopt(sock, IPPROTO_IP, IP_TOS, (void*)&val, sizeof(val));
+#endif
+
+#ifdef SO_PRIORITY
+	/* linux specific, sets QoS class.
+	 * 6 looks to be optimal for interactive traffic (see tc-prio(8) ). */
+	val = 6;
+	setsockopt(sock, SOL_SOCKET, SO_PRIORITY, (void*) &val, sizeof(val));
+#endif
+
+}
+
+/* Listen on address:port. 
+ * Special cases are address of "" listening on everything,
+ * and address of NULL listening on localhost only.
+ * Returns the number of sockets bound on success, or -1 on failure. On
+ * failure, if errstring wasn't NULL, it'll be a newly malloced error
+ * string.*/
+int dropbear_listen(const char* address, const char* port,
+		int *socks, unsigned int sockcount, char **errstring, int *maxfd) {
+
+	struct addrinfo hints, *res = NULL, *res0 = NULL;
+	int err;
+	unsigned int nsock;
+	struct linger linger;
+	int val;
+	int sock;
+
+	TRACE(("enter dropbear_listen"))
+	
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC; /* TODO: let them flag v4 only etc */
+	hints.ai_socktype = SOCK_STREAM;
+
+	/* for calling getaddrinfo:
+	 address == NULL and !AI_PASSIVE: local loopback
+	 address == NULL and AI_PASSIVE: all interfaces
+	 address != NULL: whatever the address says */
+	if (!address) {
+		TRACE(("dropbear_listen: local loopback"))
+	} else {
+		if (address[0] == '\0') {
+			TRACE(("dropbear_listen: all interfaces"))
+			address = NULL;
+		}
+		hints.ai_flags = AI_PASSIVE;
+	}
+	err = getaddrinfo(address, port, &hints, &res0);
+
+	if (err) {
+		if (errstring != NULL && *errstring == NULL) {
+			int len;
+			len = 20 + strlen(gai_strerror(err));
+			*errstring = (char*)m_malloc(len);
+			snprintf(*errstring, len, "Error resolving: %s", gai_strerror(err));
+		}
+		if (res0) {
+			freeaddrinfo(res0);
+			res0 = NULL;
+		}
+		TRACE(("leave dropbear_listen: failed resolving"))
+		return -1;
+	}
+
+
+	nsock = 0;
+	for (res = res0; res != NULL && nsock < sockcount;
+			res = res->ai_next) {
+
+		/* Get a socket */
+		socks[nsock] = socket(res->ai_family, res->ai_socktype,
+				res->ai_protocol);
+
+		sock = socks[nsock]; /* For clarity */
+
+		if (sock < 0) {
+			err = errno;
+			TRACE(("socket() failed"))
+			continue;
+		}
+
+		/* Various useful socket options */
+		val = 1;
+		/* set to reuse, quick timeout */
+		setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void*) &val, sizeof(val));
+		linger.l_onoff = 1;
+		linger.l_linger = 5;
+		setsockopt(sock, SOL_SOCKET, SO_LINGER, (void*)&linger, sizeof(linger));
+
+#if defined(IPPROTO_IPV6) && defined(IPV6_V6ONLY)
+		if (res->ai_family == AF_INET6) {
+			int on = 1;
+			if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, 
+						&on, sizeof(on)) == -1) {
+				dropbear_log(LOG_WARNING, "Couldn't set IPV6_V6ONLY");
+			}
+		}
+#endif
+
+		set_sock_priority(sock);
+
+		if (bind(sock, res->ai_addr, res->ai_addrlen) < 0) {
+			err = errno;
+			close(sock);
+			TRACE(("bind(%s) failed", port))
+			continue;
+		}
+
+		if (listen(sock, 20) < 0) {
+			err = errno;
+			close(sock);
+			TRACE(("listen() failed"))
+			continue;
+		}
+
+		*maxfd = MAX(*maxfd, sock);
+
+		nsock++;
+	}
+
+	if (res0) {
+		freeaddrinfo(res0);
+		res0 = NULL;
+	}
+
+	if (nsock == 0) {
+		if (errstring != NULL && *errstring == NULL) {
+			int len;
+			len = 20 + strlen(strerror(err));
+			*errstring = (char*)m_malloc(len);
+			snprintf(*errstring, len, "Error listening: %s", strerror(err));
+		}
+		TRACE(("leave dropbear_listen: failure, %s", strerror(err)))
+		return -1;
+	}
+
+	TRACE(("leave dropbear_listen: success, %d socks bound", nsock))
+	return nsock;
+}
+
+/* Connect to a given unix socket. The socket is blocking */
+#ifdef ENABLE_CONNECT_UNIX
+int connect_unix(const char* path) {
+	struct sockaddr_un addr;
+	int fd = -1;
+
+	memset((void*)&addr, 0x0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strlcpy(addr.sun_path, path, sizeof(addr.sun_path));
+	fd = socket(PF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0) {
+		TRACE(("Failed to open unix socket"))
+		return -1;
+	}
+	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+		TRACE(("Failed to connect to '%s' socket", path))
+		m_close(fd);
+		return -1;
+	}
+	return fd;
+}
+#endif
+
+/* Connect via TCP to a host. Connection will try ipv4 or ipv6, will
+ * return immediately if nonblocking is set. On failure, if errstring
+ * wasn't null, it will be a newly malloced error message */
+
+/* TODO: maxfd */
+int connect_remote(const char* remotehost, const char* remoteport,
+		int nonblocking, char ** errstring) {
+
+	struct addrinfo *res0 = NULL, *res = NULL, hints;
+	int sock;
+	int err;
+
+	TRACE(("enter connect_remote"))
+
+	if (errstring != NULL) {
+		*errstring = NULL;
+	}
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_family = PF_UNSPEC;
+
+	err = getaddrinfo(remotehost, remoteport, &hints, &res0);
+	if (err) {
+		if (errstring != NULL && *errstring == NULL) {
+			int len;
+			len = 100 + strlen(gai_strerror(err));
+			*errstring = (char*)m_malloc(len);
+			snprintf(*errstring, len, "Error resolving '%s' port '%s'. %s", 
+					remotehost, remoteport, gai_strerror(err));
+		}
+		TRACE(("Error resolving: %s", gai_strerror(err)))
+		return -1;
+	}
+
+	sock = -1;
+	err = EADDRNOTAVAIL;
+	for (res = res0; res; res = res->ai_next) {
+
+		sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (sock < 0) {
+			err = errno;
+			continue;
+		}
+
+		if (nonblocking) {
+			setnonblocking(sock);
+		}
+
+		if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
+			if (errno == EINPROGRESS && nonblocking) {
+				TRACE(("Connect in progress"))
+				break;
+			} else {
+				err = errno;
+				close(sock);
+				sock = -1;
+				continue;
+			}
+		}
+
+		break; /* Success */
+	}
+
+	if (sock < 0 && !(errno == EINPROGRESS && nonblocking)) {
+		/* Failed */
+		if (errstring != NULL && *errstring == NULL) {
+			int len;
+			len = 20 + strlen(strerror(err));
+			*errstring = (char*)m_malloc(len);
+			snprintf(*errstring, len, "Error connecting: %s", strerror(err));
+		}
+		TRACE(("Error connecting: %s", strerror(err)))
+	} else {
+		/* Success */
+		set_sock_priority(sock);
+	}
+
+	freeaddrinfo(res0);
+	if (sock > 0 && errstring != NULL && *errstring != NULL) {
+		m_free(*errstring);
+	}
+
+	TRACE(("leave connect_remote: sock %d\n", sock))
+	return sock;
+}
+
+/* Sets up a pipe for a, returning three non-blocking file descriptors
+ * and the pid. exec_fn is the function that will actually execute the child process,
+ * it will be run after the child has fork()ed, and is passed exec_data.
+ * If ret_errfd == NULL then stderr will not be captured.
+ * ret_pid can be passed as  NULL to discard the pid. */
+int spawn_command(void(*exec_fn)(void *user_data), void *exec_data,
+		int *ret_writefd, int *ret_readfd, int *ret_errfd, pid_t *ret_pid) {
+	int infds[2];
+	int outfds[2];
+	int errfds[2];
+	pid_t pid;
+
+	const int FDIN = 0;
+	const int FDOUT = 1;
+
+	/* redirect stdin/stdout/stderr */
+	if (pipe(infds) != 0) {
+		return DROPBEAR_FAILURE;
+	}
+	if (pipe(outfds) != 0) {
+		return DROPBEAR_FAILURE;
+	}
+	if (ret_errfd && pipe(errfds) != 0) {
+		return DROPBEAR_FAILURE;
+	}
+
+#ifdef __uClinux__
+	pid = vfork();
+#else
+	pid = fork();
+#endif
+
+	if (pid < 0) {
+		return DROPBEAR_FAILURE;
+	}
+
+	if (!pid) {
+		/* child */
+
+		TRACE(("back to normal sigchld"))
+		/* Revert to normal sigchld handling */
+		if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+			dropbear_exit("signal() error");
+		}
+
+		/* redirect stdin/stdout */
+
+		if ((dup2(infds[FDIN], STDIN_FILENO) < 0) ||
+			(dup2(outfds[FDOUT], STDOUT_FILENO) < 0) ||
+			(ret_errfd && dup2(errfds[FDOUT], STDERR_FILENO) < 0)) {
+			TRACE(("leave noptycommand: error redirecting FDs"))
+			dropbear_exit("Child dup2() failure");
+		}
+
+		close(infds[FDOUT]);
+		close(infds[FDIN]);
+		close(outfds[FDIN]);
+		close(outfds[FDOUT]);
+		if (ret_errfd)
+		{
+			close(errfds[FDIN]);
+			close(errfds[FDOUT]);
+		}
+
+		exec_fn(exec_data);
+		/* not reached */
+		return DROPBEAR_FAILURE;
+	} else {
+		/* parent */
+		close(infds[FDIN]);
+		close(outfds[FDOUT]);
+
+		setnonblocking(outfds[FDIN]);
+		setnonblocking(infds[FDOUT]);
+
+		if (ret_errfd) {
+			close(errfds[FDOUT]);
+			setnonblocking(errfds[FDIN]);
+		}
+
+		if (ret_pid) {
+			*ret_pid = pid;
+		}
+
+		*ret_writefd = infds[FDOUT];
+		*ret_readfd = outfds[FDIN];
+		if (ret_errfd) {
+			*ret_errfd = errfds[FDIN];
+		}
+		return DROPBEAR_SUCCESS;
+	}
+}
+
+/* Runs a command with "sh -c". Will close FDs (except stdin/stdout/stderr) and
+ * re-enabled SIGPIPE. If cmd is NULL, will run a login shell.
+ */
+void run_shell_command(const char* cmd, unsigned int maxfd, char* usershell) {
+	char * argv[4];
+	char * baseshell = NULL;
+	unsigned int i;
+
+	baseshell = basename(usershell);
+
+	if (cmd != NULL) {
+		argv[0] = baseshell;
+	} else {
+		/* a login shell should be "-bash" for "/bin/bash" etc */
+		int len = strlen(baseshell) + 2; /* 2 for "-" */
+		argv[0] = (char*)m_malloc(len);
+		snprintf(argv[0], len, "-%s", baseshell);
+	}
+
+	if (cmd != NULL) {
+		argv[1] = "-c";
+		argv[2] = (char*)cmd;
+		argv[3] = NULL;
+	} else {
+		/* construct a shell of the form "-bash" etc */
+		argv[1] = NULL;
+	}
+
+	/* Re-enable SIGPIPE for the executed process */
+	if (signal(SIGPIPE, SIG_DFL) == SIG_ERR) {
+		dropbear_exit("signal() error");
+	}
+
+	/* close file descriptors except stdin/stdout/stderr
+	 * Need to be sure FDs are closed here to avoid reading files as root */
+	for (i = 3; i <= maxfd; i++) {
+		m_close(i);
+	}
+
+	execv(usershell, argv);
+}
+
+void get_socket_address(int fd, char **local_host, char **local_port,
+						char **remote_host, char **remote_port, int host_lookup)
+{
+	struct sockaddr_storage addr;
+	socklen_t addrlen;
+	
+	if (local_host || local_port) {
+		addrlen = sizeof(addr);
+		if (getsockname(fd, (struct sockaddr*)&addr, &addrlen) < 0) {
+			dropbear_exit("Failed socket address: %s", strerror(errno));
+		}
+		getaddrstring(&addr, local_host, local_port, host_lookup);		
+	}
+	if (remote_host || remote_port) {
+		addrlen = sizeof(addr);
+		if (getpeername(fd, (struct sockaddr*)&addr, &addrlen) < 0) {
+			dropbear_exit("Failed socket address: %s", strerror(errno));
+		}
+		getaddrstring(&addr, remote_host, remote_port, host_lookup);		
+	}
+}
+
 /* Return a string representation of the socket address passed. The return
  * value is allocated with malloc() */
-unsigned char * getaddrstring(struct sockaddr * addr) {
+void getaddrstring(struct sockaddr_storage* addr, 
+			char **ret_host, char **ret_port,
+			int host_lookup) {
 
-	char *retstring;
+	char host[NI_MAXHOST+1], serv[NI_MAXSERV+1];
+	unsigned int len;
+	int ret;
+	
+	int flags = NI_NUMERICSERV | NI_NUMERICHOST;
 
-	/* space for "255.255.255.255:65535\0" = 22 */
-	retstring = m_malloc(22);
-
-	switch (addr->sa_family) {
-		case PF_INET: 
-			snprintf(retstring, 22, "%s:%hu",
-					inet_ntoa(((struct sockaddr_in *)addr)->sin_addr),
-					ntohs(((struct sockaddr_in *)addr)->sin_port));
-			break;
-
-		default:
-			/* XXX ipv6 */
-			snprintf(retstring, 22, "Proto unknown %d", addr->sa_family);
-
-	}
-	return retstring;
-
-}
-
-/* Get the hostname corresponding to the address addr. On failure, the IP
- * address is returned. The return value is allocated with strdup() */
-char* getaddrhostname(struct sockaddr * addr) {
-
-	struct hostent *host = NULL;
-	char * retstring;
-
-#ifdef DO_HOST_LOOKUP
-	host = gethostbyaddr((char*)&((struct sockaddr_in*)addr)->sin_addr,
-			sizeof(struct in_addr), AF_INET);
+#ifndef DO_HOST_LOOKUP
+	host_lookup = 0;
 #endif
 	
-	if (host == NULL) {
-		/* return the address */
-		retstring = inet_ntoa(((struct sockaddr_in *)addr)->sin_addr);
-	} else {
-		/* return the hostname */
-		retstring = host->h_name;
+	if (host_lookup) {
+		flags = NI_NUMERICSERV;
 	}
 
-	return strdup(retstring);
+	len = sizeof(struct sockaddr_storage);
+	/* Some platforms such as Solaris 8 require that len is the length
+	 * of the specific structure. Some older linux systems (glibc 2.1.3
+	 * such as debian potato) have sockaddr_storage.__ss_family instead
+	 * but we'll ignore them */
+#ifdef HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY
+	if (addr->ss_family == AF_INET) {
+		len = sizeof(struct sockaddr_in);
+	}
+#ifdef AF_INET6
+	if (addr->ss_family == AF_INET6) {
+		len = sizeof(struct sockaddr_in6);
+	}
+#endif
+#endif
+
+	ret = getnameinfo((struct sockaddr*)addr, len, host, sizeof(host)-1, 
+			serv, sizeof(serv)-1, flags);
+
+	if (ret != 0) {
+		if (host_lookup) {
+			/* On some systems (Darwin does it) we get EINTR from getnameinfo
+			 * somehow. Eew. So we'll just return the IP, since that doesn't seem
+			 * to exhibit that behaviour. */
+			getaddrstring(addr, ret_host, ret_port, 0);
+			return;
+		} else {
+			/* if we can't do a numeric lookup, something's gone terribly wrong */
+			dropbear_exit("Failed lookup: %s", gai_strerror(ret));
+		}
+	}
+
+	if (ret_host) {
+		*ret_host = m_strdup(host);
+	}
+	if (ret_port) {
+		*ret_port = m_strdup(serv);
+	}
 }
+
 #ifdef DEBUG_TRACE
-void printhex(unsigned char* buf, int len) {
+void printhex(const char * label, const unsigned char * buf, int len) {
 
 	int i;
 
+	fprintf(stderr, "%s\n", label);
 	for (i = 0; i < len; i++) {
 		fprintf(stderr, "%02x", buf[i]);
 		if (i % 16 == 15) {
@@ -275,42 +684,94 @@ char * stripcontrol(const char * text) {
  * Returns DROPBEAR_SUCCESS or DROPBEAR_FAILURE */
 int buf_readfile(buffer* buf, const char* filename) {
 
-	int fd;
+	int fd = -1;
 	int len;
 	int maxlen;
+	int ret = DROPBEAR_FAILURE;
 
 	fd = open(filename, O_RDONLY);
 
 	if (fd < 0) {
-		close(fd);
-		return DROPBEAR_FAILURE;
+		goto out;
 	}
 	
 	do {
 		maxlen = buf->size - buf->pos;
-		len = read(fd, buf_getwriteptr(buf, maxlen),
-				maxlen);
+		len = read(fd, buf_getwriteptr(buf, maxlen), maxlen);
+		if (len < 0) {
+			if (errno == EINTR || errno == EAGAIN) {
+				continue;
+			}
+			goto out;
+		}
 		buf_incrwritepos(buf, len);
 	} while (len < maxlen && len > 0);
 
-	close(fd);
-	return DROPBEAR_SUCCESS;
+	ret = DROPBEAR_SUCCESS;
+
+out:
+	if (fd >= 0) {
+		m_close(fd);
+	}
+	return ret;
 }
 
-/* loop until the socket is closed (in case of EINTR) or
- * we get and error.
- * Returns DROPBEAR_SUCCESS or DROPBEAR_FAILURE */
-int m_close(int fd) {
+/* get a line from the file into buffer in the style expected for an
+ * authkeys file.
+ * Will return DROPBEAR_SUCCESS if data is read, or DROPBEAR_FAILURE on EOF.*/
+/* Only used for ~/.ssh/known_hosts and ~/.ssh/authorized_keys */
+#if defined(DROPBEAR_CLIENT) || defined(ENABLE_SVR_PUBKEY_AUTH)
+int buf_getline(buffer * line, FILE * authfile) {
+
+	int c = EOF;
+
+	TRACE(("enter buf_getline"))
+
+	buf_setpos(line, 0);
+	buf_setlen(line, 0);
+
+	while (line->pos < line->size) {
+
+		c = fgetc(authfile); /*getc() is weird with some uClibc systems*/
+		if (c == EOF || c == '\n' || c == '\r') {
+			goto out;
+		}
+
+		buf_putbyte(line, (unsigned char)c);
+	}
+
+	TRACE(("leave getauthline: line too long"))
+	/* We return success, but the line length will be zeroed - ie we just
+	 * ignore that line */
+	buf_setlen(line, 0);
+
+out:
+
+
+	/* if we didn't read anything before EOF or error, exit */
+	if (c == EOF && line->pos == 0) {
+		TRACE(("leave buf_getline: failure"))
+		return DROPBEAR_FAILURE;
+	} else {
+		TRACE(("leave buf_getline: success"))
+		buf_setpos(line, 0);
+		return DROPBEAR_SUCCESS;
+	}
+
+}	
+#endif
+
+/* make sure that the socket closes */
+void m_close(int fd) {
 
 	int val;
 	do {
 		val = close(fd);
 	} while (val < 0 && errno == EINTR);
 
-	if (val == 0 || errno == EBADF) {
-		return DROPBEAR_SUCCESS;
-	} else {
-		return DROPBEAR_FAILURE;
+	if (val < 0 && errno != EBADF) {
+		/* Linux says EIO can happen */
+		dropbear_exit("Error closing fd %d, %s", fd, strerror(errno));
 	}
 }
 	
@@ -321,7 +782,7 @@ void * m_malloc(size_t size) {
 	if (size == 0) {
 		dropbear_exit("m_malloc failed");
 	}
-	ret = malloc(size);
+	ret = calloc(1, size);
 	if (ret == NULL) {
 		dropbear_exit("m_malloc failed");
 	}
@@ -329,10 +790,14 @@ void * m_malloc(size_t size) {
 
 }
 
-void __m_free(void* ptr) {
-	if (ptr != NULL) {
-		free(ptr);
+void * m_strdup(const char * str) {
+	char* ret;
+
+	ret = strdup(str);
+	if (ret == NULL) {
+		dropbear_exit("m_strdup failed");
 	}
+	return ret;
 }
 
 void * m_realloc(void* ptr, size_t size) {
@@ -351,12 +816,51 @@ void * m_realloc(void* ptr, size_t size) {
 
 /* Clear the data, based on the method in David Wheeler's
  * "Secure Programming for Linux and Unix HOWTO" */
+/* Beware of calling this from within dbutil.c - things might get
+ * optimised away */
 void m_burn(void *data, unsigned int len) {
 	volatile char *p = data;
 
 	if (data == NULL)
 		return;
 	while (len--) {
-		*p++ = 0x66;
+		*p++ = 0x0;
+	}
+}
+
+
+void setnonblocking(int fd) {
+
+	TRACE(("setnonblocking: %d", fd))
+
+	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
+		if (errno == ENODEV) {
+			/* Some devices (like /dev/null redirected in)
+			 * can't be set to non-blocking */
+			TRACE(("ignoring ENODEV for setnonblocking"))
+		} else {
+			dropbear_exit("Couldn't set nonblocking");
+		}
+	}
+	TRACE(("leave setnonblocking"))
+}
+
+void disallow_core() {
+	struct rlimit lim;
+	lim.rlim_cur = lim.rlim_max = 0;
+	setrlimit(RLIMIT_CORE, &lim);
+}
+
+/* Returns DROPBEAR_SUCCESS or DROPBEAR_FAILURE, with the result in *val */
+int m_str_to_uint(const char* str, unsigned int *val) {
+	errno = 0;
+	*val = strtoul(str, NULL, 10);
+	/* The c99 spec doesn't actually seem to define EINVAL, but most platforms
+	 * I've looked at mention it in their manpage */
+	if ((*val == 0 && errno == EINVAL)
+		|| (*val == ULONG_MAX && errno == ERANGE)) {
+		return DROPBEAR_FAILURE;
+	} else {
+		return DROPBEAR_SUCCESS;
 	}
 }

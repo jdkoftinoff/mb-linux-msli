@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_FAST_MP_MONTGOMERY_REDUCE_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,20 +12,18 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* computes xR**-1 == x (mod N) via Montgomery Reduction
  *
- * This is an optimized implementation of mp_montgomery_reduce
+ * This is an optimized implementation of montgomery_reduce
  * which uses the comba method to quickly calculate the columns of the
  * reduction.
  *
  * Based on Algorithm 14.32 on pp.601 of HAC.
 */
-int
-fast_mp_montgomery_reduce (mp_int * x, mp_int * n, mp_digit rho)
+int fast_mp_montgomery_reduce (mp_int * x, mp_int * n, mp_digit rho)
 {
   int     ix, res, olduse;
   mp_word W[MP_WARRAY];
@@ -165,3 +165,8 @@ fast_mp_montgomery_reduce (mp_int * x, mp_int * n, mp_digit rho)
   }
   return MP_OKAY;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_fast_mp_montgomery_reduce.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

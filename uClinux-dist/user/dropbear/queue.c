@@ -42,7 +42,7 @@ void* dequeue(struct Queue* queue) {
 
 	void* ret;
 	struct Link* oldhead;
-	assert(!isempty(queue));
+	dropbear_assert(!isempty(queue));
 	
 	ret = queue->head->item;
 	oldhead = queue->head;
@@ -52,7 +52,7 @@ void* dequeue(struct Queue* queue) {
 	} else {
 		queue->head = NULL;
 		queue->tail = NULL;
-		TRACE(("empty queue dequeing"));
+		TRACE(("empty queue dequeing"))
 	}
 
 	m_free(oldhead);
@@ -62,7 +62,7 @@ void* dequeue(struct Queue* queue) {
 
 void *examine(struct Queue* queue) {
 
-	assert(!isempty(queue));
+	dropbear_assert(!isempty(queue));
 	return queue->head->item;
 }
 
@@ -70,7 +70,7 @@ void enqueue(struct Queue* queue, void* item) {
 
 	struct Link* newlink;
 
-	TRACE(("enter enqueue"));
+	TRACE(("enter enqueue"))
 	newlink = (struct Link*)m_malloc(sizeof(struct Link));
 
 	newlink->item = item;
@@ -85,5 +85,5 @@ void enqueue(struct Queue* queue, void* item) {
 		queue->head = newlink;
 	}
 	queue->count++;
-	TRACE(("leave enqueue"));
+	TRACE(("leave enqueue"))
 }

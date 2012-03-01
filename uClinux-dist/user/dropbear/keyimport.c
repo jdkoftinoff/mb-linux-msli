@@ -108,29 +108,13 @@ int import_write(const char *filename, sign_key *key, char *passphrase,
 static sign_key *dropbear_read(const char* filename) {
 
 	buffer * buf = NULL;
-	int len, maxlen;
-	FILE *fp;
 	sign_key *ret = NULL;
 	int type;
 
-	buf = buf_new(2000);
-	/* can't use buf_readfile since we might have "-" as filename */
-	if (strlen(filename) == 1 && filename[0] == '-') {
-		fp = stdin;
-	} else {
-		fp = fopen(filename, "r");
-	}
-	if (!fp) {
+	buf = buf_new(MAX_PRIVKEY_SIZE);
+	if (buf_readfile(buf, filename) == DROPBEAR_FAILURE) {
 		goto error;
 	}
-
-	do {
-		maxlen = buf->size - buf->pos;
-		len = fread(buf_getwriteptr(buf, maxlen), 1, maxlen, fp);
-		buf_incrwritepos(buf, len);
-	} while (len != maxlen && len > 0);
-
-	fclose(fp);
 
 	buf_setpos(buf, 0);
 	ret = new_sign_key();
@@ -173,14 +157,10 @@ static int dropbear_write(const char*filename, sign_key * key) {
 	}
 #endif
 
-	buf = buf_new(2000);
+	buf = buf_new(MAX_PRIVKEY_SIZE);
 	buf_put_priv_key(buf, key, keytype);
 
-	if (strlen(filename) == 1 && filename[0] == '-') {
-		fp = stdout;
-	} else {
-		fp = fopen(filename, "w");
-	}
+	fp = fopen(filename, "w");
 	if (!fp) {
 		ret = 0;
 		goto out;
@@ -192,6 +172,8 @@ static int dropbear_write(const char*filename, sign_key * key) {
 				1, buf->len - buf->pos, fp);
 		buf_incrpos(buf, len);
 	} while (len > 0 && buf->len != buf->pos);
+
+	fclose(fp);
 
 	if (buf->pos != buf->len) {
 		ret = 0;
@@ -223,7 +205,7 @@ static void base64_encode_fp(FILE * fp, unsigned char *data,
 	unsigned long outlen;
 	int rawcpl;
 	rawcpl = cpl * 3 / 4;
-	assert((unsigned int)cpl < sizeof(out));
+	dropbear_assert((unsigned int)cpl < sizeof(out));
 
     while (datalen > 0) {
 		n = (datalen < rawcpl ? datalen : rawcpl);
@@ -379,7 +361,7 @@ struct openssh_key {
 static struct openssh_key *load_openssh_key(const char *filename)
 {
 	struct openssh_key *ret;
-	FILE *fp;
+	FILE *fp = NULL;
 	char buffer[256];
 	char *errmsg = NULL, *p = NULL;
 	int headers_done;
@@ -499,6 +481,9 @@ static struct openssh_key *load_openssh_key(const char *filename)
 		}
 		memset(&ret, 0, sizeof(ret));
 		m_free(ret);
+	}
+	if (fp) {
+		fclose(fp);
 	}
 	if (errmsg) {
 		fprintf(stderr, "Error: %s\n", errmsg);
@@ -716,7 +701,6 @@ static int openssh_write(const char *filename, sign_key *key,
 	int nnumbers = -1, pos, len, seqlen, i;
 	char *header = NULL, *footer = NULL;
 	char zero[1];
-	unsigned char iv[8];
 	int ret = 0;
 	FILE *fp;
 	int keytype = -1;
@@ -734,7 +718,7 @@ static int openssh_write(const char *filename, sign_key *key,
 	}
 #endif
 
-	assert(keytype != -1);
+	dropbear_assert(keytype != -1);
 
 	/*
 	 * Fetch the key blobs.
@@ -933,7 +917,7 @@ static int openssh_write(const char *filename, sign_key *key,
 	 * with the same value. Those are all removed and the rest is
 	 * returned.
 	 */
-	assert(pos == len);
+	dropbear_assert(pos == len);
 	while (pos < outlen) {
 		outblob[pos++] = outlen - len;
 	}
@@ -944,40 +928,6 @@ static int openssh_write(const char *filename, sign_key *key,
 	if (passphrase) {
 		fprintf(stderr, "Encrypted keys aren't supported currently\n");
 		goto error;
-#if 0
-		/*
-		 * Invent an iv. Then derive encryption key from passphrase
-		 * and iv/salt:
-		 * 
-		 *  - let block A equal MD5(passphrase || iv)
-		 *  - let block B equal MD5(A || passphrase || iv)
-		 *  - block C would be MD5(B || passphrase || iv) and so on
-		 *  - encryption key is the first N bytes of A || B
-		 */
-		struct MD5Context md5c;
-		unsigned char keybuf[32];
-
-		for (i = 0; i < 8; i++) iv[i] = random_byte();
-
-		MD5Init(&md5c);
-		MD5Update(&md5c, (unsigned char *)passphrase, strlen(passphrase));
-		MD5Update(&md5c, iv, 8);
-		MD5Final(keybuf, &md5c);
-
-		MD5Init(&md5c);
-		MD5Update(&md5c, keybuf, 16);
-		MD5Update(&md5c, (unsigned char *)passphrase, strlen(passphrase));
-		MD5Update(&md5c, iv, 8);
-		MD5Final(keybuf+16, &md5c);
-
-		/*
-		 * Now encrypt the key blob.
-		 */
-		des3_encrypt_pubkey_ossh(keybuf, iv, outblob, outlen);
-
-		memset(&md5c, 0, sizeof(md5c));
-		memset(keybuf, 0, sizeof(keybuf));
-#endif
 	}
 
 	/*
@@ -994,12 +944,6 @@ static int openssh_write(const char *filename, sign_key *key,
 		goto error;
 	}
 	fputs(header, fp);
-	if (passphrase) {
-		fprintf(fp, "Proc-Type: 4,ENCRYPTED\nDEK-Info: DES-EDE3-CBC,");
-		for (i = 0; i < 8; i++)
-			fprintf(fp, "%02X", iv[i]);
-		fprintf(fp, "\n\n");
-	}
 	base64_encode_fp(fp, outblob, outlen, 64);
 	fputs(footer, fp);
 	fclose(fp);
@@ -1511,7 +1455,7 @@ sign_key *sshcom_read(const char *filename, char *passphrase)
 		privlen = pos - publen;
 	}
 
-	assert(privlen > 0);			   /* should have bombed by now if not */
+	dropbear_assert(privlen > 0);			   /* should have bombed by now if not */
 
 	retkey = snew(struct ssh2_userkey);
 	retkey->alg = alg;
@@ -1577,7 +1521,7 @@ int sshcom_write(const char *filename, sign_key *key,
 		pos += ssh2_read_mpint(privblob+pos, privlen-pos, &q);
 		pos += ssh2_read_mpint(privblob+pos, privlen-pos, &iqmp);
 
-		assert(e.start && iqmp.start); /* can't go wrong */
+		dropbear_assert(e.start && iqmp.start); /* can't go wrong */
 
 		numbers[0] = e;
 		numbers[1] = d;
@@ -1601,7 +1545,7 @@ int sshcom_write(const char *filename, sign_key *key,
 		pos = 0;
 		pos += ssh2_read_mpint(privblob+pos, privlen-pos, &x);
 
-		assert(y.start && x.start); /* can't go wrong */
+		dropbear_assert(y.start && x.start); /* can't go wrong */
 
 		numbers[0] = p;
 		numbers[1] = g;
@@ -1613,7 +1557,7 @@ int sshcom_write(const char *filename, sign_key *key,
 		initial_zero = 1;
 		type = "dl-modp{sign{dsa-nist-sha1},dh{plain}}";
 	} else {
-		assert(0);					 /* zoinks! */
+		dropbear_assert(0);					 /* zoinks! */
 	}
 
 	/*
@@ -1657,13 +1601,13 @@ int sshcom_write(const char *filename, sign_key *key,
 	}
 	ciphertext = (char *)outblob+lenpos+4;
 	cipherlen = pos - (lenpos+4);
-	assert(!passphrase || cipherlen % 8 == 0);
+	dropbear_assert(!passphrase || cipherlen % 8 == 0);
 	/* Wrap up the encrypted blob string. */
 	PUT_32BIT(outblob+lenpos, cipherlen);
 	/* And finally fill in the total length field. */
 	PUT_32BIT(outblob+4, pos);
 
-	assert(pos < outlen);
+	dropbear_assert(pos < outlen);
 
 	/*
 	 * Encrypt the key.

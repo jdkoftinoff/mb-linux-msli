@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_JACOBI_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* computes the jacobi c = (a | n) (or Legendre if n is prime)
  * HAC pp. 73 Algorithm 2.149
@@ -49,13 +50,13 @@ int mp_jacobi (mp_int * a, mp_int * p, int *c)
   }
 
   if ((res = mp_init (&p1)) != MP_OKAY) {
-    goto __A1;
+    goto LBL_A1;
   }
 
   /* divide out larger power of two */
   k = mp_cnt_lsb(&a1);
   if ((res = mp_div_2d(&a1, k, &a1, NULL)) != MP_OKAY) {
-     goto __P1;
+     goto LBL_P1;
   }
 
   /* step 4.  if e is even set s=1 */
@@ -83,17 +84,22 @@ int mp_jacobi (mp_int * a, mp_int * p, int *c)
   } else {
     /* n1 = n mod a1 */
     if ((res = mp_mod (p, &a1, &p1)) != MP_OKAY) {
-      goto __P1;
+      goto LBL_P1;
     }
     if ((res = mp_jacobi (&p1, &a1, &r)) != MP_OKAY) {
-      goto __P1;
+      goto LBL_P1;
     }
     *c = s * r;
   }
 
   /* done */
   res = MP_OKAY;
-__P1:mp_clear (&p1);
-__A1:mp_clear (&a1);
+LBL_P1:mp_clear (&p1);
+LBL_A1:mp_clear (&a1);
   return res;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_jacobi.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_DR_REDUCE_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,16 +12,15 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* reduce "x" in place modulo "n" using the Diminished Radix algorithm.
  *
  * Based on algorithm from the paper
  *
  * "Generating Efficient Primes for Discrete Log Cryptosystems"
- *                 Chae Hoon Lim, Pil Loong Lee,
+ *                 Chae Hoon Lim, Pil Joong Lee,
  *          POSTECH Information Research Laboratories
  *
  * The modulus must be of a special format [see manual]
@@ -86,3 +87,8 @@ top:
   }
   return MP_OKAY;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_dr_reduce.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

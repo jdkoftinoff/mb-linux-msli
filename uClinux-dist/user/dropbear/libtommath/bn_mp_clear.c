@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_CLEAR_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,18 +12,24 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* clear one (frees)  */
 void
 mp_clear (mp_int * a)
 {
+  volatile mp_digit *p;
+  int len;
+
   /* only do anything if a hasn't been freed previously */
   if (a->dp != NULL) {
     /* first zero the digits */
-    memset (a->dp, 0, sizeof (mp_digit) * a->used);
+	len = a->alloc;
+	p = a->dp;
+	while (len--) {
+		*p++ = 0;
+	}
 
     /* free ram */
     XFREE(a->dp);
@@ -32,3 +40,8 @@ mp_clear (mp_int * a)
     a->sign  = MP_ZPOS;
   }
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_clear.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

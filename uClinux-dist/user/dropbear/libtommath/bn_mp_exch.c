@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_EXCH_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* swap the elements of two integers, for cases where you can't simply swap the 
  * mp_int pointers around
@@ -26,3 +27,8 @@ mp_exch (mp_int * a, mp_int * b)
   *a = *b;
   *b = t;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_exch.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

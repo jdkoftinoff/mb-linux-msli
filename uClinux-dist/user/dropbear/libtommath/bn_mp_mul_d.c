@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_MUL_D_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* multiply by a digit */
 int
@@ -56,8 +57,9 @@ mp_mul_d (mp_int * a, mp_digit b, mp_int * c)
     u       = (mp_digit) (r >> ((mp_word) DIGIT_BIT));
   }
 
-  /* store final carry [if any] */
+  /* store final carry [if any] and increment ix offset  */
   *tmpc++ = u;
+  ++ix;
 
   /* now zero digits above the top */
   while (ix++ < olduse) {
@@ -70,3 +72,8 @@ mp_mul_d (mp_int * a, mp_digit b, mp_int * c)
 
   return MP_OKAY;
 }
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_mul_d.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

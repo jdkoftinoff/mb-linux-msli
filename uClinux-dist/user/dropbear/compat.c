@@ -162,7 +162,7 @@ int daemon(int nochdir, int noclose) {
 
 	int fd;
 
-	switch (vfork()) {
+	switch (fork()) {
 		case -1:
 			return (-1);
 		case 0:
@@ -190,7 +190,7 @@ int daemon(int nochdir, int noclose) {
 
 #ifndef HAVE_BASENAME
 
-char *basename(char *path) {
+char *basename(const char *path) {
 
 	char *foo = strrchr(path, '/');
 	return ++foo;

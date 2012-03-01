@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_PRIME_RANDOM_EX_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,8 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
 
 /* makes a truly random prime of a given size (bits),
  *
@@ -46,7 +47,7 @@ int mp_prime_random_ex(mp_int *a, int t, int size, int flags, ltm_prime_callback
    }
 
    /* calc the byte size */
-   bsize = (size>>3)+(size&7?1:0);
+   bsize = (size>>3) + ((size&7)?1:0);
 
    /* we need a buffer of bsize bytes */
    tmp = OPT_CAST(unsigned char) XMALLOC(bsize);
@@ -55,19 +56,17 @@ int mp_prime_random_ex(mp_int *a, int t, int size, int flags, ltm_prime_callback
    }
 
    /* calc the maskAND value for the MSbyte*/
-   maskAND = 0xFF >> (8 - (size & 7));
+   maskAND = ((size&7) == 0) ? 0xFF : (0xFF >> (8 - (size & 7)));
 
    /* calc the maskOR_msb */
    maskOR_msb        = 0;
-   maskOR_msb_offset = (size - 2) >> 3;
+   maskOR_msb_offset = ((size & 7) == 1) ? 1 : 0;
    if (flags & LTM_PRIME_2MSB_ON) {
-      maskOR_msb     |= 1 << ((size - 2) & 7);
-   } else if (flags & LTM_PRIME_2MSB_OFF) {
-      maskAND        &= ~(1 << ((size - 2) & 7));
-   }
+      maskOR_msb       |= 0x80 >> ((9 - size) & 7);
+   }  
 
    /* get the maskOR_lsb */
-   maskOR_lsb         = 0;
+   maskOR_lsb         = 1;
    if (flags & LTM_PRIME_BBS) {
       maskOR_lsb     |= 3;
    }
@@ -92,6 +91,9 @@ int mp_prime_random_ex(mp_int *a, int t, int size, int flags, ltm_prime_callback
 
       /* is it prime? */
       if ((err = mp_prime_is_prime(a, t, &res)) != MP_OKAY)           { goto error; }
+      if (res == MP_NO) {  
+         continue;
+      }
 
       if (flags & LTM_PRIME_SAFE) {
          /* see if (a-1)/2 is prime */
@@ -116,3 +118,8 @@ error:
 }
 
 
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_prime_random_ex.c,v $ */
+/* $Revision: 1.4 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

@@ -1,5 +1,5 @@
 /*
- * Dropbear - a SSH2 server
+ * Dropbear SSH
  * 
  * Copyright (c) 2002,2003 Matt Johnston
  * All rights reserved.
@@ -34,8 +34,8 @@
 #define BUF_MAX_INCR 1000000000
 #define BUF_MAX_SIZE 1000000000
 
-/* avoid excessively large numbers, > ~8192 bit */
-#define BUF_MAX_MPINT (8200 / 8)
+/* avoid excessively large numbers, > ~8192 bits */
+#define BUF_MAX_MPINT (8240 / 8)
 
 /* Create (malloc) a new buffer of size */
 buffer* buf_new(unsigned int size) {
@@ -106,7 +106,7 @@ buffer* buf_newcopy(buffer* buf) {
 /* Set the length of the buffer */
 void buf_setlen(buffer* buf, unsigned int len) {
 	if (len > buf->size) {
-		dropbear_exit("bad buf_setlen");
+		dropbear_exit("Bad buf_setlen");
 	}
 	buf->len = len;
 }
@@ -114,7 +114,7 @@ void buf_setlen(buffer* buf, unsigned int len) {
 /* Increment the length of the buffer */
 void buf_incrlen(buffer* buf, unsigned int incr) {
 	if (incr > BUF_MAX_INCR || buf->len + incr > buf->size) {
-		dropbear_exit("bad buf_incrlen");
+		dropbear_exit("Bad buf_incrlen");
 	}
 	buf->len += incr;
 }
@@ -122,7 +122,7 @@ void buf_incrlen(buffer* buf, unsigned int incr) {
 void buf_setpos(buffer* buf, unsigned int pos) {
 
 	if (pos > buf->len) {
-		dropbear_exit("bad buf_setpos");
+		dropbear_exit("Bad buf_setpos");
 	}
 	buf->pos = pos;
 }
@@ -130,7 +130,7 @@ void buf_setpos(buffer* buf, unsigned int pos) {
 /* increment the postion by incr, increasing the buffer length if required */
 void buf_incrwritepos(buffer* buf, unsigned int incr) {
 	if (incr > BUF_MAX_INCR || buf->pos + incr > buf->size) {
-		dropbear_exit("bad buf_incrwritepos");
+		dropbear_exit("Bad buf_incrwritepos");
 	}
 	buf->pos += incr;
 	if (buf->pos > buf->len) {
@@ -144,7 +144,7 @@ void buf_incrpos(buffer* buf,  int incr) {
 	if (incr > BUF_MAX_INCR ||
 			(unsigned int)((int)buf->pos + incr) > buf->len 
 			|| ((int)buf->pos + incr) < 0) {
-		dropbear_exit("bad buf_incrpos");
+		dropbear_exit("Bad buf_incrpos");
 	}
 	buf->pos += incr;
 }
@@ -152,19 +152,28 @@ void buf_incrpos(buffer* buf,  int incr) {
 /* Get a byte from the buffer and increment the pos */
 unsigned char buf_getbyte(buffer* buf) {
 
-	/* This check is really just "==", but the >= allows us to check for the
-	 * assert()able case of pos > len, which should _never_ happen */
+	/* This check is really just ==, but the >= allows us to check for the
+	 * bad case of pos > len, which should _never_ happen. */
 	if (buf->pos >= buf->len) {
-		dropbear_exit("bad buf_getbyte");
+		dropbear_exit("Bad buf_getbyte");
 	}
 	return buf->data[buf->pos++];
+}
+
+/* Get a bool from the buffer and increment the pos */
+unsigned char buf_getbool(buffer* buf) {
+
+	unsigned char b;
+	b = buf_getbyte(buf);
+	if (b != 0)
+		b = 1;
+	return b;
 }
 
 /* put a byte, incrementing the length if required */
 void buf_putbyte(buffer* buf, unsigned char val) {
 
-	/* assert(buf->pos <= buf->len) */
-	if (buf->pos == buf->len) {
+	if (buf->pos >= buf->len) {
 		buf_incrlen(buf, 1);
 	}
 	buf->data[buf->pos] = val;
@@ -176,7 +185,7 @@ void buf_putbyte(buffer* buf, unsigned char val) {
 unsigned char* buf_getptr(buffer* buf, unsigned int len) {
 
 	if (buf->pos + len > buf->len) {
-		dropbear_exit("bad buf_getptr");
+		dropbear_exit("Bad buf_getptr");
 	}
 	return &buf->data[buf->pos];
 }
@@ -186,7 +195,7 @@ unsigned char* buf_getptr(buffer* buf, unsigned int len) {
 unsigned char* buf_getwriteptr(buffer* buf, unsigned int len) {
 
 	if (buf->pos + len > buf->size) {
-		dropbear_exit("bad buf_getwriteptr");
+		dropbear_exit("Bad buf_getwriteptr");
 	}
 	return &buf->data[buf->pos];
 }
@@ -200,7 +209,7 @@ unsigned char* buf_getstring(buffer* buf, unsigned int *retlen) {
 	unsigned char* ret;
 	len = buf_getint(buf);
 	if (len > MAX_STRING_LEN) {
-		dropbear_exit("string too long");
+		dropbear_exit("String too long");
 	}
 
 	if (retlen != NULL) {
@@ -212,6 +221,27 @@ unsigned char* buf_getstring(buffer* buf, unsigned int *retlen) {
 	ret[len] = '\0';
 
 	return ret;
+}
+
+/* Return a string as a newly allocated buffer */
+buffer * buf_getstringbuf(buffer *buf) {
+	buffer *ret;
+	unsigned char* str;
+	unsigned int len;
+	str = buf_getstring(buf, &len);
+	ret = m_malloc(sizeof(*ret));
+	ret->data = str;
+	ret->len = len;
+	ret->size = len;
+	ret->pos = 0;
+	return ret;
+}
+
+/* Just increment the buffer position the same as if we'd used buf_getstring,
+ * but don't bother copying/malloc()ing for it */
+void buf_eatstring(buffer *buf) {
+
+	buf_incrpos( buf, buf_getint(buf) );
 }
 
 /* Get an uint32 from the buffer and increment the pos */
@@ -252,9 +282,9 @@ void buf_putbytes(buffer *buf, const unsigned char *bytes, unsigned int len) {
 void buf_putmpint(buffer* buf, mp_int * mp) {
 
 	unsigned int len, pad = 0;
-	TRACE(("enter buf_putmpint"));
+	TRACE(("enter buf_putmpint"))
 
-	assert(mp != NULL);
+	dropbear_assert(mp != NULL);
 
 	if (SIGN(mp) == MP_NEG) {
 		dropbear_exit("negative bignum");
@@ -288,7 +318,7 @@ void buf_putmpint(buffer* buf, mp_int * mp) {
 		buf_incrwritepos(buf, len-pad);
 	}
 
-	TRACE(("leave buf_putmpint"));
+	TRACE(("leave buf_putmpint"))
 }
 
 /* Retrieve an mp_int from the buffer.

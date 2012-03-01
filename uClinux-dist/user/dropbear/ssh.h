@@ -42,7 +42,21 @@
 #define SSH_MSG_USERAUTH_FAILURE            51
 #define SSH_MSG_USERAUTH_SUCCESS            52
 #define SSH_MSG_USERAUTH_BANNER             53
+
+/* packets 60-79 are method-specific, aren't one-one mapping */
+#define SSH_MSG_USERAUTH_SPECIFIC_60   60
+
+#define SSH_MSG_USERAUTH_PASSWD_CHANGEREQ   60
+
 #define SSH_MSG_USERAUTH_PK_OK				60
+
+/* keyboard interactive auth */
+#define SSH_MSG_USERAUTH_INFO_REQUEST           60
+#define SSH_MSG_USERAUTH_INFO_RESPONSE          61
+
+
+/* If adding numbers here, check MAX_UNAUTH_PACKET_TYPE in process-packet.c
+ * is still valid */
 
 /* connect message numbers */
 #define SSH_MSG_GLOBAL_REQUEST                  80
@@ -62,12 +76,6 @@
 
 /* extended data types */
 #define SSH_EXTENDED_DATA_STDERR	1
-
-/* channel connection failure types */
-#define SSH_OPEN_ADMINISTRATIVELY_PROHIBITED    1
-#define SSH_OPEN_CONNECT_FAILED                 2
-#define SSH_OPEN_UNKNOWN_CHANNEL_TYPE           3
-#define SSH_OPEN_RESOURCE_SHORTAGE              4
 
 /* disconnect codes */
 #define SSH_DISCONNECT_HOST_NOT_ALLOWED_TO_CONNECT      1
@@ -98,5 +106,13 @@
 #define SSH_SIGNKEY_RSA "ssh-rsa"
 #define SSH_SIGNKEY_RSA_LEN 7
 
+/* Agent commands. These aren't part of the spec, and are defined
+ * only on the openssh implementation. */
+#define SSH_AGENT_FAILURE			5
+#define SSH_AGENT_SUCCESS			6
+#define SSH2_AGENTC_REQUEST_IDENTITIES		11
+#define SSH2_AGENT_IDENTITIES_ANSWER		12
+#define SSH2_AGENTC_SIGN_REQUEST		13
+#define SSH2_AGENT_SIGN_RESPONSE		14
 
-
+#define SSH2_AGENT_FAILURE			30

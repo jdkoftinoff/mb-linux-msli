@@ -26,38 +26,114 @@
 #define _AUTH_H_
 
 #include "includes.h"
+#include "signkey.h"
+#include "chansession.h"
 
-void authinitialise();
+void svr_authinitialise();
+void cli_authinitialise();
 
+/* Server functions */
 void recv_msg_userauth_request();
 void send_msg_userauth_failure(int partial, int incrfail);
 void send_msg_userauth_success();
+void svr_auth_password();
+void svr_auth_pubkey();
+void svr_auth_pam();
+
+#ifdef ENABLE_SVR_PUBKEY_OPTIONS
+int svr_pubkey_allows_agentfwd();
+int svr_pubkey_allows_tcpfwd();
+int svr_pubkey_allows_x11fwd();
+int svr_pubkey_allows_pty();
+void svr_pubkey_set_forced_command(struct ChanSess *chansess);
+void svr_pubkey_options_cleanup();
+int svr_add_pubkey_options(buffer *options_buf, int line_num, const char* filename);
+#else
+/* no option : success */
+#define svr_pubkey_allows_agentfwd() 1
+#define svr_pubkey_allows_tcpfwd() 1
+#define svr_pubkey_allows_x11fwd() 1
+#define svr_pubkey_allows_pty() 1
+static inline void svr_pubkey_set_forced_command(struct ChanSess *chansess) { }
+static inline void svr_pubkey_options_cleanup() { }
+#define svr_add_pubkey_options(x,y,z) DROPBEAR_SUCCESS
+#endif
+
+/* Client functions */
+void recv_msg_userauth_failure();
+void recv_msg_userauth_success();
+void recv_msg_userauth_specific_60();
+void recv_msg_userauth_pk_ok();
+void recv_msg_userauth_info_request();
+void cli_get_user();
+void cli_auth_getmethods();
+void cli_auth_try();
+void recv_msg_userauth_banner();
+void cli_pubkeyfail();
+void cli_auth_password();
+int cli_auth_pubkey();
+void cli_auth_interactive();
+char* getpass_or_cancel(char* prompt);
+void cli_auth_pubkey_cleanup();
+
 
 #define MAX_USERNAME_LEN 25 /* arbitrary for the moment */
 
-#define AUTH_TYPE_PUBKEY	1 << 0
-#define AUTH_TYPE_PASSWORD	1 << 1
+#define AUTH_TYPE_NONE      1
+#define AUTH_TYPE_PUBKEY    1 << 1
+#define AUTH_TYPE_PASSWORD  1 << 2
+#define AUTH_TYPE_INTERACT  1 << 3
 
-/* auth types, "none" means we should return list of acceptable types */
-#define AUTH_METHOD_NONE	"none"
+#define AUTH_METHOD_NONE "none"
 #define AUTH_METHOD_NONE_LEN 4
 #define AUTH_METHOD_PUBKEY "publickey"
 #define AUTH_METHOD_PUBKEY_LEN 9
 #define AUTH_METHOD_PASSWORD "password"
 #define AUTH_METHOD_PASSWORD_LEN 8
+#define AUTH_METHOD_INTERACT "keyboard-interactive"
+#define AUTH_METHOD_INTERACT_LEN 20
 
+
+
+/* This structure is shared between server and client - it contains
+ * relatively little extraneous bits when used for the client rather than the
+ * server */
 struct AuthState {
-
 	char *username; /* This is the username the client presents to check. It
 					   is updated each run through, used for auth checking */
-	char *printableuser; /* stripped of control chars, used for logs etc */
-	struct passwd * pw;
 	unsigned char authtypes; /* Flags indicating which auth types are still 
 								valid */
 	unsigned int failcount; /* Number of (failed) authentication attempts.*/
-	unsigned authdone : 1; /* 0 if we haven't authed, 1 if we have */
+	unsigned authdone : 1; /* 0 if we haven't authed, 1 if we have. Applies for
+							  client and server (though has differing [obvious]
+							  meanings). */
+	unsigned perm_warn : 1; /* Server only, set if bad permissions on 
+							   ~/.ssh/authorized_keys have already been
+							   logged. */
 
-
+	/* These are only used for the server */
+	uid_t pw_uid;
+	gid_t pw_gid;
+	char *pw_dir;
+	char *pw_shell;
+	char *pw_name;
+	char *pw_passwd;
+#ifdef ENABLE_SVR_PUBKEY_OPTIONS
+	struct PubKeyOptions* pubkey_options;
+#endif
 };
+
+#ifdef ENABLE_SVR_PUBKEY_OPTIONS
+struct PubKeyOptions;
+struct PubKeyOptions {
+	/* Flags */
+	int no_port_forwarding_flag;
+	int no_agent_forwarding_flag;
+	int no_x11_forwarding_flag;
+	int no_pty_flag;
+	/* "command=" option. */
+	unsigned char * forced_command;
+};
+#endif
 
 #endif /* _AUTH_H_ */

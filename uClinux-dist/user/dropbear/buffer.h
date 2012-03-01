@@ -50,10 +50,13 @@ void buf_setpos(buffer* buf, unsigned int pos);
 void buf_incrpos(buffer* buf, int incr); /* -ve is ok, to go backwards */
 void buf_incrwritepos(buffer* buf, unsigned int incr);
 unsigned char buf_getbyte(buffer* buf);
+unsigned char buf_getbool(buffer* buf);
 void buf_putbyte(buffer* buf, unsigned char val);
 unsigned char* buf_getptr(buffer* buf, unsigned int len);
 unsigned char* buf_getwriteptr(buffer* buf, unsigned int len);
 unsigned char* buf_getstring(buffer* buf, unsigned int *retlen);
+buffer * buf_getstringbuf(buffer *buf);
+void buf_eatstring(buffer *buf);
 void buf_putint(buffer* buf, unsigned int val);
 void buf_putstring(buffer* buf, const unsigned char* str, unsigned int len);
 void buf_putbytes(buffer *buf, const unsigned char *bytes, unsigned int len);

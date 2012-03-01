@@ -15,7 +15,7 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-/*RCSID("$OpenBSD: sshpty.c,v 1.7 2002/06/24 17:57:20 deraadt Exp $");*/
+/*RCSID("OpenBSD: sshpty.c,v 1.7 2002/06/24 17:57:20 deraadt Exp ");*/
 
 #include "includes.h"
 #include "dbutil.h"
@@ -234,7 +234,7 @@ pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, int namebuflen)
 
 		return 1;
 	}
-	dropbear_log(LOG_WARNING, "failed to open any /dev/pty?? devices");
+	dropbear_log(LOG_WARNING, "Failed to open any /dev/pty?? devices");
 	return 0;
 #endif /* HAVE_DEV_PTS_AND_PTC */
 #endif /* USE_DEV_PTMX */

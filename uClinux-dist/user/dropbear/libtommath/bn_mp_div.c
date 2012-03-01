@@ -1,3 +1,5 @@
+#include <tommath.h>
+#ifdef BN_MP_DIV_C
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *
  * LibTomMath is a library that provides multiple-precision
@@ -10,9 +12,80 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://math.libtomcrypt.org
+ * Tom St Denis, tomstdenis@gmail.com, http://math.libtomcrypt.com
  */
-#include <tommath.h>
+
+#ifdef BN_MP_DIV_SMALL
+
+/* slower bit-bang division... also smaller */
+int mp_div(mp_int * a, mp_int * b, mp_int * c, mp_int * d)
+{
+   mp_int ta, tb, tq, q;
+   int    res, n, n2;
+
+  /* is divisor zero ? */
+  if (mp_iszero (b) == 1) {
+    return MP_VAL;
+  }
+
+  /* if a < b then q=0, r = a */
+  if (mp_cmp_mag (a, b) == MP_LT) {
+    if (d != NULL) {
+      res = mp_copy (a, d);
+    } else {
+      res = MP_OKAY;
+    }
+    if (c != NULL) {
+      mp_zero (c);
+    }
+    return res;
+  }
+	
+  /* init our temps */
+  if ((res = mp_init_multi(&ta, &tb, &tq, &q, NULL) != MP_OKAY)) {
+     return res;
+  }
+
+
+  mp_set(&tq, 1);
+  n = mp_count_bits(a) - mp_count_bits(b);
+  if (((res = mp_abs(a, &ta)) != MP_OKAY) ||
+      ((res = mp_abs(b, &tb)) != MP_OKAY) || 
+      ((res = mp_mul_2d(&tb, n, &tb)) != MP_OKAY) ||
+      ((res = mp_mul_2d(&tq, n, &tq)) != MP_OKAY)) {
+      goto LBL_ERR;
+  }
+
+  while (n-- >= 0) {
+     if (mp_cmp(&tb, &ta) != MP_GT) {
+        if (((res = mp_sub(&ta, &tb, &ta)) != MP_OKAY) ||
+            ((res = mp_add(&q, &tq, &q)) != MP_OKAY)) {
+           goto LBL_ERR;
+        }
+     }
+     if (((res = mp_div_2d(&tb, 1, &tb, NULL)) != MP_OKAY) ||
+         ((res = mp_div_2d(&tq, 1, &tq, NULL)) != MP_OKAY)) {
+           goto LBL_ERR;
+     }
+  }
+
+  /* now q == quotient and ta == remainder */
+  n  = a->sign;
+  n2 = (a->sign == b->sign ? MP_ZPOS : MP_NEG);
+  if (c != NULL) {
+     mp_exch(c, &q);
+     c->sign  = (mp_iszero(c) == MP_YES) ? MP_ZPOS : n2;
+  }
+  if (d != NULL) {
+     mp_exch(d, &ta);
+     d->sign = (mp_iszero(d) == MP_YES) ? MP_ZPOS : n;
+  }
+LBL_ERR:
+   mp_clear_multi(&ta, &tb, &tq, &q, NULL);
+   return res;
+}
+
+#else
 
 /* integer signed division. 
  * c*b + d == a [e.g. a/b, c=quotient, d=remainder]
@@ -56,19 +129,19 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
   q.used = a->used + 2;
 
   if ((res = mp_init (&t1)) != MP_OKAY) {
-    goto __Q;
+    goto LBL_Q;
   }
 
   if ((res = mp_init (&t2)) != MP_OKAY) {
-    goto __T1;
+    goto LBL_T1;
   }
 
   if ((res = mp_init_copy (&x, a)) != MP_OKAY) {
-    goto __T2;
+    goto LBL_T2;
   }
 
   if ((res = mp_init_copy (&y, b)) != MP_OKAY) {
-    goto __X;
+    goto LBL_X;
   }
 
   /* fix the sign */
@@ -80,10 +153,10 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
   if (norm < (int)(DIGIT_BIT-1)) {
      norm = (DIGIT_BIT-1) - norm;
      if ((res = mp_mul_2d (&x, norm, &x)) != MP_OKAY) {
-       goto __Y;
+       goto LBL_Y;
      }
      if ((res = mp_mul_2d (&y, norm, &y)) != MP_OKAY) {
-       goto __Y;
+       goto LBL_Y;
      }
   } else {
      norm = 0;
@@ -95,13 +168,13 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
 
   /* while (x >= y*b**n-t) do { q[n-t] += 1; x -= y*b**{n-t} } */
   if ((res = mp_lshd (&y, n - t)) != MP_OKAY) { /* y = y*b**{n-t} */
-    goto __Y;
+    goto LBL_Y;
   }
 
   while (mp_cmp (&x, &y) != MP_LT) {
     ++(q.dp[n - t]);
     if ((res = mp_sub (&x, &y, &x)) != MP_OKAY) {
-      goto __Y;
+      goto LBL_Y;
     }
   }
 
@@ -143,7 +216,7 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
       t1.dp[1] = y.dp[t];
       t1.used = 2;
       if ((res = mp_mul_d (&t1, q.dp[i - t - 1], &t1)) != MP_OKAY) {
-        goto __Y;
+        goto LBL_Y;
       }
 
       /* find right hand */
@@ -155,27 +228,27 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
 
     /* step 3.3 x = x - q{i-t-1} * y * b**{i-t-1} */
     if ((res = mp_mul_d (&y, q.dp[i - t - 1], &t1)) != MP_OKAY) {
-      goto __Y;
+      goto LBL_Y;
     }
 
     if ((res = mp_lshd (&t1, i - t - 1)) != MP_OKAY) {
-      goto __Y;
+      goto LBL_Y;
     }
 
     if ((res = mp_sub (&x, &t1, &x)) != MP_OKAY) {
-      goto __Y;
+      goto LBL_Y;
     }
 
     /* if x < 0 then { x = x + y*b**{i-t-1}; q{i-t-1} -= 1; } */
     if (x.sign == MP_NEG) {
       if ((res = mp_copy (&y, &t1)) != MP_OKAY) {
-        goto __Y;
+        goto LBL_Y;
       }
       if ((res = mp_lshd (&t1, i - t - 1)) != MP_OKAY) {
-        goto __Y;
+        goto LBL_Y;
       }
       if ((res = mp_add (&x, &t1, &x)) != MP_OKAY) {
-        goto __Y;
+        goto LBL_Y;
       }
 
       q.dp[i - t - 1] = (q.dp[i - t - 1] - 1UL) & MP_MASK;
@@ -187,7 +260,7 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
    */
   
   /* get sign before writing to c */
-  x.sign = a->sign;
+  x.sign = x.used == 0 ? MP_ZPOS : a->sign;
 
   if (c != NULL) {
     mp_clamp (&q);
@@ -196,16 +269,26 @@ int mp_div (mp_int * a, mp_int * b, mp_int * c, mp_int * d)
   }
 
   if (d != NULL) {
-    mp_div_2d (&x, norm, &x, NULL);
+    if ((res = mp_div_2d (&x, norm, &x, NULL)) != MP_OKAY) {
+		goto LBL_Y;
+	}
     mp_exch (&x, d);
   }
 
   res = MP_OKAY;
 
-__Y:mp_clear (&y);
-__X:mp_clear (&x);
-__T2:mp_clear (&t2);
-__T1:mp_clear (&t1);
-__Q:mp_clear (&q);
+LBL_Y:mp_clear (&y);
+LBL_X:mp_clear (&x);
+LBL_T2:mp_clear (&t2);
+LBL_T1:mp_clear (&t1);
+LBL_Q:mp_clear (&q);
   return res;
 }
+
+#endif
+
+#endif
+
+/* $Source: /cvs/libtom/libtommath/bn_mp_div.c,v $ */
+/* $Revision: 1.3 $ */
+/* $Date: 2006/03/31 14:18:44 $ */

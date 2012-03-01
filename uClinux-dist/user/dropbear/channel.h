@@ -27,6 +27,7 @@
 
 #include "includes.h"
 #include "buffer.h"
+#include "circbuffer.h"
 
 /* channel->type values */
 #define CHANNEL_ID_NONE 0
@@ -36,52 +37,73 @@
 #define CHANNEL_ID_TCPDIRECT 4
 #define CHANNEL_ID_TCPFORWARDED 5
 
-#define MAX_CHANNELS 60 /* simple mem restriction, includes each tcp/x11
-							connection, so can't be _too_ small */
+#define SSH_OPEN_ADMINISTRATIVELY_PROHIBITED    1
+#define SSH_OPEN_CONNECT_FAILED                 2
+#define SSH_OPEN_UNKNOWN_CHANNEL_TYPE           3
+#define SSH_OPEN_RESOURCE_SHORTAGE              4
+
+/* Not a real type */
+#define SSH_OPEN_IN_PROGRESS					99
 
 #define CHAN_EXTEND_SIZE 3 /* how many extra slots to add when we need more */
 
-#define RECV_MAXWINDOW 6000 /* tweak */
-#define RECV_MAXPACKET 1400 /* tweak */
-#define RECV_MINWINDOW 19000 /* when we get below this, we send a windowadjust */
-
-/* a simpler way to define that we need code for listeners */
-#if !defined(DISABLE_X11FWD) || !defined(DISABLE_AUTHFWD) || \
-	!defined(DISABLE_REMOTETCPFWD)
-#define USE_LISTENERS
-#endif
+struct ChanType;
 
 struct Channel {
 
 	unsigned int index; /* the local channel index */
 	unsigned int remotechan;
-	unsigned char type; /* CHANNEL_ID_SESSION, CHANNEL_ID_X11 etc */
 	unsigned int recvwindow, transwindow;
+	unsigned int recvdonelen;
 	unsigned int recvmaxpacket, transmaxpacket;
 	void* typedata; /* a pointer to type specific data */
-	int infd; /* stdin for the program, we write to this */
-	int outfd; /* stdout for the program, we read from this */
-	int errfd; /* stdout for a program. This doesn't really fit here,
-				  but makes the code a lot tidyer without being too bad. This
-				  is -1 for channels which don't requre it. Currently only
-				  a 'session' without a pty will use it */
-	buffer *writebuf; /* data for the program */
+	int writefd; /* read from wire, written to insecure side */
+	int readfd; /* read from insecure side, written to wire */
+	int errfd; /* used like writefd or readfd, depending if it's client or server.
+				  Doesn't exactly belong here, but is cleaner here */
+	circbuffer *writebuf; /* data from the wire, for local consumption */
+	circbuffer *extrabuf; /* extended-data for the program - used like writebuf
+					     but for stderr */
 
-	int sentclosed, recvclosed;
+	/* whether close/eof messages have been exchanged */
+	int sent_close, recv_close;
+	int recv_eof, sent_eof;
 
-	/* this is set when we receive/send a channel eof packet */
-	int recveof, senteof;
+	/* Set after running the ChanType-specific close hander
+	 * to ensure we don't run it twice (nor type->checkclose()). */
+	int close_handler_done;
 
 	int initconn; /* used for TCP forwarding, whether the channel has been
 					 fully initialised */
 
+	int await_open; /* flag indicating whether we've sent an open request
+					   for this channel (and are awaiting a confirmation
+					   or failure). */
+
+	int flushing;
+
+	const struct ChanType* type;
+
 };
-	
-void chaninitialise();
+
+struct ChanType {
+
+	int sepfds; /* Whether this channel has seperate pipes for in/out or not */
+	char *name;
+	int (*inithandler)(struct Channel*);
+	int (*check_close)(struct Channel*);
+	void (*reqhandler)(struct Channel*);
+	void (*closehandler)(struct Channel*);
+
+};
+
+void chaninitialise(const struct ChanType *chantypes[]);
 void chancleanup();
 void setchannelfds(fd_set *readfd, fd_set *writefd);
 void channelio(fd_set *readfd, fd_set *writefd);
-struct Channel* newchannel(unsigned int remotechan, unsigned char type, 
+struct Channel* getchannel();
+struct Channel* newchannel(unsigned int remotechan, 
+		const struct ChanType *type, 
 		unsigned int transwindow, unsigned int transmaxpacket);
 
 void recv_msg_channel_open();
@@ -89,13 +111,20 @@ void recv_msg_channel_request();
 void send_msg_channel_failure(struct Channel *channel);
 void send_msg_channel_success(struct Channel *channel);
 void recv_msg_channel_data();
+void recv_msg_channel_extended_data();
 void recv_msg_channel_window_adjust();
 void recv_msg_channel_close();
 void recv_msg_channel_eof();
 
-#ifdef USE_LISTENERS
-int send_msg_channel_open_init(int fd, unsigned char type,
-		const char * typestring);
+void common_recv_msg_channel_data(struct Channel *channel, int fd, 
+		circbuffer * buf);
+
+#ifdef DROPBEAR_CLIENT
+extern const struct ChanType clichansess;
+#endif
+
+#if defined(USING_LISTENERS) || defined(DROPBEAR_CLIENT)
+int send_msg_channel_open_init(int fd, const struct ChanType *type);
 void recv_msg_channel_open_confirmation();
 void recv_msg_channel_open_failure();
 #endif

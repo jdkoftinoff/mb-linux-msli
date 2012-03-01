@@ -1,25 +1,27 @@
+Current:
+
 Things which might need doing:
+
+- default private dbclient keys
 
 - Make options.h generated from configure perhaps?
 
-- improved queueing of unauthed connections
-
-- fix agent fwd problems (lock when agent request fails)
-
-- improve channel window adjustment algorithm (circular buffering)
+- handle /etc/environment in AIX
 
 - check that there aren't timing issues with valid/invalid user authentication
   feedback.
 
-- Binding to specific addresses, related to ...
-- ... IP6 (binding to :: takes over ipv4 as well, sigh. If anyone wants to
-  suggest a clean way (ie no V4MAPPED or setsockopt things) please let me know)
+- Binding to different interfaces
 
-- PAM - the synchronous nature makes it ugly
-
-- possible RSA blinding? need to check whether this is vuln to timing attacks
-- check PRNG
-- CTR mode, SSH_MSG_IGNORE sending to improve CBC security
-- DH Group Exchange possibly, or just add group14 (see recent drafts)
+- CTR mode
+- SSH_MSG_IGNORE sending to improve CBC security
+- DH Group Exchange possibly, or just add group14 (whatever it's called today)
 
 - fix scp.c for IRIX
+
+- Be able to use OpenSSH keys for the client? or at least have some form of 
+  encrypted keys.
+
+- Client agent forwarding
+
+- Handle restrictions in ~/.ssh/authorized_keys ?
