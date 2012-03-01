@@ -992,7 +992,7 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
       curr_part=0;
     }
 
-  data_header.npart=curr_part;
+  data_header.npart=htonl(curr_part);
 
   /* read current erase block header */
   if((lseek(h,erase.start,SEEK_SET)==erase.start)
@@ -1726,7 +1726,6 @@ int main(int argc,char **argv,char **env)
 	    {
 	      if(record_data(h,buffer,l,cont)!=l)
 		{
-		  cont=1;
 		  fprintf(stderr,"FATAL ERROR: flash write error\n");
 		  free(tar_argv);
 		  close(tar_pipe[0]);
@@ -1734,6 +1733,7 @@ int main(int argc,char **argv,char **env)
 		  close(h);
 		  return 1;
 		}
+	      cont=1;
 	    }
 	  close(tar_pipe[0]);
 	  waitpid(pid,&status,0);
