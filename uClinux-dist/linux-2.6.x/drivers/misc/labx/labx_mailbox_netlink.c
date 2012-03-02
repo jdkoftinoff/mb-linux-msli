@@ -121,7 +121,7 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
   /* Write the length of the packet and then its raw words */
   returnValue = nla_put_u32(skb, 
                             LABX_MAILBOX_MESSAGE_PACKET_A_LENGTH, 
-                            msgLengthWords);
+                            msgLengthBytes);
   if(returnValue != 0) goto fail;
 
   nestIndex = LABX_MAILBOX_MESSAGE_PACKET_A_WORDS;
@@ -131,7 +131,7 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
       (MSG_RAM_BASE(mailbox) + (wordIndex*4)));
     if(returnValue != 0) goto fail;
   }
-  printk("\n");
+  DBG("\n");
      
   /* Close the nesting for the message packet */
   nla_nest_end(skb, packetNesting);
@@ -259,12 +259,12 @@ static int mailbox_event_response_cb(struct sk_buff *skb, struct genl_info *info
     memcpy(mailboxMessage.messageContent, msgPayloadPtr, msgPayloadSize);
 
     DBG("Writing IDL response to mailbox\n");
-    for(wordIndex = 0; wordIndex < mailboxMessage.length; wordIndex++) {
+    for(wordIndex = 0; wordIndex < ((mailboxMessage.length+3)/4); wordIndex++) {
       DBG("Message: 0x%08X\n", mailboxMessage.messageContent[wordIndex]);
       XIo_Out32(MSG_RAM_BASE(targetMailbox)+(wordIndex*4), ((uint32_t*)mailboxMessage.messageContent)[wordIndex]);
     }
     DBG("Message response length: 0x%04X\n", mailboxMessage.length);
-    XIo_Out32(REGISTER_ADDRESS(targetMailbox, HOST_MSG_LEN_REG), (mailboxMessage.length*4));
+    XIo_Out32(REGISTER_ADDRESS(targetMailbox, HOST_MSG_LEN_REG), mailboxMessage.length);
   }
   return 0;
 }

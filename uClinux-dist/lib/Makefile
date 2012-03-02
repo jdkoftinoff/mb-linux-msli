@@ -204,8 +204,6 @@ clean: clean_links
 #
 #
 LINKLIBS=\
-    $(ROOTDIR)/lib/microsupport/tmp-target/build/lib/libmicrosupport.a \
-    $(ROOTDIR)/lib/avdecc/tmp-target/build/lib/libavdecc.a \
 	$(ROOTDIR)/lib/libxml2/build/.libs/libxml2.so \
 	$(ROOTDIR)/lib/libjpeg/*.a \
 	$(ROOTDIR)/lib/libpng/*.a \
