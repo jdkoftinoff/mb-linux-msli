@@ -215,8 +215,6 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S10hostname
-	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
-	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
 	$(ROMFSINST) $(COMMON)/etc/logo-1.bin /etc/dmitripaneld/logo-1.bin
