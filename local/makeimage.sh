@@ -52,7 +52,7 @@ gzip -9 romfs.bin
 
 if [ -f "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" ]
     then 
-    ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 32 "${DMITRI_IO_MAINT_DOWNLOAD_BIT}"
+    ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_IO_MAINT_DOWNLOAD_BIT}"
     echo "Maintenance mode binary image..."
     ../../mbbl/mbbl-mkbootimage/mbbl-imagetool -o firmware0.bin -s 0 -b "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" -k linux.bin.gz -l logo-1.bin.gz -f 8x12-font.bin.gz -f 16x24-font.bin.gz -r romfs.bin.gz -d dt-maint.dtb -i identity.txt
     echo "Maintenance mode MCS image..." 
@@ -80,7 +80,7 @@ fi
 
 if [ -f "${DMITRI_IO_GNET_DOWNLOAD_BIT}" -a -f "${MBBL_ELF}" ]
     then
-    ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 32 "${DMITRI_IO_GNET_DOWNLOAD_BIT}"
+    ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_IO_GNET_DOWNLOAD_BIT}"
     ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 "${MBBL_ELF}"
     echo "GNET tar file..."
     if [ -d update ]
@@ -105,7 +105,7 @@ fi
 
 if [ -f "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]
     then
-    ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 32 "${DMITRI_IO_AVB_DOWNLOAD_BIT}"
+    ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_IO_AVB_DOWNLOAD_BIT}"
     echo "AVB tar file..."
     if [ -d update ]
 	then
