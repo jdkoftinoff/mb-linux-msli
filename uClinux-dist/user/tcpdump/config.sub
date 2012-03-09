@@ -284,6 +284,10 @@ case $basic_machine in
 		os=-linux
 		;;
 
+	microblaze*)
+		os=-linux
+		;;
+
 	# We use `pc' rather than `unknown'
 	# because (1) that's what they normally are, and
 	# (2) the word "unknown" tends to confuse beginning users.
