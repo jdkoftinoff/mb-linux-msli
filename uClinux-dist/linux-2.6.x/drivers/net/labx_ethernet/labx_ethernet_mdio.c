@@ -41,14 +41,15 @@ static void labx_eth_free_mdio_bus(struct mii_bus *bus)
 int labx_eth_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
 {
 	u16 val=0;
-	//printk("MR%d", phy_id);
+	//printk("MR%d: 0x%02X ", phy_id, regnum);
 	_labx_eth_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
+        //printk("=> 0x%04X\n", val);
 	return val;
 }
 
 int labx_eth_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
 {
-  //  printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
+        //printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
 	_labx_eth_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
 	return 0;
 }

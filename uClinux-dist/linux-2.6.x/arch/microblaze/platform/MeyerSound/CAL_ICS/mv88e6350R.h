@@ -39,7 +39,7 @@
 
 struct mvEthSwitch {
   /* Pointer back to the platform device */
-  struct platform_device *pdev;
+  struct phy_device *pdev;
 
   /* Version information read from the hardware */
   uint32_t versionMajor;
