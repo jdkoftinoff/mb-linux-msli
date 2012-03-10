@@ -29,11 +29,11 @@ if [ -z "${MBBL_ELF}" ]; then
 fi
 
 echo "Maintenance device tree (${DMITRI_IO_MAINT_DTS})..."
-../dtc/dtc -f -o dt-maint.dtb -O dtb "${DMITRI_IO_MAINT_DTS}" 2>/dev/null
+bash ./make-padded-dt.bash "${DMITRI_IO_MAINT_DTS}" dt-maint.dtb
 echo "GNET device tree (${DMITRI_IO_GNET_DTS})..."
-../dtc/dtc -f -o dt-gnet.dtb -O dtb "${DMITRI_IO_GNET_DTS}" 2>/dev/null
+bash ./make-padded-dt.bash "${DMITRI_IO_GNET_DTS}" dt-gnet.dtb
 echo "AVB device tree (${DMITRI_IO_AVB_DTS})..."
-../dtc/dtc -f -o dt-avb.dtb -O dtb "${DMITRI_IO_AVB_DTS}" 2>/dev/null
+bash ./make-padded-dt.bash "${DMITRI_IO_AVB_DTS}" dt-avb.dtb
 
 echo "Kernel..."
 gzip -9c ../uClinux-dist/linux-2.6.x/arch/microblaze/boot/linux.bin  > linux.bin.gz
@@ -48,7 +48,6 @@ gzip -9 romfs.bin
 ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 8x12-font.bin.gz
 ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 16x24-font.bin.gz
 ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 romfs.bin.gz
-../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 dt-maint.dtb
 
 if [ -f "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" ]
     then 
