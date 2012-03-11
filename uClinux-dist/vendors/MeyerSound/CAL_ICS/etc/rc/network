@@ -4,8 +4,8 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 echo "Setting up interface lo: "
 ifconfig lo up 127.0.0.1
-ifconfig eth0 up
-ifconfig eth1 up
+ifconfig eth0 multicast up
+ifconfig eth1 multicast up
 
 mkdir /var/lib
 /bin/inetd &
