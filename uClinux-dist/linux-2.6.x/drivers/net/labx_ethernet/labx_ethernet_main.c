@@ -514,7 +514,7 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
     lp->deferred_skb = NULL;
-    lp->ndev->stats.tx_errors++;
+    lp->ndev->stats.tx_dropped++;
   }
 
   /*
@@ -772,6 +772,14 @@ static int xenet_open(struct net_device *dev)
 	 "%s: labx_ethernet: allocating interrupt %d for fifo mode.\n",
 	 dev->name, lp->fifo_irq);
 
+  /* Reset the FIFO core */
+  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
+
+  /* Clear any pending interrupts and disable all interrupts for the moment */
+  Write_Fifo32(lp->Emac, FIFO_ISR_OFFSET, Read_Fifo32(lp->Emac, FIFO_ISR_OFFSET));
+  Write_Fifo32(lp->Emac, FIFO_IER_OFFSET, 0);
+
   /* With the way interrupts are issued on the fifo core, this needs to be
    * fast interrupt handler.
    */
@@ -812,10 +820,6 @@ static int xenet_open(struct net_device *dev)
     }
   }
 
-  /* Reset the FIFO core */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
-
   /* Enable FIFO interrupts  - no polled mode */
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
                        FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
@@ -824,7 +828,7 @@ static int xenet_open(struct net_device *dev)
   _labx_eth_Start(&lp->Emac);
 
   /* We're ready to go. */
-  netif_start_queue(dev);
+  netif_wake_queue(dev);
 
   return 0;
 }
@@ -931,7 +935,7 @@ static int xenet_change_mtu(struct net_device *dev, int new_mtu)
 
 static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 {
-  struct net_local *lp;
+  struct net_local *lp = netdev_priv(dev);
   unsigned long flags, fifo_free_bytes;
   int total_frags = skb_shinfo(skb)->nr_frags + 1;
   unsigned int total_len;
@@ -953,7 +957,6 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
    * or other processor in SMP case.
    */
   spin_lock_irqsave(&XTE_tx_spinlock, flags);
-  lp = netdev_priv(dev);
 
   fifo_free_bytes = (Read_Fifo32(lp->Emac, FIFO_TDFV_OFFSET) << 2);
   if (fifo_free_bytes < total_len) {
@@ -967,6 +970,9 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Write frame data to FIFO, starting with the header and following
    * up with each of the fragments
    */
+
+  /* Place the transmit path into full-word alignment mode */
+  Write_Fifo32(lp->Emac, FIFO_TX_CTRL_OFFSET, FIFO_ALIGN32);
 
   word_len = ((skb_headlen(skb) + 3) >> 2);
 
@@ -988,10 +994,10 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Initiate transmit */
   Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
   lp->ndev->stats.tx_bytes += total_len;
+  dev->trans_start = jiffies;
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 
   dev_kfree_skb(skb);	/* free skb */
-  dev->trans_start = jiffies;
   return 0;
 }
 
@@ -1654,10 +1660,7 @@ static int xtenet_setup(struct device *dev,
   if (ndev->mtu > XTE_JUMBO_MTU)
     ndev->mtu = XTE_JUMBO_MTU;
 
-
   /* Assign the FIFO transmit callback */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
   ndev->hard_start_xmit = xenet_FifoSend;
 
   /* initialize the netdev structure */
