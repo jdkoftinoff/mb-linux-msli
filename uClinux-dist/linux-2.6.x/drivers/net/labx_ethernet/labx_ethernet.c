@@ -1130,6 +1130,7 @@ u16 labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
 void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 {
 	u32 EmmcReg;
+	u32 Reg;
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1181,8 +1182,12 @@ void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_EMMC_OFFSET, EmmcReg);
 
-	/* Reset Tx/Rx since the speed changed */
-	labx_eth_Reset(InstancePtr, XTE_NORESET_HARD);
+	/* Reset Rx since the speed changed to allow the shim to recalibrate if necessary */
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				       XTE_RCW1_OFFSET);
+	Reg |= XTE_RCW1_RST_MASK;
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+				  XTE_RCW1_OFFSET, Reg);
 
 	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOperatingSpeed: done\n");
 }
