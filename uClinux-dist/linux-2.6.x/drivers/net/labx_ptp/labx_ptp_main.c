@@ -458,6 +458,12 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_PTP_GET_AS_GRANDMASTER:
+    if (0 != copy_to_user((void __user*)arg, &ptp->presentMaster, sizeof(PtpProperties))) {
+      return (-EFAULT);
+    }
+    break;
+
   default:
     return(-EINVAL);
   }
