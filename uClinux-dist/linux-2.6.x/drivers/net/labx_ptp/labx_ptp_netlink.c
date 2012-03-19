@@ -146,7 +146,7 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   pairIndex = PTP_VALUEMAP_A_PAIRS;
 
   /* Capture the Grandmaster identity as a string value */
-  gmIdentity = ptp->presentMaster.grandmasterIdentity;
+  gmIdentity = ptp->gmPriority->rootSystemIdentity.clockIdentity;
   sprintf(gmIdentityString, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
           NEW_GM_KEY_STRING,
           gmIdentity[0], gmIdentity[1], gmIdentity[2], gmIdentity[3], 

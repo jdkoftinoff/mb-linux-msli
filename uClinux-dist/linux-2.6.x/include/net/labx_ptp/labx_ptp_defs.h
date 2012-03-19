@@ -112,11 +112,13 @@ typedef struct {
   /* Various PTP-defined properties */
   uint8_t          domainNumber;
   int16_t          currentUtcOffset;
-  uint8_t          grandmasterPriority1;
-  PtpClockQuality  grandmasterClockQuality;
-  uint8_t          grandmasterPriority2;
-  PtpClockIdentity grandmasterIdentity;
-  uint8_t          timeSource;
+  /* Note that this is our local systemIdentity, but is kept as separate
+     fields (instead of as a PtpSystemIdentity) for backwards compatability */
+  uint8_t          grandmasterPriority1;    /* 8.6.2.1 */
+  PtpClockQuality  grandmasterClockQuality; /* 8.6.2.2 - 8.6.2.4 */
+  uint8_t          grandmasterPriority2;    /* 8.6.2.5 */
+  PtpClockIdentity grandmasterIdentity;     /* 8.6.2.6 */
+  uint8_t          timeSource;              /* 8.6.2.7 */
   uint8_t          delayMechanism;
   uint32_t         lockRangeNsec;
   uint32_t         lockTimeMsec;
