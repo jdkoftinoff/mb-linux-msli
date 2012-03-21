@@ -389,6 +389,9 @@ int aes3_rx_probe(const char *name,
   /* Ensure that the engine and its interrupts are disabled */
   XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG), NO_IRQS);
   
+  /*Initialize the Stream mask, enable all the 8 streams*/
+  XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG), 0xff);
+  
   /* Run the thread assigned to converting status FIFO words into Netlink packets
    * after initializing its state to wait for the ISR
    */
