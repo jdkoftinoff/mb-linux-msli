@@ -212,6 +212,8 @@
 #define GM_PRIORITY1_OFFSET                  (15 * BYTES_PER_WORD)
 #define CUMULATIVE_SCALED_RATE_OFFSET_OFFSET (17 * BYTES_PER_WORD)
 #define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
+#define STEPS_REMOVED_OFFSET                 (18 * BYTES_PER_WORD)
+#define PATH_TRACE_OFFSET                    (20 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
  * the data alignment from the network side to the host interface
@@ -260,6 +262,21 @@ typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSe
   LinkDelaySyncIntervalSetting_SET_INTERVALS
 } LinkDelaySyncIntervalSetting_State_t;
 
+/* 802.1AS PortAnnounceInformation state machine states */
+typedef enum { PortAnnounceInformation_BEGIN,
+  PortAnnounceInformation_DISABLED, PortAnnounceInformation_AGED,
+  PortAnnounceInformation_UPDATE, PortAnnounceInformation_SUPERIOR_MASTER_PORT,
+  PortAnnounceInformation_REPEATED_MASTER_PORT, PortAnnounceInformation_INFERIOR_MASTER_OR_OTHER_PORT,
+  PortAnnounceInformation_CURRENT, PortAnnounceInformation_RECEIVE
+} PortAnnounceInformation_State_t;
+
+typedef enum { InfoIs_Disabled, InfoIs_Received, InfoIs_Aged, InfoIs_Mine
+} PtpInfoIs;
+
+/* 802.1AS PortRoleSelection state machine states */
+typedef enum { PortRoleSelection_INIT_BRIDGE, PortRoleSelection_ROLE_SELECTION
+} PortRoleSelection_State_t;
+
 #define SIGNED_SHIFT(a, b) (((b) >= 0) ? ((a)<<(b)) : ((a)>>(-b)))
 #define ANNOUNCE_INTERVAL_TICKS(ptp, port)   \
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogAnnounceInterval))
@@ -267,6 +284,34 @@ typedef enum { LinkDelaySyncIntervalSetting_NOT_ENABLED, LinkDelaySyncIntervalSe
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogSyncInterval))
 #define PDELAY_REQ_INTERVAL_TICKS(ptp, port) \
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogPdelayReqInterval))
+
+typedef struct __attribute__((packed)) {
+  PtpClockIdentity clockIdentity;
+  uint16_t         portNumber;
+} PtpPortIdentity; /* 8.5.2 */
+
+typedef struct __attribute__((packed)) {
+  uint8_t          priority1;
+  PtpClockQuality  clockQuality;
+  uint8_t          priority2;
+  PtpClockIdentity clockIdentity;
+} PtpSystemIdentity; /* 10.3.2 */
+
+/* NOTE: All fields in the priority vector should be BIG ENDIAN for proper
+   byte-wise comparison of the UInteger224 */
+typedef struct __attribute__((packed)) {
+  PtpSystemIdentity rootSystemIdentity;
+  uint16_t          stepsRemoved;
+  PtpPortIdentity   sourcePortIdentity; /* Port identity of the transmitting port */
+  uint16_t          portNumber;         /* Port number of the receiving port */
+} PtpPriorityVector; /* 10.3.4 */
+
+typedef enum {
+  SuperiorMasterInfo,
+  RepeatedMasterInfo,
+  InferiorMasterInfo,
+  OtherInfo
+} AnnounceReceiveInfo;
 
 struct ptp_port {
 
@@ -302,7 +347,8 @@ struct ptp_port {
   /* Mask of pending transmit interrupts to respond to */
   uint32_t pendingTxFlags;
 
-  /* 802.1AS per-port variables (10.2.4) - Time sync state machines */
+  /* 802.1AS per-port variables (10.2.3 - 10.2.4) - Time sync state machines */
+  PtpRole  selectedRole; /* 10.2.3.20 */
   uint32_t asCapable;
   int8_t   currentLogSyncInterval;
   int8_t   initialLogSyncInterval;
@@ -313,9 +359,26 @@ struct ptp_port {
   uint32_t portEnabled;
   uint32_t pttPortEnabled;
 
-  /* 802.1AS per-port variables (10.3.9) - BMCA/Announce state machines */
-  int8_t currentLogAnnounceInterval;
-  int8_t initialLogAnnounceInterval;
+  /* 802.1AS per-port variables (10.3.8 - 10.3.9) - BMCA/Announce state machines */
+  int8_t            reselect;                   /* 10.3.8.1 (bool) */
+  int8_t            selected;                   /* 10.3.8.2 (bool) */
+  PtpInfoIs         infoIs;                     /* 10.3.9.2 */
+  PtpPriorityVector masterPriority;             /* 10.3.9.3 */
+  int8_t            currentLogAnnounceInterval; /* 10.3.9.4 */
+  int8_t            initialLogAnnounceInterval; /* 10.3.9.5 */
+  int8_t            newInfo;                    /* 10.3.9.8 (bool) */
+  PtpPriorityVector portPriority;               /* 10.3.9.9 */
+  PtpPriorityVector gmPathPriority;
+  uint16_t          portStepsRemoved;           /* 10.3.9.10 */
+  uint8_t          *rcvdAnnouncePtr;            /* 10.3.9.11 */
+  int8_t            rcvdMsg;                    /* 10.3.9.12 (bool) */
+  int8_t            updtInfo;                   /* 10.3.9.13 (bool) */
+
+  /* 802.1AS PortAnnounceInformation state machine variables */
+  PortAnnounceInformation_State_t portAnnounceInformation_State;
+  uint32_t            announceTimeoutCounter;   /* 10.3.11.1.1 equivalent (Ticks since last received announce) */
+  PtpPriorityVector   messagePriority;          /* 10.3.11.1.2 */
+  AnnounceReceiveInfo rcvdInfo;                 /* 10.3.11.1.3 */
 
   /* 802.1AS timeouts (10.6.3) */
   uint8_t syncReceiptTimeout;
@@ -366,6 +429,7 @@ struct ptp_port {
   /* Timer state space */
   uint32_t announceCounter;
   uint16_t announceSequenceId;
+  uint32_t syncTimeoutCounter;
   uint32_t syncCounter;
   uint16_t syncSequenceId;
   uint32_t delayReqCounter;
@@ -381,6 +445,7 @@ struct ptp_port {
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
+#define PTP_MAX_PATH_TRACE 50
 struct ptp_device {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -402,13 +467,24 @@ struct ptp_device {
   int32_t irq;
 
   /* Number of ports attached to this instance */
-  uint32_t numPorts;
+  uint32_t numPorts; /* (8.6.2.8) */
 
-  /* Width, in bits, of the instance's ports */
+  /* Width, in bits, of the instance's ports (< 10G == 8, 10G == 64)*/
   uint32_t portWidth;
 
-  /* Properties for the instance */
+  /* 802.1AS Time aware system attributes (8.6.2) */
   PtpProperties properties;
+
+  /* 802.1AS Time aware system global variables (10.2.3) */
+  uint8_t            gmPresent; /* 10.2.3.13 (bool) */
+
+  /* 802.1AS Time aware system global variables (10.3.8) */
+  uint16_t           masterStepsRemoved; /* 10.3.8.3 */
+  PtpPriorityVector  systemPriority; /* Priority vector for this system (10.3.8.18) */
+  PtpPriorityVector *gmPriority;     /* Priority vector for the current grandmaster (10.3.8.19) */
+  PtpPriorityVector  lastGmPriority; /* Previous grandmaster priority vector (10.3.8.20) */
+  uint32_t           pathTraceLength;               /* Number of paths listed in the pathTrace array */
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; /* 10.3.8.21 */
 
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
@@ -432,11 +508,9 @@ struct ptp_device {
   RtcIncrement currentIncrement;
 
   /* Present role and delay mechanism for the endpoint */
-  PtpRole presentRole;
+  PortRoleSelection_State_t       portRoleSelection_State;
 
-  /* Properties for the present grandmaster */
-  PtpProperties presentMaster;
-  PtpPortProperties presentMasterPort;
+  /* New master event needs to be transmitted */
   uint32_t newMaster;
 
   /* Timer state space */
@@ -446,7 +520,6 @@ struct ptp_device {
 
   /* Packet Rx state space */
   struct tasklet_struct rxTasklet;
-  uint32_t announceTimeoutCounter;
   uint32_t slaveDebugCounter;
 
   /* Packet Tx state space */
@@ -479,7 +552,9 @@ uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuff
 void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress);
 void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t * rxBuffer, uint8_t *sourcePortId);
 void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *requestingPortId);
-void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpProperties *properties, PtpPortProperties *portProperties);
+uint16_t get_rx_announce_steps_removed(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
+uint16_t get_rx_announce_path_trace(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer, PtpClockIdentity *pathTrace);
+void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpPriorityVector *pv);
 void copy_ptp_properties(PtpProperties *to, PtpProperties *from);
 void copy_ptp_port_properties(PtpPortProperties *to, PtpPortProperties *from);
 int32_t compare_mac_addresses(const uint8_t *macAddressA, const uint8_t *macAddressB);
@@ -514,6 +589,11 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer);
 /* From labx_ptp_pdelay_state.c */
 void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port);
 void LinkDelaySyncIntervalSetting_StateMachine(struct ptp_device *ptp, uint32_t port);
+
+/* From labx_ptp_bmca_announce_state.c */
+void PortAnnounceReceive_StateMachine(struct ptp_device *ptp, uint32_t port);
+void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port);
+void PortRoleSelection_StateMachine(struct ptp_device *ptp);
 
 /* From labx_ptp_rtc.c */
 void disable_rtc(struct ptp_device *ptp);

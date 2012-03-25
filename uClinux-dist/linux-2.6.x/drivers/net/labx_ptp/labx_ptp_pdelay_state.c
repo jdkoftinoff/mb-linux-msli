@@ -436,7 +436,7 @@ static void LinkDelaySyncIntervalSetting_StateMachine_SetState(struct ptp_device
       uint32_t packetWord = read_packet(ptp->ports[port].rcvdSignalingPtr, &offset);
       int8_t linkDelayInterval = (int8_t)((packetWord >> 24) & 0xFF);
       int8_t timeSyncInterval = (int8_t)((packetWord >> 16) & 0xFF);
-      int8_t announceInterval = (int8_t)((packetWord >> 8) & 0xFF);
+      //int8_t announceInterval = (int8_t)((packetWord >> 8) & 0xFF);
       uint8_t flags = (uint8_t)(packetWord & 0xFF);
 
       switch (linkDelayInterval)
