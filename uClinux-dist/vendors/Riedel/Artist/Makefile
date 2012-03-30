@@ -145,6 +145,9 @@ DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
 
+#Add the AES3 receiver node
+DEVICES += aes3_rx0,c,251,0
+
 # Add the Biamp SPI mailbox peripheral device node
 DEVICES += mailbox0,c,255,0
 
