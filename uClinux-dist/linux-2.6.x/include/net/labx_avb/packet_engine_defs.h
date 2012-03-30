@@ -479,8 +479,19 @@ typedef struct {
 
 #define IOC_SET_RTC_UNSTABLE       _IO(ENGINE_IOC_CHAR, (ENGINE_IOC_CLIENT_START + 8))
 
-/* Type definitions and macros for depacketizer microcode */
+#define DEPACKETIZER_MAX_AUTOMUTE_STREAMS 64
+typedef struct {
+  uint32_t channelBufferSizeBytes;
+  uint16_t nChannels;
+  uint16_t streamIndex;
+  uint32_t channelAddresses[DEPACKETIZER_MAX_AUTOMUTE_STREAMS];
+} SetAutomuteStream;
 
+#define IOC_SET_AUTOMUTE_STREAM   _IOW(ENGINE_IOC_CHAR,               \
+                                        (ENGINE_IOC_CLIENT_START + 9), \
+                                        SetAutomuteStream)
+
+/* Type definitions and macros for depacketizer microcode */
 
 /* Parameter maxima */
 #define DEPACKETIZER_MAX_STREAMS (128)

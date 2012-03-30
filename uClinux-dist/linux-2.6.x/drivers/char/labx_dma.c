@@ -617,6 +617,7 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
       }
       return -ENOMEM;
     }
+  memset(pointers[i], 0, alloc->size);
   }
 
   return 0;
