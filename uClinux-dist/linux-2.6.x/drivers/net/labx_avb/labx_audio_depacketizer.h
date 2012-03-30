@@ -192,6 +192,12 @@ typedef enum {
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  256
 #define NO_IRQ_SUPPLIED   (-1)
+struct depacketizer_presentation_channels {
+  uint32_t channelBufferSizeBytes;
+  struct audio_depacketizer *redundancyPartner; // Currently unused
+  void *channelBuffers[1];
+};
+
 struct audio_depacketizer {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -243,6 +249,7 @@ struct audio_depacketizer {
   uint32_t streamSeqError;
   uint32_t netlinkSequence;
   struct task_struct *netlinkTask;
+  struct depacketizer_presentation_channels *presentationChannels[MAX_CONCURRENT_STREAMS];
 };
 
 /* From labx_audio_depacketizer_netlink.c */
