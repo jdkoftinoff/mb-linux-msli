@@ -34,4 +34,13 @@ if [ -x /etc/persist/config/network_config ]
     AVBDFILE=/usr/bin/avbd
   fi
   $AVBDFILE platformFile=$XMLFILE &
+
+  if [ -f /etc/persist/bin/avbd ]
+    then
+    P17221DFILE=/etc/persist/bin/p17221d
+    else
+    P17221DFILE=/usr/bin/p17221d
+  fi
+  $P17221DFILE 127.0.0.1 8080 &
+
 fi
