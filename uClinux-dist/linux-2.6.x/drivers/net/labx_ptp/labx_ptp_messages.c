@@ -99,7 +99,7 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
   write_packet(txBuffer, wordOffset, packetWord);
 
   /* Clear out the flag field, correction field, four reserved bytes,
-   * and set the 80-bit source ID to be our clockIdentity, port zero.
+   * and set the 80-bit source ID to be our clockIdentity, and port number.
    * clockIdentity is formed by our OUI, 0xFFFE, and the serial number.
    * OUI and serial number are the first three and last three bytes of
    * our MAC address, respectively.
@@ -116,6 +116,7 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
   write_packet(txBuffer, wordOffset, packetWord);
   packetWord = (ptp->properties.grandmasterIdentity[6] << 24);
   packetWord |= (ptp->properties.grandmasterIdentity[7] << 16);
+  packetWord |= port + 1;
   write_packet(txBuffer, wordOffset, packetWord);
 
   /* Clear the sequence ID and log message interval to zero, and set the

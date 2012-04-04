@@ -294,20 +294,31 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_UPDATE);
           } else if (pPort->rcvdMsg && !pPort->updtInfo) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
-          } else if ((pPort->infoIs == InfoIs_Received) &&
-                     ((pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout) ||
-                      ((pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2) && ptp->gmPresent)) &&
-                     !pPort->updtInfo && !pPort->rcvdMsg) { // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
+          } else {
+            // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
+            int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+            int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
+            if ((pPort->infoIs == InfoIs_Received) &&
+                (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
+                !pPort->updtInfo && !pPort->rcvdMsg) {
 
-            BMCA_DBG("Announce AGED: (announce %d >= %d || sync %d >= %d)\n",
-              pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
-              pPort->syncTimeoutCounter, SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+              BMCA_DBG("Announce AGED: (announce %d >= %d || sync %d >= %d)\n",
+                pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
+                pPort->syncTimeoutCounter, SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
 
-            PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
+              if (syncTimeout) {
+                pPort->syncTimeoutCounter = 0;
+              }
 
-            /* Update stats */
-            if (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout) {
-              pPort->stats.announceReceiptTimeoutCount++;
+              PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
+
+              /* Update stats */
+              if (announceTimeout) {
+                pPort->stats.announceReceiptTimeoutCount++;
+              }
+              if (syncTimeout) {
+                pPort->stats.syncReceiptTimeoutCount++;
+              }
             }
           }
           break;
