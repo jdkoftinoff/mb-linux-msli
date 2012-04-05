@@ -100,7 +100,7 @@ CPU_CFLAGS=$(subst ",, $(strip $(CPU_CFLAGS-y)))
 
 # Some nice CFLAGS to work with
 GEN_CFLAGS:=-fno-builtin
-CFLAGS:=$(XWARNINGS) $(CPU_CFLAGS) -ansi
+CFLAGS:=$(XWARNINGS) $(CPU_CFLAGS)
 
 LDFLAGS:=-Wl,--warn-common -Wl,--warn-once -Wl,-z,combreloc -Wl,-z,defs
 
