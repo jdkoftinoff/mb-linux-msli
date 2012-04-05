@@ -95,7 +95,7 @@ PICFLAG:=-fPIC
 OPTIMIZATION+=$(call check_gcc,-Os,-O2)
 
 # Add a bunch of extra pedantic annoyingly strict checks
-XWARNINGS=$(subst ",, $(strip $(WARNINGS))) -Wno-trigraphs -pedantic
+XWARNINGS=$(subst ",, $(strip $(WARNINGS))) -Wno-trigraphs 
 CPU_CFLAGS=$(subst ",, $(strip $(CPU_CFLAGS-y)))
 
 # Some nice CFLAGS to work with
