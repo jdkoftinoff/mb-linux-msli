@@ -322,37 +322,38 @@ static void switchVlanInit(struct phy_device *phydev,
   
   /* port 0 is mapped to port 5 (CPU Port) */  
   reg = REG_READ(phydev, MV_REG_PORT(CAL_ICS_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG);  
-  reg &= ~0x00ff;
-  reg |= 0x20;
+  reg &= ~0xf0ff;
+  reg |= 0x0020;
   REG_WRITE(phydev, MV_REG_PORT(CAL_ICS_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG, reg); 
   printk("VLAN map for port %d = 0x%08X\n", CAL_ICS_EXT_PORT_0, reg);
 
   /* port 1 is mapped to port 6 (CPU Port) */
   reg = REG_READ(phydev, MV_REG_PORT(CAL_ICS_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG);  
-  reg &= ~0x00ff;
-  reg |= 0x40;
+  reg &= ~0xf0ff;
+  reg |= 0x1040;
   REG_WRITE(phydev, MV_REG_PORT(CAL_ICS_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG, reg);
   printk("VLAN map for port %d = 0x%08X\n", CAL_ICS_EXT_PORT_0, reg);
 
   /* port 5 (CPU Port) is mapped to port 0*/
   reg = REG_READ(phydev, MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG);
-  reg &= ~0x00ff;
-  reg |= 0x01;
+  reg &= ~0xf0ff;
+  reg |= 0x0001;
   REG_WRITE(phydev, MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG, reg);
   printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort0, reg);
 
   /* port 6 (CPU Port) is mapped to port 1*/
   reg = REG_READ(phydev, MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG);
-  reg &= ~0x00ff;
-  reg |= 0x02;
+  reg &= ~0xf0ff;
+  reg |= 0x1002;
   REG_WRITE(phydev, MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG, reg);
   printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort1, reg);
 
-  /* enable only appropriate ports to forwarding mode */
+  /* enable only appropriate ports to forwarding mode and disable VLAN tunneling */
   for(prt=0; prt < switchMaxPortsNum; prt++) {
     if ((1 << prt)& switchEnabledPortsMask) {
       reg = REG_READ(phydev, MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG);
-      reg |= 0x3;
+      reg |= 0x0003;  /* Port State = Forwarding */
+      reg &= ~0x0080; /* VLAN Tunnel = Disabled */
       REG_WRITE(phydev, MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG, reg);
     }
   }
