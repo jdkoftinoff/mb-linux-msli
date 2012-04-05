@@ -142,6 +142,7 @@ namespace std{
 		}
 	};
 
+#ifndef __STRICT_ANSI__
 
 	template <class traits> class _UCXXEXPORT __ostream_printout<traits, char, signed long long int>{
 	public:
@@ -236,6 +237,7 @@ namespace std{
 	};
 
 
+#endif	//__STRICT_ANSI__
 
 	template <class traits> class _UCXXEXPORT __ostream_printout<traits, char, double>{
 	public:
@@ -355,6 +357,7 @@ namespace std{
 		}
 	};
 
+#ifndef __STRICT_ANSI__
 
 	template <class traits> class _UCXXEXPORT __ostream_printout<traits, wchar_t, signed long long int>{
 	public:
@@ -425,6 +428,7 @@ namespace std{
 	};
 
 
+#endif	//__STRICT_ANSI__
 
 	template <class traits> class _UCXXEXPORT __ostream_printout<traits, wchar_t, double>{
 	public:

@@ -467,6 +467,7 @@ namespace std {
 #endif
 
 
+#ifndef __STRICT_ANSI__
 
 //Support for output of long long data types
 
@@ -488,6 +489,7 @@ template<class Ch, class Tr> _UCXXEXPORT basic_ostream<Ch, Tr>&
 }
 
 
+#endif	//__STRICT_ANSI__
 
 
 
