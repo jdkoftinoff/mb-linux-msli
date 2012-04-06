@@ -22,4 +22,16 @@ else
   echo "Using avbd application from JFFS2"
 fi
 
+# Look for p1722d in jffs file system first, then fall back to romfs
+P17221DFILE=/mnt/config/p17221d
+if [ ! -f $P17221DFILE ] ; then
+  echo "Using p17221d application from ROMfs"
+  P17221DFILE=/mnt/apps/p17221d
+fi
+
 $AVBDFILE platformFile=$XMLFILE &
+if [ -f $P17721DFILE ] ; then
+  echo "Launching 1722.1 daemon..."
+  $P17221DFILE 127.0.0.1 8080 &
+fi
+
