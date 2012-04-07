@@ -197,7 +197,7 @@ static inline void xiic_setreg16(struct xiic_i2c *i2c, int reg, u16 value)
         iowrite32/*16*/(value, i2c->base + reg);
 }
 
-static inline void xiic_setreg32(struct xiic_i2c *i2c, int reg, int value)
+static inline void xiic_setreg32(struct xiic_i2c *i2c, int reg, unsigned int value)
 {
 	iowrite32(value, i2c->base + reg);
 }
@@ -246,7 +246,7 @@ static void xiic_set_timeout(struct xiic_i2c *i2c)
 	i2c->timestamp_expire=jiffies+HZ;
 }
 
-static int xiic_check_timeout(struct xiic_i2c *i2c)
+static int xiic_check_timeout_counter(struct xiic_i2c *i2c)
 {
 	if(time_after(jiffies,i2c->timestamp_expire))
 	  {
@@ -254,6 +254,11 @@ static int xiic_check_timeout(struct xiic_i2c *i2c)
 		return i2c->interrupt_counter_expire==0;
 	  }
 	return 0;
+}
+
+static int xiic_check_timeout(struct xiic_i2c *i2c)
+{
+	return time_after(jiffies,i2c->timestamp_expire);
 }
 
 static void xiic_reinit(struct xiic_i2c *i2c, int irq_en)
@@ -461,8 +466,10 @@ static void xiic_process(struct xiic_i2c *i2c)
 			(XIIC_INTR_TX_EMPTY_MASK | XIIC_INTR_TX_HALF_MASK);
 
 		if (!i2c->tx_msg) {
-			dev_dbg(i2c->adap.dev.parent,
-				"%s unexpexted TX IRQ\n", __func__);
+			xiic_set_timeout(i2c);
+			dev_printk(KERN_ALERT,i2c->adap.dev.parent,
+			       "unexpected TX IRQ, reinit\n");
+			xiic_reinit(i2c,0);
 			goto out;
 		}
 
@@ -500,19 +507,21 @@ out:
 
 	xiic_setreg32(i2c, XIIC_IISR_OFFSET, clr);
 
-	if(xiic_check_timeout(i2c))
+	if(xiic_check_timeout_counter(i2c))
 	  {
 	    xiic_set_timeout(i2c);
-	    printk(KERN_ALERT "Watchdog timeout expired, current state:\n");
-	    printk(KERN_ALERT "IER: 0x%x, ISR: 0x%x, "
-		   "pend: 0x%x, SR: 0x%x, msg: %p, nmsgs: %d\n",
-		   ier, isr, pend, xiic_getreg8(i2c, XIIC_SR_REG_OFFSET),
-		   i2c->tx_msg, i2c->nmsgs);
+	    dev_printk(KERN_ALERT,i2c->adap.dev.parent,
+		       "watchdog timeout expired, current state:\n");
+	    dev_printk(KERN_ALERT,i2c->adap.dev.parent,
+		       "IER: 0x%x, ISR: 0x%x, "
+		       "pend: 0x%x, SR: 0x%x, msg: %p, nmsgs: %d\n",
+		       ier, isr, pend, xiic_getreg8(i2c, XIIC_SR_REG_OFFSET),
+		       i2c->tx_msg, i2c->nmsgs);
 	    xiic_reinit(i2c,0);
 	    if (i2c->tx_msg)
 	      {
-		printk(KERN_ALERT 
-		       "Returning error for the current transaction\n");
+		dev_printk(KERN_ALERT,i2c->adap.dev.parent,
+			   "returning error for the current transaction\n");
 		xiic_wakeup(i2c, STATE_ERROR);
 	      }
 	  }
@@ -700,7 +709,16 @@ static int xiic_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 
 	err = xiic_busy(i2c);
 	if (err)
-		return err;
+	  {
+	    if(xiic_check_timeout(i2c))
+	      {
+		dev_printk(KERN_ALERT,i2c->adap.dev.parent,
+			   "timeout expired yet the bus is busy, resetting it\n");
+		xiic_reinit(i2c,0);
+	      }
+	    else
+	      return err;
+	  }
 
 	i2c->tx_msg = msgs;
 	i2c->nmsgs = num;
