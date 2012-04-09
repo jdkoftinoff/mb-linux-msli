@@ -47,7 +47,7 @@
 #include <linux/i2c-xiic.h>
 #include <linux/io.h>
 #include <linux/slab.h>
-
+ 
 #define DRIVER_NAME "xiic-i2c"
 
 enum xilinx_i2c_state {
