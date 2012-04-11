@@ -12,7 +12,7 @@ if [ "${2}" == "" ]
     exit 1
 fi
 
-
+lastline=`tail -n1 "${1}"|wc -l`
 linecount=`wc -l "${1}"|cut -f1 -d' '`
 linenum=`grep -n bootargs "${1}"|cut -f1 -d:`
 
@@ -22,7 +22,7 @@ if [ "$linenum" == "" ]
     exit 1
 fi
 
-((bottomlines=linecount-linenum+1))
+((bottomlines=linecount-linenum+1-lastline))
 
 outfiledir=`dirname "${2}"`
 outfile=`mktemp "${outfiledir}/device-tree.XXXXXXXX"`
