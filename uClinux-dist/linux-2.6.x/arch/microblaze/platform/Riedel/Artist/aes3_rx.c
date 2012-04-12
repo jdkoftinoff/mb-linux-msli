@@ -79,8 +79,6 @@ static irqreturn_t aes3_rx_interrupt(int irq, void *dev_id) {
 
   /* To add the service routine of IRQ */
   
-  printk("AES clock mode IRQ, clock source changes!");
-  
   /* Wake up the Netlink thread to consume status data */
   rx->statusReady = AES_NEW_STATUS_READY;
   wake_up_interruptible(&(rx->statusFifoQueue));
@@ -302,7 +300,7 @@ static int aes3_rx_ioctl(struct inode *inode,
    
  case IOC_READ_AES_MASK:
    {
-     /* Get the stream status, then copy into the userspace pointer */
+     /* Get the stream mask, then copy into the userspace pointer */
      Value = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG));
      if(copy_to_user((void __user*)arg, &Value, 
                      sizeof(uint32_t)) != 0) {
@@ -355,8 +353,6 @@ int aes3_rx_probe(const char *name,
                               struct file_operations *derivedFops,
                               void *derivedData,
                               struct aes3_rx **newInstance) {
-
-  
   struct aes3_rx *rx;
   int returnValue;
 
@@ -434,7 +430,6 @@ int aes3_rx_probe(const char *name,
   platform_set_drvdata(pdev, rx);
   rx->pdev = pdev;
 
-
   /* Add as a character device to make the instance available for use */
   cdev_init(&rx->cdev, &aes3_rx_fops);
   rx->cdev.owner = THIS_MODULE;
@@ -503,8 +498,8 @@ static int __devexit aes3_rx_of_remove(struct of_device *dev)
 
 /* Define the devices from the tree we are compatible with */
 static struct of_device_id aes3_rx_of_match[] = {
-  { .compatible = "xlnx,aes3-rx-1.01.a", },
-  { .compatible = "xlnx,aes3-rx-1.02.a", },
+  { .compatible = "xlnx,labx-aes3-rx-1.01.a", },
+  { .compatible = "xlnx,labx-aes3-rx-1.02.a", },
   { /* end of list */ },
 };
 
