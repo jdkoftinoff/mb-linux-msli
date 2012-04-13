@@ -445,6 +445,7 @@ typedef struct XLlTemac {
   wait_queue_head_t PhyWait; /* Wait queue for PHY operations */
   u32 MdioState;             /* MDIO state */
   struct mii_bus *mdio_bus;  /* MDIO bus driver instance */
+  struct semaphore mdio_sem; /* MDIO access semaphore */
   u32 versionReg;            /* Version register */
   u32 MacMatchUnits;         /* Number of supported MAC filters */
   struct net_device *dev;    /* Pointer back to the net device */
