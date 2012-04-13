@@ -355,35 +355,6 @@ static inline int _labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
   return status;
 }
 
-static inline void _labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhySetMdioDivisor(InstancePtr, Divisor);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
-			      u32 RegisterNum, u16 *PhyDataPtr)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
-			       u32 RegisterNum, u16 PhyData)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
 static inline int _labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   int status;
