@@ -41,7 +41,7 @@
 /* Driver name and the revision of hardware expected (1.1 - 1.7) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x17
+#define DRIVER_VERSION_MAX  0x18
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12

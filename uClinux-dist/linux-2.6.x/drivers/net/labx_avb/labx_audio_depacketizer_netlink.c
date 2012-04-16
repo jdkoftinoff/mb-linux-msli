@@ -92,8 +92,8 @@ int audio_depacketizer_stream_event(struct audio_depacketizer *depacketizer) {
      * NOTE - No register returns this yet!!!
      */
 
-   if(depacketizer->capabilities.versionMajor == 0x01 
-       && depacketizer->capabilities.versionMinor >= 0x08) {
+   if((depacketizer->capabilities.versionMajor > 1) ||
+             (depacketizer->capabilities.versionMinor >= 8)) {
       returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_SEQ_ERROR, depacketizer->errorIndex);
    }
     
