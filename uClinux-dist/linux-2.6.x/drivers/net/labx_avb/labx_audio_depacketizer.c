@@ -706,6 +706,9 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
+  /* Grab the sequence error index prior to clearing the IRQ, it's 
+     possible the index will change if cleared first */
+  seqError = XIo_In32(REGISTER_ADDRESS(depacketizer, ERROR_REG));
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
   maskedFlags &= irqMask;
@@ -726,7 +729,10 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     depacketizer->streamStatusGeneration++;
 
     /* If this was a sequence error IRQ, leave a flag in place */
-    if((maskedFlags & SEQ_ERROR_IRQ) != 0) depacketizer->streamSeqError = 1;
+    if((maskedFlags & SEQ_ERROR_IRQ) != 0) {
+      depacketizer->streamSeqError = 1;
+      depacketizer->errorIndex = seqError;
+    }
 
     /* Disarm both event interrupts while the status thread handles the present
      * event(s).  This permits the status thread to limit the rate at which events
@@ -1333,6 +1339,7 @@ static int audio_depacketizer_probe(const char *name,
    */
   depacketizer->streamStatusGeneration = 0;
   depacketizer->streamSeqError         = 0;
+  depacketizer->errorIndex             = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
   }
@@ -1402,6 +1409,9 @@ static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.03.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.04.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.05.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.06.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.07.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.08.a", },
 	{ /* end of list */ },
 };
 
