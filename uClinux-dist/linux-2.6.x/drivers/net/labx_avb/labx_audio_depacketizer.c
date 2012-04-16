@@ -703,6 +703,7 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
   uint32_t irqMask;
+  uint32_t seqError;
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
