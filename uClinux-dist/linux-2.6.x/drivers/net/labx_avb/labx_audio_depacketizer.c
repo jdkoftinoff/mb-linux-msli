@@ -41,7 +41,7 @@
 /* Driver name and the revision of hardware expected (1.1 - 1.7) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x17
+#define DRIVER_VERSION_MAX  0x18
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
@@ -703,9 +703,13 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
   uint32_t irqMask;
+  uint32_t seqError;
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
+  /* Grab the sequence error index prior to clearing the IRQ, it's 
+     possible the index will change if cleared first */
+  seqError = XIo_In32(REGISTER_ADDRESS(depacketizer, ERROR_REG));
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
   maskedFlags &= irqMask;
@@ -726,7 +730,10 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     depacketizer->streamStatusGeneration++;
 
     /* If this was a sequence error IRQ, leave a flag in place */
-    if((maskedFlags & SEQ_ERROR_IRQ) != 0) depacketizer->streamSeqError = 1;
+    if((maskedFlags & SEQ_ERROR_IRQ) != 0) {
+      depacketizer->streamSeqError = 1;
+      depacketizer->errorIndex = seqError;
+    }
 
     /* Disarm both event interrupts while the status thread handles the present
      * event(s).  This permits the status thread to limit the rate at which events
@@ -1333,6 +1340,7 @@ static int audio_depacketizer_probe(const char *name,
    */
   depacketizer->streamStatusGeneration = 0;
   depacketizer->streamSeqError         = 0;
+  depacketizer->errorIndex             = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
   }
@@ -1402,6 +1410,9 @@ static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.03.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.04.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.05.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.06.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.07.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.08.a", },
 	{ /* end of list */ },
 };
 

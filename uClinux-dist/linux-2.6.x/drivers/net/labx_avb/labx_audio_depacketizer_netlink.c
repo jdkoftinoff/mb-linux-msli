@@ -91,13 +91,18 @@ int audio_depacketizer_stream_event(struct audio_depacketizer *depacketizer) {
     /* Write the identity of the stream 
      * NOTE - No register returns this yet!!!
      */
-    returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_SEQ_ERROR, 0x00000000);
+
+   if((depacketizer->capabilities.versionMajor > 1) ||
+             (depacketizer->capabilities.versionMinor >= 8)) {
+      returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_SEQ_ERROR, depacketizer->errorIndex);
+   }
     
     /* Clear the "stream sequence error" flag.  There is a race condition inherent here
      * with the ISR; however, the delivery of any one sequence error event is already
      * unreliable due to the way the depacketizer hardware operates.
      */
     depacketizer->streamSeqError = 0;
+    depacketizer->errorIndex     = 0;
 
     /* Make sure the clear occurs even if there was a write failure */
     if(returnValue != 0) goto fail;
