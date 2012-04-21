@@ -1431,7 +1431,13 @@ int main(int argc,char **argv,char **env)
 	}
       curr_offset_new=curr_offset+sizeof(segment_header)
 	+htonl(segment_header.size_padded);
-      if(curr_offset_new<=curr_offset)
+
+      /*
+	verify that no wraparound or zero-offset happens
+	with or without the segment header size being added
+      */
+      if((curr_offset_new<=curr_offset)
+	 ||(curr_offset_new<=(curr_offset+sizeof(segment_header))))
 	{
 	  fprintf(stderr,"Invalid segment header at 0x%08x on device %s\n",
 		  curr_offset,dev_name);
@@ -1447,8 +1453,8 @@ int main(int argc,char **argv,char **env)
 	  return 1;
 	}
     }
-  while((segment_header.image_segment_type!=REC_TYPE_RDISK)
-	&&(segment_header.image_segment_type!=REC_TYPE_END));
+  while((htonl(segment_header.image_segment_type)!=REC_TYPE_RDISK)
+	&&(htonl(segment_header.image_segment_type)!=REC_TYPE_END));
 
 #ifdef DEBUG
   printf("Chain ends at 0x%08x\n",curr_offset);

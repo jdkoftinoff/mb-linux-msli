@@ -1752,7 +1752,7 @@ int main(int argc,char **argv)
     {
       int use_header_offset,fonts_counter,file_finished;
       u32 initial_offset,initial_offset_bootloader,initial_offset_chain,
-	curr_offset,bitstream_size,bootloader_size;
+	curr_offset,curr_offset_new,bitstream_size,bootloader_size;
       unsigned char imageheaderbuffer[BOOT_IMAGE_HEADER_SIZE];
       unsigned char bitstream_fixed_header[]=
 	"\x00\x09\x0f\xf0\x0f\xf0\x0f\xf0\x0f\xf0\x00\x00"
@@ -2019,11 +2019,25 @@ int main(int argc,char **argv)
 	    case REC_TYPE_USER:
 	      break;
 	    }
-	  curr_offset+=sizeof(image_segment_header)
+	  curr_offset_new=curr_offset+sizeof(image_segment_header)
 	    +htonl(segmentheader.size_padded);
-	  if(lseek(h,curr_offset,SEEK_SET)!=curr_offset)
+
+	  /*
+	    verify that no wraparound or zero-offset happens
+	    with or without the segment header size being added
+	  */
+	  if((curr_offset_new<=curr_offset)
+	     ||(curr_offset_new<=(curr_offset+sizeof(image_segment_header))))
 	    {
 	      file_finished=1;
+	    }
+	  else
+	    {
+	      curr_offset=lseek(h,curr_offset_new,SEEK_SET);
+	      if(curr_offset!=curr_offset_new)
+		{
+		  file_finished=1;
+		}
 	    }
 	}
       cleanup_mem();
