@@ -1599,16 +1599,22 @@ int main(int argc,char **argv,char **env)
 	      printf("Format completed successfully\n");
 	    }
 	  else
-	    return 1;
-	  
-	  if(find_chain_start(h)!=0)
 	    {
 	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
 	      return 1;
 	    }
+	  
+	  if(find_chain_start(h)!=0)
+	    {
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
+	      return 1;
+	    }
 	}
       else 
-	return 1;
+	{
+	  fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
+	  return 1;
+	}
     }
   
   if(find_data_end(h))
@@ -1622,23 +1628,27 @@ int main(int argc,char **argv,char **env)
 	      printf("Format completed successfully\n");
 	    }
 	  else
-	    return 1;
+	    {
+	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      return 1;
+	    }
 	  
 	  if(find_chain_start(h)!=0)
 	    {
-	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
 	      return 1;
 	    }
 	  if(find_data_end(h)!=0)
 	    {
-	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
 	      return 1;
 	    }
 	}
       else 
-	return 1;
-      fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
-      return 1;
+	{
+	  fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
+	  return 1;
+	}
     }
 
   /* if output is requested yet no arguments are supplied, exit */
