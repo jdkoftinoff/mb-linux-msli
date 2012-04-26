@@ -969,25 +969,48 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
   if(write_ptr==0xffffffff)
     find_data_end(h);
   if(write_ptr==0xffffffff)
-    return -1;
+    {
+#ifdef DEBUG
+      printf("Could not find end of recorded data\n");
+#endif
+      /* format error */
+      return -1;
+    }
   if(eraseblock_by_offset(&erase,write_ptr)<0)
-    return -1;
+    {
+#ifdef DEBUG
+      printf("Could not find erase block\n");
+#endif
+      /* format error */
+      return -1;
+    }
 
   if(continue_flag)
     {
+#ifdef DEBUG
+      printf("Continuing, erase block from 0x%x to 0x%x, "
+	     "writing at global offset 0x%x, limit 0x%x\n",
+	     erase.start,erase.start+erase.length-1,
+	     write_ptr,offset_dont_overwrite);
+#endif
       /* if continuing, check if overwriting our own start offset */
-      if(((erase.start+erase.length)>offset_dont_overwrite)
+      if(((erase.start+erase.length)>
+	  (offset_dont_overwrite+glob_user_area_start))
 	 &&(write_ptr<=offset_dont_overwrite))
 	{
 #ifdef DEBUG
-	  printf("*** short write ***\n");
+	  printf("Device full\n");
 #endif
-	  return 0;
+	  /* device full */
+	  return -2;
 	}
     }
   else
     {
       /* record start offset and part 0 */
+#ifdef DEBUG
+      printf("Starting, writing at 0x%x\n",write_ptr);
+#endif
       offset_dont_overwrite=write_ptr;
       curr_part=0;
     }
@@ -1017,7 +1040,11 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	  else
 	    write_size=size;
 #ifdef DEBUG
-	  printf("writing %d bytes into current block\n",write_size);
+	  printf("Writing %d bytes into current block "
+		 "from 0x%x to 0x%x, at global offset 0x%x, "
+		 "block offset 0x%x\n",
+		 write_size,erase.start,erase.start+erase.length-1,
+		 write_ptr,offset_in_block);
 #endif
 	  data_header.serial=htonl(write_serial);
 	  data_header.size=htonl(write_size);
@@ -1046,7 +1073,8 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	  else 
 	    {
 	      sync();
-	      return -1;
+	      /* write error */
+	      return -3;
 	    }
 	}
       while(size)
@@ -1063,6 +1091,7 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 		 ||(htonl(header.next_block)<glob_chain_start))
 		{
 		  sync();
+		  /* format error */
 		  return -1;
 		}
 	      erase.start=htonl(header.next_block)+glob_user_area_start;
@@ -1087,13 +1116,23 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 		 
 	      if(!erase_needed_flag)
 		{
-		  if(((erase.start+erase.length)>offset_dont_overwrite)
-		     &&(erase.start<=offset_dont_overwrite))
+#ifdef DEBUG
+		  printf("Erase block from 0x%x to 0x%x, "
+			 "writing at global offset 0x%x, limit 0x%x\n",
+			 erase.start,erase.start+erase.length-1,
+			 write_ptr,offset_dont_overwrite);
+#endif
+		  if(((erase.start+erase.length)>
+		      (offset_dont_overwrite+glob_user_area_start))
+		     &&(erase.start<=
+			(offset_dont_overwrite+glob_user_area_start)))
 		    {
 #ifdef DEBUG
-		      printf("*** short write ***\n");
+		      printf("Device full\n");
 #endif
-		      return orig_size-size;
+		      //return orig_size-size;
+		      /* device full */
+		      return -2;
 		    }
 		}
 
@@ -1103,7 +1142,10 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	      else
 		write_size=size;
 #ifdef DEBUG
-	      printf("writing %d bytes into erased block\n",write_size);
+	      printf("Writing %d bytes into erased block "
+		     "from 0x%x to 0x%x, at global offset 0x%x\n",
+		     write_size,erase.start,erase.start+erase.length-1,
+		     write_ptr);
 #endif
 	      data_header.serial=htonl(write_serial);
 	      data_header.size=htonl(write_size);
@@ -1137,17 +1179,24 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	      else
 		{
 		  sync();
-		  return -1;
+		  /* write error */
+		  return -3;
 		}
 	    }
 	  else
-	    return -1;
+	    {
+	      /* format error */
+	      return -1;
+	    }
 	}
       /* success */
       return orig_size;
     }
   else
-    return -1;
+    {
+      /* format error */
+      return -1;
+    }
 }
 
 /* main */
@@ -1658,7 +1707,7 @@ int main(int argc,char **argv,char **env)
   char **tar_argv;
   static unsigned char buffer[4096];
   int tar_pipe[2];
-  int tar_argc,j,l,status;
+  int tar_argc,j,l,res,status;
   pid_t pid;
 
 
@@ -1740,9 +1789,23 @@ int main(int argc,char **argv,char **env)
 	  close(tar_pipe[1]);
 	  while((l=read(tar_pipe[0],buffer,sizeof(buffer)))>0)
 	    {
-	      if(record_data(h,buffer,l,cont)!=l)
+	      res=record_data(h,buffer,l,cont);
+	      if(res!=l)
 		{
-		  fprintf(stderr,"FATAL ERROR: flash write error\n");
+		  switch(res)
+		    {
+		    case -1:
+		      fprintf(stderr,"FATAL ERROR: invalid flash format\n");
+		      break;
+		    case -2:
+		      fprintf(stderr,"FATAL ERROR: no space left on device\n");
+		      break;
+		    case -3:
+		      fprintf(stderr,"FATAL ERROR: flash write error\n");
+		      break;
+		    default:
+		      fprintf(stderr,"FATAL ERROR: unknown write error\n");
+		    }
 		  free(tar_argv);
 		  close(tar_pipe[0]);
 		  waitpid(pid,&status,0);
