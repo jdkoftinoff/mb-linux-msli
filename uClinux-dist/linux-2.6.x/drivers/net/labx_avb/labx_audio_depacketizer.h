@@ -76,10 +76,10 @@
 #  define SYNC_PENDING     (0x80000000)
 
 #define RELOCATE_REG         (0x00B)
-#  define RELOCATION_INACTIVE       (0x00000000)
-#  define RELOCATION_ACTIVE         (0x80000000)
-#  define RELOCATION_MATCH_MASK     (0x0000007F)
-#  define RELOCATION_ADDRESS_SHIFT  (7)
+#  define RELOCATION_INACTIVE              (0x00000000)
+#  define RELOCATION_ACTIVE                (0x80000000)
+#  define RELOCATION_MATCH_MASK(device)    (device->streamIndexMask)
+#  define RELOCATION_ADDRESS_SHIFT(device) (device->streamIndexShift)
 
 #define STREAM_STATUS_0_REG  (0x00C)
 #define STREAM_STATUS_1_REG  (0x00D)
@@ -224,7 +224,8 @@ struct audio_depacketizer {
   /* Architecture employed for stream matching */
   StreamMatchArchitecture matchArchitecture;
 
-  /* Stream index mask appropriate for the instance */
+  /* Stream index shift and mask appropriate for the instance */
+  uint32_t streamIndexShift;
   uint32_t streamIndexMask;
 
   /* Capabilities of the depacketizer hardware */
