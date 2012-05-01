@@ -554,9 +554,9 @@ static int32_t relocate_matcher(struct audio_depacketizer *depacketizer,
    * with a synchronized write to the relocation register to ensure the state
    * capture occurs when the engine is idle.
    */
-  relocationWord = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK);
+  relocationWord  = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK(depacketizer));
   relocationWord |= ((matcherRelocation->oldVector + matcherRelocation->ringStateOffset) << 
-                     RELOCATION_ADDRESS_SHIFT);
+                     RELOCATION_ADDRESS_SHIFT(depacketizer));
   relocationWord |= RELOCATION_ACTIVE;
   XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
   XIo_Out32(REGISTER_ADDRESS(depacketizer, RELOCATE_REG), relocationWord);
@@ -576,9 +576,9 @@ static int32_t relocate_matcher(struct audio_depacketizer *depacketizer,
    * causing the engine to commit the present value of the ring offset counter into
    * its new home, where it will be used from now on.
    */
-  relocationWord = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK);
+  relocationWord  = (matcherRelocation->matchUnit & RELOCATION_MATCH_MASK(depacketizer));
   relocationWord |= ((matcherRelocation->newVector + matcherRelocation->ringStateOffset) << 
-                     RELOCATION_ADDRESS_SHIFT);
+                     RELOCATION_ADDRESS_SHIFT(depacketizer));
   XIo_Out32(REGISTER_ADDRESS(depacketizer, SYNC_REG), SYNC_NEXT_WRITE);
   XIo_Out32(REGISTER_ADDRESS(depacketizer, RELOCATE_REG), relocationWord);
   returnValue = await_synced_write(depacketizer);
@@ -1136,9 +1136,13 @@ static int audio_depacketizer_probe(const char *name,
   /* Calculate an appropriate mask for stream indices, given the maximum
    * number of streams supported by the instance.
    */
-  depacketizer->streamIndexMask = 0;
+  depacketizer->streamIndexShift = 0;
+  depacketizer->streamIndexMask  = 0;
   maxStreamShifter = (depacketizer->capabilities.maxStreams - 1);
   while(maxStreamShifter != 0) {
+    // Construct the mask by shifting in ones; nothing guarantees that the max
+    // number of streams is an integer power of two.
+    depacketizer->streamIndexShift++;
     depacketizer->streamIndexMask = ((depacketizer->streamIndexMask << 1) | 0x01);
     maxStreamShifter >>= 1;
   }
