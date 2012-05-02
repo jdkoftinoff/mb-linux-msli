@@ -23,11 +23,6 @@
 #include "net/labx_ethernet/labx_ethernet_defs.h"
 
 
-extern void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress, 
-		u32 RegisterNum, u16 *PhyDataPtr);
-extern void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress, 
-		u32 RegisterNum, u16 PhyData);
-
 static void labx_eth_free_mdio_bus(struct mii_bus *bus)
 {
 #if 0
@@ -40,16 +35,27 @@ static void labx_eth_free_mdio_bus(struct mii_bus *bus)
 
 int labx_eth_mdio_read(struct mii_bus *bus, int phy_id, int regnum)
 {
+  	XLlTemac *InstancePtr = (XLlTemac*)bus->priv;
 	u16 val=0;
-	//printk("MR%d", phy_id);
-	_labx_eth_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
+	if (down_interruptible(&InstancePtr->mdio_sem)) {
+		return 0;
+	}
+	//printk("MR%d: 0x%02X ", phy_id, regnum);
+	labx_eth_PhyRead((XLlTemac *)(bus->priv),phy_id,regnum,&val);
+        //printk("=> 0x%04X\n", val);
+	up(&InstancePtr->mdio_sem);
 	return val;
 }
 
 int labx_eth_mdio_write(struct mii_bus *bus, int phy_id, int regnum, u16 val)
 {
-  //  printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
-	_labx_eth_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
+  	XLlTemac *InstancePtr = (XLlTemac*)bus->priv;
+	if (down_interruptible(&InstancePtr->mdio_sem)) {
+		return 0;
+	}
+        //printk("MW%d: 0x%02X <= 0x%04X\n", phy_id, regnum, val);
+	labx_eth_PhyWrite((XLlTemac *)bus->priv,phy_id,regnum,val);
+	up(&InstancePtr->mdio_sem);
 	return 0;
 }
 
@@ -96,6 +102,7 @@ int labx_eth_mdio_bus_init(struct device *dev, struct labx_eth_platform_data *pd
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%s", pdata->mdio_bus_name);
 
 	InstancePtr->mdio_bus = new_bus;
+	sema_init(&InstancePtr->mdio_sem, 1);
 	ret = mdiobus_register(new_bus);
 	if (ret)
 	{

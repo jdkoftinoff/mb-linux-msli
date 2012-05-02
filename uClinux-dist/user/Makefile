@@ -13,6 +13,7 @@ ifndef ROOTDIR
 ROOTDIR=$(PWD)/..
 endif
 
+HOST_NCPU?=1
 UCLINUX_BUILD_USER=1
 -include $(LINUX_CONFIG)
 -include $(CONFIG_CONFIG)
@@ -448,7 +449,7 @@ dir_$(CONFIG_USER_MIDILOOPBACK_MIDILOOPBACK) += midiloopback
 dir_$(CONFIG_USER_MBBL_MKBOOTIMAGE)         += mbbl-mkbootimage
 dir_$(CONFIG_USER_MTD_STORAGE)              += mtd-storage
 dir_$(CONFIG_USER_AVAHI_AVAHI)              += avahi 
-
+ 
 dir_y += games
 
 -include Makefile.local

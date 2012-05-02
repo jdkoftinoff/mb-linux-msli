@@ -346,6 +346,7 @@ extern "C" {
 #define XTE_DEFAULT_OPTIONS                     \
     (XTE_FLOW_CONTROL_OPTION |                  \
      XTE_BROADCAST_OPTION |                     \
+     XTE_MULTICAST_OPTION |                     \
      XTE_FCS_INSERT_OPTION |                    \
      XTE_FCS_STRIP_OPTION |                     \
      XTE_LENTYPE_ERR_OPTION |                   \
@@ -364,9 +365,6 @@ extern "C" {
 #define XTE_RESET_HARD    1
 #define XTE_NORESET_HARD  0
 /*@}*/
-
-#define XTE_MULTI_MAT_ENTRIES       4	/* Number of storable addresses in
-					   the Multicast Address Table */
 
 #define XTE_MDIO_DIV_DFT            29	/* Default MDIO clock divisor */
 
@@ -447,6 +445,7 @@ typedef struct XLlTemac {
   wait_queue_head_t PhyWait; /* Wait queue for PHY operations */
   u32 MdioState;             /* MDIO state */
   struct mii_bus *mdio_bus;  /* MDIO bus driver instance */
+  struct semaphore mdio_sem; /* MDIO access semaphore */
   u32 versionReg;            /* Version register */
   u32 MacMatchUnits;         /* Number of supported MAC filters */
   struct net_device *dev;    /* Pointer back to the net device */

@@ -136,6 +136,12 @@ extern "C" {
 #define FIFO_RDFD_OFFSET 0x00000020  /**< Receive Data */
 #define FIFO_RLF_OFFSET  0x00000024  /**< Receive Length */
 
+#define FIFO_TX_CTRL_OFFSET (LABX_FIFO_REGS_BASE + 0x00000028)  /** TX FIFO control */
+#define FIFO_RX_CTRL_OFFSET (LABX_FIFO_REGS_BASE + 0x0000002C)  /** RX FIFO control */
+#  define FIFO_ALIGN32      0x00000000
+#  define FIFO_ALIGN16      0x00000001
+#  define RX_FIFO_SUPPRESS  0x00000002
+
 #define FIFO_RESET_MAGIC 0x000000A5  /* Pattern to reset FIFOs */
 
   /* Macros for FIFO register access */

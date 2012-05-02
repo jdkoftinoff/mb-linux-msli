@@ -124,11 +124,7 @@ static int sample_pointers_open(struct inode *inode, struct file *filp)
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
   spin_lock_irqsave(&sample_pointers->mutex, flags);
-  if(sample_pointers->opened) {
-    returnValue = -1;
-  } else {
-    sample_pointers->opened = true;
-  }
+  sample_pointers->opened++;
 
   /* Invoke the open() operation on the derived driver, if there is one */
   if((sample_pointers->derivedFops != NULL) && 
@@ -149,7 +145,7 @@ static int sample_pointers_release(struct inode *inode, struct file *filp)
 
   preempt_disable();
   spin_lock_irqsave(&sample_pointers->mutex, flags);
-  sample_pointers->opened = false;
+  sample_pointers->opened--;
 
   /* Invoke the release() operation on the derived driver, if there is one */
   if((sample_pointers->derivedFops != NULL) && 

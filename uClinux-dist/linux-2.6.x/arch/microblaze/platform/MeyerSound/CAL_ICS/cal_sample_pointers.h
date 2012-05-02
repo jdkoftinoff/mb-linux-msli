@@ -196,7 +196,7 @@ struct sample_pointers {
 
   /* Mutex for the device instance */
   spinlock_t mutex;
-  bool opened;
+  int32_t opened;
 
   /* File operations and private data for a polymorphic
    * driver to use
