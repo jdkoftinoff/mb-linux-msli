@@ -74,8 +74,8 @@ static irqreturn_t aes3_rx_interrupt(int irq, void *dev_id) {
   irqreturn_t returnValue = IRQ_NONE;
 
   /* write into the status reg will clear the interrupt */
-  maskedFlags = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG));
-  XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG), maskedFlags);
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
+  XIo_Out32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG), maskedFlags);
 
   /* To add the service routine of IRQ */
   
@@ -134,14 +134,21 @@ static int tx_netlink_status(struct aes3_rx *rx) {
   returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_AES_DEVICE, new_encode_dev(rx->deviceNode));
   if(returnValue != 0) goto tx_failure;
 
-  /* Read the AES status register and send it out
+  /* Read the AES rx status register and send it out
    */
-  aesStatus = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG));
+  aesStatus = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
   returnValue = nla_put_u32(skb, 
-                            LABX_AES_EVENTS_A_AES_STATUS, 
+                            LABX_AES_EVENTS_A_AES_RX_STATUS, 
                             aesStatus);
   if(returnValue != 0) goto tx_failure;
 
+  /* Read the AES tx status register and send it out
+   */
+  aesStatus = XIo_In32(REGISTER_ADDRESS(rx, AES_TX_STREAM_STATUS_REG));
+  returnValue = nla_put_u32(skb, 
+                            LABX_AES_EVENTS_A_AES_TX_STATUS, 
+                            aesStatus);
+  if(returnValue != 0) goto tx_failure;
 
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
@@ -278,23 +285,65 @@ static int aes3_rx_ioctl(struct inode *inode,
 
  switch(command) {
      
- case IOC_READ_STREAM_STATUS:
+ case IOC_READ_RX_STREAM_STATUS:
    {
-     /* Get the stream status, then copy into the userspace pointer */
-     Value = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG));
+     /* Get the rx stream status, then copy into the userspace pointer */
+     Value = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
      if(copy_to_user((void __user*)arg, &Value, 
                      sizeof(uint32_t)) != 0) {
        return(-EFAULT);
      }
    }
    break;
-   
+
+ case IOC_READ_TX_STREAM_STATUS:
+   {
+     /* Get the tx stream status, then copy into the userspace pointer */
+     Value = XIo_In32(REGISTER_ADDRESS(rx, AES_TX_STREAM_STATUS_REG));
+     if(copy_to_user((void __user*)arg, &Value, 
+                     sizeof(uint32_t)) != 0) {
+       return(-EFAULT);
+     }
+   }
+   break;  
+
  case IOC_CONFIG_AES: 
   {
+   /* Write the AES configuration register. */
    if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
         return(-EFAULT);
    }
    XIo_Out32(REGISTER_ADDRESS(rx, AES_CONTROL_REG), Value);
+  }
+   break;
+   
+ case IOC_CONFIG_RX_PCM_MODE:
+  {
+   /* Write the RX PCM configuration register. */
+   if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
+        return(-EFAULT);
+   }
+   XIo_Out32(REGISTER_ADDRESS(rx, AES_RX_PCM_MODE_REG), Value);
+  }
+   break;
+   
+ case IOC_CONFIG_TX_PCM_MODE:
+  {
+   /* Write the TX PCM configuration register. */
+   if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
+        return(-EFAULT);
+   }
+   XIo_Out32(REGISTER_ADDRESS(rx, AES_TX_PCM_MODE_REG), Value);
+  }
+   break;
+   
+ case IOC_CONFIG_2CHAN_MODE:
+  {
+   /* Write the two-channel mode configuration register. */
+   if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
+        return(-EFAULT);
+   }
+   XIo_Out32(REGISTER_ADDRESS(rx, AES_TX_2CHAN_MODE_REG), Value);
   }
    break;
    
@@ -383,7 +432,7 @@ int aes3_rx_probe(const char *name,
 
 
   /* Ensure that the engine and its interrupts are disabled */
-  XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_STATUS_REG), NO_IRQS);
+  XIo_Out32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG), NO_IRQS);
   
   /*Initialize the Stream mask, enable all the 8 streams*/
   XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG), 0xff);

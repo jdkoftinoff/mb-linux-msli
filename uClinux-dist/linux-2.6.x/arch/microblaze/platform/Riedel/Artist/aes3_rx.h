@@ -38,9 +38,12 @@
     
 /* Output channel select registers */ 
 #define AES_STREAM_MASK_REG       (0x00)
-#define AES_STREAM_STATUS_REG      (0x01) 
-#define AES_CONTROL_REG         (0x02)
-
+#define AES_RX_STREAM_STATUS_REG  (0x01) 
+#define AES_CONTROL_REG           (0x02)
+#define AES_RX_PCM_MODE_REG       (0x03)
+#define AES_TX_PCM_MODE_REG       (0x04)
+#define AES_TX_2CHAN_MODE_REG     (0x05)
+#define AES_TX_STREAM_STATUS_REG  (0x06)
 
 /* Xilinx FPGA related */
 #define REGISTER_ADDRESS(device, offset) \
