@@ -179,7 +179,12 @@ static int sample_pointers_ioctl(struct inode *inode,
       
   case IOC_READ_ROUTING_MATRIX:
     {
-      Reg = *((uint32_t*)arg);
+      uint32_t userVal = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      Reg = userVal;
 
       /* Get the stream status, then copy into the userspace pointer */
       Value = XIo_In32(REGISTER_ADDRESS(sample_pointers, Reg));
@@ -191,18 +196,50 @@ static int sample_pointers_ioctl(struct inode *inode,
     break;
     
   case IOC_SET_ROUTING_MATRIX: 
-    Value = *((uint32_t*)arg) & 0xFF;
-    Reg = ((*((uint32_t*)arg)) >> 8) & 0xFF;
-    XIo_Out32(REGISTER_ADDRESS(sample_pointers, Reg), Value);
+    {
+      uint32_t userVal = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      Value = userVal & 0xFF;
+      Reg = (userVal >> 8) & 0xFF;
+      XIo_Out32(REGISTER_ADDRESS(sample_pointers, Reg), Value);
+    }
     break;
   
   case IOC_UPDATE_SOFT_MUTE_COEFF_TABLE:
-    Value = *((uint32_t*)arg);
-    if ( (Value < 0) || (Value >= COEFF_TABLE_MAX_NUM) )
-      Value = 0;
-    for (Reg = 0; Reg < 256; Reg++) 
-      XIo_Out32(REGISTER_ADDRESS(sample_pointers, MUTE_COEFF_REG_BASE_ADDRESS+Reg), MUTE_COEFF_TABLE[Value][Reg]);
-    
+    {
+      uint32_t userVal = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      Value = userVal;
+      if ( (Value < 0) || (Value >= COEFF_TABLE_MAX_NUM) ) {
+        Value = 0;
+      }
+      for (Reg = 0; Reg < 256; Reg++) {
+        XIo_Out32(REGISTER_ADDRESS(sample_pointers, MUTE_COEFF_REG_BASE_ADDRESS+Reg), MUTE_COEFF_TABLE[Value][Reg]);
+      }
+    }
+    break;
+   
+  case IOC_CAL_SET_AVB_MUTE:
+    {
+      uint32_t userVal = 0;
+      uint32_t channel = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      channel = userVal & 0x3;
+      Value = XIo_In32(REGISTER_ADDRESS(sample_pointers, AVB_STREAM_CHAN_REG));
+      Value &= ~(0xF << (channel*4));
+      Value |= ((userVal >> 8) & 0xF) << (channel*4);
+      XIo_Out32(REGISTER_ADDRESS(sample_pointers, AVB_STREAM_CHAN_REG), Value);
+    }
+    break;
   
   default:
       if((sample_pointers->derivedFops != NULL) && 
@@ -294,7 +331,7 @@ int cal_sample_pointers_probe(const char *name,
 
   /* Initialize other resources */
   spin_lock_init(&sample_pointers->mutex);
-  sample_pointers->opened = false;
+  sample_pointers->opened = 0;
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, sample_pointers);
