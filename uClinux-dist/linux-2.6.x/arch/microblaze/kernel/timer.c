@@ -269,3 +269,18 @@ void __init time_init(void)
 	microblaze_clocksource_init();
 	microblaze_clockevent_init();
 }
+
+unsigned long long sched_clock(void)
+{
+	static u32 timeUpper = 0;
+	static u32 prevTime = 0;
+	u32 time = (u32)microblaze_read(&clocksource_microblaze);
+
+	// Prevent wraparound (for a very long time)
+	if (time < prevTime) timeUpper++;
+	prevTime = time;
+
+        return ((((u64)timeUpper) * clocksource_microblaze.mult) << (32 - clocksource_microblaze.shift)) +
+	       ((((u64)time) * clocksource_microblaze.mult) >> clocksource_microblaze.shift);
+}
+
