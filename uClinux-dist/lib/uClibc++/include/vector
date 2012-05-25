@@ -33,70 +33,71 @@
 
 namespace std{
 
-	template <class T, class Allocator = allocator<T> > class vector;
-	template <class T, class Allocator> bool operator==(const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> bool operator< (const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> bool operator!=(const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> bool operator> (const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> bool operator>=(const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> bool operator<=(const vector<T,Allocator>& x, const vector<T,Allocator>& y);
-	template <class T, class Allocator> void swap(vector<T,Allocator>& x, vector<T,Allocator>& y);
-
-	template <class T, class Allocator> class _UCXXEXPORT vector {
+	template <class T> class _UCXXEXPORT vector {
 	public:
 
-		typedef typename Allocator::reference reference;
-		typedef typename Allocator::const_reference const_reference;
-		typedef typename Allocator::size_type size_type;
-		typedef typename Allocator::difference_type difference_type;
-		typedef typename Allocator::pointer pointer;
-		typedef typename Allocator::const_pointer const_pointer;
+		typedef T& reference;
+		typedef const T& const_reference;
+		typedef size_t size_type;
+		typedef ptrdiff_t difference_type;
+		typedef T* pointer;
+		typedef const T* const_pointer;
 
 		typedef T* iterator;
 		typedef const T* const_iterator;
 		typedef T value_type;
-		typedef Allocator allocator_type;
+		typedef allocator<T> allocator_type;
 		typedef std::reverse_iterator<iterator> reverse_iterator;
 		typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
-		explicit _UCXXEXPORT vector(const Allocator& al= Allocator()): data(0), //defaultValue(T()), 
-			data_size(__UCLIBCXX_STL_BUFFER_SIZE__), elements(0), a(al)
+		explicit _UCXXEXPORT vector(void): data(0),
+			data_size(__UCLIBCXX_STL_BUFFER_SIZE__), elements(0)
 		{
-			data = a.allocate(data_size);
+			data = (T*)::operator new(data_size * sizeof(T));
 		}
 
-		explicit _UCXXEXPORT vector(size_type n, const T& value = T(), const Allocator& al= Allocator()) : 
-			data(0), data_size(0), elements(0), a(al)
+		explicit _UCXXEXPORT vector(size_type n, const T& value = T()) : 
+			data(0), data_size(0), elements(0)
 		{
 			data_size = n + __UCLIBCXX_STL_BUFFER_SIZE__;
-			data = a.allocate(data_size);
+			data = (T*)::operator new(data_size * sizeof(T));
 
 			resize(n, value);
 		}
 
-		template <class InputIterator> _UCXXEXPORT 
-			vector(InputIterator first, InputIterator last, const Allocator& al = Allocator()):
-			data(0), data_size(__UCLIBCXX_STL_BUFFER_SIZE__), elements(0), a(al)
+		explicit _UCXXEXPORT vector(const T* values, size_type n) :
+			data(0), data_size(0), elements(0)
 		{
-			data = a.allocate(data_size);
-			assign(first, last);
-		}
-
-		_UCXXEXPORT vector(const vector<T,Allocator>& x){
-			a = x.a;
-
-			elements  = x.elements;
+			elements  = n;
 			data_size = elements + __UCLIBCXX_STL_BUFFER_SIZE__;
-			data = a.allocate(data_size);
+			data = (T*)::operator new(data_size * sizeof(T));
 
 			for(size_type i = 0; i < elements; i++){
-				a.construct(data+i, x.data[i]);
+	                        new((void*)(data+i)) T(values[i]);
 			}	
 		}
 
-		_UCXXEXPORT ~vector();	//Below
+		template <class InputIterator> _UCXXEXPORT 
+			vector(InputIterator first, InputIterator last):
+			data(0), data_size(__UCLIBCXX_STL_BUFFER_SIZE__), elements(0)
+		{
+			data = (T*)::operator new(data_size * sizeof(T));
+			assign(first, last);
+		}
 
-		_UCXXEXPORT vector<T,Allocator>& operator=(const vector<T,Allocator>& x){
+		_UCXXEXPORT vector(const vector<T>& x){
+			elements  = x.elements;
+			data_size = elements + __UCLIBCXX_STL_BUFFER_SIZE__;
+			data = (T*)::operator new(data_size * sizeof(T));
+
+			for(size_type i = 0; i < elements; i++){
+	                        new((void*)(data+i)) T(x.data[i]);
+			}	
+		}
+
+		_UCXXEXPORT ~vector(void);	//Below
+
+		_UCXXEXPORT vector<T>& operator=(const vector<T>& x){
 			if(&x == this){
 				return *this;
 			}
@@ -117,7 +118,7 @@ namespace std{
 			//If we need to add new elements
 			if(elements < x.elements){
 				for(size_t i = elements; i< x.elements; ++i){
-					a.construct(data+i, x.data[i]);
+	                                new((void*)(data+i)) T(x.data[i]);
 					++elements;
 				}
 			}
@@ -140,7 +141,7 @@ namespace std{
 		}
 
 		inline allocator_type get_allocator() const{
-			return a;
+			return allocator<T>();
 		}
 
 		inline iterator begin(){
@@ -316,7 +317,7 @@ namespace std{
 			return (data + index);
 		}
 
-		_UCXXEXPORT void swap(vector<T,Allocator>& v){
+		_UCXXEXPORT void swap(vector<T>& v){
 			if(this == &v){		//Avoid dv.swap(v)
 				return;
 			}
@@ -347,45 +348,43 @@ namespace std{
 		T* data;
 		size_type data_size;
 		size_type elements;
-		Allocator a;
 	};
 
 
 
 	//Here go template instantiations
 
-	template<class T, class Allocator> _UCXXEXPORT vector<T, Allocator>::~vector(){
+	template<class T> _UCXXEXPORT vector<T>::~vector(){
 		for(size_t i = 0; i < elements; ++i){
-			a.destroy(data + i);
+			((T*)(data+i))->~T();
 		}
-		a.deallocate(data, data_size);
+		::operator delete(data);
 	}
 
 
-	template<class T, class Allocator> _UCXXEXPORT void vector<T, Allocator>::reserve(size_type n){
+	template<class T> _UCXXEXPORT void vector<T>::reserve(size_type n){
 		if(n > data_size){              //We never shrink...
 			T * temp_ptr = data;
-			size_type temp_size = data_size;
 
 			data_size = n;
-			data = a.allocate(data_size);
+		        data = (T*)(::operator new(data_size*sizeof(T)));
 
 			for(size_type i = 0; i<elements; ++i){
-				a.construct(data+i, temp_ptr[i]);
-				a.destroy(temp_ptr+i);
+                                new((void*)(data+i)) T(temp_ptr[i]);
+				((T*)(temp_ptr+i))->~T();
 			}
-			a.deallocate(temp_ptr, temp_size);
+		        ::operator delete(temp_ptr);
 		}
 	}
 
-	template<class T, class Allocator> _UCXXEXPORT void vector<T, Allocator>::resize(size_type sz, const T & c){
+	template<class T> _UCXXEXPORT void vector<T>::resize(size_type sz, const T & c){
 		if(sz > elements){      //Need to actually call constructor
 			if(sz > data_size){
 				reserve(sz + __UCLIBCXX_STL_BUFFER_SIZE__);
 			}
 
 			for(size_type i = elements; i<sz ; ++i){
-				a.construct(data+i, c);
+                                new((void*)(data+i)) T(c);
 			}
 			elements = sz;
 		}else{
@@ -393,10 +392,10 @@ namespace std{
 		}
 	}
 
-	template<class T, class Allocator> _UCXXEXPORT void vector<T, Allocator>::downsize(size_type sz){
+	template<class T> _UCXXEXPORT void vector<T>::downsize(size_type sz){
 		if(sz < elements){      //Actually are downsizing
 			for(size_t i = sz; i< elements; ++i){
-				a.destroy(data+i);
+				((T*)(data+i))->~T();
 			}
 			elements = sz;
 		}
@@ -408,61 +407,61 @@ namespace std{
 
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
-	template<> _UCXXEXPORT vector<char, allocator<char> >::vector(const allocator<char>& al);
-	template<> _UCXXEXPORT vector<char, allocator<char> >::vector(size_type n, const char & value, const allocator<char> & al);
+	template<> _UCXXEXPORT vector<char>::vector();
+	template<> _UCXXEXPORT vector<char>::vector(size_type n, const char & value);
 
-	template<> _UCXXEXPORT vector<char, allocator<char> >::~vector();
-	template<> _UCXXEXPORT vector<unsigned char, allocator<unsigned char> >::~vector();
+	template<> _UCXXEXPORT vector<char>::~vector();
+	template<> _UCXXEXPORT vector<unsigned char>::~vector();
 
 #endif //__UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template<> _UCXXEXPORT void vector<char, allocator<char> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<unsigned char, allocator<unsigned char> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<short int, allocator<short int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<unsigned short int, allocator<unsigned short int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<int, allocator<int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<unsigned int, allocator<unsigned int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<long int, allocator<long int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<unsigned long int, allocator<unsigned long int> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<float, allocator<float> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<double, allocator<double> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<bool, allocator<bool> >::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<char>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<unsigned char>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<short int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<unsigned short int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<unsigned int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<long int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<unsigned long int>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<float>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<double>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<bool>::reserve(size_type n);
 
-	template<> _UCXXEXPORT void vector<char, allocator<char> >::resize(size_type sz, const char & c);
+	template<> _UCXXEXPORT void vector<char>::resize(size_type sz, const char & c);
 	template<> _UCXXEXPORT void
-		vector<unsigned char, allocator<unsigned char> >::resize(size_type sz, const unsigned char & c);
-	template<> _UCXXEXPORT void vector<short int, allocator<short int> >::resize(size_type sz, const short & c);
+		vector<unsigned char>::resize(size_type sz, const unsigned char & c);
+	template<> _UCXXEXPORT void vector<short int>::resize(size_type sz, const short & c);
 	template<> _UCXXEXPORT void
-		vector<unsigned short int, allocator<unsigned short int> >::resize(size_type sz, const unsigned short int & c);
-	template<> _UCXXEXPORT void vector<int, allocator<int> >::resize(size_type sz, const int & c);
-	template<> _UCXXEXPORT void vector<unsigned int, allocator<unsigned int> >::resize(size_type sz, const unsigned int & c);
-	template<> _UCXXEXPORT void vector<long int, allocator<long int> >::resize(size_type sz, const long int & c);
+		vector<unsigned short int>::resize(size_type sz, const unsigned short int & c);
+	template<> _UCXXEXPORT void vector<int>::resize(size_type sz, const int & c);
+	template<> _UCXXEXPORT void vector<unsigned int>::resize(size_type sz, const unsigned int & c);
+	template<> _UCXXEXPORT void vector<long int>::resize(size_type sz, const long int & c);
 	template<> _UCXXEXPORT void
-		vector<unsigned long int, allocator<unsigned long int> >::resize(size_type sz, const unsigned long int & c);
-	template<> _UCXXEXPORT void vector<float, allocator<float> >::resize(size_type sz, const float & c);
-	template<> _UCXXEXPORT void vector<double, allocator<double> >::resize(size_type sz, const double & c);
-	template<> _UCXXEXPORT void vector<bool, allocator<bool> >::resize(size_type sz, const bool & c);
+		vector<unsigned long int>::resize(size_type sz, const unsigned long int & c);
+	template<> _UCXXEXPORT void vector<float>::resize(size_type sz, const float & c);
+	template<> _UCXXEXPORT void vector<double>::resize(size_type sz, const double & c);
+	template<> _UCXXEXPORT void vector<bool>::resize(size_type sz, const bool & c);
 
 #elif defined __UCLIBCXX_EXPAND_STRING_CHAR__
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template<> _UCXXEXPORT vector<char, allocator<char> >::vector(const allocator<char>& al);
-	template<> _UCXXEXPORT vector<char, allocator<char> >::vector(size_type n, const char & value, const allocator<char> & al);
-	template<> _UCXXEXPORT vector<char, allocator<char> >::~vector();
+	template<> _UCXXEXPORT vector<char>::vector();
+	template<> _UCXXEXPORT vector<char>::vector(size_type n, const char & value);
+	template<> _UCXXEXPORT vector<char>::~vector();
 
 #endif
 
-	template<> _UCXXEXPORT void vector<char, allocator<char> >::reserve(size_type n);
-	template<> _UCXXEXPORT void vector<char, allocator<char> >::resize(size_type sz, const char & c);
+	template<> _UCXXEXPORT void vector<char>::reserve(size_type n);
+	template<> _UCXXEXPORT void vector<char>::resize(size_type sz, const char & c);
 
 #endif
 #endif
 
 
 
-	template <class T, class Allocator> _UCXXEXPORT bool
-		operator==(const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+	template <class T> _UCXXEXPORT bool
+		operator==(const vector<T>& x, const vector<T>& y)
 	{
 		if(x.size() !=y.size() ){
 			return false;
@@ -475,37 +474,37 @@ namespace std{
 		return true;
 	}
 
-	template <class T, class Allocator> _UCXXEXPORT bool
-		operator< (const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+	template <class T> _UCXXEXPORT bool
+		operator< (const vector<T>& x, const vector<T>& y)
 	{
-		less<typename iterator_traits<typename vector<T,Allocator>::iterator >::value_type> c;
+		less<typename iterator_traits<typename vector<T>::iterator >::value_type> c;
                 return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end(), c);
 	}
-	template <class T, class Allocator> _UCXXEXPORT bool
-		operator!=(const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+	template <class T> _UCXXEXPORT bool
+		operator!=(const vector<T>& x, const vector<T>& y)
 	{
 		return !(x == y);
 	}
 	template <class T, class Allocator> _UCXXEXPORT bool
-		operator> (const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+		operator> (const vector<T>& x, const vector<T>& y)
 	{
-		greater<typename iterator_traits<typename vector<T,Allocator>::iterator >::value_type> c;
+		greater<typename iterator_traits<typename vector<T>::iterator >::value_type> c;
                 return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end(), c);
 	}
-	template <class T, class Allocator> _UCXXEXPORT bool
-		operator>=(const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+	template <class T> _UCXXEXPORT bool
+		operator>=(const vector<T>& x, const vector<T>& y)
 	{
-		greater_equal<typename iterator_traits<typename vector<T,Allocator>::iterator >::value_type> c;
+		greater_equal<typename iterator_traits<typename vector<T>::iterator >::value_type> c;
                 return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end(), c);
 	}
-	template <class T, class Allocator> _UCXXEXPORT bool
-		operator<=(const vector<T,Allocator>& x, const vector<T,Allocator>& y)
+	template <class T> _UCXXEXPORT bool
+		operator<=(const vector<T>& x, const vector<T>& y)
 	{
-		less_equal<typename iterator_traits<typename vector<T,Allocator>::iterator >::value_type> c;
+		less_equal<typename iterator_traits<typename vector<T>::iterator >::value_type> c;
                 return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end(), c);
 	}
 
-	template <class T, class Allocator> _UCXXEXPORT void swap(vector<T,Allocator>& x, vector<T,Allocator>& y){
+	template <class T> _UCXXEXPORT void swap(vector<T>& x, vector<T>& y){
 		x.swap(y);
 	}
 

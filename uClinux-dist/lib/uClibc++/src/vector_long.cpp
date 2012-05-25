@@ -17,19 +17,20 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-#include <new>
-#include <cstdlib>
-#include <func_exception>
+#define __UCLIBCXX_COMPILE_VECTOR__ 1
 
-_UCXXEXPORT void* operator new(std::size_t numBytes) {
-	//C++ stardard 5.3.4.8 requires that a valid pointer be returned for
-	//a call to new(0). Thus:
-	if(numBytes == 0){
-		numBytes = 1;
-	}
-	void * p = malloc(numBytes);
-	if(p == 0){
-		std::__throw_bad_alloc();
-	}
-	return p;
+
+#include <vector>
+
+namespace std{
+
+#ifdef __UCLIBCXX_EXPAND_VECTOR_BASIC__
+
+	template _UCXXEXPORT void vector<long int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<unsigned long int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<long int>::resize(size_type sz, const long int & c);
+	template _UCXXEXPORT void vector<unsigned long int>::resize(size_type sz, const unsigned long int & c);
+
+#endif
+
 }
