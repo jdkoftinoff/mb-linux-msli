@@ -33,7 +33,7 @@
 
 namespace std{
 
-	template <class charT, class traits, class Allocator>
+	template <class charT, class traits>
 		class _UCXXEXPORT basic_stringbuf : public basic_streambuf<charT,traits>
 	{
 	public:
@@ -41,7 +41,7 @@ namespace std{
 		typedef typename traits::int_type int_type;
 		typedef typename traits::pos_type pos_type;
 		typedef typename traits::off_type off_type;
-		typedef typename Allocator::size_type size_type;
+		typedef size_t size_type;
 
 		explicit _UCXXEXPORT basic_stringbuf(ios_base::openmode which = ios_base::in | ios_base::out)
 			: data(), ielement(0), oelement(0)
@@ -49,7 +49,7 @@ namespace std{
 			basic_streambuf<charT,traits>::openedFor = which;
 		}
 
-		explicit _UCXXEXPORT basic_stringbuf(const basic_string<charT,traits,Allocator>& str,
+		explicit _UCXXEXPORT basic_stringbuf(const basic_string<charT,traits>& str,
 			ios_base::openmode which = ios_base::in | ios_base::out)
 			: data(str), ielement(0), oelement(0)
 		{
@@ -61,11 +61,11 @@ namespace std{
 
 		virtual _UCXXEXPORT ~basic_stringbuf() { }
 
-		_UCXXEXPORT basic_string<charT,traits,Allocator> str() const{
+		_UCXXEXPORT basic_string<charT,traits> str() const{
 			return data;
 		}
 
-		_UCXXEXPORT void str(const basic_string<charT,traits,Allocator>& s){
+		_UCXXEXPORT void str(const basic_string<charT,traits>& s){
 			data = s;
 			ielement = 0;
 			if(basic_streambuf<charT,traits>::openedFor & ios_base::ate){
@@ -215,13 +215,13 @@ namespace std{
 			return seekoff(sp, ios_base::beg, which);
 		}
 
-		basic_string<charT,traits,Allocator> data;
+		basic_string<charT,traits> data;
 		size_type ielement;
 		size_type oelement;
 	};
 
 
-	template <class charT, class traits, class Allocator> class _UCXXEXPORT basic_istringstream
+	template <class charT, class traits> class _UCXXEXPORT basic_istringstream
 		: public basic_istream<charT,traits>
 	{
 	public:
@@ -235,28 +235,28 @@ namespace std{
 			: basic_ios<charT, traits>(&sb), basic_istream<charT,traits>(&sb), sb(m)
 		{
 		}
-		explicit _UCXXEXPORT basic_istringstream( const basic_string<charT,traits,Allocator>& str, 
+		explicit _UCXXEXPORT basic_istringstream( const basic_string<charT,traits>& str, 
 			ios_base::openmode which = ios_base::in) 
 			: basic_ios<charT, traits>(&sb), basic_istream<charT,traits>(&sb), sb(str, which)
 		{
 		}
 		virtual _UCXXEXPORT ~basic_istringstream() {  }
-		_UCXXEXPORT basic_stringbuf<charT,traits,Allocator>* rdbuf() const{
+		_UCXXEXPORT basic_stringbuf<charT,traits>* rdbuf() const{
 			return &sb;
 		}
-		_UCXXEXPORT basic_string<charT,traits,Allocator> str() const{
+		_UCXXEXPORT basic_string<charT,traits> str() const{
 			return sb.str();
 		}
-		_UCXXEXPORT void str(const basic_string<charT,traits,Allocator>& s){
+		_UCXXEXPORT void str(const basic_string<charT,traits>& s){
 			sb.str(s);
 			basic_istream<charT,traits>::clear();
 		}
 	private:
-		basic_stringbuf<charT,traits,Allocator> sb;
+		basic_stringbuf<charT,traits> sb;
 	};
 
 
-	template <class charT, class traits, class Allocator> class _UCXXEXPORT basic_ostringstream
+	template <class charT, class traits> class _UCXXEXPORT basic_ostringstream
 		: public basic_ostream<charT,traits>
 	{
 	public:
@@ -270,29 +270,29 @@ namespace std{
 			: basic_ios<charT, traits>(&sb), basic_ostream<charT,traits>(&sb), sb(m)
 		{
 		}
-		explicit _UCXXEXPORT basic_ostringstream(const basic_string<charT,traits,Allocator>& str, 
+		explicit _UCXXEXPORT basic_ostringstream(const basic_string<charT,traits>& str, 
 			ios_base::openmode which = ios_base::out)
 			: basic_ios<charT, traits>(&sb), basic_ostream<charT,traits>(&sb), sb(str, which)
 		{
 		}
 		virtual _UCXXEXPORT ~basic_ostringstream() {  }
 
-		_UCXXEXPORT basic_stringbuf<charT,traits,Allocator>* rdbuf() const{
+		_UCXXEXPORT basic_stringbuf<charT,traits>* rdbuf() const{
 			return &sb;
 		}
-		_UCXXEXPORT basic_string<charT,traits,Allocator> str() const{
+		_UCXXEXPORT basic_string<charT,traits> str() const{
 			return sb.str();
 		}
-		_UCXXEXPORT void str(const basic_string<charT,traits,Allocator>& s){
+		_UCXXEXPORT void str(const basic_string<charT,traits>& s){
 			sb.str(s);
 			basic_ostream<charT,traits>::clear();
 		}
 	private:
-		basic_stringbuf<charT,traits,Allocator> sb;
+		basic_stringbuf<charT,traits> sb;
 	};
 
 
-	template <class charT, class traits, class Allocator> class _UCXXEXPORT basic_stringstream
+	template <class charT, class traits> class _UCXXEXPORT basic_stringstream
 		 : public basic_iostream<charT,traits>
 	{
 	public:
@@ -307,20 +307,20 @@ namespace std{
 		{
 		}
 
-		explicit _UCXXEXPORT basic_stringstream(const basic_string<charT,traits,Allocator>& str,
+		explicit _UCXXEXPORT basic_stringstream(const basic_string<charT,traits>& str,
 			ios_base::openmode which = ios_base::out|ios_base::in)
 			: basic_ios<charT, traits>(&sb), basic_iostream<charT,traits>(&sb), sb(str, which)
 		{
 		}
 		virtual _UCXXEXPORT ~basic_stringstream(){  }
 
-		_UCXXEXPORT basic_stringbuf<charT,traits,Allocator>* rdbuf(){
+		_UCXXEXPORT basic_stringbuf<charT,traits>* rdbuf(){
 			return &sb;
 		}
-		_UCXXEXPORT basic_string<charT,traits,Allocator> str() const{
+		_UCXXEXPORT basic_string<charT,traits> str() const{
 			return sb.str();
 		}
-		_UCXXEXPORT void str(const basic_string<charT,traits,Allocator>& s){
+		_UCXXEXPORT void str(const basic_string<charT,traits>& s){
 			sb.str(s);
 			basic_iostream<charT,traits>::clear();
 		}
@@ -333,43 +333,43 @@ namespace std{
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::
 		basic_stringbuf(ios_base::openmode which);
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::~basic_stringbuf();
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::~basic_stringbuf();
 
 #endif // __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template <> _UCXXEXPORT basic_string<char, char_traits<char>, allocator<char> >
-		basic_stringbuf<char, char_traits<char>, allocator<char> >::str() const;
+	template <> _UCXXEXPORT basic_string<char, char_traits<char> >
+		basic_stringbuf<char, char_traits<char> >::str() const;
 
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::int_type
-		basic_stringbuf<char, char_traits<char>, allocator<char> >::
-			pbackfail(basic_stringbuf<char, char_traits<char>, allocator<char> >::int_type c);
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::int_type
+		basic_stringbuf<char, char_traits<char> >::
+			pbackfail(basic_stringbuf<char, char_traits<char> >::int_type c);
 
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::pos_type
-		basic_stringbuf<char, char_traits<char>, allocator<char> >::
-			seekoff (basic_stringbuf<char, char_traits<char>, allocator<char> >::off_type off,
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::pos_type
+		basic_stringbuf<char, char_traits<char> >::
+			seekoff (basic_stringbuf<char, char_traits<char> >::off_type off,
 				ios_base::seekdir way,
 				ios_base::openmode which
 			);
 
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::int_type
-		basic_stringbuf<char, char_traits<char>, allocator<char> >::
-			overflow (basic_stringbuf<char, char_traits<char>, allocator<char> >::int_type c);
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::int_type
+		basic_stringbuf<char, char_traits<char> >::
+			overflow (basic_stringbuf<char, char_traits<char> >::int_type c);
 
-	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char>, allocator<char> >::int_type
-		basic_stringbuf<char, char_traits<char>, allocator<char> >::underflow ();
+	template <> _UCXXEXPORT basic_stringbuf<char, char_traits<char> >::int_type
+		basic_stringbuf<char, char_traits<char> >::underflow ();
 
-	template <> _UCXXEXPORT streamsize basic_stringbuf<char, char_traits<char>, allocator<char> >::
+	template <> _UCXXEXPORT streamsize basic_stringbuf<char, char_traits<char> >::
 		xsputn(const char* s, streamsize n);
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template <> _UCXXEXPORT basic_stringstream<char, char_traits<char>, allocator<char> >::
+	template <> _UCXXEXPORT basic_stringstream<char, char_traits<char> >::
 		basic_stringstream(ios_base::openmode which);
-	template <> _UCXXEXPORT basic_stringstream<char, char_traits<char>, allocator<char> >::~basic_stringstream();
-	template <> _UCXXEXPORT basic_istringstream<char, char_traits<char>, allocator<char> >::~basic_istringstream();
-	template <> _UCXXEXPORT basic_ostringstream<char, char_traits<char>, allocator<char> >::~basic_ostringstream();
+	template <> _UCXXEXPORT basic_stringstream<char, char_traits<char> >::~basic_stringstream();
+	template <> _UCXXEXPORT basic_istringstream<char, char_traits<char> >::~basic_istringstream();
+	template <> _UCXXEXPORT basic_ostringstream<char, char_traits<char> >::~basic_ostringstream();
 
 #endif //__UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 

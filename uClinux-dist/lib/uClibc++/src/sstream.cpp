@@ -26,7 +26,7 @@ namespace std{
 #ifdef __UCLIBCXX_EXPAND_SSTREAM_CHAR__
 
 	typedef char_traits<char> tr_ch;
-	typedef basic_stringbuf<char, tr_ch, allocator<char> > char_stringbuf;
+	typedef basic_stringbuf<char, tr_ch> char_stringbuf;
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
@@ -35,7 +35,7 @@ namespace std{
 
 #endif //__UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT basic_string<char, char_traits<char>, allocator<char> > char_stringbuf::str() const;
+	template _UCXXEXPORT basic_string<char, char_traits<char> > char_stringbuf::str() const;
 	template _UCXXEXPORT char_stringbuf::int_type char_stringbuf::pbackfail(char_stringbuf::int_type c);
 	template _UCXXEXPORT char_stringbuf::int_type char_stringbuf::overflow(char_stringbuf::int_type c);
 	template _UCXXEXPORT char_stringbuf::pos_type
@@ -45,10 +45,10 @@ namespace std{
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT basic_stringstream<char, tr_ch, allocator<char> >::basic_stringstream(ios_base::openmode which);
-	template _UCXXEXPORT basic_istringstream<char, tr_ch, allocator<char> >::~basic_istringstream();
-	template _UCXXEXPORT basic_ostringstream<char, tr_ch, allocator<char> >::~basic_ostringstream();
-	template _UCXXEXPORT basic_stringstream<char, tr_ch, allocator<char> >::~basic_stringstream();
+	template _UCXXEXPORT basic_stringstream<char, tr_ch>::basic_stringstream(ios_base::openmode which);
+	template _UCXXEXPORT basic_istringstream<char, tr_ch>::~basic_istringstream();
+	template _UCXXEXPORT basic_ostringstream<char, tr_ch>::~basic_ostringstream();
+	template _UCXXEXPORT basic_stringstream<char, tr_ch>::~basic_stringstream();
 
 #endif //__UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
