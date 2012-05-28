@@ -168,6 +168,9 @@ extern int pthread_create (pthread_t *__restrict __threadp,
 /* Obtain the identifier of the current thread.  */
 extern pthread_t pthread_self (void) __THROW;
 
+/* Obtain the stack frame of the current thread.  */
+extern void* pthread_self_stack (void **tos) __THROW;
+
 /* Compare two thread identifiers.  */
 extern int pthread_equal (pthread_t __thread1, pthread_t __thread2) __THROW;
 
