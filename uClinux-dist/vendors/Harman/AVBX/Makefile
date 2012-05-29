@@ -24,7 +24,7 @@ ROMFS_DIRS = bin dev dev/flash etc home lib mnt mnt/apps mnt/config proc usr var
 
 ROMFS_DIRS-$(CONFIG_SYSFS) += sys
 
-ROMFS_DIRS-$(CONFIG_DEBUG_FS) += debugfs
+#ROMFS_DIRS-$(CONFIG_DEBUG_FS) += debugfs
 
 ROMFS_DIRS += $(ROMFS_DIRS-y)
 
@@ -210,10 +210,10 @@ else
 	$(ROMFSINST) -s /etc/init.d/checkroot /etc/rc.d/S01checkroot
 endif
 
-ifdef CONFIG_DEBUG_FS
-	$(ROMFSINST) $(COMMON)/etc/rc/debugfs /etc/init.d/debugfs
-	$(ROMFSINST) -s /etc/init.d/debugfs /etc/rc.d/S02debufs
-endif
+#ifdef CONFIG_DEBUG_FS
+#	$(ROMFSINST) $(COMMON)/etc/rc/debugfs /etc/init.d/debugfs
+#	$(ROMFSINST) -s /etc/init.d/debugfs /etc/rc.d/S02debufs
+#endif
 
 ifdef CONFIG_USB_DEVICEFS
 	$(ROMFSINST) $(COMMON)/etc/rc/usbfs /etc/init.d/usbfs
