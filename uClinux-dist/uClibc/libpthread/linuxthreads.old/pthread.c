@@ -699,7 +699,6 @@ void * pthread_self_stack(void** tos) {
   if (NULL == bos) {
     bos = (void*) -1;
   }
-  printf("STACK[%d]: %p %p\n", tid, self, bos);
   return bos;
 }
 libpthread_hidden_def (pthread_self_stack)
