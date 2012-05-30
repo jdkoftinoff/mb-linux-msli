@@ -305,6 +305,8 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
+      ptp->ports[0].reselect = TRUE;
+      ptp->ports[1].reselect = TRUE;
     }
     break;
 
