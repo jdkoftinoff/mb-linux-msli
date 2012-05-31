@@ -264,6 +264,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_SET_PROPERTIES:
     {
       uint32_t copyResult;
+      int i;
 
       /* Copy the userspace argument into the device */
       preempt_disable();
@@ -305,8 +306,9 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
-      ptp->ports[0].reselect = TRUE;
-      ptp->ports[1].reselect = TRUE;
+      for (i=0; i<ptp->numPorts; i++) {
+        ptp->ports[i].reselect = TRUE;
+      }
     }
     break;
 
