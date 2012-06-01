@@ -306,10 +306,6 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
                 pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
                 pPort->syncTimeoutCounter, SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
 
-              if (syncTimeout) {
-                pPort->syncTimeoutCounter = 0;
-              }
-
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
 
               /* Update stats */
@@ -375,12 +371,17 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute gmPathPriority vectors */
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-    if (!(pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i) * pPort->announceReceiptTimeout) &
-        (!ptp->gmPresent || !(pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, i) * pPort->syncReceiptTimeout))) {
+    // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
+    int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, i) * pPort->syncReceiptTimeout * 2);
+    int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i) * pPort->announceReceiptTimeout);
+    if (!announceTimeout & (!ptp->gmPresent || !syncTimeout)) {
       memcpy(&pPort->gmPathPriority, &pPort->portPriority, sizeof(PtpPriorityVector));
       pPort->gmPathPriority.stepsRemoved = cpu_to_be16(be16_to_cpu(pPort->gmPathPriority.stepsRemoved) + 1);
     } else {
       memset(&pPort->gmPathPriority, 0xFF, sizeof(PtpPriorityVector));
+      if (syncTimeout) {
+        pPort->syncTimeoutCounter = 0;
+      }
     }
   }
 
