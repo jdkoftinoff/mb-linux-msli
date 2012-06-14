@@ -140,6 +140,9 @@
 #define BCM5482_SHD_SSD_EN	0x0001	/* SSD enable */
 #define BCM5482_SHD_MODE	0x1f	/* 11111: Mode Control Register */
 #define BCM5482_SHD_MODE_1000BX	0x0001	/* Enable 1000BASE-X registers */
+#define BCM5482_PRIM_SERD_CTRL  0x16
+#define BCM5482_MISC_1000_CTRL2 0x17
+#define BCM5482_SIGDETECT_EN    0x20   
 
 /*
  * EXPANSION SHADOW ACCESS REGISTERS.  (PHY REG 0x15, 0x16, and 0x17)
@@ -456,8 +459,14 @@ static void dump_phy_reg(struct phy_device *phydev)
   printk("0x1C:F - LED GPIO Control/Status register:             0x%04lx\n", val);
   val = bcm54xx_shadow_read(phydev, 0x13);
   printk("0x1C:13 - SerDES 100BASE-FX Control register:          0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x14);
+  printk("0x1C:14 - Secondary SerDES Control register:           0x%04lx\n", val);
   val = bcm54xx_shadow_read(phydev, 0x15);
   printk("0x1C:15 - SGMII Slave register:                        0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x16);
+  printk("0x1C:16 - Primary SerDes Control:                      0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x17);
+  printk("0x1C:17 - Misc 1000BASE-X Control 2:                   0x%04lx\n", val);
   val = bcm54xx_shadow_read(phydev, 0x18);
   printk("0x1C:18 - SGMII/Media Converter register:              0x%04lx\n", val);
   val = bcm54xx_shadow_read(phydev, 0x1A);
@@ -691,7 +700,7 @@ static int bcm5482_read_status(struct phy_device *phydev)
 
         if (phydev->link) 
         {
-                val = BCM_LED_SRC_OFF;
+                val = BCM_LED_SRC_ON;
                 reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12);
                 reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
                 bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS12, reg);
