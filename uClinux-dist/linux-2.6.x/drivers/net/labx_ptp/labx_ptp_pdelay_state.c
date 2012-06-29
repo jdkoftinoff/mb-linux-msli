@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /* Define this to get some extra debug on path delay messages */
 /* #define PATH_DELAY_DEBUG */
