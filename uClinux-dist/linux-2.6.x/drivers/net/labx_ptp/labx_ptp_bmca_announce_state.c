@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
 #define BMCA_DEBUG 1
@@ -46,19 +45,19 @@ static void print_priority_vector(const char* str, const PtpPriorityVector* pv) 
   printk("%s: P1 %d, CC %d, CA %d, LV %d, P2 %d, GMID %02X%02X%02X%02X%02X%02X%02X%02X, SR %d, SPID %02X%02X%02X%02X%02X%02X%02X%02X SPN %d, PN %d\n",
     str,
     pv->rootSystemIdentity.priority1,
-    pv->rootSystemIdentity.clockQuality.clockClass,
-    pv->rootSystemIdentity.clockQuality.clockAccuracy,
-    be16_to_cpu(pv->rootSystemIdentity.clockQuality.offsetScaledLogVariance),
+    pv->rootSystemIdentity.clockClass,
+    pv->rootSystemIdentity.clockAccuracy,
+    get_offset_scaled_log_variance(pv->rootSystemIdentity.offsetScaledLogVariance),
     pv->rootSystemIdentity.priority2,
     pv->rootSystemIdentity.clockIdentity[0], pv->rootSystemIdentity.clockIdentity[1], pv->rootSystemIdentity.clockIdentity[2],
     pv->rootSystemIdentity.clockIdentity[3], pv->rootSystemIdentity.clockIdentity[4], pv->rootSystemIdentity.clockIdentity[5],
     pv->rootSystemIdentity.clockIdentity[6], pv->rootSystemIdentity.clockIdentity[7],
-    be16_to_cpu(pv->stepsRemoved),
+    get_steps_removed(pv->stepsRemoved),
     pv->sourcePortIdentity.clockIdentity[0], pv->sourcePortIdentity.clockIdentity[1], pv->sourcePortIdentity.clockIdentity[2],
     pv->sourcePortIdentity.clockIdentity[3], pv->sourcePortIdentity.clockIdentity[4], pv->sourcePortIdentity.clockIdentity[5],
     pv->sourcePortIdentity.clockIdentity[6], pv->sourcePortIdentity.clockIdentity[7],
-    be16_to_cpu(pv->sourcePortIdentity.portNumber),
-    be16_to_cpu(pv->portNumber));
+    get_port_number(pv->sourcePortIdentity.portNumber),
+    get_port_number(pv->portNumber));
 }
 
 static const char* roleString(uint32_t role) {
@@ -110,7 +109,7 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
   BMCA_DBG_2("QA: port %d, Source port ID %02X%02X%02X%02X%02X%02X%02X%02X, PN %d\n", port,
     sourcePortId.clockIdentity[0], sourcePortId.clockIdentity[1], sourcePortId.clockIdentity[2],
     sourcePortId.clockIdentity[3], sourcePortId.clockIdentity[4], sourcePortId.clockIdentity[5],
-    sourcePortId.clockIdentity[6], sourcePortId.clockIdentity[7], __be16_to_cpu(sourcePortId.portNumber));
+    sourcePortId.clockIdentity[6], sourcePortId.clockIdentity[7], get_port_number(sourcePortId.portNumber));
 
   if (0 == memcmp(sourcePortId.clockIdentity, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity))) {
     return FALSE;
@@ -376,7 +375,8 @@ static void updtRolesTree(struct ptp_device *ptp)
     int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i) * pPort->announceReceiptTimeout);
     if (!announceTimeout & (!ptp->gmPresent || !syncTimeout)) {
       memcpy(&pPort->gmPathPriority, &pPort->portPriority, sizeof(PtpPriorityVector));
-      pPort->gmPathPriority.stepsRemoved = cpu_to_be16(be16_to_cpu(pPort->gmPathPriority.stepsRemoved) + 1);
+      set_steps_removed(pPort->gmPathPriority.stepsRemoved,
+                        (get_steps_removed(pPort->gmPathPriority.stepsRemoved) + 1));
     } else {
       memset(&pPort->gmPathPriority, 0xFF, sizeof(PtpPriorityVector));
       if (syncTimeout) {
@@ -393,7 +393,7 @@ static void updtRolesTree(struct ptp_device *ptp)
                                     ptp->ports[i].gmPathPriority.rootSystemIdentity.clockIdentity)) {
       if (REPLACE_PRESENT_MASTER == bmca_comparison(ptp->gmPriority, &ptp->ports[i].gmPathPriority)) {
         ptp->gmPriority = &ptp->ports[i].gmPathPriority;
-        ptp->masterStepsRemoved = ptp->ports[i].messagePriority.stepsRemoved + 1;
+        ptp->masterStepsRemoved = (get_steps_removed(ptp->ports[i].messagePriority.stepsRemoved) + 1);
       }
     }
   }
@@ -411,8 +411,8 @@ static void updtRolesTree(struct ptp_device *ptp)
     memcpy(&pPort->masterPriority, ptp->gmPriority, sizeof(PtpPriorityVector));
     memcpy(pPort->masterPriority.sourcePortIdentity.clockIdentity,
            ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity));
-    pPort->masterPriority.sourcePortIdentity.portNumber = cpu_to_be16(i+1);
-    pPort->masterPriority.portNumber = cpu_to_be16(i+1);
+    set_port_number(pPort->masterPriority.sourcePortIdentity.portNumber, (i+1));
+    set_port_number(pPort->masterPriority.portNumber, (i+1));
 
     /* selectedRole */
     switch (pPort->infoIs) {
