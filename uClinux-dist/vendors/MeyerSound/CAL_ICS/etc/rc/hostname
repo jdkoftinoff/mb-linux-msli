@@ -1,6 +1,7 @@
 #!/bin/sh
 
-#PATH=/bin:/sbin:/usr/bin:/usr/sbin
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mkdir /var/tmp/identity
+/bin/mbbl-imagetool -i /var/tmp/identity/identity.txt -I /dev/mtd0
+/bin/dmitri-sethostname
 
-#echo "Setting hostname: "
-#hostname CAL_ICS

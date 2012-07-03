@@ -92,7 +92,8 @@ LINKHDRS = \
 	$(ROOTDIR)/prop/libtrustedsource/librep/*.h,. \
 	$(ROOTDIR)/prop/libtrustedsource/librep/common/query.h,common \
 	$(ROOTDIR)/prop/initdhcpd/initdhcpd.h,. \
-	$(ROOTDIR)/lib/libffi/install/include/libffi,.
+	$(ROOTDIR)/lib/libffi/install/include/libffi,. \
+	$(STAGEDIR)/usr/include/*,.
 
 
 .PHONY: all romfs clean

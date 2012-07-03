@@ -1180,6 +1180,46 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
 				}
 			    }
 			}
+		      else
+			{
+		      if(!strcmp(identity_key,"model"))
+			{
+			  n=sscanf((const char*)identity_value,"%i",&val);
+			  if(n==1)
+			    {
+			      identity_offset=fdt_path_offset(fdt_buf,
+							      "/chosen");
+			      if(identity_offset>=0)
+				{
+				  identity_property=
+				    fdt_get_property(fdt_buf,
+						     identity_offset,
+						     "entity-model-id",
+						     &identity_fdt_value_len);
+				  if(identity_property
+				     &&identity_fdt_value_len==4)
+				    /* 
+				       entity model ID is always
+				       4 bytes long
+				    */
+				    {
+				      identity_new_value[0]=(val>>24)&0xff;
+				      identity_new_value[1]=(val>>16)&0xff;
+				      identity_new_value[2]=(val>>8)&0xff;
+				      identity_new_value[3]=val&0xff;
+				      fdt_setprop_inplace(fdt_buf,
+							  identity_offset,
+							  "entity-model-id",
+							  &identity_new_value,
+							  4);
+				    }
+				}
+			    }
+
+			}
+
+
+			}
 		    }
 		}
 	    }
