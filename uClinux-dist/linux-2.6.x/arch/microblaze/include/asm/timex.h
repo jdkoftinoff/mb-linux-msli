@@ -13,6 +13,14 @@
 
 typedef unsigned long cycles_t;
 
-#define get_cycles()	(0)
+#ifdef CONFIG_SELFMOD_TIMER
+extern cycles_t get_cycles(void);
+#else
+extern unsigned int microblaze_timer_baseaddr;
+static inline cycles_t get_cycles(void)
+{
+  return *(volatile unsigned int __force *)(microblaze_timer_baseaddr + 0x18);
+}
+#endif
 
 #endif /* _ASM_TIMEX_H */

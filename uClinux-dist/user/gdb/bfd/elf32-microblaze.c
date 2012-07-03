@@ -260,6 +260,23 @@ microblaze_elf_reloc_type_lookup (abfd, code)
   return microblaze_elf_howto_table [(int) microblaze_reloc];
 };
 
+static reloc_howto_type *
+microblaze_elf_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+				  const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (microblaze_elf_howto_raw)
+	    / sizeof (microblaze_elf_howto_raw[0]));
+       i++)
+    if (microblaze_elf_howto_raw[i].name != NULL
+	&& strcasecmp (microblaze_elf_howto_raw[i].name, r_name) == 0)
+      return &microblaze_elf_howto_raw[i];
+
+  return NULL;
+}
+
 /* Set the howto pointer for a RCE ELF reloc.  */
 static void
 microblaze_elf_info_to_howto (
@@ -1175,6 +1192,7 @@ microblaze_elf_relax_section (
 #define elf_info_to_howto_rel	NULL
 
 #define bfd_elf32_bfd_reloc_type_lookup		microblaze_elf_reloc_type_lookup
+#define bfd_elf32_bfd_reloc_name_lookup         microblaze_elf_reloc_name_lookup
 #define bfd_elf32_bfd_is_local_label_name       microblaze_elf_is_local_label_name
 #define elf_backend_relocate_section		microblaze_elf_relocate_section
 #define bfd_elf32_bfd_relax_section             microblaze_elf_relax_section

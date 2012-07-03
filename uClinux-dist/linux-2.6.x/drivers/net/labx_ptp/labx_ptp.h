@@ -285,25 +285,45 @@ typedef enum { PortRoleSelection_INIT_BRIDGE, PortRoleSelection_ROLE_SELECTION
 #define PDELAY_REQ_INTERVAL_TICKS(ptp, port) \
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogPdelayReqInterval))
 
-typedef struct __attribute__((packed)) {
-  PtpClockIdentity clockIdentity;
-  uint16_t         portNumber;
-} PtpPortIdentity; /* 8.5.2 */
+/* Definitions and macros for manipulating port numbers */
+#define PTP_PORT_NUMBER_BYTES sizeof(uint16_t)
+typedef uint8_t PtpPortNumber[PTP_PORT_NUMBER_BYTES];
 
 typedef struct __attribute__((packed)) {
-  uint8_t          priority1;
-  PtpClockQuality  clockQuality;
-  uint8_t          priority2;
   PtpClockIdentity clockIdentity;
+  PtpPortNumber    portNumber;
+} PtpPortIdentity; /* 8.5.2 */
+
+/* Definitions and macros for manipulating offset scaled log variance */
+#define PTP_OFFSET_VARIANCE_BYTES sizeof(uint16_t)
+typedef uint8_t PtpOffsetVariance[PTP_OFFSET_VARIANCE_BYTES];
+
+/* The PtpClockQuality structure used for userspace access is "flattened" here to
+ * explicitly control the alignment of accesses and endian-ness
+ */
+typedef struct __attribute__((packed)) {
+  uint8_t          priority1;
+
+  /* Elements from PtpClockQuality flattened for packing and alignment */
+  uint8_t           clockClass;
+  uint8_t           clockAccuracy;
+  PtpOffsetVariance offsetScaledLogVariance;
+
+  uint8_t           priority2;
+  PtpClockIdentity  clockIdentity;
 } PtpSystemIdentity; /* 10.3.2 */
+
+/* Definitions and macros for tracking steps removed */
+#define PTP_STEPS_REMOVED_BYTES sizeof(uint16_t)
+typedef uint8_t PtpStepsRemoved[PTP_STEPS_REMOVED_BYTES];
 
 /* NOTE: All fields in the priority vector should be BIG ENDIAN for proper
    byte-wise comparison of the UInteger224 */
 typedef struct __attribute__((packed)) {
   PtpSystemIdentity rootSystemIdentity;
-  uint16_t          stepsRemoved;
+  PtpStepsRemoved   stepsRemoved;
   PtpPortIdentity   sourcePortIdentity; /* Port identity of the transmitting port */
-  uint16_t          portNumber;         /* Port number of the receiving port */
+  PtpPortNumber     portNumber;         /* Port number of the receiving port */
 } PtpPriorityVector; /* 10.3.4 */
 
 typedef enum {
@@ -580,6 +600,12 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
                    uint8_t * packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer);
+uint16_t get_port_number(const uint8_t *portNumber);
+void set_port_number(uint8_t *portNumber, uint16_t setValue);
+uint16_t get_steps_removed(const uint8_t *stepsRemoved);
+void set_steps_removed(uint8_t *stepsRemoved, uint16_t setValue);
+uint16_t get_offset_scaled_log_variance(const uint8_t *offsetScaledLogVariance);
+void set_offset_scaled_log_variance(uint8_t *offsetScaledLogVariance, uint16_t setValue);
 
 /* From labx_ptp_state.c */
 void ack_grandmaster_change(struct ptp_device *ptp);

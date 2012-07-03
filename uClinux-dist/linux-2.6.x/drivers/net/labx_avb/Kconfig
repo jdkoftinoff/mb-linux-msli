@@ -33,6 +33,11 @@ config LABX_AUDIO_TDM
 	help
 	  This configures support for the Lab X AVB audio time domain multiplexer driver
 
+config LABX_LEGACY_BRIDGE
+	bool "AVB Legacy Packet Bridge support"
+	help
+	  This configures support for the Lab X AVB legacy packet bridge driver
+
 config XILINX_AVB_SIMPLE_IPM
 	bool "AVB Simple IPM support"
 	depends on XILINX_LLTEMAC_AVB_LABX

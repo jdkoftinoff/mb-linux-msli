@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /* Uncomment to print debug messages for the slave offset */
 /* #define SLAVE_OFFSET_DEBUG */

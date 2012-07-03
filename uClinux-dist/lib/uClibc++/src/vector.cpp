@@ -29,51 +29,42 @@ namespace std{
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT vector<char, allocator<char> >::vector(const allocator<char>& al);
-	template _UCXXEXPORT vector<char, allocator<char> >::vector(size_type n, const char & value, const allocator<char> & al);
+	template _UCXXEXPORT vector<char>::vector();
+	template _UCXXEXPORT vector<char>::vector(size_type n, const char & value);
 
-	template _UCXXEXPORT vector<char, allocator<char> >::~vector();
-	template _UCXXEXPORT vector<unsigned char, allocator<unsigned char> >::~vector();
+	template _UCXXEXPORT vector<char>::~vector();
+	template _UCXXEXPORT vector<unsigned char>::~vector();
 
 #endif //__UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT void vector<char, allocator<char> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<unsigned char, allocator<unsigned char> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<short int, allocator<short int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<unsigned short int, allocator<unsigned short int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<int, allocator<int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<unsigned int, allocator<unsigned int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<long int, allocator<long int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<unsigned long int, allocator<unsigned long int> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<float, allocator<float> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<double, allocator<double> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<bool, allocator<bool> >::reserve(size_type n);
+	template _UCXXEXPORT void vector<char>::reserve(size_type n);
+	template _UCXXEXPORT void vector<unsigned char>::reserve(size_type n);
+	template _UCXXEXPORT void vector<short int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<unsigned short int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<unsigned int>::reserve(size_type n);
+	template _UCXXEXPORT void vector<bool>::reserve(size_type n);
 
-	template _UCXXEXPORT void vector<char, allocator<char> >::resize(size_type sz, const char & c);
-	template _UCXXEXPORT void vector<unsigned char, allocator<unsigned char> >::resize(size_type sz, const unsigned char & c);
-	template _UCXXEXPORT void vector<short int, allocator<short int> >::resize(size_type sz, const short & c);
-	template _UCXXEXPORT void vector<unsigned short int, allocator<unsigned short int> >
+	template _UCXXEXPORT void vector<char>::resize(size_type sz, const char & c);
+	template _UCXXEXPORT void vector<unsigned char>::resize(size_type sz, const unsigned char & c);
+	template _UCXXEXPORT void vector<short int>::resize(size_type sz, const short & c);
+	template _UCXXEXPORT void vector<unsigned short int>
 		::resize(size_type sz, const unsigned short int & c);
-	template _UCXXEXPORT void vector<int, allocator<int> >::resize(size_type sz, const int & c);
-	template _UCXXEXPORT void vector<unsigned int, allocator<unsigned int> >::resize(size_type sz, const unsigned int & c);
-	template _UCXXEXPORT void vector<long int, allocator<long int> >::resize(size_type sz, const long int & c);
-	template _UCXXEXPORT void vector<unsigned long int, allocator<unsigned long int> >::
-		resize(size_type sz, const unsigned long int & c);
-	template _UCXXEXPORT void vector<float, allocator<float> >::resize(size_type sz, const float & c);
-	template _UCXXEXPORT void vector<double, allocator<double> >::resize(size_type sz, const double & c);
-	template _UCXXEXPORT void vector<bool, allocator<bool> >::resize(size_type sz, const bool & c);
+	template _UCXXEXPORT void vector<int>::resize(size_type sz, const int & c);
+	template _UCXXEXPORT void vector<unsigned int>::resize(size_type sz, const unsigned int & c);
+	template _UCXXEXPORT void vector<bool>::resize(size_type sz, const bool & c);
 
 #elif defined __UCLIBCXX_EXPAND_STRING_CHAR__
 
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
-	template _UCXXEXPORT vector<char, allocator<char> >::vector(const allocator<char>& al);
-	template _UCXXEXPORT vector<char, allocator<char> >::vector(size_type n, const char & value, const allocator<char> & al);
-	template _UCXXEXPORT vector<char, allocator<char> >::~vector();
+	template _UCXXEXPORT vector<char>::vector();
+	template _UCXXEXPORT vector<char>::vector(size_type n, const char & value);
+	template _UCXXEXPORT vector<char>::~vector();
 #endif // __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT void vector<char, allocator<char> >::reserve(size_type n);
-	template _UCXXEXPORT void vector<char, allocator<char> >::resize(size_type sz, const char & c);
+	template _UCXXEXPORT void vector<char>::reserve(size_type n);
+	template _UCXXEXPORT void vector<char>::resize(size_type sz, const char & c);
 
 #endif
 

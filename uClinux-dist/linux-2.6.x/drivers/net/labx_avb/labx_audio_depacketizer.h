@@ -62,7 +62,7 @@
 #  define ID_SELECT_ALL   0xFFFFFFFF
 
 #define ID_CONFIG_DATA_REG   (0x006)
-
+#define ERROR_REG            (0x007)
 #define IRQ_MASK_REG         (0x008)
 #define IRQ_FLAGS_REG        (0x009)
 #  define NO_IRQS       (0x00000000)
@@ -192,6 +192,12 @@ typedef enum {
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  256
 #define NO_IRQ_SUPPLIED   (-1)
+struct depacketizer_presentation_channels {
+  uint32_t channelBufferSizeBytes;
+  struct audio_depacketizer *redundancyPartner; // Currently unused
+  void *channelBuffers[1];
+};
+
 struct audio_depacketizer {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -242,8 +248,10 @@ struct audio_depacketizer {
   wait_queue_head_t streamStatusQueue;
   uint32_t streamStatusGeneration;
   uint32_t streamSeqError;
+  uint32_t errorIndex;
   uint32_t netlinkSequence;
   struct task_struct *netlinkTask;
+  struct depacketizer_presentation_channels *presentationChannels[MAX_CONCURRENT_STREAMS];
 };
 
 /* From labx_audio_depacketizer_netlink.c */

@@ -90,6 +90,7 @@ struct pthread_functions
 				    int execute);
   void (*ptr__pthread_cleanup_pop_restore) (struct _pthread_cleanup_buffer * buffer,
 					    int execute);
+  void* (*ptr_pthread_self_stack) (void **tos);
 };
 
 /* Variable in libc.so.  */

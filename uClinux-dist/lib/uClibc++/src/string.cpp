@@ -32,10 +32,10 @@ namespace std{
 
 #ifdef __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__
 
-	template _UCXXEXPORT string::basic_string(const allocator<char> &);
-	template _UCXXEXPORT string::basic_string(size_type n, char c, const allocator<char> & );
-	template _UCXXEXPORT string::basic_string(const char* s, const allocator<char>& al);
-	template _UCXXEXPORT string::basic_string(const basic_string& str, size_type pos, size_type n, const allocator<char>& al);
+	template _UCXXEXPORT string::basic_string();
+	template _UCXXEXPORT string::basic_string(size_type n, char c);
+	template _UCXXEXPORT string::basic_string(const char* s);
+	template _UCXXEXPORT string::basic_string(const basic_string& str, size_type pos, size_type n);
 	template _UCXXEXPORT string::~basic_string();
 
 #endif // __UCLIBCXX_EXPAND_CONSTRUCTORS_DESTRUCTORS__

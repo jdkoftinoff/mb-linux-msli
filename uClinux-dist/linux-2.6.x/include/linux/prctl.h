@@ -85,4 +85,6 @@
 #define PR_SET_TIMERSLACK 29
 #define PR_GET_TIMERSLACK 30
 
+#define PR_TASK_PERF_USER_TRACE                        35
+
 #endif /* _LINUX_PRCTL_H */

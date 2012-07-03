@@ -208,8 +208,7 @@ static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortData
   struct ptp_port *pPort = &ptp->ports[port];
 
   memcpy(&dataSet->clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-  dataSet->portNumber              = port + 1;
-  
+  dataSet->portNumber                     = (port + 1);
   dataSet->portRole                       = pPort->selectedRole;
   dataSet->pttPortEnabled                 = pPort->pttPortEnabled;
   dataSet->isMeasuringDelay               = pPort->isMeasuringDelay;
@@ -264,6 +263,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_SET_PROPERTIES:
     {
       uint32_t copyResult;
+      int i;
 
       /* Copy the userspace argument into the device */
       preempt_disable();
@@ -294,17 +294,23 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
 
       /* Update the system priority vector to match the new properties */
       ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
-      ptp->systemPriority.rootSystemIdentity.clockQuality  = ptp->properties.grandmasterClockQuality;
+      ptp->systemPriority.rootSystemIdentity.clockClass    = ptp->properties.grandmasterClockQuality.clockClass;
+      ptp->systemPriority.rootSystemIdentity.clockAccuracy = ptp->properties.grandmasterClockQuality.clockAccuracy;
+      set_offset_scaled_log_variance(ptp->systemPriority.rootSystemIdentity.offsetScaledLogVariance,
+                                     ptp->properties.grandmasterClockQuality.offsetScaledLogVariance);
       ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
       memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-      ptp->systemPriority.stepsRemoved                     = 0;
+      set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
       memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-      ptp->systemPriority.sourcePortIdentity.portNumber    = 0;
-      ptp->systemPriority.portNumber                       = 0;
+      set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
+      set_port_number(ptp->systemPriority.portNumber, 0);
 
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
+      for (i=0; i<ptp->numPorts; i++) {
+        ptp->ports[i].reselect = TRUE;
+      }
     }
     break;
 
@@ -460,8 +466,11 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     {
       PtpProperties presentMaster;
       memset(&presentMaster, 0, sizeof(PtpProperties));
-      presentMaster.grandmasterPriority1    = ptp->gmPriority->rootSystemIdentity.priority1;
-      presentMaster.grandmasterClockQuality = ptp->gmPriority->rootSystemIdentity.clockQuality;
+      presentMaster.grandmasterPriority1                  = ptp->gmPriority->rootSystemIdentity.priority1;
+      presentMaster.grandmasterClockQuality.clockClass    = ptp->gmPriority->rootSystemIdentity.clockClass;
+      presentMaster.grandmasterClockQuality.clockAccuracy = ptp->gmPriority->rootSystemIdentity.clockAccuracy;
+      presentMaster.grandmasterClockQuality.offsetScaledLogVariance =
+        get_offset_scaled_log_variance(ptp->gmPriority->rootSystemIdentity.offsetScaledLogVariance);
       presentMaster.grandmasterPriority2    = ptp->gmPriority->rootSystemIdentity.priority2;
       memcpy(presentMaster.grandmasterIdentity, ptp->gmPriority->rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
       if (0 != copy_to_user((void __user*)arg, &presentMaster, sizeof(PtpProperties))) {
@@ -635,13 +644,16 @@ static int ptp_probe(const char *name,
 
   /* Update the system priority vector to match the new properties */
   ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
-  ptp->systemPriority.rootSystemIdentity.clockQuality  = ptp->properties.grandmasterClockQuality;
+  ptp->systemPriority.rootSystemIdentity.clockClass    = ptp->properties.grandmasterClockQuality.clockClass;
+  ptp->systemPriority.rootSystemIdentity.clockAccuracy = ptp->properties.grandmasterClockQuality.clockAccuracy;
+  set_offset_scaled_log_variance(ptp->systemPriority.rootSystemIdentity.offsetScaledLogVariance,
+                                 ptp->properties.grandmasterClockQuality.offsetScaledLogVariance);
   ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
   memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-  ptp->systemPriority.stepsRemoved                     = 0;
+  set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
   memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-  ptp->systemPriority.sourcePortIdentity.portNumber    = 0;
-  ptp->systemPriority.portNumber                       = 0;
+  set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
+  set_port_number(ptp->systemPriority.portNumber, 0);
 
   ptp->pathTraceLength = 1;
   memcpy(&ptp->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
@@ -733,6 +745,7 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 		return 0;
 	}
 }
+
 static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct;

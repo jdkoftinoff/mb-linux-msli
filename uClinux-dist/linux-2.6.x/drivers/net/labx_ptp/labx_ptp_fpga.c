@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/net/labx_ptp_main_xilinx.c
+ *  linux/drivers/net/labx_ptp_main_fpga.c
  *
  *  Lab X Technologies Precision Time Protocol (PTP) driver
  *
@@ -29,7 +29,6 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/netdevice.h>
-#include <xio.h>
 
 /* Interrupt service routine for the instance */
 static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
@@ -42,9 +41,9 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
 
   for (i=0; i<ptp->numPorts; i++) {
     /* Read the interrupt flags and immediately clear them */
-    maskedFlags = XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG));
-    maskedFlags &= XIo_In32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG));
-    XIo_Out32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG), maskedFlags);
+    maskedFlags = ioread32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG));
+    maskedFlags &= ioread32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_MASK_REG));
+    iowrite32(maskedFlags, REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG));
 
     /* Detect the timer IRQ */
     if((maskedFlags & PTP_TIMER_IRQ) != 0) {
@@ -80,19 +79,19 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
 
 void ptp_enable_port(struct ptp_device *ptp,int port)
 {
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG)) | PTP_TX_ENABLE);
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) | PTP_RX_ENABLE);
+    iowrite32(ioread32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG)) | PTP_TX_ENABLE, REGISTER_ADDRESS(ptp, port, PTP_TX_REG));
+    iowrite32(ioread32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) | PTP_RX_ENABLE, REGISTER_ADDRESS(ptp, port, PTP_RX_REG));
 }
 
 void ptp_disable_port(struct ptp_device *ptp,int port)
 {
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG), XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG)) & ~PTP_TX_ENABLE);
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG), XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & ~PTP_RX_ENABLE);
+    iowrite32(ioread32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG)) & ~PTP_TX_ENABLE, REGISTER_ADDRESS(ptp, port, PTP_TX_REG));
+    iowrite32(ioread32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & ~PTP_RX_ENABLE, REGISTER_ADDRESS(ptp, port, PTP_RX_REG));
 }
 
 void ptp_disable_irqs(struct ptp_device *ptp, int port)
 {
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_IRQ_MASK_REG), PTP_NO_IRQS);
+    iowrite32(PTP_NO_IRQS, REGISTER_ADDRESS(ptp, port, PTP_IRQ_MASK_REG));
 }
 
 void ptp_enable_irqs(struct ptp_device *ptp, int port)
@@ -104,13 +103,13 @@ void ptp_enable_irqs(struct ptp_device *ptp, int port)
                PTP_TX_IRQ(PTP_TX_DELAY_REQ_BUFFER) |
                PTP_TX_IRQ(PTP_TX_PDELAY_REQ_BUFFER) |
                PTP_TX_IRQ(PTP_TX_PDELAY_RESP_BUFFER));
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_IRQ_FLAGS_REG), irqMask);
-    XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_IRQ_MASK_REG), irqMask);
+    iowrite32(irqMask, REGISTER_ADDRESS(ptp, port, PTP_IRQ_FLAGS_REG));
+    iowrite32(irqMask, REGISTER_ADDRESS(ptp, port, PTP_IRQ_MASK_REG));
 }
 
 uint32_t ptp_get_version(struct ptp_device *ptp)
 {
-	return(XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_REVISION_REG)));
+    return(ioread32(REGISTER_ADDRESS(ptp, 0, PTP_REVISION_REG)));
 }
 
 /* Configure the prescaler and divider used to generate a 10 msec event timer.
@@ -118,9 +117,9 @@ uint32_t ptp_get_version(struct ptp_device *ptp)
  */
 void ptp_setup_event_timer(struct ptp_device *ptp, int port, PtpPlatformData *platformData)
 {
-    XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_TIMER_REG), 
-              (((platformData->timerPrescaler - 1) & PTP_PRESCALER_MASK) |
-               (((platformData->timerDivider - 1) & PTP_DIVIDER_MASK) << PTP_DIVIDER_SHIFT)));
+    iowrite32( (((platformData->timerPrescaler - 1) & PTP_PRESCALER_MASK) |
+               (((platformData->timerDivider - 1) & PTP_DIVIDER_MASK) << PTP_DIVIDER_SHIFT)), 
+                                                    REGISTER_ADDRESS(ptp, 0, PTP_TIMER_REG));
 }
 
 uint32_t ptp_setup_interrupt(struct ptp_device *ptp)
@@ -139,7 +138,7 @@ uint32_t ptp_setup_interrupt(struct ptp_device *ptp)
  */
 void write_packet(uint8_t * bufferBase, uint32_t *wordOffset, 
                          uint32_t writeWord) {
-  XIo_Out32(((uint32_t)bufferBase + *wordOffset), writeWord);
+  iowrite32(writeWord, ((uint32_t)bufferBase + *wordOffset));
   *wordOffset += BYTES_PER_WORD;
 }
 
@@ -147,7 +146,7 @@ void write_packet(uint8_t * bufferBase, uint32_t *wordOffset,
  * advanced to the next word.
  */
 uint32_t read_packet(uint8_t * bufferBase, uint32_t *wordOffset) {
-  uint32_t readWord = XIo_In32((uint32_t)bufferBase + *wordOffset);
+  uint32_t readWord = ioread32((uint32_t)bufferBase + *wordOffset);
   *wordOffset += BYTES_PER_WORD;
   return(readWord);
 }
@@ -158,7 +157,7 @@ void ptp_process_rx(struct ptp_device *ptp, int port)
     uint32_t bufferBase;
 
     /* Process all messages received since the last time we ran */
-    newRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
+    newRxBuffer = (ioread32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
     while(ptp->ports[port].lastRxBuffer != newRxBuffer) {
       /* Advance the last buffer circularly around the available Rx buffers */
       ptp->ports[port].lastRxBuffer = ((ptp->ports[port].lastRxBuffer + 1) & PTP_RX_BUFFER_MASK);
@@ -166,15 +165,12 @@ void ptp_process_rx(struct ptp_device *ptp, int port)
       /* Fetch the word containing the LTF and the message type */
       bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, ptp->ports[port].lastRxBuffer);
       process_rx_buffer(ptp,port,(uint8_t *)bufferBase);
-
-//      bufferBase = PTP_RX_PACKET_BUFFER(ptp, port, rxBuffer);
-//      process_rx_buffer(ptp->ports[i].lastRxBuffer);
     }
 }
 
 void ptp_platform_init(struct ptp_device *ptp, int port)
 {
-    ptp->ports[port].lastRxBuffer = (XIo_In32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
+    ptp->ports[port].lastRxBuffer = (ioread32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
 }
 
 /* Gets the hardware timestamp located within the passed packet buffer.
@@ -265,8 +261,7 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer) 
    * pending flags are valid.  We're not using them anyways - the only hazard that
    * exists is if we attempt to send two packets from the same buffer simultaneously.
    */
-  XIo_Out32(REGISTER_ADDRESS(ptp, port, PTP_TX_REG), 
-            ((1<<i) | PTP_TX_ENABLE));
+  iowrite32(((1<<i) | PTP_TX_ENABLE), REGISTER_ADDRESS(ptp, port, PTP_TX_REG));
 }
 
 
@@ -277,7 +272,7 @@ uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufTyp
 
 /* Disables the RTC */
 void disable_rtc(struct ptp_device *ptp) {
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), PTP_RTC_DISABLE);
+  iowrite32(PTP_RTC_DISABLE, REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG));
 }
 
 /* Sets the RTC increment, simultaneously enabling the RTC */
@@ -293,7 +288,7 @@ void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
   incrementWord |= PTP_RTC_ENABLE;
 
   /* The actual write is already atomic, so no need to ensure mutual exclusion */
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG), incrementWord);
+  iowrite32(incrementWord, REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG));
 }
 
 /* Return the current increment value */
@@ -314,17 +309,17 @@ void get_rtc_time(struct ptp_device *ptp, PtpTime *time) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), PTP_RTC_CAPTURE_FLAG);
+  iowrite32(PTP_RTC_CAPTURE_FLAG, REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
   do {
-    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
+    timeWord = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
   } while((timeWord & PTP_RTC_CAPTURE_FLAG) != 0);
 
   /* Now read the entire captured time and pack it into the structure.  The last
    * value read during polling is perfectly valid.
    */
   time->secondsUpper = (uint16_t) timeWord;
-  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG));
-  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG));
+  time->secondsLower = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG));
+  time->nanoseconds = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG));
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 }
@@ -341,17 +336,17 @@ void get_local_time(struct ptp_device *ptp, PtpTime *time) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG), PTP_RTC_LOCAL_CAPTURE_FLAG);
+  iowrite32(PTP_RTC_LOCAL_CAPTURE_FLAG, REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG));
   do {
-    timeWord = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG));
+    timeWord = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_HIGH_REG));
   } while((timeWord & PTP_RTC_LOCAL_CAPTURE_FLAG) != 0);
 
   /* Now read the entire captured time and pack it into the structure.  The last
    * value read during polling is perfectly valid.
    */
   time->secondsUpper = (uint16_t) timeWord;
-  time->secondsLower = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_LOW_REG));
-  time->nanoseconds = XIo_In32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_NANOSECONDS_REG));
+  time->secondsLower = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_SECONDS_LOW_REG));
+  time->nanoseconds = ioread32(REGISTER_ADDRESS(ptp, 0, PTP_LOCAL_NANOSECONDS_REG));
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 }
@@ -366,11 +361,10 @@ void set_rtc_time(struct ptp_device *ptp, PtpTime *time) {
    */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG), time->secondsUpper);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG), time->secondsLower);
-  XIo_Out32(REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG), time->nanoseconds);
+  iowrite32(time->secondsUpper, REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_HIGH_REG));
+  iowrite32(time->secondsLower, REGISTER_ADDRESS(ptp, 0, PTP_SECONDS_LOW_REG));
+  iowrite32(time->nanoseconds, REGISTER_ADDRESS(ptp, 0, PTP_NANOSECONDS_REG));
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 }
-
 
