@@ -41,7 +41,7 @@
 /* Driver name and the revision of hardware expected (1.1 - 1.7) */
 #define DRIVER_NAME "labx_audio_depacketizer"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x17
+#define DRIVER_VERSION_MAX  0x18
 
 /* "Breakpoint" revision numbers for certain features */
 #define UNIFIED_MATCH_VERSION_MIN  0x12
@@ -703,9 +703,13 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*) dev_id;
   uint32_t maskedFlags;
   uint32_t irqMask;
+  uint32_t seqError;
   irqreturn_t returnValue = IRQ_NONE;
 
   /* Read the interrupt flags and immediately clear them */
+  /* Grab the sequence error index prior to clearing the IRQ, it's 
+     possible the index will change if cleared first */
+  seqError = XIo_In32(REGISTER_ADDRESS(depacketizer, ERROR_REG));
   maskedFlags = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_FLAGS_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
   maskedFlags &= irqMask;
@@ -726,7 +730,10 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
     depacketizer->streamStatusGeneration++;
 
     /* If this was a sequence error IRQ, leave a flag in place */
-    if((maskedFlags & SEQ_ERROR_IRQ) != 0) depacketizer->streamSeqError = 1;
+    if((maskedFlags & SEQ_ERROR_IRQ) != 0) {
+      depacketizer->streamSeqError = 1;
+      depacketizer->errorIndex = seqError;
+    }
 
     /* Disarm both event interrupts while the status thread handles the present
      * event(s).  This permits the status thread to limit the rate at which events
@@ -749,8 +756,19 @@ static int netlink_thread(void *data)
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)data;
   uint32_t streamStatusGeneration = depacketizer->streamStatusGeneration;
   uint32_t irqMask;
+  unsigned int channelIndex;
+  unsigned int statusWordIndex;
+  static const unsigned int statusWordOffset[STREAM_STATUS_WORDS] =
+      {STREAM_STATUS_0_REG, STREAM_STATUS_1_REG, STREAM_STATUS_2_REG, STREAM_STATUS_3_REG};
+  uint32_t streamStatus;
+  uint32_t statusWordMask;
+  uint32_t lastStreamStatus[STREAM_STATUS_WORDS];
 
   __set_current_state(TASK_RUNNING);
+  lastStreamStatus[0] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_0_REG));
+  lastStreamStatus[1] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_1_REG));
+  lastStreamStatus[2] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_2_REG));
+  lastStreamStatus[3] = XIo_In32(REGISTER_ADDRESS(depacketizer, STREAM_STATUS_3_REG));
 
   do {
     set_current_state(TASK_INTERRUPTIBLE);
@@ -763,6 +781,39 @@ static int netlink_thread(void *data)
     __set_current_state(TASK_RUNNING);
 
     streamStatusGeneration = depacketizer->streamStatusGeneration;
+
+    // Software based muting: If a stream's status has changed from Active to Inactive, then
+    // zero the channel sample buffers associated with the stream.  For each of the 128 possible
+    // streams, check for an Active to Inactive transition and clear the buffer if it has occurred.
+    // Only buffers which have been registered for software-based muting will be cleared out.
+    // TODO: This does not currently check for a redundancy partner; it should do so!
+    for (channelIndex = 0, statusWordIndex = 0; statusWordIndex < STREAM_STATUS_WORDS; statusWordIndex++) {
+      // There are four stream status registers we have to check; each has an Active bit for 32 streams
+      streamStatus = XIo_In32(REGISTER_ADDRESS(depacketizer, statusWordOffset[statusWordIndex]));
+      // Save time by skipping the bit checking if nothing has changed for this set of channels
+      if (streamStatus != lastStreamStatus[statusWordIndex]) {
+        // Start with a mask of 0x1, then shift it to 0x2 and so on until 0x40000000, 0x80000000, and 0
+        for (statusWordMask = 0x1; statusWordMask != 0; statusWordMask <<= 1) {
+          if (depacketizer->presentationChannels[channelIndex] != NULL &&
+              (streamStatus & statusWordMask) == 0 &&
+              (lastStreamStatus[statusWordIndex] & statusWordMask) != 0) {
+        	void **channelBuffer;
+            // Stream has become inactive
+            // printk("Software based muting for %p: Stream %u inactive - mute buffer address", depacketizer, channelIndex);
+            for (channelBuffer = depacketizer->presentationChannels[channelIndex]->channelBuffers;
+                *channelBuffer != NULL; ++channelBuffer) {
+              // printk(" %p", *channelBuffer);
+              memset(*channelBuffer, 0, depacketizer->presentationChannels[channelIndex]->channelBufferSizeBytes);
+            }
+            // printk("\n");
+          }
+          ++channelIndex;
+        }
+        lastStreamStatus[statusWordIndex] = streamStatus;
+      } else {
+        channelIndex += 32;
+      }
+    }
 
     audio_depacketizer_stream_event(depacketizer);
 
@@ -1004,6 +1055,48 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
     set_rtc_unstable(depacketizer);
     break;
 
+  case IOC_SET_AUTOMUTE_STREAM:
+    {
+      struct depacketizer_presentation_channels *channels;
+      SetAutomuteStream setAutomuteStream;
+      if(copy_from_user(&setAutomuteStream, (void __user*)arg, sizeof(SetAutomuteStream)) != 0 ||
+    		  setAutomuteStream.streamIndex > DEPACKETIZER_MAX_STREAMS ||
+    		  setAutomuteStream.nChannels > DEPACKETIZER_MAX_AUTOMUTE_STREAMS ) {
+        return(-EFAULT);
+      }
+      if (depacketizer->presentationChannels[setAutomuteStream.streamIndex] != NULL) {
+        kfree(depacketizer->presentationChannels[setAutomuteStream.streamIndex]);
+      }
+      if (setAutomuteStream.nChannels > 0) {
+        void **channelBuffer;
+        channels = kmalloc(sizeof(struct depacketizer_presentation_channels) +
+      		  setAutomuteStream.nChannels*sizeof(void *), GFP_KERNEL);
+        channels->channelBufferSizeBytes = setAutomuteStream.channelBufferSizeBytes;
+        channels->redundancyPartner = NULL;
+        // Caution: The buffer channel addresses reported to the userspace app are actually
+        // in kernel memory space, having been (usually) obtained via kmalloc().  So, it
+        // is safe to simply copy them here.  Beware, however, that we have no way to enforce
+        // this and the addresses may in fact be virtual (user space) addresses, which would
+        // be tragic in the general case where user and kernel address spaces are different.
+        memcpy(channels->channelBuffers, setAutomuteStream.channelAddresses,
+            setAutomuteStream.nChannels*sizeof(void *));
+        channels->channelBuffers[setAutomuteStream.nChannels] = NULL;
+        depacketizer->presentationChannels[setAutomuteStream.streamIndex] = channels;
+
+        // Initial mute of stream channels
+        // printk("Software based muting for %p: Initial mute stream %u size %u - mute buffer address", depacketizer, setAutomuteStream.streamIndex, channels->channelBufferSizeBytes);
+        for (channelBuffer = channels->channelBuffers; *channelBuffer != NULL; ++channelBuffer) {
+          // printk(" %p", *channelBuffer);
+          memset(*channelBuffer, 0, channels->channelBufferSizeBytes);
+        }
+        // printk("\n");
+
+      } else {
+        depacketizer->presentationChannels[setAutomuteStream.streamIndex] = NULL;
+      }
+    }
+    break;
+
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
@@ -1047,6 +1140,7 @@ static int audio_depacketizer_probe(const char *name,
   depacketizer = (struct audio_depacketizer*) kmalloc(sizeof(struct audio_depacketizer), 
                                                       GFP_KERNEL);
   if(!depacketizer) return(-ENOMEM);
+  memset(depacketizer, 0, sizeof(struct audio_depacketizer));
 
   /* Request and map the device's I/O memory region into uncacheable space */
   depacketizer->physicalAddress = addressRange->start;
@@ -1250,6 +1344,7 @@ static int audio_depacketizer_probe(const char *name,
    */
   depacketizer->streamStatusGeneration = 0;
   depacketizer->streamSeqError         = 0;
+  depacketizer->errorIndex             = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
   }
@@ -1320,6 +1415,8 @@ static struct of_device_id audio_depacketizer_of_match[] = {
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.04.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.05.a", },
 	{ .compatible = "xlnx,labx-audio-depacketizer-1.06.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.07.a", },
+	{ .compatible = "xlnx,labx-audio-depacketizer-1.08.a", },
 	{ /* end of list */ },
 };
 

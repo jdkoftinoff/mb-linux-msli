@@ -244,6 +244,35 @@ static ssize_t garcia_w_spimaster(struct class *c, const char * buf, size_t coun
 	return count;
 }
 
+static ssize_t garcia_r_clkout(struct class *c,char *buf)
+{
+	int count = 0;
+	int val;
+	if ((fpga_gpio.shadow_value & GARCIA_FPGA_RECOVERED_CLOCK_ENA) == 0) {
+		val = 0;
+	} else {
+		val = 1;
+	}
+	count = snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return count;
+}
+
+static ssize_t garcia_w_clkout(struct class *c, const char * buf, size_t count)
+{
+	unsigned long int val;
+
+	if (strict_strtoul(buf, 0, &val) == 0) {
+		fpga_gpio.shadow_value &= ~GARCIA_FPGA_RECOVERED_CLOCK_ENA;
+		if (val != 0) {
+			fpga_gpio.shadow_value |= GARCIA_FPGA_RECOVERED_CLOCK_ENA;
+		}
+		garcia_fpga_write_gpio((garcia_fpga_read_gpio() & ~GARCIA_GPIO_INPUTS_MASK) |
+					(fpga_gpio.shadow_value & GARCIA_GPIO_INPUTS_MASK));
+	}
+	return count;
+}
+
+#if 0
 static ssize_t garcia_r_packetizer_ena(struct class *c,char *buf)
 {
 	int count = 0;
@@ -275,6 +304,7 @@ static ssize_t garcia_w_packetizer_ena(struct class *c, const char * buf, size_t
 	}
 	return count;
 }
+#endif
 
 static ssize_t garcia_r_inputs(struct class *c, char *buf)
 {
@@ -419,7 +449,10 @@ static ssize_t garcia_w_icapdly(struct class *c, const char * buf, size_t count)
 
 static struct class_attribute garcia_fpga_class_attrs[] = {
 	__ATTR(spimaster, S_IRUGO | S_IWUGO, garcia_r_spimaster, garcia_w_spimaster),
+	__ATTR(clockout, S_IRUGO | S_IWUGO, garcia_r_clkout, garcia_w_clkout),
+#if 0
 	__ATTR(packetizer_ena, S_IRUGO | S_IWUGO, garcia_r_packetizer_ena, garcia_w_packetizer_ena),
+#endif
 	__ATTR(inputs, S_IRUGO, garcia_r_inputs, NULL),
 	__ATTR(selector, S_IRUGO, garcia_r_selector, NULL),
 	__ATTR(pushbutton, S_IRUGO, garcia_r_pushbutton, NULL),

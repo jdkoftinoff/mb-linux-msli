@@ -203,7 +203,7 @@ static void send_message_response(struct spi_mailbox *mailbox,
                                   MessageData *data) {
   int i;
   DBG("Writing response message \n");
-  printk("Sending response\n");
+
   for(i=0; i < ((data->length + 3)/4); i++) {
     XIo_Out32(MSG_RAM_BASE(mailbox)+(i*4), ((uint32_t*)data->messageContent)[i]);
   }

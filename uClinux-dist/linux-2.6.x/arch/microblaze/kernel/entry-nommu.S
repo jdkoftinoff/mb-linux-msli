@@ -281,9 +281,29 @@ ENTRY(_user_exception)
 	/* re-enable interrupts now we are in kernel mode */
 	enable_irq
 
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS	 /* get flags in thread info */
+	andi	r11, r11, _TIF_WORK_SYSCALL_MASK
+	beqi	r11, 3f
+
+	addik	r3, r0, -ENOSYS
+	swi	r3, r1, PT_R3
+	brlid	r15, do_syscall_trace_enter
+	addik	r5, r1, PT_R0
+
+	# do_syscall_trace_enter returns the new syscall nr.
+	addk	r12, r0, r3
+	lwi	r5, r1, PT_R5;
+	lwi	r6, r1, PT_R6;
+	lwi	r7, r1, PT_R7;
+	lwi	r8, r1, PT_R8;
+	lwi	r9, r1, PT_R9;
+	lwi	r10, r1, PT_R10;
+3:
 	/* See if the system call number is valid. */
 	addi	r11, r12, -__NR_syscalls
 	bgei	r11, 1f			/* return to user if not valid */
+
 	/* Figure out which function to use for this system call. */
 	/* Note Microblaze barrel shift is optional, so don't rely on it */
 	add	r12, r12, r12			/* convert num -> ptr */
@@ -474,22 +494,33 @@ ENTRY(ret_from_fork)
 	brlid	r15, schedule_tail
 	nop
 	swi	r31, r1, PT_R31		/* save r31 in user context. */
-			/* will soon be restored to r31 in ret_to_user */
-	addk	r3, r0, r0
+			                /* will soon be restored to r31 in ret_to_user */
 	brid	ret_to_user
-	nop
+	addk	r3, r0, r0              /* Set errno in branch delay slot */
 
 work_pending:
 	enable_irq
 
 	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS;		/* get flags in thread info */
+	andi	r11, r11, _TIF_WORK_SYSCALL_MASK
+	beqi	r11, 1f
+
+	swi	r3, r1, PT_R3
+	swi	r4, r1, PT_R4
+	brlid	r15, do_syscall_trace_leave
+	addik	r5, r1, PT_R0
+	lwi	r3, r1, PT_R3
+	lwi	r4, r1, PT_R4
+1:
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
 	andi	r11, r11, _TIF_NEED_RESCHED
-	beqi	r11, 1f
+	beqi	r11, 2f
 	bralid	r15, schedule
 	nop
 
-1:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+2:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
 	andi	r11, r11, _TIF_SIGPENDING
 	beqi	r11, no_work_pending

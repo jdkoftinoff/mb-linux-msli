@@ -301,6 +301,7 @@ libpthread_hidden_proto(pthread_exit)
 
 libpthread_hidden_proto(pthread_equal)
 libpthread_hidden_proto(pthread_self)
+libpthread_hidden_proto(pthread_self_stack)
 libpthread_hidden_proto(pthread_getschedparam)
 libpthread_hidden_proto(pthread_setschedparam)
 
@@ -373,6 +374,7 @@ struct pthread_functions __pthread_functions =
 */
     .ptr__pthread_cleanup_push_defer = __pthread_cleanup_push_defer,
     .ptr__pthread_cleanup_pop_restore = __pthread_cleanup_pop_restore,
+    .ptr_pthread_self_stack = pthread_self_stack,
   };
 #ifdef SHARED
 # define ptr_pthread_functions &__pthread_functions
@@ -686,6 +688,20 @@ pthread_t pthread_self(void)
   return THREAD_GETMEM(self, p_tid);
 }
 libpthread_hidden_def (pthread_self)
+
+void * pthread_self_stack(void** tos) {
+  pthread_descr self = thread_self();
+  pthread_t tid = THREAD_GETMEM(self, p_tid);
+  if (NULL != tos) {
+    *tos = (void*)self;
+  }
+  void *bos = thread_handle(tid)->h_bottom;
+  if (NULL == bos) {
+    bos = (void*) -1;
+  }
+  return bos;
+}
+libpthread_hidden_def (pthread_self_stack)
 
 int pthread_equal(pthread_t thread1, pthread_t thread2)
 {

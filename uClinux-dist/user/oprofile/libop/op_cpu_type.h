@@ -60,6 +60,7 @@ typedef enum {
 	CPU_CORE, /**< Core Solo / Duo series */
 	CPU_PPC_7450, /**< PowerPC G4 */
 	CPU_CORE_2, /**< Intel Core 2 */
+	CPU_MICROBLAZE,  /**< Xilinx Microblaze */
 	MAX_CPU_TYPE
 } op_cpu;
 

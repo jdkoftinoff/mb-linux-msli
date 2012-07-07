@@ -821,6 +821,14 @@ int gpio_request(unsigned gpio, const char *label)
 	 * before IRQs are enabled, for non-sleeping (SOC) GPIOs.
 	 */
 
+#if 1
+	// LabX: We need multiple drivers sharing a GPIO,
+	// so bypass the check to see if the GPIO is already
+	// requested.
+	set_bit(FLAG_REQUESTED, &desc->flags);
+	desc_set_label(desc, label ? : "?");
+	status = 0;
+#else
 	if (test_and_set_bit(FLAG_REQUESTED, &desc->flags) == 0) {
 		desc_set_label(desc, label ? : "?");
 		status = 0;
@@ -829,6 +837,7 @@ int gpio_request(unsigned gpio, const char *label)
 		module_put(chip->owner);
 		goto done;
 	}
+#endif
 
 	if (chip->request) {
 		/* chip->request may sleep */

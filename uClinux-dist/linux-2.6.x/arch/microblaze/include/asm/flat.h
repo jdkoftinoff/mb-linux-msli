@@ -71,7 +71,7 @@ flat_get_value(unsigned long *rp, unsigned long relval)
 
 /* Set a value into an instruction or memory location. This only
    looks at the 64/32 flag. */
-static inline unsigned long
+static inline void
 flat_set_value(unsigned long *rp, unsigned long addr, unsigned long relval)
 {	
 	/* Is this a split 64/32 reloc? */

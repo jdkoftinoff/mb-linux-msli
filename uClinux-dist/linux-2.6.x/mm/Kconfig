@@ -61,6 +61,11 @@ config SPARSEMEM_MANUAL
 
 endchoice
 
+config FORCE_MAX_ZONEORDER
+	prompt "Max zone order (default 11)"
+	int
+	default "11"
+
 config DISCONTIGMEM
 	def_bool y
 	depends on (!SELECT_MEMORY_MODEL && ARCH_DISCONTIGMEM_ENABLE) || DISCONTIGMEM_MANUAL

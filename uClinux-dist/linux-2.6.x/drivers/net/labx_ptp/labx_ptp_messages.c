@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /**
  * Packet transmission methods
@@ -155,7 +154,6 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port, PtpPri
   uint32_t packetWord;
   uint32_t i;
   PtpSystemIdentity *identity = &pv->rootSystemIdentity;
-  PtpClockQuality   *quality = &identity->clockQuality;
 
   /* Clear out all dynamic fields and populate static ones with properties from
    * the PTP device structure.
@@ -173,10 +171,11 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port, PtpPri
 
   /* Clear reserved, and set the grandmaster properties. */
   packetWord = (identity->priority1 << 16);
-  packetWord |= (quality->clockClass << 8);
-  packetWord |= quality->clockAccuracy;
+  packetWord |= (identity->clockClass << 8);
+  packetWord |= identity->clockAccuracy;
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = (quality->offsetScaledLogVariance << 16);
+  packetWord =  (identity->offsetScaledLogVariance[0] << 24);
+  packetWord |= (identity->offsetScaledLogVariance[1] << 16);
   packetWord |= (identity->priority2 << 8);
   packetWord |= identity->clockIdentity[0];
   write_packet(txBuffer, &wordOffset, packetWord);
@@ -450,6 +449,36 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer) {
   uint32_t wordOffset = CUMULATIVE_SCALED_RATE_OFFSET_OFFSET;
   return read_packet(rxBuffer, &wordOffset);
+}
+
+uint16_t get_port_number(const uint8_t *portNumber) {
+  /* Fetch the big-endian packed value */
+  return((uint16_t) ((portNumber[0] << 8) | portNumber[1]));
+}
+
+void set_port_number(uint8_t *portNumber, uint16_t setValue) {
+  portNumber[0] = (uint8_t) (setValue >> 8);
+  portNumber[1] = (uint8_t) setValue;
+}
+
+uint16_t get_steps_removed(const uint8_t *stepsRemoved) {
+  /* Fetch the big-endian packed value */
+  return((uint16_t) ((stepsRemoved[0] << 8) | stepsRemoved[1]));
+}
+
+void set_steps_removed(uint8_t *stepsRemoved, uint16_t setValue) {
+  stepsRemoved[0] = (uint8_t) (setValue >> 8);
+  stepsRemoved[1] = (uint8_t) setValue;
+}
+
+uint16_t get_offset_scaled_log_variance(const uint8_t *offsetScaledLogVariance) {
+  /* Fetch the big-endian packed value */
+  return((uint16_t) ((offsetScaledLogVariance[0] << 8) | offsetScaledLogVariance[1]));
+}
+
+void set_offset_scaled_log_variance(uint8_t *offsetScaledLogVariance, uint16_t setValue) {
+  offsetScaledLogVariance[0] = (uint8_t) (setValue >> 8);
+  offsetScaledLogVariance[1] = (uint8_t) setValue;
 }
 
 /* Sets the message timestamp (e.g. originTimestamp) within the passed packet buffer */
@@ -785,10 +814,10 @@ uint16_t get_rx_announce_steps_removed(struct ptp_device *ptp, uint32_t port, ui
   uint32_t wordOffset = STEPS_REMOVED_OFFSET;
   uint32_t packetWord;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  stepsRemoved = (packetWord & 0xFF) << 8;
+  stepsRemoved = ((packetWord & 0xFF) << 8);
   packetWord = read_packet(rxBuffer, &wordOffset);
   stepsRemoved |= ((packetWord >> 24) & 0xFF);
-  return stepsRemoved;
+  return(stepsRemoved);
 }
 
 uint16_t get_rx_announce_path_trace(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer, PtpClockIdentity *pathTrace) {
@@ -845,10 +874,11 @@ void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer,
   wordOffset = GM_PRIORITY1_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
   pv->rootSystemIdentity.priority1 = ((packetWord >> 16) & 0xFF);
-  pv->rootSystemIdentity.clockQuality.clockClass = ((packetWord >> 8) & 0xFF);
-  pv->rootSystemIdentity.clockQuality.clockAccuracy = (packetWord & 0xFF);
+  pv->rootSystemIdentity.clockClass = ((packetWord >> 8) & 0xFF);
+  pv->rootSystemIdentity.clockAccuracy = (packetWord & 0xFF);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  pv->rootSystemIdentity.clockQuality.offsetScaledLogVariance = cpu_to_be16((packetWord >> 16) & 0xFFFF);
+  pv->rootSystemIdentity.offsetScaledLogVariance[0] = (uint8_t) (packetWord >> 24);
+  pv->rootSystemIdentity.offsetScaledLogVariance[1] = (uint8_t) (packetWord >> 16);
   pv->rootSystemIdentity.priority2 = ((packetWord >> 8) & 0xFF);
   pv->rootSystemIdentity.clockIdentity[0] = (packetWord & 0xFF);
   packetWord = read_packet(rxBuffer, &wordOffset);
@@ -860,14 +890,13 @@ void extract_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer,
   pv->rootSystemIdentity.clockIdentity[5] = ((packetWord >> 24) & 0xFF);
   pv->rootSystemIdentity.clockIdentity[6] = ((packetWord >> 16) & 0xFF);
   pv->rootSystemIdentity.clockIdentity[7] = ((packetWord >> 8) & 0xFF);
-  pv->stepsRemoved        = (packetWord & 0xFF) << 8;
+  pv->stepsRemoved[0] = (uint8_t) packetWord;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  pv->stepsRemoved       |= ((packetWord >> 24) & 0xFF);
-  pv->stepsRemoved        = cpu_to_be16(pv->stepsRemoved);
+  pv->stepsRemoved[1] = (uint8_t) (packetWord >> 24);
   //properties->timeSource = ((packetWord >> 16) & 0xFF);
 
   /* Port number is 1 based and is the port it came in on */
-  pv->portNumber = port + 1;
+  set_port_number(pv->portNumber, (port + 1));
 }
 
 /* Gets the MAC address from a received packet */
