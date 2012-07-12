@@ -700,7 +700,7 @@ static int bcm5482_read_status(struct phy_device *phydev)
 
         if (phydev->link) 
         {
-                val = BCM_LED_SRC_ON;
+                val = BCM_LED_SRC_OFF;
                 reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12);
                 reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
                 bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS12, reg);
