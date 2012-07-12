@@ -295,6 +295,38 @@ out_free_bus:
   return ret;
 }
 
+static void switchVlanMapPortPair(struct phy_device *phydev, int port1, int port2, MV_U16 fid) {
+  MV_U16 reg;
+
+  /* First port is mapped to the second port. */
+  reg = REG_READ(phydev, MV_REG_PORT(port1), MV_SWITCH_PORT_VMAP_REG);  
+  reg &= ~0xf0ff;
+  reg |= (0x1 << port2) | fid;
+  REG_WRITE(phydev, MV_REG_PORT(port1), MV_SWITCH_PORT_VMAP_REG, reg); 
+  printk("VLAN map for port %d = 0x%08X\n", port1, reg);
+
+  /* Second port is mapped to the first port. */
+  reg = REG_READ(phydev, MV_REG_PORT(port2), MV_SWITCH_PORT_VMAP_REG);
+  reg &= ~0xf0ff;
+  reg |= (0x1 << port1) | fid;
+  REG_WRITE(phydev, MV_REG_PORT(port2), MV_SWITCH_PORT_VMAP_REG, reg);
+  printk("VLAN map for port %d = 0x%08X\n", port2, reg);
+
+  /* Enable the two ports for forwarding and disable VLAN tunneling. */
+  reg = REG_READ(phydev, MV_REG_PORT(port1), MV_SWITCH_PORT_CONTROL_REG);
+  reg |= 0x0003;  /* Port State = Forwarding */
+  reg &= ~0x0080; /* VLAN Tunnel = Disabled */
+  REG_WRITE(phydev, MV_REG_PORT(port1), MV_SWITCH_PORT_CONTROL_REG, reg);
+
+  reg = REG_READ(phydev, MV_REG_PORT(port2), MV_SWITCH_PORT_CONTROL_REG);
+  reg |= 0x0003;  /* Port State = Forwarding */
+  reg &= ~0x0080; /* VLAN Tunnel = Disabled */
+  REG_WRITE(phydev, MV_REG_PORT(port2), MV_SWITCH_PORT_CONTROL_REG, reg);
+
+  /* All other port mappings for these
+     two ports are effectively cleared. */
+}
+
 static void switchVlanInit(struct phy_device *phydev,
                            MV_U32 switchCpuPort0,
                            MV_U32 switchCpuPort1,
@@ -306,7 +338,7 @@ static void switchVlanInit(struct phy_device *phydev,
 
   MV_U16 cpu_vid = 0x1;
 
-  /* Setting  Port default priority for all ports to zero, set default VID=0x1 */
+  /* Setting port default priority for all ports to zero, set default VID=0x1 */
   for(prt=0; prt < switchMaxPortsNum; prt++) {
     if (((1 << prt) & switchEnabledPortsMask)) {
       reg = REG_READ(phydev, MV_REG_PORT(prt), MV_SWITCH_PORT_VID_REG);
@@ -316,10 +348,15 @@ static void switchVlanInit(struct phy_device *phydev,
     }
   }
 	
-  /* 
-   *  set Ports VLAN Mapping.
-   */
+  /* Set Ports VLAN Mapping. */
+
+  /* Ports 0 and 5 are mapped bidirectionally. */
+  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_0, switchCpuPort0, 0);
   
+  /* Ports 1 and 6 are mapped bidirectionally. */
+  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_1, switchCpuPort1, 0x1000);
+  
+  #if 0
   /* port 0 is mapped to port 5 (CPU Port) */  
   reg = REG_READ(phydev, MV_REG_PORT(SHURE_INFERNO_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG);  
   reg &= ~0xf0ff;
@@ -357,6 +394,7 @@ static void switchVlanInit(struct phy_device *phydev,
       REG_WRITE(phydev, MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG, reg);
     }
   }
+  #endif
 }
 
 /*
@@ -385,6 +423,37 @@ static int mvEthSwitch_open(struct inode *inode, struct file *filp)
   preempt_enable();
   
   return(returnValue);
+}
+
+static ssize_t mvEthSwitch_write(struct file *filp, const char __user* buf, size_t len, loff_t* offset) {
+  struct phy_device *phydev = ((struct mvEthSwitch*)filp->private_data)->pdev;
+  unsigned int port1;
+  unsigned int port2;
+  unsigned int fid = 0;
+  char cmd[2];
+
+  /* Write a single two-digit string to this driver
+     to map together the two ports specified in the
+     string. */
+  if(len >= 2) {
+    copy_from_user(cmd, buf, 2);
+    port1 = cmd[0] - '0';
+    port2 = cmd[1] - '0';
+
+    if(port1 < 10 && port2 < 10) {
+      /* Ports 5 and 6 are CPU ports. One will
+         be mapped to one PHY (ports 0-4), one to
+         another. The pair that maps port 6 to some
+         other port needs to have an FID field of 0x1
+         written to the VLAN Map register in order
+         to truly isolate it from the other port pair. */
+      if(port1 == 6 || port2 == 6) fid = 0x1000;
+      switchVlanMapPortPair(phydev, port1, port2, fid);
+      return 2;
+    }
+  }
+
+  return -EINVAL;
 }
 
 static int mvEthSwitch_release(struct inode *inode, struct file *filp)
@@ -497,6 +566,7 @@ static int mvEthSwitch_ioctl(struct inode *inode,
 /* Character device file operations structure */
 static struct file_operations mvEthSwitch_fops = {
   .open	   = mvEthSwitch_open,
+  .write   = mvEthSwitch_write,
   .release = mvEthSwitch_release,
   .ioctl   = mvEthSwitch_ioctl,
   .owner   = THIS_MODULE,
