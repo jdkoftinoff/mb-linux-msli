@@ -137,8 +137,10 @@ endif
 DEVICES += packetizer0,c,250,0
 DEVICES += depacketizer0,c,252,0
 DEVICES += depacketizer1,c,252,1
-DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
+
+# Add the Marvell 88E6350R Ethernet Switch peripheral device node
+DEVICES += mvEthSwitch0,c,255,0
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
 CONFIG_SYSTEM_ROOT_PASSWD := "root"

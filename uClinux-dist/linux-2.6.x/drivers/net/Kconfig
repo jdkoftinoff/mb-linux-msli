@@ -1943,11 +1943,6 @@ menuconfig NETDEV_1000
 
 if NETDEV_1000
 
-config MV88E6350R
-  tristate "Marvell Linkstreet Etherent Switch MV88E6350R support"
-  help
-    This driver supports the Marvell 88E6350R ethernet switch.
-
 config LABX_ETH_LOCALLINK
 	tristate "Lab X 10/100/1000 LocalLink Ethernet MAC support"
 	select NEED_XILINX_LLDMA
