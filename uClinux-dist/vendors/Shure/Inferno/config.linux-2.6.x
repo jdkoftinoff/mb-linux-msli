@@ -393,6 +393,7 @@ CONFIG_MTD_SPI_OTP=y
 # CONFIG_MTD_UBI is not set
 CONFIG_OF_DEVICE=y
 CONFIG_OF_GPIO=y
+CONFIG_OF_I2C=y
 CONFIG_OF_SPI=y
 # CONFIG_PARPORT is not set
 CONFIG_BLK_DEV=y
@@ -408,14 +409,18 @@ CONFIG_BLK_DEV_XIP=y
 # CONFIG_ATA_OVER_ETH is not set
 # CONFIG_XILINX_SYSACE is not set
 CONFIG_MISC_DEVICES=y
+# CONFIG_ICS932S401 is not set
 # CONFIG_ENCLOSURE_SERVICES is not set
+# CONFIG_ISL29003 is not set
 CONFIG_LABX_MAILBOX=y
 # CONFIG_C2PORT is not set
 
 #
 # EEPROM support
 #
+# CONFIG_EEPROM_AT24 is not set
 # CONFIG_EEPROM_AT25 is not set
+# CONFIG_EEPROM_LEGACY is not set
 # CONFIG_EEPROM_93CX6 is not set
 
 #
@@ -448,8 +453,6 @@ CONFIG_MARVELL_PHY=y
 # CONFIG_VITESSE_PHY is not set
 # CONFIG_SMSC_PHY is not set
 # CONFIG_BROADCOM_PHY is not set
-# CONFIG_BCM8451_TX_CLOCKALIGN is not set
-# CONFIG_BCM8451_RX_CLOCKSKEW is not set
 # CONFIG_ICPLUS_PHY is not set
 # CONFIG_REALTEK_PHY is not set
 # CONFIG_NATIONAL_PHY is not set
@@ -474,6 +477,7 @@ CONFIG_LABX_AUDIO_DEPACKETIZER=y
 CONFIG_LABX_AUDIO_DEPACKETIZER_DMA=y
 CONFIG_LABX_AUDIO_TDM=y
 # CONFIG_LABX_LEGACY_BRIDGE is not set
+# CONFIG_LABX_REDUNDANCY_SWITCH is not set
 # CONFIG_XILINX_LLTEMAC is not set
 # CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_RGMII is not set
 CONFIG_XILINX_LLTEMAC_MARVELL_88E1111_GMII=y
@@ -579,14 +583,55 @@ CONFIG_XILINX_HWICAP=y
 # CONFIG_TCG_TPM is not set
 CONFIG_LABX_DMA=y
 CONFIG_LABX_DMA_CDEV=y
-CONFIG_LABX_LOCAL_AUDIO=y
+# CONFIG_LABX_LOCAL_AUDIO is not set
 # CONFIG_LABX_AUDIO_METERS is not set
 # CONFIG_I2S_SWITCH is not set
 # CONFIG_I2S_GNET is not set
 # CONFIG_XILINX_MAILBOX is not set
 # CONFIG_MEYER_SMPTE is not set
 # CONFIG_I2C_SERIAL is not set
-# CONFIG_I2C is not set
+CONFIG_I2C=y
+CONFIG_I2C_BOARDINFO=y
+# CONFIG_I2C_CHARDEV is not set
+CONFIG_I2C_HELPER_AUTO=y
+
+#
+# I2C Hardware Bus support
+#
+
+#
+# I2C system bus drivers (mostly embedded / system-on-chip)
+#
+# CONFIG_I2C_GPIO is not set
+# CONFIG_I2C_OCORES is not set
+# CONFIG_I2C_SIMTEC is not set
+# CONFIG_I2C_XILINX is not set
+
+#
+# External I2C/SMBus adapter drivers
+#
+# CONFIG_I2C_PARPORT_LIGHT is not set
+# CONFIG_I2C_TAOS_EVM is not set
+
+#
+# Other I2C/SMBus bus drivers
+#
+# CONFIG_I2C_PCA_PLATFORM is not set
+# CONFIG_I2C_STUB is not set
+
+#
+# Miscellaneous I2C Chip support
+#
+# CONFIG_DS1682 is not set
+# CONFIG_SENSORS_PCF8574 is not set
+# CONFIG_PCF8575 is not set
+# CONFIG_SENSORS_PCA9539 is not set
+# CONFIG_SENSORS_MAX6875 is not set
+# CONFIG_SENSORS_TSL2550 is not set
+# CONFIG_I2C_DEBUG_CORE is not set
+# CONFIG_I2C_DEBUG_ALGO is not set
+# CONFIG_I2C_DEBUG_BUS is not set
+# CONFIG_I2C_DEBUG_CHIP is not set
 CONFIG_SPI=y
 # CONFIG_SPI_MAILBOX is not set
 # CONFIG_SPI_DEBUG is not set
@@ -617,6 +662,9 @@ CONFIG_GPIO_XILINX=y
 #
 # I2C GPIO expanders:
 #
+# CONFIG_GPIO_MAX732X is not set
+# CONFIG_GPIO_PCA953X is not set
+# CONFIG_GPIO_PCF857X is not set
 
 #
 # PCI GPIO expanders:
@@ -646,8 +694,30 @@ CONFIG_SSB_POSSIBLE=y
 # CONFIG_MFD_CORE is not set
 # CONFIG_MFD_SM501 is not set
 # CONFIG_HTC_PASIC3 is not set
+# CONFIG_TPS65010 is not set
+# CONFIG_TWL4030_CORE is not set
 # CONFIG_MFD_TMIO is not set
+# CONFIG_PMIC_DA903X is not set
+# CONFIG_MFD_WM8400 is not set
+# CONFIG_MFD_WM8350_I2C is not set
+# CONFIG_MFD_PCF50633 is not set
 # CONFIG_REGULATOR is not set
+
+#
+# Multimedia devices
+#
+
+#
+# Multimedia core support
+#
+# CONFIG_VIDEO_DEV is not set
+# CONFIG_DVB_CORE is not set
+# CONFIG_VIDEO_MEDIA is not set
+
+#
+# Multimedia drivers
+#
+# CONFIG_DAB is not set
 
 #
 # Graphics support
@@ -689,6 +759,23 @@ CONFIG_RTC_INTF_PROC=y
 CONFIG_RTC_INTF_DEV=y
 CONFIG_RTC_INTF_DEV_UIE_EMUL=y
 # CONFIG_RTC_DRV_TEST is not set
+
+#
+# I2C RTC drivers
+#
+# CONFIG_RTC_DRV_DS1307 is not set
+# CONFIG_RTC_DRV_DS1374 is not set
+# CONFIG_RTC_DRV_DS1672 is not set
+# CONFIG_RTC_DRV_MAX6900 is not set
+# CONFIG_RTC_DRV_RS5C372 is not set
+# CONFIG_RTC_DRV_ISL1208 is not set
+# CONFIG_RTC_DRV_X1205 is not set
+# CONFIG_RTC_DRV_PCF8563 is not set
+# CONFIG_RTC_DRV_PCF8583 is not set
+# CONFIG_RTC_DRV_M41T80 is not set
+# CONFIG_RTC_DRV_S35390A is not set
+# CONFIG_RTC_DRV_FM3130 is not set
+# CONFIG_RTC_DRV_RX8581 is not set
 
 #
 # SPI RTC drivers

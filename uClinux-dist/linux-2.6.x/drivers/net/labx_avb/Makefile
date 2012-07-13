@@ -7,7 +7,7 @@ EXTRA_CFLAGS += -I$(TOPDIR)/drivers/xilinx_common
 
 obj-$(CONFIG_LABX_AUDIO_PACKETIZER)       += labx_audio_packetizer.o
 obj-$(CONFIG_LABX_AUDIO_DEPACKETIZER)     += labx_audio_depacketizer_.o
-obj-$(CONFIG_LABX_AUDIO_DEPACKETIZER)     += labx_redundancy_switch.o
+obj-$(CONFIG_LABX_REDUNDANCY_SWITCH)      += labx_redundancy_switch.o
 obj-$(CONFIG_LABX_AUDIO_TDM)              += labx_tdm_audio.o
 obj-$(CONFIG_LABX_LEGACY_BRIDGE)          += labx_legacy_bridge.o
 
