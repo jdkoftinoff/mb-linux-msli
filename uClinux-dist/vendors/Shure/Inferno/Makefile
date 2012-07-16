@@ -136,7 +136,6 @@ endif
 # Add the AVB packet engine device nodes
 DEVICES += packetizer0,c,250,0
 DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
 DEVICES += ptp0,c,253,0
 
 # Add the Marvell 88E6350R Ethernet Switch peripheral device node
