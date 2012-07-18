@@ -114,28 +114,40 @@ typedef unsigned short MV_U16;
 #define MV_SWITCH_PORT_VID_REG     0x07
 
 /* Port LED control register and indirect registers */
-#define MV_SWITCH_PORT_LED_CTRL_REG              0x16
-#  define MV_SWITCH_LED_CTRL_UPDATE     0x8000
-#  define MV_SWITCH_LED_CTRL_PTR_MASK      0x7
-#  define MV_SWITCH_LED_CTRL_PTR_SHIFT      12
-#    define MV_SWITCH_LED_01_CTRL_REG       0x0
-#      define MV_SWITCH_LED0_1G_100M_ACT   0x001
-#      define MV_SWITCH_LED1_100M_10M_ACT  0x010
-#      define MV_SWITCH_LED1_By_BLINK_RATE 0x000 
-
-#    define MV_SWITCH_LED_23_CTRL_REG       0x1
-#      define MV_SWITCH_LED2_1G_LINK       0x009
-#      define MV_SWITCH_LED3_LINK_ACT      0x0A0
+#define MV_SWITCH_PORT_LED_CTRL_REG         0x16
+#  define MV_SWITCH_LED_CTRL_UPDATE       0x8000
+#  define MV_SWITCH_LED_CTRL_PTR_MASK        0x7
+#  define MV_SWITCH_LED_CTRL_PTR_SHIFT        12
+#    define MV_SWITCH_LED_01_CTRL_REG        0x0
+#      define MV_SWITCH_LED0_LINK_ACT        0x3
+#      define MV_SWITCH_LED0_1G_100M_ACT    0x10
+#      define MV_SWITCH_LED1_100M_10M_ACT   0x10
+#      define MV_SWITCH_LED1_By_BLINK_RATE  0x00
+#      define MV_SWITCH_LED1_GIG            0x30
 
 #    define MV_SWITCH_LED_RATE_CTRL_REG     0x6
 #    define MV_SWITCH_LED_SPECIAL_CTRL_REG  0x7
 #      define MV_SWITCH_LED_SPECIAL_NONE  0x000
 #  define MV_SWITCH_LED_CTRL_DATA_MASK  0x03FF
 
-#define MV_SWITCH_LED_WRITE(ledReg, regValue)                                   \
-    (MV_SWITCH_LED_CTRL_UPDATE |                                                \
-     ((ledReg & MV_SWITCH_LED_CTRL_PTR_MASK) << MV_SWITCH_LED_CTRL_PTR_SHIFT) | \
-     (regValue & MV_SWITCH_LED_CTRL_DATA_MASK))
+/* Macros for reading/writing the individual LED
+ * control registers. */
+
+/* Puts together a read/write for an LED control register.
+ * Reads/writes are indirect, hence the need for a whichReg
+ * parameter. */
+#define MV_SWITCH_LED_REGVAL(whichReg, regValue)                                      \
+        (((whichReg & MV_SWITCH_LED_CTRL_PTR_MASK) << MV_SWITCH_LED_CTRL_PTR_SHIFT) | \
+        (regValue & MV_SWITCH_LED_CTRL_DATA_MASK))
+
+/* Performs a write to an LED control register. */
+#define MV_SWITCH_LED_WRREGVAL(whichReg, regValue) \
+        (MV_SWITCH_LED_CTRL_UPDATE | MV_SWITCH_LED_REGVAL(whichReg, regValue))
+
+/* Write this before performing a read of an LED
+   control register -- it sets up a write. */
+#define MV_SWITCH_LED_RDREGVAL(whichReg) \
+        MV_SWITCH_LED_REGVAL(whichReg, 0)
 
 /* E6350R-related */
 #define MV_E6350R_MAX_PORTS_NUM 7
@@ -575,6 +587,8 @@ static struct file_operations mvEthSwitch_fops = {
 static int mv88e6350R_probe(struct phy_device *pdev)
 {
   MV_U32 portIndex;
+  MV_U32 controlReg;   // Used for writing LED control register value.
+  //MV_U32 controlRegRd; // Used for reading back LED control register value.
   MV_U16 saved_g1reg4;
   struct mvEthSwitch *mvEthSwitch;
 	
@@ -630,42 +644,32 @@ static int mv88e6350R_probe(struct phy_device *pdev)
   }
 
   /* Initialize LED control registers
-   *
-   * Specifically, Titanium-411 is designed to display per-port status on the
-   * front panel using LED columns COL_0 and COL_1:
-   *
-   * Green -   1 Gbit Link Up
-   * Amber - 100 Mbit Link Up
-   * Red   -  10 Mbit Link Up
-   *
-   * Regardless of color, activity is indicated by blinking.
-   *
-   * On the back panel, LED columns COL_2 and COL_3 reflect status via light
-   * pipes co-located above each port, with the exception of switch port 4,
-   * which is denoted as "Port 5 - SFP Port" on the enclosure.  The SFP port
-   * has a vertical two-LED stack reflecting the same:
-   *
-   * Green - 1 Gbit Link Up
-   * Red   - Any Link Up / Activity (blink)
-   *
-   * This functionality is enabled through the use of the LED control 
-   * registers within the 88E6350R switch chip.
-   */
+   * LED 0 = green -- link, activity; LED 1 = yellow -- GBIT. */
   for(portIndex = 0; portIndex < SHURE_INFERNO_COPPER_PORTS; portIndex++) {
-    REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(portIndex),
-              MV_SWITCH_PORT_LED_CTRL_REG,
-              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_01_CTRL_REG, 
-                                  (MV_SWITCH_LED1_100M_10M_ACT | MV_SWITCH_LED0_1G_100M_ACT)));
+    controlReg  = MV_SWITCH_LED_WRREGVAL(MV_SWITCH_LED_01_CTRL_REG,
+                                        (MV_SWITCH_LED0_LINK_ACT | MV_SWITCH_LED1_GIG));
 
-    REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(portIndex),
-              MV_SWITCH_PORT_LED_CTRL_REG,
-              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_23_CTRL_REG, 
-                                  (MV_SWITCH_LED3_LINK_ACT | MV_SWITCH_LED2_1G_LINK)));
+    /* Write LED control register - 0x33 */
+    REG_WRITE(mvEthSwitch->pdev,           // Device
+              MV_REG_PORT(portIndex),      // Port
+              MV_SWITCH_PORT_LED_CTRL_REG, // Register
+              controlReg);                 // Register value - contains register
+                                           // being indirectly accessed.
+    
+    /* Read/print register. */
+    /*controlRegRd  = REG_READ(mvEthSwitch->pdev,
+                             MV_REG_PORT(portIndex),
+                             MV_SWITCH_PORT_LED_CTRL_REG);*/
 
-    REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(portIndex),
-              MV_SWITCH_PORT_LED_CTRL_REG,
-              MV_SWITCH_LED_WRITE(MV_SWITCH_LED_SPECIAL_CTRL_REG,
-                                  MV_SWITCH_LED_SPECIAL_NONE));
+    /* Test register value. */
+    /*controlReg &= MV_SWITCH_LED_CTRL_DATA_MASK;
+    controlRegRd &= MV_SWITCH_LED_CTRL_DATA_MASK;
+    if(controlReg == controlRegRd) {
+      printk("LED01 register for port %u: 0x%08x\n", portIndex, controlRegRd);
+    } else {
+      printk("LED01 register for port %u: failed to set to 0x%08x, value is 0x%08x!\n",
+             portIndex, controlReg, controlRegRd);
+    }*/
   }
 
   /* Enable PHY Polling Unit (PPU) */
