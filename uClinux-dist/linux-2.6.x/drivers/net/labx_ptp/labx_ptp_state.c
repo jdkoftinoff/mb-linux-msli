@@ -49,6 +49,7 @@ static void timer_state_task(unsigned long data) {
   uint32_t newMaster;
   int i;
   int8_t reselect = 0;
+  bool localMaster = true;
 
   /* Update port roles whenever any port is flagged for reselect */
   for (i=0; i<ptp->numPorts; i++) {
@@ -56,6 +57,13 @@ static void timer_state_task(unsigned long data) {
   }
   if (reselect) {
     PortRoleSelection_StateMachine(ptp);
+  }
+
+  for (i=0; i<ptp->numPorts; i++) {
+    if (ptp->ports[i].selectedRole == PTP_SLAVE) {
+      localMaster = false;
+      break;
+    }
   }
 
   for (i=0; i<ptp->numPorts; i++) {
@@ -73,7 +81,7 @@ static void timer_state_task(unsigned long data) {
       if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].syncCounter = 0;
         transmit_sync(ptp, i);
-        if(ptp->rtcChangesAllowed) {
+        if(ptp->rtcChangesAllowed && localMaster) {
           /* Periodically update the RTC to get update listeners to
              notice (IE when they are not coasting) */
           set_rtc_increment(ptp, &ptp->nominalIncrement);
@@ -191,89 +199,12 @@ static void timer_state_task(unsigned long data) {
 
 /* Processes a newly-received ANNOUNCE packet for the passed instance */
 static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
-#if 0
-  PtpProperties properties;
-  PtpPortProperties portProperties;
-  unsigned long flags;
-  uint32_t byteIndex;
-#endif
 
   ptp->ports[port].stats.rxAnnounceCount++;
 
   ptp->ports[port].rcvdAnnouncePtr = rxBuffer;
 
   PortAnnounceReceive_StateMachine(ptp, port);
-
-#if 0
-  /* Extract the properties of the port which sent the message, and compare 
-   * them to those of the present master to determine what to do.
-   */
-  extract_announce(ptp, port, rxBuffer, &properties, &portProperties);
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
-  switch(bmca_comparison(&ptp->presentMaster, &ptp->presentMasterPort, &properties, &portProperties)) {
-  case IS_PRESENT_MASTER: 
-    {
-      //printk("BMCA: Is present master.\n");
-      /* A message from our fearless leader; reset its timeout counter */
-    } 
-    break;
-    
-  case REPLACE_PRESENT_MASTER: 
-    {
-      //printk("BMCA: Replace master.\n");
-      /* Replace the present master's properties, and ensure that we're a slave.
-       */
-      ptp->presentRole = PTP_SLAVE;
-      copy_ptp_properties(&ptp->presentMaster, &properties);
-      copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
-      ptp->slaveDebugCounter      = 0;
-
-      /* Do not permit the RTC to change until userspace permits it, and also
-       * reset the lock state
-       */
-      ptp->newMaster          = TRUE;
-      ptp->rtcChangesAllowed  = FALSE;
-      ptp->acquiring          = PTP_RTC_ACQUIRING;
-      ptp->rtcLockState       = PTP_RTC_UNLOCKED;
-      ptp->rtcLockCounter     = 0;
-      ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-      ptp->rtcLastOffset      = 0;
-    
-      /* Invalidate all the slave flags */
-      ptp->ports[port].syncTimestampsValid     = 0;
-      ptp->ports[port].delayReqTimestampsValid = 0;
-      ptp->ports[port].syncSequenceIdValid     = 0;
-      ptp->ports[port].delayReqCounter         = 0;
-      ptp->ports[port].delayReqSequenceId      = 0x0000;
-
-      ptp->integral       = 0;
-      ptp->derivative     = 0;
-      ptp->previousOffset = 0;
-    
-      /* Announce the new slave */
-      printk("PTP slaved to peer ");
-      for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
-        printk("%02X", portProperties.sourceMacAddress[byteIndex]);
-        if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
-      }
-      printk(", GM ");
-      for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_BYTES; byteIndex++) {
-        printk("%02X", properties.grandmasterIdentity[byteIndex]);
-        if(byteIndex < (PTP_CLOCK_IDENTITY_BYTES - 1)) printk(":");
-  	  }
-      printk("\n");
-    } 
-    break;
-
-  default:
-    //printk("BMCA: Keep present master.\n");
-    /* Retain the present master, but do not reset its timeout counter */
-    break;
-  } /* switch(BMCA comparison) */
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
-#endif
 }
 
 /* Processes a newly-received SYNC packet for the passed instance */
