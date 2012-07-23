@@ -43,13 +43,22 @@ void tasklet_init(struct tasklet_struct *t, void (*func)(unsigned long),unsigned
 void ptp_platform_init(struct ptp_device *ptp, int port);
 
 /* Tasklet function for responding to timer interrupts */
-static void timer_state_task(unsigned long data) {
+void labx_ptp_timer_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device*) data;
   unsigned long flags;
   uint32_t newMaster;
   int i;
   int8_t reselect = 0;
   bool localMaster = true;
+
+  uint32_t timerTicks = 0;
+
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  timerTicks = ptp->timerTicks;
+  ptp->timerTicks = 0;
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
 
   /* Update port roles whenever any port is flagged for reselect */
   for (i=0; i<ptp->numPorts; i++) {
@@ -70,14 +79,14 @@ static void timer_state_task(unsigned long data) {
     switch(ptp->ports[i].selectedRole) {
     case PTP_MASTER:
       /* Send ANNOUNCE and SYNC messages at their rate for a master port */
-      ptp->ports[i].announceCounter++;
+      ptp->ports[i].announceCounter += timerTicks;
       if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].announceCounter = 0;
         ptp->ports[i].newInfo = FALSE;
         transmit_announce(ptp, i);
       }
 
-      ptp->ports[i].syncCounter++;
+      ptp->ports[i].syncCounter += timerTicks;
       if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].syncCounter = 0;
         transmit_sync(ptp, i);
@@ -91,13 +100,15 @@ static void timer_state_task(unsigned long data) {
 
     case PTP_SLAVE:
     {
-      uint32_t timeoutTicks;
+#ifdef DEBUG_INCREMENT
+      uint32_t timeoutTicks = 8;
+#endif
 
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      ++ptp->ports[i].announceTimeoutCounter;
-      ++ptp->ports[i].syncTimeoutCounter;
+      ptp->ports[i].announceTimeoutCounter += timerTicks;
+      ptp->ports[i].syncTimeoutCounter += timerTicks;
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
 
@@ -438,10 +449,8 @@ static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t port, ui
   MDPdelayReq_StateMachine(ptp, port);
 }
 
-static void tx_state_task(unsigned long data);
-
 /* Tasklet function for PTP Rx packets */
-static void rx_state_task(unsigned long data) {
+void labx_ptp_rx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
   int i;
 
@@ -449,7 +458,7 @@ static void rx_state_task(unsigned long data) {
     /* Make sure any pending Tx operations are completed. Tasklets aren't run in any particular order */
     if (ptp->ports[i].pendingTxFlags != PTP_TX_BUFFER_NONE)
     {
-      tx_state_task(data);
+      labx_ptp_tx_state_task(data);
     }
     ptp_process_rx(ptp,i);
   }
@@ -498,8 +507,9 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
         break;
       } /* switch(messageType) */
 }
+
 /* Tasklet function for PTP Tx packets */
-static void tx_state_task(unsigned long data) {
+void labx_ptp_tx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
   uint32_t pendingTxFlags;
   uint32_t whichBuffer;
@@ -603,7 +613,9 @@ void init_state_machines(struct ptp_device *ptp) {
   int i;
 
   /* Initialize the timer state machine */
-  tasklet_init(&ptp->timerTasklet, &timer_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  tasklet_init(&ptp->timerTasklet, &labx_ptp_timer_state_task, (unsigned long) ptp);
+#endif
   ptp->heartbeatCounter = 0;
   ptp->netlinkSequence  = 0;
 
@@ -651,7 +663,9 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->masterRateRatio = 0;
   ptp->masterRateRatioValid = FALSE;
 
-  tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  tasklet_init(&ptp->rxTasklet, &labx_ptp_rx_state_task, (unsigned long) ptp);
+#endif
 
   for(i=0; i<ptp->numPorts; i++) {
     ptp_platform_init(ptp,i);
@@ -680,7 +694,9 @@ void init_state_machines(struct ptp_device *ptp) {
 
   printk("PTP master\n");
 
-  /* Initialize the Tx state machine */
-  tasklet_init(&ptp->txTasklet, &tx_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  /* Initialize the Tx state tasklet */
+  tasklet_init(&ptp->txTasklet, &labx_ptp_tx_state_task, (unsigned long) ptp);
+#endif
 }
 

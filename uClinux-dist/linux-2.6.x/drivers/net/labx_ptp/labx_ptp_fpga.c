@@ -47,16 +47,21 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
 
     /* Detect the timer IRQ */
     if((maskedFlags & PTP_TIMER_IRQ) != 0) {
+
+      preempt_disable();
+      spin_lock_irqsave(&ptp->mutex, flags);
+      ptp->timerTicks++;
+      spin_unlock_irqrestore(&ptp->mutex, flags);
+      preempt_enable();
+
+#ifdef CONFIG_LABX_PTP_NO_TASKLET
+      labx_ptp_timer_state_task((uintptr_t)ptp);
+#else
       /* Kick off the timer tasklet */
-      tasklet_schedule(&ptp->timerTasklet);
+      tasklet_hi_schedule(&ptp->timerTasklet);
+#endif
     }
 
-    /* Detect the Rx IRQ */
-    if((maskedFlags & PTP_RX_IRQ) != 0) {
-      /* Kick off the Rx tasklet */
-      tasklet_schedule(&ptp->rxTasklet);
-    }
-  
     /* Detect the Tx IRQ from any enabled buffer bits */
     txCompletedFlags = (maskedFlags & PTP_TX_IRQ_MASK);
     if(txCompletedFlags != PTP_TX_BUFFER_NONE) {
@@ -70,9 +75,24 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
 
+#ifdef CONFIG_LABX_PTP_NO_TASKLET
+      labx_ptp_tx_state_task((uintptr_t)ptp);
+#else
       /* Now kick off the Tx tasklet */
-      tasklet_schedule(&ptp->txTasklet);
+      tasklet_hi_schedule(&ptp->txTasklet);
+#endif
     }
+
+    /* Detect the Rx IRQ */
+    if((maskedFlags & PTP_RX_IRQ) != 0) {
+#ifdef CONFIG_LABX_PTP_NO_TASKLET
+      labx_ptp_rx_state_task((uintptr_t)ptp);
+#else
+      /* Kick off the Rx tasklet */
+      tasklet_hi_schedule(&ptp->rxTasklet);
+#endif
+    }
+  
   }
   return(IRQ_HANDLED);
 }

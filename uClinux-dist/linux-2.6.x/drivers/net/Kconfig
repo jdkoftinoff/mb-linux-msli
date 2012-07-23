@@ -1978,6 +1978,14 @@ config LABX_PTP
 	help
 	  This driver supports the Lab X Technologies PTP hardware.
 
+config LABX_PTP_NO_TASKLET
+	bool "Disable PTP Tasklets"
+	depends on LABX_PTP
+	help
+	  Enable this to push all PTP handling into the interrupt handlers.
+	  This will make PTP more stable on systems with high interrupt load
+	  at the expense of higher interrupt latency for other interrupts.
+
 source "drivers/net/labx_avb/Kconfig"
 
 config ACENIC
