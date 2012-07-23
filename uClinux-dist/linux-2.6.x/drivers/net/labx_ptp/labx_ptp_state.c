@@ -43,12 +43,22 @@ void tasklet_init(struct tasklet_struct *t, void (*func)(unsigned long),unsigned
 void ptp_platform_init(struct ptp_device *ptp, int port);
 
 /* Tasklet function for responding to timer interrupts */
-static void timer_state_task(unsigned long data) {
+void labx_ptp_timer_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device*) data;
   unsigned long flags;
   uint32_t newMaster;
   int i;
   int8_t reselect = 0;
+  bool localMaster = true;
+
+  uint32_t timerTicks = 0;
+
+  preempt_disable();
+  spin_lock_irqsave(&ptp->mutex, flags);
+  timerTicks = ptp->timerTicks;
+  ptp->timerTicks = 0;
+  spin_unlock_irqrestore(&ptp->mutex, flags);
+  preempt_enable();
 
   /* Update port roles whenever any port is flagged for reselect */
   for (i=0; i<ptp->numPorts; i++) {
@@ -59,21 +69,28 @@ static void timer_state_task(unsigned long data) {
   }
 
   for (i=0; i<ptp->numPorts; i++) {
+    if (ptp->ports[i].selectedRole == PTP_SLAVE) {
+      localMaster = false;
+      break;
+    }
+  }
+
+  for (i=0; i<ptp->numPorts; i++) {
     switch(ptp->ports[i].selectedRole) {
     case PTP_MASTER:
       /* Send ANNOUNCE and SYNC messages at their rate for a master port */
-      ptp->ports[i].announceCounter++;
+      ptp->ports[i].announceCounter += timerTicks;
       if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].announceCounter = 0;
         ptp->ports[i].newInfo = FALSE;
         transmit_announce(ptp, i);
       }
 
-      ptp->ports[i].syncCounter++;
+      ptp->ports[i].syncCounter += timerTicks;
       if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].syncCounter = 0;
         transmit_sync(ptp, i);
-        if(ptp->rtcChangesAllowed) {
+        if(ptp->rtcChangesAllowed && localMaster) {
           /* Periodically update the RTC to get update listeners to
              notice (IE when they are not coasting) */
           set_rtc_increment(ptp, &ptp->nominalIncrement);
@@ -83,13 +100,15 @@ static void timer_state_task(unsigned long data) {
 
     case PTP_SLAVE:
     {
-      uint32_t timeoutTicks;
+#ifdef DEBUG_INCREMENT
+      uint32_t timeoutTicks = 8;
+#endif
 
       /* Increment and test the announce receipt timeout counter */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
-      ++ptp->ports[i].announceTimeoutCounter;
-      ++ptp->ports[i].syncTimeoutCounter;
+      ptp->ports[i].announceTimeoutCounter += timerTicks;
+      ptp->ports[i].syncTimeoutCounter += timerTicks;
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
 
@@ -191,89 +210,12 @@ static void timer_state_task(unsigned long data) {
 
 /* Processes a newly-received ANNOUNCE packet for the passed instance */
 static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
-#if 0
-  PtpProperties properties;
-  PtpPortProperties portProperties;
-  unsigned long flags;
-  uint32_t byteIndex;
-#endif
 
   ptp->ports[port].stats.rxAnnounceCount++;
 
   ptp->ports[port].rcvdAnnouncePtr = rxBuffer;
 
   PortAnnounceReceive_StateMachine(ptp, port);
-
-#if 0
-  /* Extract the properties of the port which sent the message, and compare 
-   * them to those of the present master to determine what to do.
-   */
-  extract_announce(ptp, port, rxBuffer, &properties, &portProperties);
-  preempt_disable();
-  spin_lock_irqsave(&ptp->mutex, flags);
-  switch(bmca_comparison(&ptp->presentMaster, &ptp->presentMasterPort, &properties, &portProperties)) {
-  case IS_PRESENT_MASTER: 
-    {
-      //printk("BMCA: Is present master.\n");
-      /* A message from our fearless leader; reset its timeout counter */
-    } 
-    break;
-    
-  case REPLACE_PRESENT_MASTER: 
-    {
-      //printk("BMCA: Replace master.\n");
-      /* Replace the present master's properties, and ensure that we're a slave.
-       */
-      ptp->presentRole = PTP_SLAVE;
-      copy_ptp_properties(&ptp->presentMaster, &properties);
-      copy_ptp_port_properties(&ptp->presentMasterPort, &portProperties);
-      ptp->slaveDebugCounter      = 0;
-
-      /* Do not permit the RTC to change until userspace permits it, and also
-       * reset the lock state
-       */
-      ptp->newMaster          = TRUE;
-      ptp->rtcChangesAllowed  = FALSE;
-      ptp->acquiring          = PTP_RTC_ACQUIRING;
-      ptp->rtcLockState       = PTP_RTC_UNLOCKED;
-      ptp->rtcLockCounter     = 0;
-      ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-      ptp->rtcLastOffset      = 0;
-    
-      /* Invalidate all the slave flags */
-      ptp->ports[port].syncTimestampsValid     = 0;
-      ptp->ports[port].delayReqTimestampsValid = 0;
-      ptp->ports[port].syncSequenceIdValid     = 0;
-      ptp->ports[port].delayReqCounter         = 0;
-      ptp->ports[port].delayReqSequenceId      = 0x0000;
-
-      ptp->integral       = 0;
-      ptp->derivative     = 0;
-      ptp->previousOffset = 0;
-    
-      /* Announce the new slave */
-      printk("PTP slaved to peer ");
-      for(byteIndex = 0; byteIndex < MAC_ADDRESS_BYTES; byteIndex++) {
-        printk("%02X", portProperties.sourceMacAddress[byteIndex]);
-        if(byteIndex < (MAC_ADDRESS_BYTES - 1)) printk(":");
-      }
-      printk(", GM ");
-      for(byteIndex = 0; byteIndex < PTP_CLOCK_IDENTITY_BYTES; byteIndex++) {
-        printk("%02X", properties.grandmasterIdentity[byteIndex]);
-        if(byteIndex < (PTP_CLOCK_IDENTITY_BYTES - 1)) printk(":");
-  	  }
-      printk("\n");
-    } 
-    break;
-
-  default:
-    //printk("BMCA: Keep present master.\n");
-    /* Retain the present master, but do not reset its timeout counter */
-    break;
-  } /* switch(BMCA comparison) */
-  spin_unlock_irqrestore(&ptp->mutex, flags);
-  preempt_enable();
-#endif
 }
 
 /* Processes a newly-received SYNC packet for the passed instance */
@@ -507,10 +449,8 @@ static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t port, ui
   MDPdelayReq_StateMachine(ptp, port);
 }
 
-static void tx_state_task(unsigned long data);
-
 /* Tasklet function for PTP Rx packets */
-static void rx_state_task(unsigned long data) {
+void labx_ptp_rx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
   int i;
 
@@ -518,7 +458,7 @@ static void rx_state_task(unsigned long data) {
     /* Make sure any pending Tx operations are completed. Tasklets aren't run in any particular order */
     if (ptp->ports[i].pendingTxFlags != PTP_TX_BUFFER_NONE)
     {
-      tx_state_task(data);
+      labx_ptp_tx_state_task(data);
     }
     ptp_process_rx(ptp,i);
   }
@@ -567,8 +507,9 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
         break;
       } /* switch(messageType) */
 }
+
 /* Tasklet function for PTP Tx packets */
-static void tx_state_task(unsigned long data) {
+void labx_ptp_tx_state_task(unsigned long data) {
   struct ptp_device *ptp = (struct ptp_device *) data;
   uint32_t pendingTxFlags;
   uint32_t whichBuffer;
@@ -672,7 +613,9 @@ void init_state_machines(struct ptp_device *ptp) {
   int i;
 
   /* Initialize the timer state machine */
-  tasklet_init(&ptp->timerTasklet, &timer_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  tasklet_init(&ptp->timerTasklet, &labx_ptp_timer_state_task, (unsigned long) ptp);
+#endif
   ptp->heartbeatCounter = 0;
   ptp->netlinkSequence  = 0;
 
@@ -720,7 +663,9 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->masterRateRatio = 0;
   ptp->masterRateRatioValid = FALSE;
 
-  tasklet_init(&ptp->rxTasklet, &rx_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  tasklet_init(&ptp->rxTasklet, &labx_ptp_rx_state_task, (unsigned long) ptp);
+#endif
 
   for(i=0; i<ptp->numPorts; i++) {
     ptp_platform_init(ptp,i);
@@ -749,7 +694,9 @@ void init_state_machines(struct ptp_device *ptp) {
 
   printk("PTP master\n");
 
-  /* Initialize the Tx state machine */
-  tasklet_init(&ptp->txTasklet, &tx_state_task, (unsigned long) ptp);
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
+  /* Initialize the Tx state tasklet */
+  tasklet_init(&ptp->txTasklet, &labx_ptp_tx_state_task, (unsigned long) ptp);
+#endif
 }
 
