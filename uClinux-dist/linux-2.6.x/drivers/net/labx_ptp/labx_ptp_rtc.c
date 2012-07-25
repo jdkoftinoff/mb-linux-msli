@@ -307,10 +307,10 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     if (ptp->masterRateRatioValid) {
       newRtcIncrement = ptp->masterRateRatio >> 1;
 
-      /* If we crossed the midpoint, dump the integral */
+      /* If we crossed the midpoint, damp the integral */
       if (((slaveOffset < 0) && (ptp->previousOffset > 0)) ||
           ((slaveOffset > 0) && (ptp->previousOffset < 0))) {
-        ptp->integral = 0;
+        ptp->integral >>= 1;
       }
     } else {
       newRtcIncrement = (ptp->nominalIncrement.mantissa & RTC_MANTISSA_MASK);
