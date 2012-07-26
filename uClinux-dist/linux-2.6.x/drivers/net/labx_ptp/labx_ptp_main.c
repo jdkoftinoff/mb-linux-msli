@@ -611,6 +611,11 @@ static int ptp_probe(const char *name,
 
   ptp_setup_event_timer(ptp, 0, platformData);
 
+  /* Set up netlink workers */
+  INIT_WORK(&ptp->work_send_gm_change, ptp_work_send_gm_change);
+  INIT_WORK(&ptp->work_send_rtc_change, ptp_work_send_rtc_change);
+  INIT_WORK(&ptp->work_send_heartbeat, ptp_work_send_heartbeat);
+
   /* Configure defaults and initialize the transmit templates */
   quality = &ptp->properties.grandmasterClockQuality;
   for(i=0; i<ptp->numPorts; i++) {
@@ -713,6 +718,8 @@ static int ptp_probe(const char *name,
 
   /* Register for network device events */
   ptp->notifier.notifier_call = ptp_device_event;
+
+  ptp->timerTicks = 0;
 
   if (register_netdevice_notifier(&ptp->notifier) != 0)
   {

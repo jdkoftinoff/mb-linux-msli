@@ -534,16 +534,27 @@ struct ptp_device {
   uint32_t newMaster;
 
   /* Timer state space */
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
   struct tasklet_struct timerTasklet;
+#endif
   uint32_t heartbeatCounter;
   uint32_t netlinkSequence;
 
+  /* Netlink workers to send messages */
+  struct work_struct work_send_gm_change;
+  struct work_struct work_send_rtc_change;
+  struct work_struct work_send_heartbeat;
+
   /* Packet Rx state space */
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
   struct tasklet_struct rxTasklet;
+#endif
   uint32_t slaveDebugCounter;
 
   /* Packet Tx state space */
+#ifndef CONFIG_LABX_PTP_NO_TASKLET
   struct tasklet_struct txTasklet;
+#endif
 
   /* Per-port data */
   struct ptp_port *ports;
@@ -554,6 +565,9 @@ struct ptp_device {
 
   /* Network device event notifier */
   struct notifier_block notifier;
+
+  /* Number of timer ticks that have passed since the last time the tasklet ran */
+  uint32_t timerTicks;
 };
 
 /* Enumerated type identifying a packet buffer direction; outgoing or incoming, 
@@ -611,6 +625,9 @@ void set_offset_scaled_log_variance(uint8_t *offsetScaledLogVariance, uint16_t s
 void ack_grandmaster_change(struct ptp_device *ptp);
 void init_state_machines(struct ptp_device *ptp);
 void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer);
+void labx_ptp_timer_state_task(unsigned long data);
+void labx_ptp_rx_state_task(unsigned long data);
+void labx_ptp_tx_state_task(unsigned long data);
 
 /* From labx_ptp_pdelay_state.c */
 void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port);
@@ -644,6 +661,9 @@ void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
 int ptp_events_tx_rtc_change(struct ptp_device *ptp);
+int ptp_work_send_heartbeat(struct work_struct *work);
+int ptp_work_send_gm_change(struct work_struct *work);
+int ptp_work_send_rtc_change(struct work_struct *work);
 
 /* From Platform Specific Files */
 void ptp_disable_irqs(struct ptp_device *ptp, int port);

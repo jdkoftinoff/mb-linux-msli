@@ -129,7 +129,11 @@ ENTRY(_interrupt)
 
 ret_from_intr:
 	lwi	r11, r1, PT_MODE
+#ifdef CONFIG_PREEMPT
+	bneid	r11, check_preempt
+#else
 	bneid	r11, no_intr_resched
+#endif
 	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS                /* get flags in thread info */
 	andi	r11, r11, _TIF_NEED_RESCHED
@@ -145,7 +149,31 @@ ret_from_intr:
 	bralid	r15, do_signal
 	addk	r6, r0, r0
 
+#ifdef CONFIG_PREEMPT
+	brid    no_intr_resched
+
+check_preempt:
+	lwi     r11, CURRENT_TASK, TS_THREAD_INFO;
+	/* Get preempt_count from thread info */
+	lwi     r5, r11, TI_PREEMPT_COUNT;
+	bgti    r5, restore_context;
+
+	lwi     r5, r11, TI_FLAGS;              /* get flags in thread info */
+	andi    r5, r5, _TIF_NEED_RESCHED;
+	beqi    r5, no_intr_resched /* if zero jump over */
+
+preempt:
+	/* interrupts are off that's why I am calling preempt_chedule_irq */
+	bralid  r15, preempt_schedule_irq
+	nop
+	lwi     r11, CURRENT_TASK, TS_THREAD_INFO;      /* get thread info */
+	lwi     r5, r11, TI_FLAGS;              /* get flags in thread info */
+	andi    r5, r5, _TIF_NEED_RESCHED;
+	bnei    r5, preempt /* if non zero jump to resched */
+#endif
+
 no_intr_resched:
+
 	/* Disable interrupts, we are now committed to the state restore */
 	disable_irq
 
@@ -155,6 +183,7 @@ no_intr_resched:
 
 	/* save r31 */
 	swi	r31, r0, PER_CPU(CURRENT_SAVE)
+
 restore_context:
 	/* special purpose registers */
 	lwi	r11, r1, PT_FSR
