@@ -30,7 +30,6 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/platform_device.h>
-#include <linux/phy.h>
 
 #include "mv88e6350R.h"
 #include "mv88e6350R_defs.h"
@@ -46,12 +45,15 @@
 static uint32_t instanceCount;
 #define NAME_MAX_SIZE    (256)
 
+/* Pointer to instance of our switch struct. */
+static struct phy_device* internalPhy = NULL;
 
-/* 88E6350R ports assigned to the two CPU ports */
+
+/* 88E6350R ports assigned to the CPU and HMI ports */
 #define SHURE_INFERNO_EXT_PORT_0 (0)
 #define SHURE_INFERNO_EXT_PORT_1 (1)
-#define SHURE_INFERNO_CPU_PORT_0 (5)
-#define SHURE_INFERNO_CPU_PORT_1 (6)
+#define SHURE_INFERNO_CPU_PORT (5)
+#define SHURE_INFERNO_HMI_PORT (6) // Host Management Interface
 
 /* Register constant definitions for the 88E6350R LinkStreet switch */
 #define PHYS_CTRL_REG  (1)
@@ -73,11 +75,11 @@ static uint32_t instanceCount;
  * Using RGMII delay on switch IND input data
  * Using RGMII delay on switch OUTD output data
  */
-#define SHURE_INFERNO_CPU_PORT_0_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         RGMII_MODE_GTXCLK_DELAY | \
-                                         FORCE_LINK_UP           | \
-                                         FORCE_DUPLEX_FULL       | \
-                                         FORCE_SPEED_1000)
+#define SHURE_INFERNO_CPU_PORT_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
+                                          RGMII_MODE_GTXCLK_DELAY | \
+                                          FORCE_LINK_UP           | \
+                                          FORCE_DUPLEX_FULL       | \
+                                          FORCE_SPEED_1000)
 
                                          
 /* Register settings assigned to the SFP port:
@@ -85,11 +87,11 @@ static uint32_t instanceCount;
  * Using RGMII delay on switch IND input data
  * Using RGMII delay on switch OUTD output data
  */
-#define SHURE_INFERNO_CPU_PORT_1_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         RGMII_MODE_GTXCLK_DELAY | \
-                                         FORCE_LINK_UP           | \
-                                         FORCE_DUPLEX_FULL       | \
-                                         FORCE_SPEED_1000)
+#define SHURE_INFERNO_HMI_PORT_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
+                                          RGMII_MODE_GTXCLK_DELAY | \
+                                          FORCE_LINK_UP           | \
+                                          FORCE_DUPLEX_FULL       | \
+                                          FORCE_SPEED_1000)
 
                                           
 /* Bit-mask of enabled ports  */
@@ -108,27 +110,34 @@ typedef unsigned int   MV_U32;
 typedef short          MV_16;
 typedef unsigned short MV_U16;
 
+/* MDIO defines */
+#define XPAR_XPS_GPIO_0_BASEADDR 0x820F0000
+#define LABX_MDIO_ETH_BASEADDR 0x82050000
+#define MDIO_CONTROL_REG      (0x00000000)
+
+#define LABX_MAC_REGS_BASE    (0x00001000)
+#define MAC_MDIO_CONFIG_REG   (LABX_MAC_REGS_BASE + 0x0014)
+#define LABX_ETHERNET_MDIO_DIV  (0x28)
+#  define MDIO_DIVISOR_MASK  (0x0000003F)
+#  define MDIO_ENABLED       (0x00000040)
+
 /* Per-port switch registers */
 #define MV_SWITCH_PORT_CONTROL_REG 0x04
 #define MV_SWITCH_PORT_VMAP_REG    0x06
 #define MV_SWITCH_PORT_VID_REG     0x07
 
 /* Port LED control register and indirect registers */
-#define MV_SWITCH_PORT_LED_CTRL_REG         0x16
-#  define MV_SWITCH_LED_CTRL_UPDATE       0x8000
-#  define MV_SWITCH_LED_CTRL_PTR_MASK        0x7
-#  define MV_SWITCH_LED_CTRL_PTR_SHIFT        12
-#    define MV_SWITCH_LED_01_CTRL_REG        0x0
-#      define MV_SWITCH_LED0_LINK_ACT        0x3
-#      define MV_SWITCH_LED0_1G_100M_ACT    0x10
-#      define MV_SWITCH_LED1_100M_10M_ACT   0x10
-#      define MV_SWITCH_LED1_By_BLINK_RATE  0x00
-#      define MV_SWITCH_LED1_GIG            0x30
+#define MV_SWITCH_PORT_LED_CTRL_REG        0x16
+#  define MV_SWITCH_LED_CTRL_UPDATE      0x8000
+#  define MV_SWITCH_LED_CTRL_PTR_MASK       0x7
+#  define MV_SWITCH_LED_CTRL_PTR_SHIFT       12
+#    define MV_SWITCH_LED_23_CTRL_REG       0x1
+#      define MV_SWITCH_LED23_OFF          0xEE
 
 #    define MV_SWITCH_LED_RATE_CTRL_REG     0x6
 #    define MV_SWITCH_LED_SPECIAL_CTRL_REG  0x7
-#      define MV_SWITCH_LED_SPECIAL_NONE  0x000
-#  define MV_SWITCH_LED_CTRL_DATA_MASK  0x03FF
+#      define MV_SWITCH_LED_SPECIAL_NONE    0x0
+#  define MV_SWITCH_LED_CTRL_DATA_MASK    0x3FF
 
 /* Macros for reading/writing the individual LED
  * control registers. */
@@ -200,13 +209,16 @@ static int marvell_read_status(struct phy_device *phydev)
   /* External PHY routed to the corresponding internal port */
   unsigned int portStatusReg = REG_READ(phydev_switch, MV_REG_PORT(phydev->addr), 0x00);
   /* Internal MAC hooked up to the FPGA */
-  unsigned int internalPort = (phydev->addr == SHURE_INFERNO_EXT_PORT_0) ? SHURE_INFERNO_CPU_PORT_0 : SHURE_INFERNO_CPU_PORT_1;
+  unsigned int internalPort = SHURE_INFERNO_CPU_PORT;
   unsigned int physicalControlReg = REG_READ(phydev_switch, MV_REG_PORT(internalPort), 0x01);
   unsigned int phySpeed = (portStatusReg >> 8) & 3;
 
+  /* We are in polling mode, and get called periodically.
+     Don't do anything unless there was actually a link
+     status change. */
   if (phySpeed != (physicalControlReg & 3)) {
     /* Adjust the CPU port speed to match the external PHY speed */
-    printk("Port Status %04X\n", (uint16_t)portStatusReg);
+    printk("Port Status for PHY address %u: %04X\n", phydev->addr, (uint16_t)portStatusReg);
     REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0023) | 0x0010 | phySpeed); /* Link down, new speed */
     REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0003) | 0x0030 | phySpeed); /* Link up */
   }
@@ -224,12 +236,47 @@ static int marvell_read_status(struct phy_device *phydev)
   return 0;
 }
 
+/* Probe function for the phy_device structure that
+ * will represent the PHY within the switch (as opposed
+ * to the switch itself). We need to keep a reference
+ * to that structure around so that we can change it
+ * when necessary, such as when re-mapping which PHY
+ * within the switch is configured to talk to the FPGA,
+ * whose address Linux needs.
+ *
+ * See the notes in mvEthSwitch_write() when the
+ * ports are remapped. */
+static int marvell_probe(struct phy_device *phydev)
+{
+  /* We are being probed and we receive the phy_device
+   * that will represent the PHY within the switch that
+   * we are currently communicating over. We want to
+   * keep it around since we will need it when performing
+   * switch operations. See comments on variable internalPhy
+   * within struct mvEthSwitch. */
+  static int probed = 0;
+
+  printk("mv88e6350R PHY probe: phydev = %p.\n", phydev);
+
+  /* We are called twice, for some reason. Only
+     the first time does the call contain the
+     pointer to the correct PHY device. */
+  if(!probed) {
+    internalPhy = phydev;
+    probed = 1;
+  }
+
+  /* Probed successfully. */
+  return 0;
+}
+
 static struct phy_driver phy_driver = {
 	.phy_id = 0x01410e70,
 	.phy_id_mask = 0xfffffff0,
 	.name = "Marvell 88E6350R PHY",
 	.features = PHY_GBIT_FEATURES,
 	.flags = 0,
+        .probe = &marvell_probe,
 	.config_aneg = &marvell_config_aneg,
 	.read_status = &marvell_read_status,
 	.driver = { .owner = THIS_MODULE },
@@ -340,8 +387,8 @@ static void switchVlanMapPortPair(struct phy_device *phydev, int port1, int port
 }
 
 static void switchVlanInit(struct phy_device *phydev,
-                           MV_U32 switchCpuPort0,
-                           MV_U32 switchCpuPort1,
+                           MV_U32 switchCpuPort,
+                           MV_U32 switchHmiPort,
                            MV_U32 switchMaxPortsNum,
                            MV_U32 switchEnabledPortsMask)
 {
@@ -363,40 +410,11 @@ static void switchVlanInit(struct phy_device *phydev,
   /* Set Ports VLAN Mapping. */
 
   /* Ports 0 and 5 are mapped bidirectionally. */
-  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_0, switchCpuPort0, 0);
+  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_0, switchCpuPort, 0x0000);
   
   /* Ports 1 and 6 are mapped bidirectionally. */
-  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_1, switchCpuPort1, 0x1000);
+  switchVlanMapPortPair(phydev, SHURE_INFERNO_EXT_PORT_1, switchHmiPort, 0x1000);
   
-  #if 0
-  /* port 0 is mapped to port 5 (CPU Port) */  
-  reg = REG_READ(phydev, MV_REG_PORT(SHURE_INFERNO_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG);  
-  reg &= ~0xf0ff;
-  reg |= 0x0020;
-  REG_WRITE(phydev, MV_REG_PORT(SHURE_INFERNO_EXT_PORT_0), MV_SWITCH_PORT_VMAP_REG, reg); 
-  printk("VLAN map for port %d = 0x%08X\n", SHURE_INFERNO_EXT_PORT_0, reg);
-
-  /* port 1 is mapped to port 6 (CPU Port) */
-  reg = REG_READ(phydev, MV_REG_PORT(SHURE_INFERNO_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG);  
-  reg &= ~0xf0ff;
-  reg |= 0x1040;
-  REG_WRITE(phydev, MV_REG_PORT(SHURE_INFERNO_EXT_PORT_1), MV_SWITCH_PORT_VMAP_REG, reg);
-  printk("VLAN map for port %d = 0x%08X\n", SHURE_INFERNO_EXT_PORT_0, reg);
-
-  /* port 5 (CPU Port) is mapped to port 0*/
-  reg = REG_READ(phydev, MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG);
-  reg &= ~0xf0ff;
-  reg |= 0x0001;
-  REG_WRITE(phydev, MV_REG_PORT(switchCpuPort0), MV_SWITCH_PORT_VMAP_REG, reg);
-  printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort0, reg);
-
-  /* port 6 (CPU Port) is mapped to port 1*/
-  reg = REG_READ(phydev, MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG);
-  reg &= ~0xf0ff;
-  reg |= 0x1002;
-  REG_WRITE(phydev, MV_REG_PORT(switchCpuPort1), MV_SWITCH_PORT_VMAP_REG, reg);
-  printk("VLAN map for CPU port %d = 0x%08X\n", switchCpuPort1, reg);
-
   /* enable only appropriate ports to forwarding mode and disable VLAN tunneling */
   for(prt=0; prt < switchMaxPortsNum; prt++) {
     if ((1 << prt)& switchEnabledPortsMask) {
@@ -406,7 +424,6 @@ static void switchVlanInit(struct phy_device *phydev,
       REG_WRITE(phydev, MV_REG_PORT(prt), MV_SWITCH_PORT_CONTROL_REG, reg);
     }
   }
-  #endif
 }
 
 /*
@@ -442,30 +459,55 @@ static ssize_t mvEthSwitch_write(struct file *filp, const char __user* buf, size
   unsigned int port1;
   unsigned int port2;
   unsigned int fid = 0;
-  char cmd[2];
+  unsigned int phyAddr;
+  char cmd[4];
 
   /* Write a single two-digit string to this driver
      to map together the two ports specified in the
-     string. */
+     string. Append 'r#' to reset the switch/PHYs
+     and tell Linux to use the PHY whose address is
+     #. The reset should be done with the first of
+     any port mappings. */
+
   if(len >= 2) {
-    copy_from_user(cmd, buf, 2);
+    copy_from_user(cmd, buf, 4);
     port1 = cmd[0] - '0';
     port2 = cmd[1] - '0';
 
     if(port1 < 10 && port2 < 10) {
-      /* Ports 5 and 6 are CPU ports. One will
-         be mapped to one PHY (ports 0-4), one to
-         another. The pair that maps port 6 to some
-         other port needs to have an FID field of 0x1
-         written to the VLAN Map register in order
-         to truly isolate it from the other port pair. */
+      /* Ports 5 is the CPU port and port 6 is the HMI
+         port. One will be mapped to one PHY (one of ports 0-4),
+         one to another. The pair that maps one of them to
+         some PHY port needs to have an FID field of 0x1
+         written to the VLAN Map register in order to truly
+         isolate it from the other pair. Choose the HMI
+         port pair to have that FID. */
       if(port1 == 6 || port2 == 6) fid = 0x1000;
       switchVlanMapPortPair(phydev, port1, port2, fid);
-      return 2;
     }
   }
 
-  return -EINVAL;
+  if(len >= 4 && cmd[2] == 'r') {
+    /* Reset VTU and ATU. */
+    printk("Resetting VTU.\n");
+    REG_WRITE(phydev, MV_REG_GLOBAL, 0x05, 0x9000);
+    printk("Resetting ATU.\n");
+    REG_WRITE(phydev, MV_REG_GLOBAL, 0x0B, 0x9000);
+
+    /* Tell Linux the PHY address of the
+       PHY that it will be connected to now. */
+    phyAddr = cmd[3] - '0';
+    if(phyAddr < 10) {
+      printk("Linux pointed to PHY address %u.\n", phyAddr);
+      internalPhy->addr = phyAddr;
+    }
+  }
+
+  if(len >= 2) {
+    return len;
+  } else {
+    return -EINVAL;
+  }
 }
 
 static int mvEthSwitch_release(struct inode *inode, struct file *filp)
@@ -587,11 +629,10 @@ static struct file_operations mvEthSwitch_fops = {
 static int mv88e6350R_probe(struct phy_device *pdev)
 {
   MV_U32 portIndex;
-  MV_U32 controlReg;   // Used for writing LED control register value.
-  //MV_U32 controlRegRd; // Used for reading back LED control register value.
+  MV_U32 controlReg; // Used for writing LED control register value.
   MV_U16 saved_g1reg4;
   struct mvEthSwitch *mvEthSwitch;
-	
+
   /* Create and populate a device structure */
   mvEthSwitch = (struct mvEthSwitch*) kmalloc(sizeof(struct mvEthSwitch), GFP_KERNEL);
   if(!mvEthSwitch) return(-ENOMEM);
@@ -614,21 +655,21 @@ static int mv88e6350R_probe(struct phy_device *pdev)
   mvEthSwitch->instanceNumber = instanceCount++;
   kobject_set_name(&mvEthSwitch->cdev.kobj, "%s.%d", mvEthSwitch->name, mvEthSwitch->instanceNumber);
   cdev_add(&mvEthSwitch->cdev, MKDEV(DRIVER_MAJOR, mvEthSwitch->instanceNumber), 1);
-	
-  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(SHURE_INFERNO_CPU_PORT_0), 
-            PHYS_CTRL_REG,
-            SHURE_INFERNO_CPU_PORT_0_PHYS_CTRL);
 
-  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(SHURE_INFERNO_CPU_PORT_1), 
+  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(SHURE_INFERNO_CPU_PORT), 
             PHYS_CTRL_REG,
-            SHURE_INFERNO_CPU_PORT_1_PHYS_CTRL);
+            SHURE_INFERNO_CPU_PORT_PHYS_CTRL);
+
+  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(SHURE_INFERNO_HMI_PORT), 
+            PHYS_CTRL_REG,
+            SHURE_INFERNO_HMI_PORT_PHYS_CTRL);
 
   /* Init vlan LAN0-3 <-> CPU port egiga0 */
-  printk("CPU port is on 88E6350R port %d and %d\n", SHURE_INFERNO_CPU_PORT_0, SHURE_INFERNO_CPU_PORT_1);
+  printk("CPU port is on 88E6350R port %d and HMI port is on 88E6350R port %d\n", SHURE_INFERNO_CPU_PORT, SHURE_INFERNO_HMI_PORT);
 
   switchVlanInit(mvEthSwitch->pdev,
-                 SHURE_INFERNO_CPU_PORT_0,
-                 SHURE_INFERNO_CPU_PORT_1,
+                 SHURE_INFERNO_CPU_PORT,
+                 SHURE_INFERNO_HMI_PORT,
                  MV_E6350R_MAX_PORTS_NUM,
                  SHURE_INFERNO_ENABLED_PORTS);
 
@@ -637,39 +678,31 @@ static int mv88e6350R_probe(struct phy_device *pdev)
   REG_WRITE(mvEthSwitch->pdev, MV_REG_GLOBAL,0x4,0x0);
 
   for(portIndex = 0; portIndex < MV_E6350R_MAX_PORTS_NUM; portIndex++) {
-    /* Reset PHYs for all but the port to the CPU */
-    if((portIndex != SHURE_INFERNO_CPU_PORT_0) && (portIndex != SHURE_INFERNO_CPU_PORT_1)) {
+    /* Reset PHYs for all but the ports to the CPU and the HMI */
+    if((portIndex != SHURE_INFERNO_CPU_PORT) && (portIndex != SHURE_INFERNO_HMI_PORT)) {
       REG_WRITE(mvEthSwitch->pdev, portIndex, 0, 0x9140);
     }
   }
 
-  /* Initialize LED control registers
-   * LED 0 = green -- link, activity; LED 1 = yellow -- GBIT. */
+  /*
+   * Initialize LED control registers.
+   *
+   * Default (on power up):
+   *   LED 0 = green -- link, activity; LED 1 = yellow -- GBIT.
+   *
+   * We also want LEDs 2 and 3 turned off so that
+   * the strobing isn't visible in the adjacent
+   * LEDs 0 and 1.
+   */
   for(portIndex = 0; portIndex < SHURE_INFERNO_COPPER_PORTS; portIndex++) {
-    controlReg  = MV_SWITCH_LED_WRREGVAL(MV_SWITCH_LED_01_CTRL_REG,
-                                        (MV_SWITCH_LED0_LINK_ACT | MV_SWITCH_LED1_GIG));
+    controlReg  = MV_SWITCH_LED_WRREGVAL(MV_SWITCH_LED_23_CTRL_REG, MV_SWITCH_LED23_OFF);
 
-    /* Write LED control register - 0x33 */
+    /* Write LED control register - 0xEE */
     REG_WRITE(mvEthSwitch->pdev,           // Device
               MV_REG_PORT(portIndex),      // Port
-              MV_SWITCH_PORT_LED_CTRL_REG, // Register
+              MV_SWITCH_PORT_LED_CTRL_REG, // Register being indirectly accessed.
               controlReg);                 // Register value - contains register
-                                           // being indirectly accessed.
-    
-    /* Read/print register. */
-    /*controlRegRd  = REG_READ(mvEthSwitch->pdev,
-                             MV_REG_PORT(portIndex),
-                             MV_SWITCH_PORT_LED_CTRL_REG);*/
-
-    /* Test register value. */
-    /*controlReg &= MV_SWITCH_LED_CTRL_DATA_MASK;
-    controlRegRd &= MV_SWITCH_LED_CTRL_DATA_MASK;
-    if(controlReg == controlRegRd) {
-      printk("LED01 register for port %u: 0x%08x\n", portIndex, controlRegRd);
-    } else {
-      printk("LED01 register for port %u: failed to set to 0x%08x, value is 0x%08x!\n",
-             portIndex, controlReg, controlRegRd);
-    }*/
+                                           // value being indirectly accessed.
   }
 
   /* Enable PHY Polling Unit (PPU) */
