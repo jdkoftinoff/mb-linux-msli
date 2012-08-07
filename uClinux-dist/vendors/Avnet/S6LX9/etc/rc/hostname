@@ -1,0 +1,12 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mkdir /var/tmp/identity
+/bin/mbbl-imagetool -i /var/tmp/identity/identity.txt -I /dev/mtd0
+HOSTNAME=`egrep '^hostname *=' /etc/identity/identity.txt | cut -d'=' -f2 | tr -d ' '`
+if [ "x${HOSTNAME}" = "x" ]
+  then
+    HOSTNAME=microboard
+fi
+hostname ${HOSTNAME}
+
