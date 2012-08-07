@@ -644,6 +644,10 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x16", 0xef3015, 0, 64 * 1024, 32, SECT_4K, },
 	{ "w25x32", 0xef3016, 0, 64 * 1024, 64, SECT_4K, },
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
+
+	/* Numonyx */
+	{ "n25q128", 0x20ba18, 0, 64 * 1024, 256, },
+
 };
 
 static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
