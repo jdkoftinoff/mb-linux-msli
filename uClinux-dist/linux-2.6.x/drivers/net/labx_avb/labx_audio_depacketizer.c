@@ -670,7 +670,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
             (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
 	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
-	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
+	     ? clockRecoverySettings->dacPCoeff : DAC_COEFF_ZERO));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
             ((512 << VCO_LOCK_COUNT_SHIFT) | (8 << VCO_UNLOCK_COUNT_SHIFT)));
 

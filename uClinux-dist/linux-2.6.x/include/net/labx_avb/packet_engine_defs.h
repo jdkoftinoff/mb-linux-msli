@@ -60,6 +60,11 @@
 #define SYT_INTERVAL_176_4_KHZ  (32)
 #define SYT_INTERVAL_192_KHZ    (32)
 
+/* Definitions for range of coefficients */
+#  define DAC_COEFF_MIN            0x00020000
+#  define DAC_COEFF_ZERO           0x00000000
+#  define DAC_COEFF_MAX            0x0001FFFF
+
 /* Number of bits in an AVBTP packet sequence number */
 #define AVBTP_SEQUENCE_NUMBER_BITS  (8)
 
@@ -446,6 +451,7 @@ typedef struct {
 typedef struct {
   uint32_t            matchUnit;
   ClockDomainSettings clockDomainSettings;
+  uint32_t            dacPCoeff;
 } ClockRecoverySettings;
 
 #define IOC_CONFIG_CLOCK_RECOVERY  _IOW(ENGINE_IOC_CHAR,               \

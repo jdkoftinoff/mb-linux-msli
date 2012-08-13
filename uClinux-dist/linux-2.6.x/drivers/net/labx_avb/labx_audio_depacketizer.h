@@ -134,9 +134,6 @@
 #  define DAC_COEFF_MANTISSA_BITS  5
 #  define DAC_COEFF_FRACTION_BITS  12
 #  define DAC_COEFF_BITS           (DAC_COEFF_MANTISSA_BITS + DAC_COEFF_FRACTION_BITS + 1)
-#  define DAC_COEFF_MIN            0x00020000
-#  define DAC_COEFF_ZERO           0x00000000
-#  define DAC_COEFF_MAX            0x0001FFFF
 #  define DAC_COEFF(floatCoeff)  ((uint32_t)(floatCoeff * (float)(0x01 << DAC_COEFF_FRACTION_BITS)))
 
 #define LOCK_COUNT_REG       0x00A
