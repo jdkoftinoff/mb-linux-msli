@@ -36,6 +36,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
   struct ptp_device *ptp = dev_id;
   uint32_t maskedFlags;
   uint32_t txCompletedFlags;
+  uint32_t newRxBuffer;
   unsigned long flags;
   int i;
 
@@ -84,7 +85,8 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
     }
 
     /* Detect the Rx IRQ */
-    if((maskedFlags & PTP_RX_IRQ) != 0) {
+    newRxBuffer = (ioread32(REGISTER_ADDRESS(ptp, i, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
+    if ( ((maskedFlags & PTP_RX_IRQ) != 0) || (ptp->ports[i].lastRxBuffer != newRxBuffer) ) {
 #ifdef CONFIG_LABX_PTP_NO_TASKLET
       labx_ptp_rx_state_task((uintptr_t)ptp);
 #else
@@ -92,7 +94,6 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
       tasklet_hi_schedule(&ptp->rxTasklet);
 #endif
     }
-  
   }
   return(IRQ_HANDLED);
 }

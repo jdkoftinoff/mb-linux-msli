@@ -141,17 +141,25 @@ static int xgpio_to_irq(struct gpio_chip *gc, unsigned offset)
  */
 static int xgpio_get(struct gpio_chip *gc, unsigned int gpio)
 {
-	struct of_mm_gpio_chip *mm_gc = to_of_mm_gpio_chip(gc);
+  struct of_mm_gpio_chip *mm_gc = to_of_mm_gpio_chip(gc);
   struct xgpio_instance *chip =
-	    container_of(mm_gc, struct xgpio_instance, mmchip);
-	    
-	if ((chip->isdual) && (gpio >= chip->gpio_width))
-	{
-  	gpio -= chip->gpio_width;
-  	return (in_be32(mm_gc->regs + XGPIO2_DATA_OFFSET) >> gpio) & 1;
-	}    
-	else
-	  return (in_be32(mm_gc->regs + XGPIO_DATA_OFFSET) >> gpio) & 1;
+      container_of(mm_gc, struct xgpio_instance, mmchip);
+   
+  if ((chip->isdual) && (gpio >= chip->gpio_width))
+  {
+    gpio -= chip->gpio_width;
+    if(((chip->gpio2_dir) >> gpio) & 1) {
+      return (in_be32(mm_gc->regs + XGPIO2_DATA_OFFSET) >> gpio) & 1;
+    } else {
+      return ((chip->gpio2_state >> gpio) & 1);
+    }
+  } else {
+    if(((chip->gpio_dir) >> gpio) & 1) {
+      return (in_be32(mm_gc->regs + XGPIO_DATA_OFFSET) >> gpio) & 1;
+    } else {
+      return ((chip->gpio_state >> gpio) & 1);
+    }
+  }
 }
 
 /**

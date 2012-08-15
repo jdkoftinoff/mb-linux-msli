@@ -264,21 +264,30 @@ void buffer_icap_reset(struct hwicap_drvdata *drvdata)
  * @data: Kernel address of the partial bitstream.
  * @size: the size of the partial bitstream in 32 bit words.
  **/
-int buffer_icap_set_configuration(struct hwicap_drvdata *drvdata, u32 *data,
+int buffer_icap_set_configuration(struct hwicap_drvdata *drvdata, u8 *data,
 			     u32 size)
 {
 	int status;
+	u32 value;
 	s32 buffer_count = 0;
 	s32 num_writes = 0;
 	bool dirty = 0;
 	u32 i;
 	void __iomem *base_address = drvdata->base_address;
 
+	/* This function only supports width 4 (32-bit words) */
+	if(drvdata->width != 4) return -EINVAL;
+
 	/* Loop through all the data */
 	for (i = 0, buffer_count = 0; i < size; i++) {
 
 		/* Copy data to bram */
-		buffer_icap_set_bram(base_address, buffer_count, data[i]);
+	        value = ((u32)data[i << 2]) << 24
+		  | ((u32)data[(i << 2) + 1]) << 16
+		  | ((u32)data[(i << 2) + 2]) << 8
+		  | (u32)data[(i << 2) + 3];
+
+		buffer_icap_set_bram(base_address, buffer_count, value);
 		dirty = 1;
 
 		if (buffer_count < XHI_MAX_BUFFER_INTS - 1) {
@@ -323,14 +332,18 @@ int buffer_icap_set_configuration(struct hwicap_drvdata *drvdata, u32 *data,
  * @data: Address of the data representing the partial bitstream
  * @size: the size of the partial bitstream in 32 bit words.
  **/
-int buffer_icap_get_configuration(struct hwicap_drvdata *drvdata, u32 *data,
+int buffer_icap_get_configuration(struct hwicap_drvdata *drvdata, u8 *data,
 			     u32 size)
 {
 	int status;
+	u32 value;
 	s32 buffer_count = 0;
 	s32 read_count = 0;
 	u32 i;
 	void __iomem *base_address = drvdata->base_address;
+
+	/* This function only supports width 4 (32-bit words) */
+	if(drvdata->width != 4) return -EINVAL;
 
 	/* Loop through all the data */
 	for (i = 0, buffer_count = XHI_MAX_BUFFER_INTS; i < size; i++) {
@@ -357,7 +370,12 @@ int buffer_icap_get_configuration(struct hwicap_drvdata *drvdata, u32 *data,
 		}
 
 		/* Copy data from bram */
-		data[i] = buffer_icap_get_bram(base_address, buffer_count);
+		value = buffer_icap_get_bram(base_address, buffer_count);
+	        data[i << 2] = (u8)((value >> 24) & 0xff);
+		data[(i << 2) + 1] = (u8)((value >> 16) & 0xff);
+		data[(i << 2) + 2] = (u8)((value >> 8 ) & 0xff);
+		data[(i << 2) + 3] = (u8)(value & 0xff);
+
 		buffer_count++;
 	}
 

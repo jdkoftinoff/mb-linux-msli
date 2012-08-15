@@ -2508,13 +2508,13 @@ int main(int argc,char **argv)
 	      /* reassemble the string */
 	      bootargsstring_new_len=ramdisk_start_ptr-bootargsstring
 		+strlen(ramdisk_offset_text_string)
-		+strlen(ramdisk_start_continuation_ptr);
+		+strlen(ramdisk_start_continuation_ptr)+1;
 	    }
 	  else
 	    {
 	      /* append the new ramdisk_start parameter */
 	      bootargsstring_new_len=strlen(bootargsstring)
-		+1+strlen(ramdisk_offset_text_string);
+		+1+strlen(ramdisk_offset_text_string)+1;
 	      
 	    }
 	  

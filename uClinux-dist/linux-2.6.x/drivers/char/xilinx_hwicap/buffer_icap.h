@@ -41,11 +41,11 @@
 #include "xilinx_hwicap.h"
 
 /* Loads a partial bitstream from system memory. */
-int buffer_icap_set_configuration(struct hwicap_drvdata *drvdata, u32 *data,
+int buffer_icap_set_configuration(struct hwicap_drvdata *drvdata, u8 *data,
 			     u32 Size);
 
 /* Loads a partial bitstream from system memory. */
-int buffer_icap_get_configuration(struct hwicap_drvdata *drvdata, u32 *data,
+int buffer_icap_get_configuration(struct hwicap_drvdata *drvdata, u8 *data,
 			     u32 Size);
 
 u32 buffer_icap_get_status(struct hwicap_drvdata *drvdata);
