@@ -425,6 +425,10 @@ struct ptp_port {
   uint32_t lostResponses;
   uint32_t neighborRateRatioValid;
 
+  /* AVnu_PTP-5 PICS */
+  uint32_t pdelayResponses;
+  uint32_t multiplePdelayResponses;
+
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
   uint32_t rcvdSignalingMsg1;

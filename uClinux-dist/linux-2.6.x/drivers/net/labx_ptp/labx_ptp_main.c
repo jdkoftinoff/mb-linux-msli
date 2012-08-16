@@ -157,11 +157,11 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
         /* Enable Rx/Tx when the link comes up */
 
         ptp_enable_port(ptp,i);
-        ptp->ports[i].portEnabled = 1;
+        ptp->ports[i].portEnabled = TRUE;
       } else {
         /* Disable Rx/Tx when the link goes down */
         ptp_disable_port(ptp,i);
-        ptp->ports[i].portEnabled = 0;
+        ptp->ports[i].portEnabled = FALSE;
       }
 
       break;
