@@ -430,6 +430,13 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t
   get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
   if (0 != compare_clock_identity(rxIdentity.clockIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity)) {
     transmit_pdelay_response(ptp, port, rxBuffer);
+  } else {
+    uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
+    printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
+    ptp->ports[port].portEnabled = FALSE;
+    if ((rxPortNumber >= 1) && (rxPortNumber <= ptp->numPorts)) {
+      ptp->ports[rxPortNumber-1].portEnabled = FALSE;
+    }
   }
 };
 
