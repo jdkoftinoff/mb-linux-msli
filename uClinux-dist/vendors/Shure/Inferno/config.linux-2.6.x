@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
+# Fri Jul 27 00:40:28 2012
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -467,6 +468,7 @@ CONFIG_NETDEV_1000=y
 CONFIG_LABX_ETHERNET=y
 # CONFIG_LABX_ETH_LOCALLINK_HARD_MAC is not set
 CONFIG_LABX_PTP=y
+# CONFIG_LABX_PTP_NO_TASKLET is not set
 CONFIG_LABX_AVB=y
 
 #
