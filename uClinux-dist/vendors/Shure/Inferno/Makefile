@@ -6,10 +6,7 @@ include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
 
-LINUX	 = $(ROOTDIR)/$(LINUXDIR)/linux 
-LINUXBIN = $(IMAGEDIR)/linux.bin
-ROMFSIMG = $(IMAGEDIR)/romfs.img
-
+LINUX         = $(ROOTDIR)/$(LINUXDIR)/linux 
 SQFS_DEVTABLE = $(IMAGEDIR)/sqfs_devtab
 
 COMMON=$(VEND)/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)/
@@ -123,6 +120,7 @@ endif
 # Format:
 #    filename type permissions uid gid major minor
 $(SQFS_DEVTABLE):
+	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	@echo "/dev/tty           c 666 0 0    5   0" >  $(SQFS_DEVTABLE)
 	@echo "/dev/console       c 666 0 0    5   1" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mem           c 666 0 0    1   1" >> $(SQFS_DEVTABLE)
@@ -264,14 +262,5 @@ endif
 	@echo "/dev/depacketizer0 c 666 0 0  252   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ptp0          c 666 0 0  253   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mvEthSwitch0  c 666 0 0  255   0" >> $(SQFS_DEVTABLE)
-
-$(LINUXBIN): $(ROOTDIR)/$(LINUXDIR)/linux
-	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
-	$(CROSS)objcopy -O binary $(LINUX) $@
-
-$(ROMFSIMG): $(LINUXBIN) $(SQFS_DEVTABLE)
-ifdef CONFIG_BINFMT_ZFLAT
-	$(CROSS)flthdr -z $(ROMFSDIR)/bin/*
-endif
 
 .PHONY: $(SQFS_DEVTABLE)
