@@ -185,8 +185,6 @@ endif
 	@echo "/dev/mtdblock9     b 666 0 0   31   9" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdblock10    b 666 0 0   31  10" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdblock11    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtdblock12    b 666 0 0   31  12" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtdblock13    b 666 0 0   31  13" >> $(SQFS_DEVTABLE)
 ifdef CONFIG_VIDEO_DEV
 	@echo "/dev/video0        c 666 0 0   81   0" >> $(SQFS_DEVTABLE)
 endif
@@ -202,8 +200,6 @@ endif
 	@echo "/dev/mtd9          c 666 0 0   90  18" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtd10         c 666 0 0   90  20" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtd11         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtd12         c 666 0 0   90  24" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtd13         c 666 0 0   90  26" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr0         c 666 0 0   90   1" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr1         c 666 0 0   90   3" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr2         c 666 0 0   90   5" >> $(SQFS_DEVTABLE)
@@ -216,8 +212,6 @@ endif
 	@echo "/dev/mtdr9         c 666 0 0   90  19" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr10        c 666 0 0   90  21" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr11        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtdr12        c 666 0 0   90  25" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mtdr13        c 666 0 0   90  27" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL0        c 666 0 0  204 187" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL1        c 666 0 0  204 188" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL2        c 666 0 0  204 189" >> $(SQFS_DEVTABLE)
