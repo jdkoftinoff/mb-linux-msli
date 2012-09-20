@@ -100,6 +100,7 @@ typedef struct {
   uint32_t sytInterval;
   uint32_t enabled;
   uint32_t sampleEdge;
+  uint32_t sampleRate;
   uint32_t halfPeriod;
   uint32_t remainder;
 } ClockDomainSettings;
@@ -108,6 +109,19 @@ typedef struct {
 #  define DOMAIN_SYNC                (0x02)
 #  define DOMAIN_SAMPLE_EDGE_FALLING (0x00)
 #  define DOMAIN_SAMPLE_EDGE_RISING  (0x01)
+
+/* Sample rate constants */
+#  define SINGLE_SAMPLE_RATE (0x00)
+#  define DOUBLE_SAMPLE_RATE (0x01)
+#  define QUAD_SAMPLE_RATE   (0x02)
+
+#  define SAMPLE_RATE_32_KHZ    (0x00)
+#  define SAMPLE_RATE_44_1_KHZ  (0x01)
+#  define SAMPLE_RATE_48_KHZ    (0x02)
+#  define SAMPLE_RATE_88_2_KHZ  (0x03)
+#  define SAMPLE_RATE_96_KHZ    (0x04) 
+#  define SAMPLE_RATE_176_4_KHZ (0x05)
+#  define SAMPLE_RATE_192_KHZ   (0x06)
 
 #define IOC_CONFIG_CLOCK_DOMAIN      _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 3), \

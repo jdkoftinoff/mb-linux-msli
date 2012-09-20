@@ -88,7 +88,7 @@ DMA_CALLBACKS_EXTERN
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   uint32_t ctrlStatusReg;
-  DBG("Disbling the depacketizer\n");
+  DBG("Disabling the depacketizer\n");
 
   /* Disable the micro-engine */
   ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
@@ -605,7 +605,9 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   ClockDomainSettings *clockDomainSettings;
   uint32_t clockDomain;
   uint32_t recoveryIndex;
+  uint32_t pCoeff;
   uint32_t controlValue = 0;
+  uint32_t sampleRate = SINGLE_SAMPLE_RATE;
 
   /* Configure the timestamp interval for the domain first.  This informs the basic
    * reference clock recovery hardware of how many samples are being averaged each
@@ -626,6 +628,29 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
                    MC_CONTROL_SYNC_EXTERNAL : MC_CONTROL_SYNC_INTERNAL;
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
             controlValue);
+
+  /* Set the sample rate for the clock domain */
+  switch(clockDomainSettings->sampleRate) {
+  case SAMPLE_RATE_32_KHZ:
+  case SAMPLE_RATE_44_1_KHZ:
+  case SAMPLE_RATE_48_KHZ:
+    sampleRate = SINGLE_SAMPLE_RATE;
+    break;
+
+  case SAMPLE_RATE_88_2_KHZ:
+  case SAMPLE_RATE_96_KHZ:
+    sampleRate = DOUBLE_SAMPLE_RATE;
+    break;
+  
+  case SAMPLE_RATE_176_4_KHZ:
+  case SAMPLE_RATE_192_KHZ:
+    sampleRate = QUAD_SAMPLE_RATE;
+    break;
+
+  default:
+    ;
+  }
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP
@@ -670,7 +695,13 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
             (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
 	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
+	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
+  pCoeff = XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG));
+  XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
+            (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
+	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
 	     ? clockRecoverySettings->dacPCoeff : DAC_COEFF_ZERO));
+  pCoeff = XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
             ((512 << VCO_LOCK_COUNT_SHIFT) | (8 << VCO_UNLOCK_COUNT_SHIFT)));
 
@@ -1096,7 +1127,7 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
       }
     }
     break;
-
+  
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
