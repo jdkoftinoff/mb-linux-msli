@@ -115,13 +115,13 @@ typedef struct {
 #  define DOUBLE_SAMPLE_RATE (0x01)
 #  define QUAD_SAMPLE_RATE   (0x02)
 
-#  define SAMPLE_RATE_32_KHZ    (0x00)
-#  define SAMPLE_RATE_44_1_KHZ  (0x01)
-#  define SAMPLE_RATE_48_KHZ    (0x02)
-#  define SAMPLE_RATE_88_2_KHZ  (0x03)
-#  define SAMPLE_RATE_96_KHZ    (0x04) 
-#  define SAMPLE_RATE_176_4_KHZ (0x05)
-#  define SAMPLE_RATE_192_KHZ   (0x06)
+#  define ENGINE_SAMPLE_RATE_32_KHZ    (0x00)
+#  define ENGINE_SAMPLE_RATE_44_1_KHZ  (0x01)
+#  define ENGINE_SAMPLE_RATE_48_KHZ    (0x02)
+#  define ENGINE_SAMPLE_RATE_88_2_KHZ  (0x03)
+#  define ENGINE_SAMPLE_RATE_96_KHZ    (0x04) 
+#  define ENGINE_SAMPLE_RATE_176_4_KHZ (0x05)
+#  define ENGINE_SAMPLE_RATE_192_KHZ   (0x06)
 
 #define IOC_CONFIG_CLOCK_DOMAIN      _IOW(ENGINE_IOC_CHAR,               \
                                           (ENGINE_IOC_CLIENT_START + 3), \

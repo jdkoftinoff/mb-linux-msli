@@ -145,19 +145,19 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
 
   /* Set the sample rate for the clock domain */
   switch(clockDomainSettings->sampleRate) {
-  case SAMPLE_RATE_32_KHZ:
-  case SAMPLE_RATE_44_1_KHZ:
-  case SAMPLE_RATE_48_KHZ:
+  case ENGINE_SAMPLE_RATE_32_KHZ:
+  case ENGINE_SAMPLE_RATE_44_1_KHZ:
+  case ENGINE_SAMPLE_RATE_48_KHZ:
     sampleRate = SINGLE_SAMPLE_RATE;
     break;
 
-  case SAMPLE_RATE_88_2_KHZ:
-  case SAMPLE_RATE_96_KHZ:
+  case ENGINE_SAMPLE_RATE_88_2_KHZ:
+  case ENGINE_SAMPLE_RATE_96_KHZ:
     sampleRate = DOUBLE_SAMPLE_RATE;
     break;
   
-  case SAMPLE_RATE_176_4_KHZ:
-  case SAMPLE_RATE_192_KHZ:
+  case ENGINE_SAMPLE_RATE_176_4_KHZ:
+  case ENGINE_SAMPLE_RATE_192_KHZ:
     sampleRate = QUAD_SAMPLE_RATE;
     break;
 
