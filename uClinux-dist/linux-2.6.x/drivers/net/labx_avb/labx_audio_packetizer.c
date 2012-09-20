@@ -118,6 +118,7 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
                                    ClockDomainSettings *clockDomainSettings) {
 
   uint32_t controlRegister;
+  uint32_t sampleRate = SINGLE_SAMPLE_RATE;
 
   DBG("Configure clock domain: sytInterval %d, enabled %d\n", clockDomainSettings->sytInterval, (int)clockDomainSettings->enabled);
 
@@ -141,6 +142,29 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
     controlRegister &= ~SAMPLE_RISING_EDGE;
   }
   XIo_Out32(REGISTER_ADDRESS(packetizer, CONTROL_REG), controlRegister);
+
+  /* Set the sample rate for the clock domain */
+  switch(clockDomainSettings->sampleRate) {
+  case SAMPLE_RATE_32_KHZ:
+  case SAMPLE_RATE_44_1_KHZ:
+  case SAMPLE_RATE_48_KHZ:
+    sampleRate = SINGLE_SAMPLE_RATE;
+    break;
+
+  case SAMPLE_RATE_88_2_KHZ:
+  case SAMPLE_RATE_96_KHZ:
+    sampleRate = DOUBLE_SAMPLE_RATE;
+    break;
+  
+  case SAMPLE_RATE_176_4_KHZ:
+  case SAMPLE_RATE_192_KHZ:
+    sampleRate = QUAD_SAMPLE_RATE;
+    break;
+
+  default:
+    ;
+  }
+  XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Enable the clock domain */
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain,

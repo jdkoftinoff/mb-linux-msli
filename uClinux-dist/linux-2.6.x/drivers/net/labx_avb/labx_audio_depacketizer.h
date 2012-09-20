@@ -86,6 +86,8 @@
 #define STREAM_STATUS_2_REG  (0x00E)
 #define STREAM_STATUS_3_REG  (0x00F)
 
+#define SAMPLE_RATE_REG      (0x010)
+
 #define CAPABILITIES_REG_A   (0x0FD)
 #  define MAX_STREAM_SLOTS_MASK  (0x7F)
 
