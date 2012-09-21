@@ -181,6 +181,13 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
       if (ptp->ports[port].pdelayResponses == 1) {
         ptp->ports[port].multiplePdelayResponses = 0;
+      } else if (ptp->ports[port].pdelayResponses > 1) {
+        ptp->ports[port].multiplePdelayResponses++;
+        if (ptp->ports[port].multiplePdelayResponses >= 3) {
+          printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
+            port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+          ptp->ports[port].portEnabled = FALSE;
+        }
       }
       ptp->ports[port].pdelayResponses = 0;
       break;
@@ -304,19 +311,6 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
       get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txRequestingPortId);
       rxSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
       txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
-
-      /* AVnu_PTP-5 from AVnu Combined Endpoint PICS D.0.0.1
-         Cease pDelay_Req transmissions if more than one
-         pDelay_Resp messages have been received for each of
-         three successive pDelay_Req messages. */
-      ptp->ports[port].pdelayResponses++;
-      if (ptp->ports[port].pdelayResponses > 1) {
-        ptp->ports[port].multiplePdelayResponses++;
-        if (ptp->ports[port].multiplePdelayResponses >= 3) {
-          printk("Disabling AS on port %d due to multiple pdelay responses.\n", port+1);
-          ptp->ports[port].portEnabled = FALSE;
-        }
-      }
     }
     if (ptp->ports[port].rcvdPdelayRespFollowUp)
     {

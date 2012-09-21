@@ -448,6 +448,12 @@ static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint8_
   ptp->ports[port].rcvdPdelayResp = TRUE;
   ptp->ports[port].rcvdPdelayRespPtr = rxBuffer;
 
+  /* AVnu_PTP-5 from AVnu Combined Endpoint PICS D.0.0.1
+     Cease pDelay_Req transmissions if more than one
+     pDelay_Resp messages have been received for each of
+     three successive pDelay_Req messages. */
+  ptp->ports[port].pdelayResponses++;
+
   MDPdelayReq_StateMachine(ptp, port);
 }
 
