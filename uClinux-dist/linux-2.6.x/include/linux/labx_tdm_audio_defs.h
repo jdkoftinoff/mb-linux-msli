@@ -31,16 +31,16 @@
 #include <linux/ioctl.h>
 
 /* Application definitions for operating contexts */
-#  define LRCLK_RISING_EDGE_CH0          0 
-#  define LRCLK_FALLING_EDGE_CH0         1
+#  define LRCLK_FALLING_EDGE_CH0         0 
+#  define LRCLK_RISING_EDGE_CH0          1 
 #  define LRCLK_MODE_NORMAL              0
 #  define LRCLK_MODE_PULSE               1
 #  define BIT_ALIGNMENT_LEFT_JUSTIFIED   0
 #  define BIT_ALIGNMENT_I2S_DELAYED      1
 #  define MASTER_MODE                    0
 #  define SLAVE_MODE                     1
-#  define SAMPLE_DEPTH_24BITS            0
-#  define SAMPLE_DEPTH_16BITS            1
+#  define SAMPLE_DEPTH_24BIT             0
+#  define SAMPLE_DEPTH_16BIT             1
 
 /* Driver definitions for operating contexts */
 #  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
@@ -55,8 +55,8 @@
 #  define TDM_RX_SLAVE_MODE                  (0x400)
 #  define TDM_TX_MASTER_MODE                 (0x0)
 #  define TDM_TX_SLAVE_MODE                  (0x800)
-#  define TDM_SAMPLE_DEPTH_24BITS            (0x0)
-#  define TDM_SAMPLE_DEPTH_16BITS            (0x1000)
+#  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
+#  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
 
 /* Sample rate constants */
 #  define SINGLE_SAMPLE_RATE (0x00)
