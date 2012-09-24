@@ -417,14 +417,27 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint8_t
 /* Processes a newly-received PDELAY_REQ packet for the passed instance */
 static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
+  PtpPortIdentity rxIdentity;
+
   ptp->ports[port].stats.rxPDelayRequestCount++;
 
   /* React to peer delay requests no matter what, even if we're not using the
    * peer-to-peer delay mechanism or if we're a slave or master.  Transmit
    * a peer delay response back - we will also transmit a peer delay response
-   * followup once this message is on the wire.
+   * followup once this message is on the wire. The only exception is if the
+   * request came from any port on this system we should discard it.
    */
-  transmit_pdelay_response(ptp, port, rxBuffer);
+  get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
+  if (0 != compare_clock_identity(rxIdentity.clockIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity)) {
+    transmit_pdelay_response(ptp, port, rxBuffer);
+  } else {
+    uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
+    printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
+    ptp->ports[port].portEnabled = FALSE;
+    if ((rxPortNumber >= 1) && (rxPortNumber <= ptp->numPorts)) {
+      ptp->ports[rxPortNumber-1].portEnabled = FALSE;
+    }
+  }
 };
 
 /* Processes a newly-received PDELAY_RESP packet for the passed instance */
@@ -434,6 +447,12 @@ static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint8_
 
   ptp->ports[port].rcvdPdelayResp = TRUE;
   ptp->ports[port].rcvdPdelayRespPtr = rxBuffer;
+
+  /* AVnu_PTP-5 from AVnu Combined Endpoint PICS D.0.0.1
+     Cease pDelay_Req transmissions if more than one
+     pDelay_Resp messages have been received for each of
+     three successive pDelay_Req messages. */
+  ptp->ports[port].pdelayResponses++;
 
   MDPdelayReq_StateMachine(ptp, port);
 }
@@ -646,7 +665,9 @@ void init_state_machines(struct ptp_device *ptp) {
     /* peer delay request state machine initialization */
     pPort->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
     pPort->allowedLostResponses = 3;
-    pPort->neighborPropDelayThresh = 10000; /* TODO: This number was randomly selected. Is it ok? */
+    /* Recommended value in 802.1AS/COR1 is 800ns for copper. Add 400ns to allow
+       use of the nTap and still come up as asCapable. */
+    pPort->neighborPropDelayThresh = 1200;
 
     /* PortAnnounceInformation state machine initializetion */
     pPort->portAnnounceInformation_State = PortAnnounceInformation_BEGIN;

@@ -74,7 +74,7 @@ static uint32_t instanceCount;
  * Using RGMII delay on switch OUTD output data
  */
 #define CAL_ICS_CPU_PORT_0_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         RGMII_MODE_GTXCLK_DELAY | \
+                                         /*RGMII_MODE_GTXCLK_DELAY | */ \
                                          FORCE_LINK_UP           | \
                                          FORCE_DUPLEX_FULL       | \
                                          FORCE_SPEED_1000)
@@ -86,7 +86,7 @@ static uint32_t instanceCount;
  * Using RGMII delay on switch OUTD output data
  */
 #define CAL_ICS_CPU_PORT_1_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         RGMII_MODE_GTXCLK_DELAY | \
+                                         /*RGMII_MODE_GTXCLK_DELAY | */ \
                                          FORCE_LINK_UP           | \
                                          FORCE_DUPLEX_FULL       | \
                                          FORCE_SPEED_1000)
