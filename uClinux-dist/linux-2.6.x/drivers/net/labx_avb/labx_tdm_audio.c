@@ -1066,7 +1066,6 @@ static ssize_t tdm_w_rx_owner(struct class *c, const char * buf, size_t count)
 static ssize_t tdm_r_mclk_divider(struct class *c, char *buf)
 {
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
-  uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
   return (snprintf(buf, PAGE_SIZE, "%d\n",
            ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
                & TDM_MCLK_DIVIDER_MASK) >> TDM_MCLK_DIVIDER_BITS)));
