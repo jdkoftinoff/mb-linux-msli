@@ -725,22 +725,22 @@ static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count)
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Evaluate the number of channels to see if is one of the supported configurations
     if(val != 8 && val != 16 && val != 32 && val != 64 && val != 128 && val != 256) {
-      return -EINVAL;
+      return -ENMCHNNOTSUPPORTED;
     }
       
     // Check that the number of channels desired is supported by the hardware
     if((val / tdm->hwConfig.TdmLaneCount) > tdm->hwConfig.TdmMaxSlotDensity) {
-      return -EINVAL;
+      return -ENMCHNTOOHIGH;
     }
       
     /* Evaluate the current sample rate, the maximum number channels supported
        scales based on the sample rate */
     if((tdm->opConfig.TdmSampleRate == DOUBLE_SAMPLE_RATE) && 
           ((val / tdm->hwConfig.TdmLaneCount) > (tdm->hwConfig.TdmMaxSlotDensity / 2))) {
-      return -EINVAL;
+      return -ENMCHNEXCDSSMPLRATE;
     } else if((tdm->opConfig.TdmSampleRate == QUAD_SAMPLE_RATE) && 
                  ((val / tdm->hwConfig.TdmLaneCount) > (tdm->hwConfig.TdmMaxSlotDensity / 4))) {
-      return -EINVAL;
+      return -ENMCHNEXCDSSMPLRATE;
     }
 
     if(setVal) {    
@@ -764,39 +764,39 @@ static ssize_t tdm_r_slot_density(struct class *c, char *buf)
 static ssize_t tdm_w_slot_density(struct class *c, const char * buf, size_t count)
 {
   uint32_t reg;
-  bool setVal = true;
+  int32_t err = 0;
   unsigned long int val;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Evaluate the slot density to see if is one of the supported configurations
     if(val != 2 && val != 4 && val != 8 && val != 16 && val != 32 && val != 64) {
-      setVal = false;
+      err = -ESLTDSTYNOTSUPPORTED;
     }
       
     // Check that the slot density desired is supported by the hardware
     if(val > tdm->hwConfig.TdmMaxSlotDensity) {
-      setVal = false;
+      err = -ESLTDSTYTOOHIGH;
      }
 
      /* Evaluate the current sample rate, the maximum number channels supported
         scales based on the sample rate */
      if((tdm->opConfig.TdmSampleRate == DOUBLE_SAMPLE_RATE) && 
          (val > (tdm->hwConfig.TdmMaxSlotDensity / 2))) {
-       setVal = false;
+       err  = -ESLTDSTYEXCDSSMPLRATE;
      } else if((tdm->opConfig.TdmSampleRate == QUAD_SAMPLE_RATE) && 
            (val > (tdm->hwConfig.TdmMaxSlotDensity / 4))) {
-       setVal = false;
+       err = -ESLTDSTYEXCDSSMPLRATE;
      }
 
-     if(setVal) {
+     if(!(err < 0)) {
        tdm->opConfig.TdmSlotDensity = val;
        reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
        reg |= val;
        XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
      }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static ssize_t tdm_r_burst_length(struct class *c, char *buf)
@@ -916,7 +916,7 @@ static ssize_t tdm_r_sample_rate(struct class *c, char *buf)
 static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count)
 {
   uint32_t reg;
-  bool setVal = true;
+  int32_t err = 0;
   unsigned long int val;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
@@ -925,19 +925,19 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
        scales based on the current slot density */
     if((tdm->opConfig.TdmSlotDensity > (tdm->hwConfig.TdmMaxSlotDensity / 2)) && 
         (val == DOUBLE_SAMPLE_RATE)) {
-      setVal = false;
+      err = -ESMPLRATENOTSUPPORTED;
     } else if((tdm->opConfig.TdmSlotDensity > (tdm->hwConfig.TdmMaxSlotDensity / 4)) && 
                 (val == QUAD_SAMPLE_RATE)) {
-      setVal = false;
+      err = -ESMPLRATENOTSUPPORTED;
     }
 
-    if(setVal) {
+    if(!(err < 0)) {
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SAMPLE_RATE_MASK;
       reg |= (val << TDM_SAMPLE_RATE_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
     }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static ssize_t tdm_r_sample_depth(struct class *c, char *buf)
@@ -974,7 +974,7 @@ static ssize_t tdm_r_module_owner(struct class *c, char *buf)
 
 static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t count)
 {
-  bool setVal = true;
+  int32_t err = 0;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   unsigned long int val;
 
@@ -982,10 +982,10 @@ static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t coun
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
     if(!tdm->hwConfig.TdmHasSlaveManager) {
-      setVal = false;
+      err = -ESCMNOTIMPL;
     }
 
-    if(setVal) {
+    if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       if (val == MASTER_MODE) {
         reg &= ~TDM_MODULE_SLAVE_MODE;
@@ -995,7 +995,7 @@ static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t coun
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
     }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static ssize_t tdm_r_tx_owner(struct class *c, char *buf)
@@ -1007,7 +1007,7 @@ static ssize_t tdm_r_tx_owner(struct class *c, char *buf)
 
 static ssize_t tdm_w_tx_owner(struct class *c, const char * buf, size_t count)
 {
-  bool setVal = true;
+  int32_t err = 0;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   unsigned long int val;
 
@@ -1015,10 +1015,10 @@ static ssize_t tdm_w_tx_owner(struct class *c, const char * buf, size_t count)
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
     if(!tdm->hwConfig.TdmHasSlaveManager) {
-      setVal = false;
+      err = -ESCMNOTIMPL;
     }
 
-    if(setVal) {
+    if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       if (val == MASTER_MODE) {
         reg &= ~TDM_TX_SLAVE_MODE;
@@ -1028,7 +1028,7 @@ static ssize_t tdm_w_tx_owner(struct class *c, const char * buf, size_t count)
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
     }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static ssize_t tdm_r_rx_owner(struct class *c, char *buf)
@@ -1040,17 +1040,17 @@ static ssize_t tdm_r_rx_owner(struct class *c, char *buf)
 
 static ssize_t tdm_w_rx_owner(struct class *c, const char * buf, size_t count)
 {
-  bool setVal = true;
+  int32_t err = 0;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   unsigned long int val;
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
     if(!tdm->hwConfig.TdmHasSlaveManager) {
-      setVal = false;
+      err = -ESCMNOTIMPL;
     }
   
-    if(setVal) {
+    if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       if (val == MASTER_MODE) {
         reg &= ~TDM_RX_SLAVE_MODE;
@@ -1060,7 +1060,7 @@ static ssize_t tdm_w_rx_owner(struct class *c, const char * buf, size_t count)
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
     }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static ssize_t tdm_r_mclk_divider(struct class *c, char *buf)
@@ -1073,7 +1073,7 @@ static ssize_t tdm_r_mclk_divider(struct class *c, char *buf)
 
 static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t count)
 {
-  bool setVal = true;
+  int32_t err = 0;
   unsigned long int val;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
@@ -1081,23 +1081,23 @@ static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t coun
 
     // Evaluate the divider to see if is one of the supported configurations
     if(val != 1 && val != 2 && val != 4 && val != 8) {
-      setVal = false;
+      err = -EMCLKDNOTSUPPORTED;
     }
 
     /* Check the frequency of the master to clock, return an
        invalid value if the divider will scale the master clock
-       output a supported frequency */
+       output to below a supported frequency */
     if((tdm->hwConfig.TdmMclkRatio / val) < 256) {
-      setVal = false;
+      err = -EMCLKDTOOHIGH;
     }
 
-    if(setVal) {
+    if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_MCLK_DIVIDER_MASK;
       reg |= (val << TDM_MCLK_DIVIDER_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
     }
   }
-  return count;
+  return (err < 0 ? err : count);
 }
 
 static struct class_attribute audio_tdm_class_attrs[] = {

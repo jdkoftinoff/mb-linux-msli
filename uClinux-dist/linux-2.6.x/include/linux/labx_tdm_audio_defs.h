@@ -141,4 +141,35 @@ typedef struct {
 #define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
 #define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
 
+/* Error number definitions */
+#define LABX_TDM_AUDIO_ERRNO 0x8000
+
+#define ENMCHNEXCDSSMPLRATE         (1 | LABX_TDM_AUDIO_ERRNO)
+#define ENMCHNTOOHIGH               (2 | LABX_TDM_AUDIO_ERRNO)
+#define ENMCHNNOTSUPPORTED          (3 | LABX_TDM_AUDIO_ERRNO)
+#define ESLTDSTYEXCDSSMPLRATE       (4 | LABX_TDM_AUDIO_ERRNO)
+#define ESLTDSTYTOOHIGH             (5 | LABX_TDM_AUDIO_ERRNO)
+#define ESLTDSTYNOTSUPPORTED        (6 | LABX_TDM_AUDIO_ERRNO)
+#define ESMPLRATENOTSUPPORTED       (7 | LABX_TDM_AUDIO_ERRNO)
+#define EMCLKDTOOHIGH               (8 | LABX_TDM_AUDIO_ERRNO)
+#define EMCLKDNOTSUPPORTED          (9 | LABX_TDM_AUDIO_ERRNO)
+#define ESCMNOTIMPL                 (10 | LABX_TDM_AUDIO_ERRNO)
+#define ETDMAUDIOCNT                (11)
+
+#if !defined(__KERNEL__) && defined(LABX_TDM_AUDIO_ERRNO_STRINGS)
+static const char* labxTdmAudioErrnoStrings[ETDMAUDIOCNT] = {
+  NULL,
+  "Number of channels exceeds maximum supported by sample rate",
+  "Number of channels exceeds maximum supported by platform",
+  "Number of channels not supported by platform",
+  "Slot density exceeds maximum supported by sample rate",
+  "Slot density exceeds maximum supported by platform",
+  "Slot density not supported by platform",
+  "Sample rate not supported by channel configuration",
+  "Master clock divider brings master clock below nominal frequency",
+  "Master clock divider value not supported",
+  "Slave clock manager not implemented"
+};
+#endif
+
 #endif
