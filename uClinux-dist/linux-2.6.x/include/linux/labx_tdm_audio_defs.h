@@ -142,34 +142,43 @@ typedef struct {
 #define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
 
 /* Error number definitions */
-#define LABX_TDM_AUDIO_ERRNO 0x8000
+#define LABX_TDM_AUDIO_ERRNO_BASE  0x0400
+#define IS_LABX_TDM_AUDIO_ERRNO(errno) (errno > LABX_TDM_AUDIO_ERRNO_BASE && errno <= (LABX_TDM_AUDIO_ERRNO_BASE + ETDMERRCNT))
 
-#define ENMCHNEXCDSSMPLRATE         (1 | LABX_TDM_AUDIO_ERRNO)
-#define ENMCHNTOOHIGH               (2 | LABX_TDM_AUDIO_ERRNO)
-#define ENMCHNNOTSUPPORTED          (3 | LABX_TDM_AUDIO_ERRNO)
-#define ESLTDSTYEXCDSSMPLRATE       (4 | LABX_TDM_AUDIO_ERRNO)
-#define ESLTDSTYTOOHIGH             (5 | LABX_TDM_AUDIO_ERRNO)
-#define ESLTDSTYNOTSUPPORTED        (6 | LABX_TDM_AUDIO_ERRNO)
-#define ESMPLRATENOTSUPPORTED       (7 | LABX_TDM_AUDIO_ERRNO)
-#define EMCLKDTOOHIGH               (8 | LABX_TDM_AUDIO_ERRNO)
-#define EMCLKDNOTSUPPORTED          (9 | LABX_TDM_AUDIO_ERRNO)
-#define ESCMNOTIMPL                 (10 | LABX_TDM_AUDIO_ERRNO)
-#define ETDMAUDIOCNT                (11)
+enum TdmErrno {
+  TDMERRNOBASE = LABX_TDM_AUDIO_ERRNO_BASE,
+  ENUMCHNOTSUPPORTED,
+  ENUMCHEXCDSCONF,
+  ESLTDSTYNOTSUPPORTED,
+  ESLTDSTYEXCDSCONF,
+  ESMPLRATENOTSUPPORTED,
+  ESMPLRATEINVALID,
+  EMCLKDTOOHIGH,
+  EMCLKDNOTSUPPORTED,
+  ESCMNOTIMPL,
+  EDMABADBURSTLEN,
+  ETDMERRCNT = EDMABADBURSTLEN - LABX_TDM_AUDIO_ERRNO_BASE
+};
 
-#if !defined(__KERNEL__) && defined(LABX_TDM_AUDIO_ERRNO_STRINGS)
-static const char* labxTdmAudioErrnoStrings[ETDMAUDIOCNT] = {
-  NULL,
-  "Number of channels exceeds maximum supported by sample rate",
-  "Number of channels exceeds maximum supported by platform",
+#ifndef __KERNEL__
+#define LABX_TDM_AUDIO_ERRSTRING(errno) (labxTdmAudioErrnoStrings[((errno) & ~LABX_TDM_AUDIO_ERRNO_BASE) - 1])
+
+#ifdef LABX_TDM_AUDIO_ERRNO_STRINGS
+const char* labxTdmAudioErrnoStrings[ETDMERRCNT] = {
   "Number of channels not supported by platform",
-  "Slot density exceeds maximum supported by sample rate",
-  "Slot density exceeds maximum supported by platform",
+  "Number of channels exceeds maximum supported by lane count/slot density/sample rate configuration",
   "Slot density not supported by platform",
+  "Slot density exceeds maximum supported by lane/channel count and sample rate configuration",
   "Sample rate not supported by channel configuration",
+  "Invalid sample rate",
   "Master clock divider brings master clock below nominal frequency",
   "Master clock divider value not supported",
-  "Slave clock manager not implemented"
+  "Slave clock manager not implemented",
+  "Invalid DMA burst length"
 };
+#else
+extern const char* labxTdmAudioErrnoStrings[ETDMERRCNT];
 #endif
+#endif /* !__KERNEL__ */
 
 #endif
