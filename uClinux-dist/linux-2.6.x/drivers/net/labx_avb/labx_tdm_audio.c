@@ -666,6 +666,9 @@ static int tdm_ioctl(struct inode *inode,
 
   switch(command) {
   case IOC_GET_AUDIO_TDM_CONTROL:
+    if(copy_from_user(&tdmControl, (void __user*)arg, sizeof(AudioTdmControl)) != 0) {
+      return(-EFAULT);
+    }
     returnValue = get_audio_tdm_control(tdm, &tdmControl);
     if(copy_to_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
       return(-EFAULT);
