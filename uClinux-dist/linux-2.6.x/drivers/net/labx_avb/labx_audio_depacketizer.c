@@ -605,7 +605,6 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   ClockDomainSettings *clockDomainSettings;
   uint32_t clockDomain;
   uint32_t recoveryIndex;
-  uint32_t pCoeff;
   uint32_t controlValue = 0;
   uint32_t sampleRate = SINGLE_SAMPLE_RATE;
 
@@ -696,12 +695,6 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
             (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
 	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
 	     ? DAC_COEFF_MAX : DAC_COEFF_ZERO));
-  pCoeff = XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG));
-  XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG),
-            (((clockDomainSettings->enabled == DOMAIN_ENABLED) ||
-	      (clockDomainSettings->enabled == DOMAIN_SYNC)) 
-	     ? clockRecoverySettings->dacPCoeff : DAC_COEFF_ZERO));
-  pCoeff = XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG));
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG),
             ((512 << VCO_LOCK_COUNT_SHIFT) | (8 << VCO_UNLOCK_COUNT_SHIFT)));
 
