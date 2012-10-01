@@ -40,14 +40,15 @@ if [ -x /etc/persist/config/network_config ]
     XMLFILE=/etc/persist/config/CAL_ICSPlatform.xml
   fi
   
-  if [ -f /etc/persist/bin/avbd ]
-    then
-    AVBDFILE=/etc/persist/bin/avbd
-    else
-    AVBDFILE=/usr/bin/avbd
+  if grep -q "BUTTONS=0x00" /proc/cmdline; then
+      if [ -f /etc/persist/bin/avbd ]
+        then
+        AVBDFILE=/etc/persist/bin/avbd
+        else
+        AVBDFILE=/usr/bin/avbd
+      fi
+      $AVBDFILE platformFile=$XMLFILE &
   fi
-  $AVBDFILE platformFile=$XMLFILE &
-
 
   if [ -f $STATIC_AVB_XML ]
     then
