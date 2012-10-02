@@ -465,7 +465,6 @@ typedef struct {
 typedef struct {
   uint32_t            matchUnit;
   ClockDomainSettings clockDomainSettings;
-  uint32_t            dacPCoeff;
 } ClockRecoverySettings;
 
 #define IOC_CONFIG_CLOCK_RECOVERY  _IOW(ENGINE_IOC_CHAR,               \

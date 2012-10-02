@@ -164,7 +164,7 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
   default:
     ;
   }
-  XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
+  //XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Enable the clock domain */
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain,
@@ -923,6 +923,7 @@ static struct of_device_id packetizer_of_match[] = {
   { .compatible = "xlnx,labx-audio-packetizer-1.02.a", },
   { .compatible = "xlnx,labx-audio-packetizer-1.03.a", },
   { .compatible = "xlnx,labx-audio-packetizer-1.04.a", },
+  { .compatible = "xlnx,labx-audio-packetizer-1.05.a", },
   { /* end of list */ },
 };
 

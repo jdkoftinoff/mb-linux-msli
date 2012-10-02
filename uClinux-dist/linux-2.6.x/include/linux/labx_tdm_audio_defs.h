@@ -31,16 +31,16 @@
 #include <linux/ioctl.h>
 
 /* Application definitions for operating contexts */
-#  define LRCLK_RISING_EDGE_CH0          0 
-#  define LRCLK_FALLING_EDGE_CH0         1
+#  define LRCLK_FALLING_EDGE_CH0         0 
+#  define LRCLK_RISING_EDGE_CH0          1 
 #  define LRCLK_MODE_NORMAL              0
 #  define LRCLK_MODE_PULSE               1
 #  define BIT_ALIGNMENT_LEFT_JUSTIFIED   0
 #  define BIT_ALIGNMENT_I2S_DELAYED      1
 #  define MASTER_MODE                    0
 #  define SLAVE_MODE                     1
-#  define SAMPLE_DEPTH_24BITS            0
-#  define SAMPLE_DEPTH_16BITS            1
+#  define SAMPLE_DEPTH_24BIT             0
+#  define SAMPLE_DEPTH_16BIT             1
 
 /* Driver definitions for operating contexts */
 #  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
@@ -55,8 +55,8 @@
 #  define TDM_RX_SLAVE_MODE                  (0x400)
 #  define TDM_TX_MASTER_MODE                 (0x0)
 #  define TDM_TX_SLAVE_MODE                  (0x800)
-#  define TDM_SAMPLE_DEPTH_24BITS            (0x0)
-#  define TDM_SAMPLE_DEPTH_16BITS            (0x1000)
+#  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
+#  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
 
 /* Sample rate constants */
 #  define SINGLE_SAMPLE_RATE (0x00)
@@ -140,5 +140,45 @@ typedef struct {
 #define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x01, AudioTdmControl)
 #define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
 #define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
+
+/* Error number definitions */
+#define LABX_TDM_AUDIO_ERRNO_BASE  0x0400
+#define IS_LABX_TDM_AUDIO_ERRNO(errno) (errno > LABX_TDM_AUDIO_ERRNO_BASE && errno <= (LABX_TDM_AUDIO_ERRNO_BASE + ETDMERRCNT))
+
+enum TdmErrno {
+  TDMERRNOBASE = LABX_TDM_AUDIO_ERRNO_BASE,
+  ENUMCHNOTSUPPORTED,
+  ENUMCHEXCDSCONF,
+  ESLTDSTYNOTSUPPORTED,
+  ESLTDSTYEXCDSCONF,
+  ESMPLRATENOTSUPPORTED,
+  ESMPLRATEINVALID,
+  EMCLKDTOOHIGH,
+  EMCLKDNOTSUPPORTED,
+  ESCMNOTIMPL,
+  EDMABADBURSTLEN,
+  ETDMERRCNT = EDMABADBURSTLEN - LABX_TDM_AUDIO_ERRNO_BASE
+};
+
+#ifndef __KERNEL__
+#define LABX_TDM_AUDIO_ERRSTRING(errno) (labxTdmAudioErrnoStrings[((errno) & ~LABX_TDM_AUDIO_ERRNO_BASE) - 1])
+
+#ifdef LABX_TDM_AUDIO_ERRNO_STRINGS
+const char* labxTdmAudioErrnoStrings[ETDMERRCNT] = {
+  "Number of channels not supported by platform",
+  "Number of channels exceeds maximum supported by lane count/slot density/sample rate configuration",
+  "Slot density not supported by platform",
+  "Slot density exceeds maximum supported by lane/channel count and sample rate configuration",
+  "Sample rate not supported by channel configuration",
+  "Invalid sample rate",
+  "Master clock divider brings master clock below nominal frequency",
+  "Master clock divider value not supported",
+  "Slave clock manager not implemented",
+  "Invalid DMA burst length"
+};
+#else
+extern const char* labxTdmAudioErrnoStrings[ETDMERRCNT];
+#endif
+#endif /* !__KERNEL__ */
 
 #endif
