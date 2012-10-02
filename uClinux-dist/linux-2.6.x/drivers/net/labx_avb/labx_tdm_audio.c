@@ -38,7 +38,7 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
-//#define _LABXDEBUG
+#define _LABXDEBUG
 
 /* Structures for storing physical hardware attributes */
 struct labx_tdm_platform_data {
@@ -263,7 +263,7 @@ static void configure_auto_mute(struct audio_tdm *tdm,
   uint32_t numChannels;
 
   /* Grab the TDM mode */  
-  numChannels = (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG))) & TDM_SLOT_DENSITY_MASK;
+  numChannels = tdm->opConfig.TdmSlotDensity * tdm->hwConfig.TdmLaneCount;
 
   /* Set the shift value for the muting on load */
   if(MAP_MUTE_MODE_SHIFT == 0x00) {
@@ -287,7 +287,6 @@ static void configure_auto_mute(struct audio_tdm *tdm,
       entryWord = (((((entryPtr->tdmChannel/(numChannels/tdm->hwConfig.TdmLaneCount)) 
         * tdm->hwConfig.TdmMaxSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->hwConfig.TdmLaneCount)))
             << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
-
 
       if(entryPtr->avbStream != AVB_STREAM_NONE) {
         entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
@@ -1274,12 +1273,7 @@ int audio_tdm_probe(const char *name,
     returnValue = -ENXIO;
     goto unmap;
   }
-
-
-  /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X, ",
-		  tdm->name, versionMajor, versionMinor,
-         (uint32_t)tdm->physicalAddress);
+ 
 #if 0
   if(tdm->irq == NO_IRQ_SUPPLIED) {
     printk("polled operation\n");
@@ -1325,6 +1319,12 @@ int audio_tdm_probe(const char *name,
   tdm->hwConfig.TdmMaxNumStreams   = pdata->num_streams;
   tdm->hwConfig.TdmMclkRatio       = pdata->mclk_ratio;
   tdm->hwConfig.TdmHasSlaveManager = pdata->slave_manager;
+
+  /* Announce the device */
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, %s\n",
+		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->hwConfig.TdmLaneCount,
+                  tdm->hwConfig.TdmMaxSlotDensity, tdm->hwConfig.TdmMclkRatio,
+                  (tdm->hwConfig.TdmHasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
 
   /* Locate and occupy the first available device index for future navigation in
    * the call to tdm_open()
