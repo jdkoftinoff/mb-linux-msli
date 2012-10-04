@@ -154,7 +154,8 @@ struct audio_tdm {
 /* Number of audio channels emitted from memory by this peripheral;
  * 7 streams of 60 channels each.
  */
-#define LABX_TDM_NUM_CHANNELS  (64)
+#define LABX_TDM_NUM_CHANNELS     (64)
+#define LABX_TDM_MIN_SLOT_DENSITY  (2)
 
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
@@ -288,14 +289,8 @@ static void configure_auto_mute(struct audio_tdm *tdm,
         * tdm->hwConfig.TdmMaxSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->hwConfig.TdmLaneCount)))
             << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
 
-      if(entryPtr->avbStream != AVB_STREAM_NONE) {
-        entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
-        entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);
-      }
-      else {
-        entryWord |= AVB_STREAM_RESET;
-        entryWord |= (AUTO_MUTE_ALWAYS << MAP_MUTE_MODE_SHIFT);      
-      }
+      entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+      entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);
 
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), entryWord);
     }
@@ -346,7 +341,12 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
               tdmControl->numChannels != 128 && tdmControl->numChannels != 256) {
         return -ENUMCHNOTSUPPORTED;
       }
-      
+     
+      /* Evaluate the number of channels to see if it is not less than the minimum supported */
+      if(tdmControl->numChannels < (tdm->hwConfig.TdmLaneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+        return -ENUMCHNOTSUPPORTED;
+      }
+
       /* Evaluate the current sample rate, the maximum number channels supported
          scales based on the current TDM configuration. TdmSampleRate << 1 results
          in the multiplier from 48K to the current sample rate. */
@@ -767,6 +767,11 @@ static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count)
       return -ENUMCHNOTSUPPORTED;
     }
       
+    /* Evaluate the number of channels to see if it is not less than the minimum supported */
+    if(val < (tdm->hwConfig.TdmLaneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+      return -ENUMCHNOTSUPPORTED;
+    }
+
     /* Evaluate the current sample rate, the maximum number channels supported
        scales based on the current TDM configuration. TdmSampleRate << 1 results
        in the multiplier from 48K to the current sample rate. */
