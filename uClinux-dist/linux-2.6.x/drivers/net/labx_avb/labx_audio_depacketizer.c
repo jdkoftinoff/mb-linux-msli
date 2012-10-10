@@ -649,7 +649,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   default:
     ;
   }
-  //XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP

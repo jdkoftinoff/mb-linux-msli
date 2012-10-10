@@ -1,12 +1,12 @@
 /*
- *  linux/include/labx_tdm_audio_defs.h 
+ *  include/linux/labx_tdm_audio_defs.h
  *
- *  Lab X Technologies AVB local audio output derived driver,
- *  adding some Labrinth-specific extensions
+ *  Lab X Technologies TDM audio driver
  *
  *  Written by Eldridge M. Mount IV (eldridge.mount@labxtechnologies.com)
+ *  Written by Albert M. Hajjar (albert.hajjar@labxtechnologies.com)
  *
- *  Copyright (C) 2010 Biamp Systems, All Rights Reserved.
+ *  Copyright (C) 2012 Lab X Technologies, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,35 +41,6 @@
 #  define SLAVE_MODE                     1
 #  define SAMPLE_DEPTH_24BIT             0
 #  define SAMPLE_DEPTH_16BIT             1
-
-/* Driver definitions for operating contexts */
-#  define TDM_LRCLK_RISING_EDGE_CH0          (0x0)
-#  define TDM_LRCLK_FALLING_EDGE_CH0         (0x80)
-#  define TDM_LRCLK_MODE_NORMAL              (0x0)
-#  define TDM_LRCLK_MODE_PULSE               (0x100)
-#  define TDM_BIT_ALIGNMENT_LEFT_JUSTIFIED   (0x0)
-#  define TDM_BIT_ALIGNMENT_I2S_DELAYED      (0x200)
-#  define TDM_MODULE_MASTER_MODE             (0x0)
-#  define TDM_MODULE_SLAVE_MODE              (0xC00)
-#  define TDM_RX_MASTER_MODE                 (0x0)
-#  define TDM_RX_SLAVE_MODE                  (0x400)
-#  define TDM_TX_MASTER_MODE                 (0x0)
-#  define TDM_TX_SLAVE_MODE                  (0x800)
-#  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
-#  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
-
-/* Sample rate constants */
-#  define SINGLE_SAMPLE_RATE (0x00)
-#  define DOUBLE_SAMPLE_RATE (0x01)
-#  define QUAD_SAMPLE_RATE   (0x02)
-
-#  define SAMPLE_RATE_32_KHZ    (0x00)
-#  define SAMPLE_RATE_44_1_KHZ  (0x01)
-#  define SAMPLE_RATE_48_KHZ    (0x02)
-#  define SAMPLE_RATE_88_2_KHZ  (0x03)
-#  define SAMPLE_RATE_96_KHZ    (0x04) 
-#  define SAMPLE_RATE_176_4_KHZ (0x05)
-#  define SAMPLE_RATE_192_KHZ   (0x06)
 
 /* Special definition to indicate "no stream assigned" to a TDM output */
 #define AVB_STREAM_NONE  (0xFFFFFFFF)
@@ -140,6 +111,7 @@ typedef struct {
 #define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x01, AudioTdmControl)
 #define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
 #define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
+#define IOC_ARM_ERROR_IRQS              _IO(AUDIO_TDM_IOC_CHAR,  0x03)
 
 /* Error number definitions */
 #define LABX_TDM_AUDIO_ERRNO_BASE  0x0400

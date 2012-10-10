@@ -4,6 +4,7 @@
  *  Lab X Technologies AVB time domain multiplexer (TDM) driver
  *
  *  Written by Scott Wagner (scott.wagner@labxtechnologies.com)
+ *  Written by Albert M. Hajjar (albert.hajjar@labxtechnologies.com)
  *
  *  Copyright (C) 2011 Lab X Technologies LLC, All Rights Reserved.
  *
@@ -24,11 +25,9 @@
  */
 
 #include "linux/labx_tdm_audio_defs.h"
+#include "labx_tdm_audio.h"
 #include <asm/io.h>
 #include <linux/fs.h>
-#include <linux/miscdevice.h>
-#include <linux/labx_local_audio.h>
-#include <linux/labx_local_audio_defs.h>
 #include <linux/highmem.h>
 #include <linux/platform_device.h>
 #include <xio.h>
@@ -40,145 +39,18 @@
 
 #define _LABXDEBUG
 
-/* Structures for storing physical hardware attributes */
-struct labx_tdm_platform_data {
-  uint8_t lane_count;
-  uint8_t num_streams;
-  uint8_t slot_density;
-  uint32_t mclk_ratio;
-  uint8_t slave_manager;
-};
-
-typedef struct {
-  u32 TdmLaneCount;
-  u32 TdmMaxSlotDensity;
-  u32 TdmMaxNumStreams;
-  u32 TdmMclkRatio;
-  u32 TdmHasSlaveManager;
-} labx_tdm_hw_Config;
-
-typedef struct {
-  u32 TdmSampleRate;
-  u32 TdmSlotDensity;
-} labx_tdm_operating_Config;
-
-#define NO_IRQ_SUPPLIED   (-1)
-struct audio_tdm {
-  /* Misc device */
-  struct miscdevice miscdev;  
-
-  /* Pointer back to the platform device */
-  struct platform_device *pdev;
-  struct class tdmclass;
-
-  /* Mutex for the device instance */
-  spinlock_t mutex;
-  bool opened;
-  
-/* File operations and private data for a polymorphic
-   * driver to use
-   */
-  struct file_operations *derivedFops;
-  void *derivedData;
-    
-  /* Name for use in identification */
-  char name[NAME_MAX_SIZE];
-  /* Device version */
-  uint32_t version;
-  
-  /* Physical and virtual base address */
-  uintptr_t      physicalAddress;
-  uintptr_t      addressRangeSize;
-  void __iomem  *virtualAddress;
-
-  /* Interrupt request number */
-  int32_t irq;
-
-  uint32_t initialVal;
-
-  /* Hardware configuration */
-  labx_tdm_hw_Config hwConfig;
-
-  /* Operating modes */
-  labx_tdm_operating_Config opConfig;
-};
-
-// There's a single register, at offset 0x00000008 (byte address, is actually register 0x02 in 32-bit offset-speak)
-   // Bits[22:19]  - MCLK divisor
-   // Bits[18:17]  - Sample rate
-   //                "00" - Single rate
-   //                "01" - Double rate
-   //                "10" - Quad rate                                 
-   // Bits[16:13]  - Burst length (2, 4, 8 are the only valid burst sizes)
-   // Bit[12]      - Sample depth
-   //                '0' 24-bits
-   //                '1' 16-bits
-   // Bit[11]      - Tx master / slave
-   //                '0' Master
-   //                '1' Slave
-   // Bit[10]      - Rx master / slave
-   //                '0' Master
-   //                '1' Slave
-   // Bit[9]       - Bit alignment:
-   //                '0' - Left-justified, or "normal" mode
-   //                '1' - I2S-like mode, MSB of channel 0 lags the LRCK edge by one clock
-   // Bit[8]       - LRCK mode:
-   //                '0' - Normal operation as a clock
-   //                '1' - Pulse indicating frame start
-   // Bit[7]       - Sample edge:
-   //                '0' - Rising edge signifies channel zero
-   //                '1' - Falling edge signifies channel zero
-   // Bits[6:0]    - Number of channels per lane (2, 4, 8 or 16, 32, 64 are the only valid number of TDM modes)
-                
-/* Global control registers */
-#define TDM_CONTROL_REG       (0x02)
-#  define TDM_SLOT_DENSITY_MASK        (0x7F)
-#  define TDM_BURST_LENGTH_MASK        (0x1E000)
-#  define TDM_SAMPLE_RATE_MASK         (0x60000)
-#  define TDM_MODULE_OWNER_MASK        (0xC00)
-#  define TDM_MCLK_DIVIDER_MASK        (0x780000)
-
-#  define TDM_MODULE_OWNER_BITS 11
-#  define TDM_BURST_LENGTH_BITS 13
-#  define TDM_SAMPLE_RATE_BITS  17
-#  define TDM_MCLK_DIVIDER_BITS 19
-
-#define TDM_STREAM_MAP_REG     (0x03)
-#  define MAP_SWAP_BANK      (0x80000000)
-#  define MAP_CHANNEL_MASK   (0x003F0000)
-#  define MAP_CHANNEL_SHIFT  (16)
-#  define MAP_STREAM_MASK    (0x0000003F)
-
-#define STREAM_MAP_BANKS  (2)
-
-/* Number of audio channels emitted from memory by this peripheral;
- * 7 streams of 60 channels each.
- */
-#define LABX_TDM_NUM_CHANNELS     (64)
-#define LABX_TDM_MIN_SLOT_DENSITY  (2)
-
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
- */
+  */
 #define DRIVER_NAME "labx_tdm_audio"
 #define DRIVER_VERSION_MIN  0x11
 #define DRIVER_VERSION_MAX  0x11
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
-
-/* Maximum number of redundancy_switchs and instance count */
+/* Maximum number of tdm modules and instance count */
 #define MAX_INSTANCES 16
 static uint32_t instanceCount;
-
-#if 0
-#define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
-#else
-#define DBG(f, x...)
-#endif
-
-#define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->virtualAddress | (offset << 2))
 
 /* Buffer for storing stream map entries */
 static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
@@ -232,6 +104,13 @@ static int tdm_open(struct inode *inode, struct file *filp)
 
   spin_unlock_irqrestore(&tdm->mutex, flags);
   preempt_enable();
+  
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  /* Open the analyzer, if we have one */
+  if(tdm->hwConfig.TdmHasAnalyzer) {
+    labx_tdm_analyzer_open(&tdm->analyzer);
+  }
+#endif
 
   return(returnValue);
 }
@@ -289,7 +168,12 @@ static void configure_auto_mute(struct audio_tdm *tdm,
         * tdm->hwConfig.TdmMaxSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->hwConfig.TdmLaneCount)))
             << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
 
-      entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+      if(entryPtr->avbStream != AVB_STREAM_NONE) { 
+        entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+      } else {
+        entryWord |= (AVB_STREAM_RESET & MAP_STREAM_MASK);
+      }
+
       entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);
 
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), entryWord);
@@ -561,9 +445,6 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       break;
 
     default:
-#ifdef _LABXDEBUG
-      printk("TDM (ioctl): bad ioctl call\n");
-#endif
       returnValue = -EINVAL;
       break;
   }
@@ -655,9 +536,9 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
 
 /* I/O control operations for the driver */
 static int tdm_ioctl(struct inode *inode,
-                                   struct file *filp,
-                                   unsigned int command,
-                                   unsigned long arg) {
+                     struct file *filp,
+                     unsigned int command,
+                     unsigned long arg) {
   // Switch on the request
   AudioTdmControl tdmControl;
   int returnValue = 0;
@@ -704,19 +585,63 @@ static int tdm_ioctl(struct inode *inode,
     }
     break;
 
+  case IOC_ARM_ERROR_IRQS:
+    {
+      // Enable the DMA error interrupt as a "one-shot" 
+      uint32_t irqMask = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG));
+      irqMask |= DMA_ERROR_IRQ;
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG), DMA_ERROR_IRQ);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
+    }
+    break;
 
   default:
-    /* We don't recognize this command; give our derived driver's ioctl()
-     * a crack at it, if one exists.
-     */
-    if((tdm->derivedFops != NULL) &&
-       (tdm->derivedFops->ioctl != NULL)) {
-      returnValue = tdm->derivedFops->ioctl(inode, filp, command, arg);
-    } else returnValue = -EINVAL;
-  }
+#ifdef CONFIG_LABX_TDM_ANALYZER
+    if(tdm->hwConfig.hasAnalyzer) {
+      return tdm_analyzer_ioctl(&tdm->analyzer, command, arg);
+    } else return(-EINVAL);
+#else
+#ifdef _LABXDEBUG
+      printk("TDM (ioctl): bad ioctl call\n");
+#endif
+      returnValue = -EINVAL;
+      break;
+#endif
 
+  }
   /* Return an error code appropriate to the command */
   return(returnValue);
+}
+
+/* Interrupt service routine for the driver */
+static irqreturn_t labx_audio_tdm_interrupt(int irq, void *dev_id) {
+  struct audio_tdm *tdm = (struct audio_tdm*) dev_id;
+  uint32_t maskedFlags;
+  uint32_t irqMask;
+
+  // Read the interrupt flags and immediately clear them 
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG));
+  irqMask = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG));
+  maskedFlags &= irqMask;
+  XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG), maskedFlags);
+
+  // Detect the DMA error IRQ 
+  if((maskedFlags & DMA_ERROR_IRQ) != 0) {
+    // TEMPORARY - Just announce this and treat it as a one-shot.
+    //             Ultimately this should be communicated via generic Netlink.
+    irqMask &= ~DMA_ERROR_IRQ;
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
+    printk("%s: DMA error!\n", tdm->name);
+  }
+  
+  // Detect the pseudorandom analysis error IRQ 
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
+    labx_tdm_analyzer_interrupt(tdm->analyzer, irqMask);
+  }
+#endif
+
+  return(IRQ_HANDLED);
 }
 
 /* Character device file operations structure */
@@ -731,15 +656,22 @@ static struct file_operations tdm_fops = {
 static void reset_tdm(struct audio_tdm *tdm) {
   uint32_t bankIndex;
   uint32_t channelIndex;
+  uint32_t numChannels;
 
   /* Restore the instance registers to initial values */
   XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), tdm->initialVal);
 
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  /* Disable the pseudorandom analyzer */
+  tdm_analyzer_open(tdm->analyzer);
+#endif
+
   /* Clear any old assignments from the auto-mute stream map; all channels
    * are presumed to have no valid stream assignment.
    */
+  numChannels = tdm->hwConfig.TdmMaxSlotDensity * tdm->hwConfig.TdmLaneCount;
   for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
-    for(channelIndex = 0; channelIndex < LABX_TDM_NUM_CHANNELS; channelIndex++) {
+    for(channelIndex = 0; channelIndex < numChannels; channelIndex++) {
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG),
                 (channelIndex << MAP_CHANNEL_SHIFT));
     }
@@ -1239,10 +1171,17 @@ int audio_tdm_probe(const char *name,
          (uint32_t) tdm->physicalAddress,
          (uint32_t) tdm->addressRangeSize);
 
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  tdm->analyzer.tdmName     = tdm->name;
+  tdm->analyzer.baseAddress = tdm->virtualAddress + TDM_ANALYZER_BASE_ADDRESS;
+  tdm->analyzer.errorIrq    = ANALYSIS_ERROR_IRQ;
+  tdm->analyzer.irqFlagsReg = TDM_IRQ_FLAGS_REG;
+  tdm->analyzer.irqMaskReg  = TDM_IRQ_MASK_REG;
+#endif
+
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied.
    * For now, there is no TDM IRQ, so this is unused.
    */
-#if 0
   if(irq != NULL) {
 	tdm->irq = irq->start;
     returnValue = request_irq(tdm->irq, &labx_audio_tdm_interrupt, IRQF_DISABLED,
@@ -1253,9 +1192,6 @@ int audio_tdm_probe(const char *name,
       goto unmap;
     }
   } else tdm->irq = NO_IRQ_SUPPLIED;
-#else
-  tdm->irq = NO_IRQ_SUPPLIED;
-#endif
 
   /* Read the initial value of the TDM instance and save it. */
   tdm->initialVal = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
@@ -1324,12 +1260,20 @@ int audio_tdm_probe(const char *name,
   tdm->hwConfig.TdmMaxNumStreams   = pdata->num_streams;
   tdm->hwConfig.TdmMclkRatio       = pdata->mclk_ratio;
   tdm->hwConfig.TdmHasSlaveManager = pdata->slave_manager;
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  tdm->hwConfig.TdmHasAnalyzer     = pdata->analyzer;
+#endif
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, %s\n",
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, %s",
 		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->hwConfig.TdmLaneCount,
                   tdm->hwConfig.TdmMaxSlotDensity, tdm->hwConfig.TdmMclkRatio,
                   (tdm->hwConfig.TdmHasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  printk(KERN_INFO "%s\n", (tdm->hwConfig.TdmHasAnalyzer ? "has analyzer" : "no analyzer"));
+#else
+  printk(KERN_INFO "\n");
+#endif
 
   /* Locate and occupy the first available device index for future navigation in
    * the call to tdm_open()
@@ -1415,6 +1359,9 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   pdata_struct.slot_density            = get_u32(ofdev, "xlnx,tdm-max-slot-density");
   pdata_struct.mclk_ratio              = get_u32(ofdev, "xlnx,mclk-ratio");
   pdata_struct.slave_manager           = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
+#ifdef CONFIG_LABX_TDM_ANALYZER
+  pdata_struct.analyzer                = get_u32(ofdev, "xlnx,has-tdm-analyzer");
+#endif
 
   /* Dispatch to the generic function */
   return(audio_tdm_probe(name, pdev, addressRange, irq, NULL, NULL, pdata));

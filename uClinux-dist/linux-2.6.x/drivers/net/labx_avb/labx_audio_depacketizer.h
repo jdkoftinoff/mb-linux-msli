@@ -231,8 +231,8 @@ struct audio_depacketizer {
   DepacketizerCaps capabilities;
 
   /* DMA instance (if supported) */
-#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   uint32_t hasDma;
+#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   struct labx_dma dma;
 #endif
 

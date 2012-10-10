@@ -164,7 +164,7 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
   default:
     ;
   }
-  //XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
+  XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Enable the clock domain */
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain,
