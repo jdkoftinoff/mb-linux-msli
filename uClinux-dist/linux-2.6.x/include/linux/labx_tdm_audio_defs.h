@@ -69,9 +69,20 @@ typedef struct {
   StreamMapEntry *mapEntries;
 } AutoMuteConfig;
 
+typedef struct {
+  uint32_t versionMajor;
+  uint32_t versionMinor;
+  uint32_t tdmLaneCount;
+  uint32_t maxNumStreams;
+  uint32_t maxSlotDensity;
+  uint32_t hasLoopback;
+  uint32_t hasSlaveManager;
+  uint32_t hasAnalyzer;
+  uint32_t hasDynamicSampleRates;
+} TdmCaps;
+
 /* Enumeration defining bitmask for modifiable parameters */
 typedef enum {
-  TDM_VERSION = 0,
   SLOT_DENSITY,
   NUM_CHANNELS,
   DMA_BURST_LENGTH,
@@ -89,8 +100,6 @@ typedef enum {
 
 /* Structure containing modifiable parameters */
 typedef struct {
-  uint32_t versionMajor;
-  uint32_t versionMinor;
   uint32_t slotDensity;
   uint32_t numChannels;
   uint32_t dmaBurstLength;
@@ -108,10 +117,11 @@ typedef struct {
 
 /* I/O control commands and structures specific to the audio tdm hardware */
 #define AUDIO_TDM_IOC_CHAR          ('t')
-#define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x01, AudioTdmControl)
-#define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
-#define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x03, AutoMuteConfig)
-#define IOC_ARM_ERROR_IRQS              _IO(AUDIO_TDM_IOC_CHAR,  0x03)
+#define IOC_GET_AUDIO_TDM_CAPS          _IOR(AUDIO_TDM_IOC_CHAR, 0x01, TdmCaps)
+#define IOC_GET_AUDIO_TDM_CONTROL       _IOR(AUDIO_TDM_IOC_CHAR, 0x02, AudioTdmControl)
+#define IOC_SET_AUDIO_TDM_CONTROL       _IOW(AUDIO_TDM_IOC_CHAR, 0x03, AudioTdmControl)
+#define IOC_CONFIG_AUTO_MUTE            _IOR(AUDIO_TDM_IOC_CHAR, 0x04, AutoMuteConfig)
+#define IOC_ARM_ERROR_IRQS              _IO(AUDIO_TDM_IOC_CHAR,  0x05)
 
 /* Error number definitions */
 #define LABX_TDM_AUDIO_ERRNO_BASE  0x0400

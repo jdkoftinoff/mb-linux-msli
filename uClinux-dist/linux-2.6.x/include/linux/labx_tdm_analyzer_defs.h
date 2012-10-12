@@ -30,26 +30,37 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-/* Analyzer status control */
-#define ANALYZER_DISABLE  (0x00)
-#define ANALYZER_ENABLE   (0x01)
+/* Generator status control */
+#define LFSR_GENERATOR_DISABLE  (0x00)
+#define LFSR_GENERATOR_ENABLE   (0x01)
 
 /* Data insertion control */
-#define INSERT_MODE_ZERO 1
-#define INSERT_MODE_DC   2
-#define INSERT_MODE_RAMP 4 
-#define INSERT_MODE_LFSR 8
+#define SIGNAL_MUTE         1
+#define SIGNAL_DC_PATTERN   2
+#define SIGNAL_RAMP         4 
+#define SIGNAL_PSUEDORANDOM 8
+
+/* Analyzer status control */
+#define LFSR_ANALYZER_DISABLE  (0x00)
+#define LFSR_ANALYZER_ENABLE   (0x01)
 
 /* Data analyzer control */
-#define ANALYZE_MODE_LFSR 0
-#define ANALYZE_MODE_RAMP 1
+#define ANALYSIS_PSUEDORANDOM 0
+#define ANALYSIS_RAMP 1
 
 typedef struct {
   uint32_t enable;
   uint32_t signalControl;
-  uint32_t tdmSlot;
+  uint32_t tdmChannel;
   uint32_t tdmLane;
 } AnalyzerConfig;
+
+typedef struct {
+  uint32_t enable;
+  uint32_t signalControl;
+  uint32_t tdmChannel;
+  uint32_t tdmLane;
+} GeneratorConfig;
 
 typedef struct {
   uint32_t errorCount;

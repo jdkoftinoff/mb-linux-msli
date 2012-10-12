@@ -51,19 +51,22 @@ struct tdm_analyzer {
   uint32_t       irqFlagsReg;
 };
 
-#  define TDM_ANALYZER_ENABLE     (0x80000000)
-#  define TDM_DEBUG_PATTERN       (0x40000000)
-#  define ANALYZER_RAMP           (0x20000000)
-#  define AUTO_MUTE_ACTIVE        (0x10000000)
-#  define ANALYZER_LANE_MASK      (0x00F)
-#  define ANALYZER_SLOT_MASK      (0x3F0)
-#  define ANALYZER_SLOT_SHIFT     (4)
-#  define GENERATOR_PATTERN_MASK  (0x78000000)
-#  define GENERATOR_PATTERN_SHIFT (27)
-#  define ANALYZER_LFSR_MODE      (0x40000000)
-
 #define GENERATOR_CONTROL_REG (0x000)
+#  define TDM_GENERATOR_ENABLE        (0x80000000)
+#  define TDM_ANALYZER_ENABLE         (0x80000000)
+#  define TDM_GENERATOR_PATTERN_MASK  (0x78000000)
+#  define TDM_GENERATOR_PATTERN_SHIFT (27)
+#  define TDM_GENERATOR_DEBUG_PATTERN (0x40000000)
+#  define TDM_GENERATOR_LANE_MASK     (0x00F)
+#  define TDM_GENERATOR_SLOT_MASK     (0x3F0)
+#  define TDM_GENERATOR_SLOT_SHIFT    (4)
 #define ANALYZER_CONTROL_REG  (0x001)
+#  define TDM_ANALYZER_RAMP           (0x20000000)
+#  define TDM_ANALYZER_LANE_MASK      (0x00F)
+#  define TDM_ANALYZER_SLOT_MASK      (0x3F0)
+#  define TDM_ANALYZER_SLOT_SHIFT     (4)
+#  define TDM_ANALYZER_LFSR_MODE      (0x40000000)
+
 #define ERROR_COUNT_REG       (0x002)
 #define ERROR_PREDICT_REG     (0x003)
 #define ERROR_ACTUAL_REG      (0x004)
@@ -73,21 +76,21 @@ struct tdm_analyzer {
 
 /* Configures the pseudorandom generator */
 static void configure_generator(struct tdm_analyzer *analyzer,
-                                AnalyzerConfig *analyzerConfig) {
+                                GeneratorConfig *generatorConfig) {
   uint32_t controlRegister;
 
   controlRegister = XIo_In32(REGISTER_ADDRESS(analyzer, GENERATOR_CONTROL_REG));
-  if(analyzerConfig->enable == ANALYZER_ENABLE) {
+  if(generatorConfig->enable == LFSR_GENERATOR_ENABLE) {
     // Enable the analyzer on the appropriate channel 
-    controlRegister &= ~(ANALYZER_LANE_MASK | ANALYZER_SLOT_MASK);
-    controlRegister |= (analyzerConfig->tdmLane & ANALYZER_LANE_MASK);
-    controlRegister |= ((analyzerConfig->tdmSlot << ANALYZER_SLOT_SHIFT) & ANALYZER_SLOT_MASK);
-    controlRegister |= ((analyzerConfig->signalControl << GENERATOR_PATTERN_SHIFT) & GENERATOR_PATTERN_MASK);
-    controlRegister |= TDM_ANALYZER_ENABLE;
+    controlRegister &= ~(TDM_GENERATOR_LANE_MASK | TDM_GENERATOR_SLOT_MASK);
+    controlRegister |= (generatorConfig->tdmLane & TDM_GENERATOR_LANE_MASK);
+    controlRegister |= ((generatorConfig->tdmChannel << TDM_GENERATOR_SLOT_SHIFT) & TDM_GENERATOR_SLOT_MASK);
+    controlRegister |= ((generatorConfig->signalControl << TDM_GENERATOR_PATTERN_SHIFT) & TDM_GENERATOR_PATTERN_MASK);
+    controlRegister |= TDM_GENERATOR_ENABLE;
 
   } else {
     // Just disable the generator  
-    controlRegister &= ~TDM_ANALYZER_ENABLE;
+    controlRegister &= ~TDM_GENERATOR_ENABLE;
   }
   XIo_Out32(REGISTER_ADDRESS(analyzer, GENERATOR_CONTROL_REG), controlRegister);
 }
@@ -100,15 +103,15 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
 
   controlRegister = XIo_In32(REGISTER_ADDRESS(analyzer, ANALYZER_CONTROL_REG));
   irqMask = XIo_In32(REGISTER_ADDRESS(analyzer, analyzer->irqMaskReg));
-  if(analyzerConfig->enable == ANALYZER_ENABLE) {
+  if(analyzerConfig->enable == LFSR_ANALYZER_ENABLE) {
     // Enable the analyzer on the appropriate channel 
-    controlRegister &= ~(ANALYZER_LANE_MASK | ANALYZER_SLOT_MASK);
-    controlRegister |= (analyzerConfig->tdmLane & ANALYZER_LANE_MASK);
-    controlRegister |= ((analyzerConfig->tdmSlot << ANALYZER_SLOT_SHIFT) & ANALYZER_SLOT_MASK);
-    if (analyzerConfig->signalControl == ANALYZE_MODE_RAMP) {
-      controlRegister &= ~ANALYZER_LFSR_MODE;
+    controlRegister &= ~(TDM_ANALYZER_LANE_MASK | TDM_ANALYZER_SLOT_MASK);
+    controlRegister |= (analyzerConfig->tdmLane & TDM_ANALYZER_LANE_MASK);
+    controlRegister |= ((analyzerConfig->tdmChannel << TDM_ANALYZER_SLOT_SHIFT) & TDM_ANALYZER_SLOT_MASK);
+    if (analyzerConfig->signalControl == ANALYSIS_PSUEDORANDOM) {
+      controlRegister &= ~TDM_ANALYZER_RAMP;
     } else {
-      controlRegister |= ANALYZER_LFSR_MODE;
+      controlRegister |= TDM_ANALYZER_RAMP;
     }
     controlRegister |= TDM_ANALYZER_ENABLE;
 
@@ -118,10 +121,10 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
   } else {
     /* Just disable the analyzer and its IRQ */
     irqMask &= ~analyzer->errorIrq;
-    controlRegister &= ~ANALYZER_ENABLE;
+    controlRegister &= ~TDM_ANALYZER_ENABLE;
   }
   XIo_Out32(REGISTER_ADDRESS(analyzer, analyzer->irqMaskReg), irqMask);
-  XIo_Out32(REGISTER_ADDRESS(analyzer, GENERATOR_CONTROL_REG), controlRegister);
+  XIo_Out32(REGISTER_ADDRESS(analyzer, ANALYZER_CONTROL_REG), controlRegister);
 }
 
 static void get_analyzer_results(struct tdm_analyzer *analyzer,
@@ -132,17 +135,19 @@ static void get_analyzer_results(struct tdm_analyzer *analyzer,
   analyzerResults->actualSample = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_ACTUAL_REG));
 }
 
-/* Opens the instance for use, placing the hardware into a known state */
-int32_t tdm_analyzer_open(struct tdm_analyzer *analyzer) {
+/* Resets the instance, placing the hardware into a known state */
+int32_t tdm_analyzer_reset(struct tdm_analyzer *analyzer) {
+  GeneratorConfig generatorConfig;
   AnalyzerConfig analyzerConfig;
 
   /* Disable the pseudorandom analyzer */
-  analyzerConfig.enable = ANALYZER_DISABLE;
+  generatorConfig.enable = LFSR_GENERATOR_DISABLE;
+  analyzerConfig.enable = LFSR_ANALYZER_DISABLE;
+  configure_generator(analyzer, &generatorConfig);
   configure_analyzer(analyzer, &analyzerConfig);
-  configure_generator(analyzer, &analyzerConfig);
   return(0);
 }
-EXPORT_SYMBOL(tdm_analyzer_open);
+EXPORT_SYMBOL(tdm_analyzer_reset);
 
 /* I/O control operations for the driver */
 int tdm_analyzer_ioctl(struct tdm_analyzer* analyzer, 
@@ -155,12 +160,12 @@ int tdm_analyzer_ioctl(struct tdm_analyzer* analyzer,
   
   case IOC_CONFIG_GENERATOR:
     {
-      AnalyzerConfig analyzerConfig;
+      GeneratorConfig generatorConfig;
 
-      if(copy_from_user(&analyzerConfig, (void __user*)arg, sizeof(analyzerConfig)) != 0) {
+      if(copy_from_user(&generatorConfig, (void __user*)arg, sizeof(generatorConfig)) != 0) {
         return(-EFAULT);
       }
-      configure_analyzer(analyzer, &analyzerConfig);
+      configure_generator(analyzer, &generatorConfig);
     }
     break;
   

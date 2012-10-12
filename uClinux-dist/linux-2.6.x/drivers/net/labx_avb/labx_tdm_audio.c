@@ -108,7 +108,7 @@ static int tdm_open(struct inode *inode, struct file *filp)
 #ifdef CONFIG_LABX_TDM_ANALYZER
   /* Open the analyzer, if we have one */
   if(tdm->hwConfig.TdmHasAnalyzer) {
-    labx_tdm_analyzer_open(&tdm->analyzer);
+    labx_tdm_analyzer_reset(&tdm->analyzer);
   }
 #endif
 
@@ -460,7 +460,7 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
 
   switch (tdmControl->bitMask)
   {
-    case TDM_VERSION:
+    case TDM_CAPABILITIES:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->versionMajor = ((tdm->version >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
       tdmControl->versionMinor = (tdm->version & REVISION_FIELD_MASK);
@@ -663,7 +663,7 @@ static void reset_tdm(struct audio_tdm *tdm) {
 
 #ifdef CONFIG_LABX_TDM_ANALYZER
   /* Disable the pseudorandom analyzer */
-  tdm_analyzer_open(tdm->analyzer);
+  tdm_analyzer_reset(tdm->analyzer);
 #endif
 
   /* Clear any old assignments from the auto-mute stream map; all channels
