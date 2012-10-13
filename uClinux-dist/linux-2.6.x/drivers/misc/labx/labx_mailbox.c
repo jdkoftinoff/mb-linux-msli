@@ -292,6 +292,7 @@ static int __devexit mailbox_of_remove(struct of_device *dev)
 
 static struct of_device_id mailbox_of_match[] = {
   { .compatible = "xlnx,labx-uhi-mailbox-1.00.a", },
+  { .compatible = "xlnx,labx-spi-mailbox-1.00.a", },
   { /* end of list */ },
 };
 
