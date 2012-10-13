@@ -131,22 +131,13 @@ struct labx_tdm_platform_data {
   uint8_t num_streams;
   uint8_t slot_density;
   uint32_t mclk_ratio;
+  uint8_t has_loopback;
   uint8_t slave_manager;
 #ifdef CONFIG_LABX_TDM_ANALYZER
   uint8_t analyzer;
 #endif
+  uint8_t has_dynamic_sample_rates;
 };
-
-typedef struct {
-  u32 TdmLaneCount;
-  u32 TdmMaxSlotDensity;
-  u32 TdmMaxNumStreams;
-  u32 TdmMclkRatio;
-  u32 TdmHasSlaveManager;
-#ifdef CONFIG_LABX_TDM_ANALYZER
-  u32 TdmHasAnalyzer
-#endif
-} labx_tdm_hw_Config;
 
 typedef struct {
   u32 TdmSampleRate;
@@ -165,7 +156,7 @@ struct audio_tdm {
   spinlock_t mutex;
   bool opened;
   
-/* File operations and private data for a polymorphic
+  /* File operations and private data for a polymorphic
    * driver to use
    */
   struct file_operations *derivedFops;
@@ -187,7 +178,7 @@ struct audio_tdm {
   uint32_t initialVal;
 
   /* Hardware configuration */
-  labx_tdm_hw_Config hwConfig;
+  TdmCaps tdmCaps;
 
   /* Operating modes */
   labx_tdm_operating_Config opConfig;

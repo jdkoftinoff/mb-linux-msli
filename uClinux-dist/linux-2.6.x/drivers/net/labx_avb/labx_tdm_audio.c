@@ -107,7 +107,7 @@ static int tdm_open(struct inode *inode, struct file *filp)
   
 #ifdef CONFIG_LABX_TDM_ANALYZER
   /* Open the analyzer, if we have one */
-  if(tdm->hwConfig.TdmHasAnalyzer) {
+  if(tdm->tdmCaps.hasAnalyzer) {
     labx_tdm_analyzer_reset(&tdm->analyzer);
   }
 #endif
@@ -143,15 +143,15 @@ static void configure_auto_mute(struct audio_tdm *tdm,
   uint32_t numChannels;
 
   /* Grab the TDM mode */  
-  numChannels = tdm->opConfig.TdmSlotDensity * tdm->hwConfig.TdmLaneCount;
+  numChannels = tdm->opConfig.TdmSlotDensity * tdm->tdmCaps.laneCount;
 
   /* Set the shift value for the muting on load */
   if(MAP_MUTE_MODE_SHIFT == 0x00) {
-    if(tdm->hwConfig.TdmMaxNumStreams == 8) {
+    if(tdm->tdmCaps.maxNumStreams == 8) {
       MAP_MUTE_MODE_SHIFT = 0x03;
-    } else if(tdm->hwConfig.TdmMaxNumStreams == 16) {
+    } else if(tdm->tdmCaps.maxNumStreams == 16) {
       MAP_MUTE_MODE_SHIFT = 0x04;
-    } else if(tdm->hwConfig.TdmMaxNumStreams == 32) {
+    } else if(tdm->tdmCaps.maxNumStreams == 32) {
       MAP_MUTE_MODE_SHIFT = 0x05;
     } else {
       MAP_MUTE_MODE_SHIFT = 0x06;
@@ -164,8 +164,8 @@ static void configure_auto_mute(struct audio_tdm *tdm,
       StreamMapEntry *entryPtr = &(autoMuteConfig->mapEntries[entryIndex]);
 
       /* Each entry consists of a map from a TDM channel to its stream */
-      entryWord = (((((entryPtr->tdmChannel/(numChannels/tdm->hwConfig.TdmLaneCount)) 
-        * tdm->hwConfig.TdmMaxSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->hwConfig.TdmLaneCount)))
+      entryWord = (((((entryPtr->tdmChannel/(numChannels/tdm->tdmCaps.laneCount)) 
+        * tdm->tdmCaps.maxSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->tdmCaps.laneCount)))
             << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
 
       if(entryPtr->avbStream != AVB_STREAM_NONE) { 
@@ -205,7 +205,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
          scales based on the current TDM configuration. TdmSampleRate << 1 results
          in the multiplier from 48K to the current sample rate. */
       if(tdmControl->slotDensity >
-         (tdm->hwConfig.TdmMaxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+         (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
         return -ESLTDSTYEXCDSCONF;
       }
 
@@ -227,19 +227,19 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       }
      
       /* Evaluate the number of channels to see if it is not less than the minimum supported */
-      if(tdmControl->numChannels < (tdm->hwConfig.TdmLaneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+      if(tdmControl->numChannels < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
         return -ENUMCHNOTSUPPORTED;
       }
 
       /* Evaluate the current sample rate, the maximum number channels supported
          scales based on the current TDM configuration. TdmSampleRate << 1 results
          in the multiplier from 48K to the current sample rate. */
-      if(((tdmControl->numChannels / tdm->hwConfig.TdmLaneCount) >
-          (tdm->hwConfig.TdmMaxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
+      if(((tdmControl->numChannels / tdm->tdmCaps.laneCount) >
+          (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
         return -ENUMCHEXCDSCONF;
       }
 
-      tdm->opConfig.TdmSlotDensity = (tdmControl->numChannels / tdm->hwConfig.TdmLaneCount);
+      tdm->opConfig.TdmSlotDensity = (tdmControl->numChannels / tdm->tdmCaps.laneCount);
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
       reg |= tdm->opConfig.TdmSlotDensity;
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
@@ -342,7 +342,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
          scales based on the current slot density. tdm->opConfig.TdmSampleRate << 1
          is the multiplier from 48KHz to the specified sample rate. */
       if((tdm->opConfig.TdmSlotDensity > 
-         (tdm->hwConfig.TdmMaxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
+         (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
         return -ESMPLRATENOTSUPPORTED;
       }
 
@@ -367,7 +367,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 
     case TDM_MODULE_OWNER:   
       // Ensure the slave clock manager is built into the TDM
-      if(!tdm->hwConfig.TdmHasSlaveManager) {
+      if(!tdm->tdmCaps.hasSlaveManager) {
         return -ESCMNOTIMPL;
       }
 
@@ -386,7 +386,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 
     case TDM_TX_OWNER:    
       // Ensure the slave clock manager is built into the TDM
-      if(!tdm->hwConfig.TdmHasSlaveManager) {
+      if(!tdm->tdmCaps.hasSlaveManager) {
         return -ESCMNOTIMPL;
       }
 
@@ -405,7 +405,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 
     case TDM_RX_OWNER:    
       // Ensure the slave clock manager is built into the TDM
-      if(!tdm->hwConfig.TdmHasSlaveManager) {
+      if(!tdm->tdmCaps.hasSlaveManager) {
         return -ESCMNOTIMPL;
       }
 
@@ -432,7 +432,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       /* Check the frequency of the master to clock, return an
          invalid value if the divider will scale the master clock
          output beyond the nominal frequency */
-      if((tdm->hwConfig.TdmMclkRatio / tdmControl->mclkDivider) < 256) {
+      if((tdm->tdmCaps.mclkRatio / tdmControl->mclkDivider) < 256) {
         return -EMCLKDTOOHIGH;
       }
 
@@ -460,12 +460,6 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
 
   switch (tdmControl->bitMask)
   {
-    case TDM_CAPABILITIES:
-      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->versionMajor = ((tdm->version >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
-      tdmControl->versionMinor = (tdm->version & REVISION_FIELD_MASK);
-      break;
-
     case SLOT_DENSITY: 
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->slotDensity = reg & TDM_SLOT_DENSITY_MASK;
@@ -473,7 +467,7 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
 
     case NUM_CHANNELS:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->hwConfig.TdmLaneCount);
+      tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount);
       break;
 
     case DMA_BURST_LENGTH:
@@ -562,6 +556,14 @@ static int tdm_ioctl(struct inode *inode,
     returnValue = set_audio_tdm_control(tdm, &tdmControl);
     break;
 
+  case IOC_GET_AUDIO_TDM_CAPS:
+    {
+      if(copy_to_user((void __user*)arg, &tdm->tdmCaps, sizeof(tdm->tdmCaps)) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+
   case IOC_CONFIG_AUTO_MUTE:
     {
       AutoMuteConfig autoMuteConfig;
@@ -597,7 +599,7 @@ static int tdm_ioctl(struct inode *inode,
 
   default:
 #ifdef CONFIG_LABX_TDM_ANALYZER
-    if(tdm->hwConfig.hasAnalyzer) {
+    if(tdm->tdmCaps.hasAnalyzer) {
       return tdm_analyzer_ioctl(&tdm->analyzer, command, arg);
     } else return(-EINVAL);
 #else
@@ -669,7 +671,7 @@ static void reset_tdm(struct audio_tdm *tdm) {
   /* Clear any old assignments from the auto-mute stream map; all channels
    * are presumed to have no valid stream assignment.
    */
-  numChannels = tdm->hwConfig.TdmMaxSlotDensity * tdm->hwConfig.TdmLaneCount;
+  numChannels = tdm->tdmCaps.maxSlotDensity * tdm->tdmCaps.laneCount;
   for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
     for(channelIndex = 0; channelIndex < numChannels; channelIndex++) {
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG),
@@ -684,7 +686,7 @@ static ssize_t tdm_r_channels(struct class *c, char *buf)
 {
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   return (snprintf(buf, PAGE_SIZE, "%d\n",
-           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK) * tdm->hwConfig.TdmLaneCount));
+           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount));
 }
 
 static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count) 
@@ -700,18 +702,18 @@ static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count)
     }
       
     /* Evaluate the number of channels to see if it is not less than the minimum supported */
-    if(val < (tdm->hwConfig.TdmLaneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+    if(val < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
       return -ENUMCHNOTSUPPORTED;
     }
 
     /* Evaluate the current sample rate, the maximum number channels supported
        scales based on the current TDM configuration. TdmSampleRate << 1 results
        in the multiplier from 48K to the current sample rate. */
-    if((val / tdm->hwConfig.TdmLaneCount) > (tdm->hwConfig.TdmMaxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+    if((val / tdm->tdmCaps.laneCount) > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
       return -ENUMCHEXCDSCONF;
     }
 
-    tdm->opConfig.TdmSlotDensity = (val / tdm->hwConfig.TdmLaneCount);
+    tdm->opConfig.TdmSlotDensity = (val / tdm->tdmCaps.laneCount);
     reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
     reg |= tdm->opConfig.TdmSlotDensity;
     XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
@@ -746,7 +748,7 @@ static ssize_t tdm_w_slot_density(struct class *c, const char * buf, size_t coun
     /* Evaluate the current sample rate, the maximum number channels supported
        scales based on the current TDM configuration. TdmSampleRate << 1 results
        in the multiplier from 48K to the current sample rate. */
-    if(val > (tdm->hwConfig.TdmMaxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+    if(val > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
       err = -ESLTDSTYEXCDSCONF;
     }
 
@@ -902,10 +904,10 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
   if (strict_strtoul(buf, 0, &val) == 0) {
     /* Evaluate the current slot density, the maximum sample rate supported
        scales based on the current slot density */
-    if((tdm->opConfig.TdmSlotDensity > (tdm->hwConfig.TdmMaxSlotDensity / 2)) && 
+    if((tdm->opConfig.TdmSlotDensity > (tdm->tdmCaps.maxSlotDensity / 2)) && 
         (val == DOUBLE_SAMPLE_RATE)) {
       err = -ESMPLRATENOTSUPPORTED;
-    } else if((tdm->opConfig.TdmSlotDensity > (tdm->hwConfig.TdmMaxSlotDensity / 4)) &&
+    } else if((tdm->opConfig.TdmSlotDensity > (tdm->tdmCaps.maxSlotDensity / 4)) &&
                (val == QUAD_SAMPLE_RATE)) {
       err = -ESMPLRATENOTSUPPORTED;
     }
@@ -969,7 +971,7 @@ static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t coun
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
-    if(!tdm->hwConfig.TdmHasSlaveManager) {
+    if(!tdm->tdmCaps.hasSlaveManager) {
       err = -ESCMNOTIMPL;
     }
 
@@ -1006,7 +1008,7 @@ static ssize_t tdm_w_tx_owner(struct class *c, const char * buf, size_t count)
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
-    if(!tdm->hwConfig.TdmHasSlaveManager) {
+    if(!tdm->tdmCaps.hasSlaveManager) {
       err = -ESCMNOTIMPL;
     }
 
@@ -1042,7 +1044,7 @@ static ssize_t tdm_w_rx_owner(struct class *c, const char * buf, size_t count)
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure the slave clock manager is built into the TDM
-    if(!tdm->hwConfig.TdmHasSlaveManager) {
+    if(!tdm->tdmCaps.hasSlaveManager) {
       err = -ESCMNOTIMPL;
     }
   
@@ -1087,7 +1089,7 @@ static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t coun
     /* Check the frequency of the master to clock, return an
        invalid value if the divider will scale the master clock
        output to below a supported frequency */
-    if((tdm->hwConfig.TdmMclkRatio / val) < 256) {
+    if((tdm->tdmCaps.mclkRatio / val) < 256) {
       err = -EMCLKDTOOHIGH;
     }
 
@@ -1147,7 +1149,6 @@ int audio_tdm_probe(const char *name,
   tdm = (struct audio_tdm*) kzalloc(sizeof(struct audio_tdm), GFP_KERNEL);
   if(!tdm) return(-ENOMEM);
 
-  /* Request and map the device's I/O memory region into uncacheable space */
   tdm->physicalAddress = addressRange->start;
   tdm->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
 
@@ -1255,22 +1256,26 @@ int audio_tdm_probe(const char *name,
   returnValue = class_register(&tdm->tdmclass);
 
   /* Setup the Config structure */
-  tdm->hwConfig.TdmLaneCount       = pdata->lane_count;
-  tdm->hwConfig.TdmMaxSlotDensity  = pdata->slot_density;
-  tdm->hwConfig.TdmMaxNumStreams   = pdata->num_streams;
-  tdm->hwConfig.TdmMclkRatio       = pdata->mclk_ratio;
-  tdm->hwConfig.TdmHasSlaveManager = pdata->slave_manager;
+  tdm->tdmCaps.versionMajor          = versionMajor;
+  tdm->tdmCaps.versionMinor          = versionMinor;
+  tdm->tdmCaps.laneCount             = pdata->lane_count;
+  tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
+  tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
+  tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
+  tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
+  tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
 #ifdef CONFIG_LABX_TDM_ANALYZER
-  tdm->hwConfig.TdmHasAnalyzer     = pdata->analyzer;
+  tdm->tdmCaps.hasAnalyzer           = pdata->analyzer;
 #endif
+  tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, %s",
-		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->hwConfig.TdmLaneCount,
-                  tdm->hwConfig.TdmMaxSlotDensity, tdm->hwConfig.TdmMclkRatio,
-                  (tdm->hwConfig.TdmHasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
+		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.laneCount,
+                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio,
+                  (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
 #ifdef CONFIG_LABX_TDM_ANALYZER
-  printk(KERN_INFO "%s\n", (tdm->hwConfig.TdmHasAnalyzer ? "has analyzer" : "no analyzer"));
+  printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
 #else
   printk(KERN_INFO "\n");
 #endif
@@ -1354,14 +1359,16 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
     irq = NULL;
   }
 
-  pdata_struct.lane_count              = get_u32(ofdev, "xlnx,tdm-lane-count");
-  pdata_struct.num_streams             = get_u32(ofdev, "xlnx,max-num-streams");
-  pdata_struct.slot_density            = get_u32(ofdev, "xlnx,tdm-max-slot-density");
-  pdata_struct.mclk_ratio              = get_u32(ofdev, "xlnx,mclk-ratio");
-  pdata_struct.slave_manager           = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
+  pdata_struct.lane_count               = get_u32(ofdev, "xlnx,tdm-lane-count");
+  pdata_struct.num_streams              = get_u32(ofdev, "xlnx,max-num-streams");
+  pdata_struct.slot_density             = get_u32(ofdev, "xlnx,tdm-max-slot-density");
+  pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
+  pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
+  pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
 #ifdef CONFIG_LABX_TDM_ANALYZER
-  pdata_struct.analyzer                = get_u32(ofdev, "xlnx,has-tdm-analyzer");
+  pdata_struct.analyzer                 = get_u32(ofdev, "xlnx,has-tdm-analyzer");
 #endif
+  pdata_struct.has_dynamic_sample_rates = get_u32(ofdev, "xlnx,has-dynamic-sample-rates");
 
   /* Dispatch to the generic function */
   return(audio_tdm_probe(name, pdev, addressRange, irq, NULL, NULL, pdata));

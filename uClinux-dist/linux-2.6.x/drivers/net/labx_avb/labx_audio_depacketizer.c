@@ -1242,7 +1242,10 @@ static int audio_depacketizer_probe(const char *name,
       returnValue = -ENXIO;
       goto unmap;
     }
-  } else depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+  } else {
+    depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+    depacketizer->capabilities.dynamicSampleRates = ((capsWord >> DYN_SAMPLE_RATES_SHIFT) & 0x1);
+  }
 
   /* Capture more capabilities information */
   depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
