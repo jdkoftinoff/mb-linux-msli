@@ -24,8 +24,8 @@
  *
  */
 
-#ifndef _LABX_TDM_ANALYZER_H_
-#define _LABX_TDM_ANALYZER_H_
+#ifndef _LABX_TDM_ANALYZER_DEFS_H_
+#define _LABX_TDM_ANALYZER_DEFS_H_
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
@@ -45,7 +45,7 @@
 #define LFSR_ANALYZER_ENABLE   (0x01)
 
 /* Data analyzer control */
-#define ANALYSIS_PSUEDORANDOM 0
+#define ANALYSIS_PSEUDORANDOM 0
 #define ANALYSIS_RAMP 1
 
 typedef struct {

@@ -108,7 +108,7 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
     controlRegister &= ~(TDM_ANALYZER_LANE_MASK | TDM_ANALYZER_SLOT_MASK);
     controlRegister |= (analyzerConfig->tdmLane & TDM_ANALYZER_LANE_MASK);
     controlRegister |= ((analyzerConfig->tdmChannel << TDM_ANALYZER_SLOT_SHIFT) & TDM_ANALYZER_SLOT_MASK);
-    if (analyzerConfig->signalControl == ANALYSIS_PSUEDORANDOM) {
+    if (analyzerConfig->signalControl == ANALYSIS_PSEUDORANDOM) {
       controlRegister &= ~TDM_ANALYZER_RAMP;
     } else {
       controlRegister |= TDM_ANALYZER_RAMP;
