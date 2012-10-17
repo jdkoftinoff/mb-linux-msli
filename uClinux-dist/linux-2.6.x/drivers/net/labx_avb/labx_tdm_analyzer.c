@@ -25,6 +25,7 @@
  */
 
 #include "linux/labx_tdm_analyzer_defs.h"
+#include "labx_tdm_analyzer.h"
 #include <xio.h>
 #include <linux/highmem.h>
 #include <linux/platform_device.h>
@@ -35,21 +36,6 @@
 #endif // CONFIG_OF
 
 #define NAME_MAX_SIZE    (256)
-
-struct tdm_analyzer {
-  /* Name for used for identification */
-  char tdmName[NAME_MAX_SIZE];
-  
-  /* Base address of analyzer register set */
-  void __iomem  *baseAddress;
-
-  /* IRQ associated with errors */
-  int32_t        errorIrq;
-
-  /* Register addresses for interrupts */
-  uint32_t       irqMaskReg;
-  uint32_t       irqFlagsReg;
-};
 
 #define GENERATOR_CONTROL_REG (0x000)
 #  define TDM_GENERATOR_ENABLE        (0x80000000)
@@ -136,7 +122,7 @@ static void get_analyzer_results(struct tdm_analyzer *analyzer,
 }
 
 /* Resets the instance, placing the hardware into a known state */
-int32_t tdm_analyzer_reset(struct tdm_analyzer *analyzer) {
+int32_t labx_tdm_analyzer_reset(struct tdm_analyzer *analyzer) {
   GeneratorConfig generatorConfig;
   AnalyzerConfig analyzerConfig;
 
@@ -147,10 +133,10 @@ int32_t tdm_analyzer_reset(struct tdm_analyzer *analyzer) {
   configure_analyzer(analyzer, &analyzerConfig);
   return(0);
 }
-EXPORT_SYMBOL(tdm_analyzer_reset);
+EXPORT_SYMBOL(labx_tdm_analyzer_reset);
 
 /* I/O control operations for the driver */
-int tdm_analyzer_ioctl(struct tdm_analyzer* analyzer, 
+int labx_tdm_analyzer_ioctl(struct tdm_analyzer* analyzer, 
                        unsigned int command, 
                        unsigned long arg) {
   // Switch on the request
@@ -199,10 +185,10 @@ int tdm_analyzer_ioctl(struct tdm_analyzer* analyzer,
   /* Return an error code appropriate to the command */
   return(returnValue);
 }
-EXPORT_SYMBOL(tdm_analyzer_ioctl);
+EXPORT_SYMBOL(labx_tdm_analyzer_ioctl);
 
 /* Interrupt service routine for the driver */
-static irqreturn_t tdm_analyzer_interrupt(struct tdm_analyzer *analyzer, 
+irqreturn_t labx_tdm_analyzer_interrupt(struct tdm_analyzer *analyzer, 
                                           uint32_t irqMask) {
 
   /* TEMPORARY - Just announce this and treat it as a one-shot.
@@ -214,3 +200,5 @@ static irqreturn_t tdm_analyzer_interrupt(struct tdm_analyzer *analyzer,
   
   return(IRQ_HANDLED);
 }
+EXPORT_SYMBOL(labx_tdm_analyzer_interrupt);
+

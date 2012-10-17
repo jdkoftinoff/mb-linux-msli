@@ -26,6 +26,9 @@
 
 #include "linux/labx_tdm_audio_defs.h"
 #include "labx_tdm_audio.h"
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+#include "labx_tdm_analyzer.h"
+#endif
 #include <asm/io.h>
 #include <linux/fs.h>
 #include <linux/highmem.h>
@@ -105,7 +108,7 @@ static int tdm_open(struct inode *inode, struct file *filp)
   spin_unlock_irqrestore(&tdm->mutex, flags);
   preempt_enable();
   
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   /* Open the analyzer, if we have one */
   if(tdm->tdmCaps.hasAnalyzer) {
     labx_tdm_analyzer_reset(&tdm->analyzer);
@@ -598,16 +601,16 @@ static int tdm_ioctl(struct inode *inode,
     break;
 
   default:
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
     if(tdm->tdmCaps.hasAnalyzer) {
-      return tdm_analyzer_ioctl(&tdm->analyzer, command, arg);
+      return labx_tdm_analyzer_ioctl(&tdm->analyzer, command, arg);
     } else return(-EINVAL);
 #else
 #ifdef _LABXDEBUG
-      printk("TDM (ioctl): bad ioctl call\n");
+    printk("TDM (ioctl): bad ioctl call (command = %u)\n", command);
 #endif
-      returnValue = -EINVAL;
-      break;
+    returnValue = -EINVAL;
+    break;
 #endif
 
   }
@@ -637,9 +640,9 @@ static irqreturn_t labx_audio_tdm_interrupt(int irq, void *dev_id) {
   }
   
   // Detect the pseudorandom analysis error IRQ 
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
-    labx_tdm_analyzer_interrupt(tdm->analyzer, irqMask);
+    labx_tdm_analyzer_interrupt(&tdm->analyzer, irqMask);
   }
 #endif
 
@@ -663,9 +666,9 @@ static void reset_tdm(struct audio_tdm *tdm) {
   /* Restore the instance registers to initial values */
   XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), tdm->initialVal);
 
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   /* Disable the pseudorandom analyzer */
-  tdm_analyzer_reset(tdm->analyzer);
+  labx_tdm_analyzer_reset(&tdm->analyzer);
 #endif
 
   /* Clear any old assignments from the auto-mute stream map; all channels
@@ -1172,8 +1175,8 @@ int audio_tdm_probe(const char *name,
          (uint32_t) tdm->physicalAddress,
          (uint32_t) tdm->addressRangeSize);
 
-#ifdef CONFIG_LABX_TDM_ANALYZER
-  tdm->analyzer.tdmName     = tdm->name;
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  strcpy(tdm->analyzer.tdmName, tdm->name);
   tdm->analyzer.baseAddress = tdm->virtualAddress + TDM_ANALYZER_BASE_ADDRESS;
   tdm->analyzer.errorIrq    = ANALYSIS_ERROR_IRQ;
   tdm->analyzer.irqFlagsReg = TDM_IRQ_FLAGS_REG;
@@ -1264,7 +1267,7 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
   tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
   tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   tdm->tdmCaps.hasAnalyzer           = pdata->analyzer;
 #endif
   tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
@@ -1274,7 +1277,7 @@ int audio_tdm_probe(const char *name,
 		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.laneCount,
                   tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio,
                   (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
 #else
   printk(KERN_INFO "\n");
@@ -1365,7 +1368,7 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
   pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
   pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   pdata_struct.analyzer                 = get_u32(ofdev, "xlnx,has-tdm-analyzer");
 #endif
   pdata_struct.has_dynamic_sample_rates = get_u32(ofdev, "xlnx,has-dynamic-sample-rates");

@@ -24,8 +24,8 @@
  */
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
-#ifdef CONFIG_LABX_TDM_AUDIO_ANALYZER
-#include <linux/labx_tdm_analyzer.h>
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+#include "labx_tdm_analyzer.h"
 #endif
 
 #define NAME_MAX_SIZE    (256)
@@ -133,7 +133,7 @@ struct labx_tdm_platform_data {
   uint32_t mclk_ratio;
   uint8_t has_loopback;
   uint8_t slave_manager;
-#ifdef CONFIG_LABX_TDM_ANALYZER
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   uint8_t analyzer;
 #endif
   uint8_t has_dynamic_sample_rates;
@@ -182,4 +182,10 @@ struct audio_tdm {
 
   /* Operating modes */
   labx_tdm_operating_Config opConfig;
+
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  /* Analyzer, if enabled */
+  struct tdm_analyzer analyzer;
+#endif
+
 };
