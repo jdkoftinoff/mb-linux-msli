@@ -35,6 +35,8 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
+#define _LABXDEBUG
+
 #define NAME_MAX_SIZE    (256)
 
 #define GENERATOR_CONTROL_REG (0x000)
@@ -74,9 +76,15 @@ static void configure_generator(struct tdm_analyzer *analyzer,
     controlRegister |= ((generatorConfig->signalControl << TDM_GENERATOR_PATTERN_SHIFT) & TDM_GENERATOR_PATTERN_MASK);
     controlRegister |= TDM_GENERATOR_ENABLE;
 
+#ifdef _LABXDEBUG
+    printk("TDM: enabled generator on lane %u, channel %u\n", generatorConfig->tdmLane, generatorConfig->tdmChannel);
+#endif
   } else {
     // Just disable the generator  
     controlRegister &= ~TDM_GENERATOR_ENABLE;
+#ifdef _LABXDEBUG
+    printk("TDM: disabled generator\n");
+#endif
   }
   XIo_Out32(REGISTER_ADDRESS(analyzer, GENERATOR_CONTROL_REG), controlRegister);
 }
@@ -96,8 +104,14 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
     controlRegister |= ((analyzerConfig->tdmChannel << TDM_ANALYZER_SLOT_SHIFT) & TDM_ANALYZER_SLOT_MASK);
     if (analyzerConfig->signalControl == ANALYSIS_PSEUDORANDOM) {
       controlRegister &= ~TDM_ANALYZER_RAMP;
+#ifdef _LABXDEBUG
+      printk("TDM: enabled pseudorandom analyzer on lane %u, channel %u\n", analyzerConfig->tdmLane, analyzerConfig->tdmChannel);
+#endif
     } else {
       controlRegister |= TDM_ANALYZER_RAMP;
+#ifdef _LABXDEBUG
+      printk("TDM: enabled ramp analyzer on lane %u, channel %u\n", analyzerConfig->tdmLane, analyzerConfig->tdmChannel);
+#endif
     }
     controlRegister |= TDM_ANALYZER_ENABLE;
 
@@ -108,6 +122,9 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
     /* Just disable the analyzer and its IRQ */
     irqMask &= ~analyzer->errorIrq;
     controlRegister &= ~TDM_ANALYZER_ENABLE;
+#ifdef _LABXDEBUG
+    printk("TDM: disabled analyzer\n");
+#endif
   }
   XIo_Out32(REGISTER_ADDRESS(analyzer, analyzer->irqMaskReg), irqMask);
   XIo_Out32(REGISTER_ADDRESS(analyzer, ANALYZER_CONTROL_REG), controlRegister);
@@ -119,6 +136,10 @@ static void get_analyzer_results(struct tdm_analyzer *analyzer,
   analyzerResults->errorCount = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_COUNT_REG));
   analyzerResults->predictedSample = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_PREDICT_REG));
   analyzerResults->actualSample = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_ACTUAL_REG));
+#ifdef _LABXDEBUG
+  printk("TDM: analyzer results: %u errors, most recent error: (predicted=0x%X,actual=0x%X)\n",
+         analyzerResults->errorCount, analyzerResults->predictedSample, analyzerResults->actualSample);
+#endif
 }
 
 /* Resets the instance, placing the hardware into a known state */

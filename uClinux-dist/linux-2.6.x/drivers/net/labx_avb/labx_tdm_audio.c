@@ -173,8 +173,10 @@ static void configure_auto_mute(struct audio_tdm *tdm,
 
       if(entryPtr->avbStream != AVB_STREAM_NONE) { 
         entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+        entryWord |= ((autoMuteConfig->enable < entryPtr->enable ? autoMuteConfig->enable : entryPtr->enable) << MAP_MUTE_MODE_SHIFT);
       } else {
-        entryWord |= (AVB_STREAM_RESET & MAP_STREAM_MASK);
+        entryWord |= AVB_STREAM_RESET;
+        entryWord |= (AUTO_MUTE_ALWAYS << MAP_MUTE_MODE_SHIFT);      
       }
 
       entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);

@@ -50,6 +50,7 @@
 typedef struct {
   uint32_t tdmChannel;
   uint32_t avbStream;
+  uint32_t enable;
 } StreamMapEntry;
 
 #define AUTO_MUTE_ALWAYS    (0x00)
