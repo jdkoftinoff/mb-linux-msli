@@ -60,7 +60,7 @@
 #define ERROR_ACTUAL_REG      (0x004)
 
 #define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->baseAddress | (offset << 2))
+  ((uintptr_t)device->baseAddress + (offset << 2))
 
 /* Configures the pseudorandom generator */
 static void configure_generator(struct tdm_analyzer *analyzer,

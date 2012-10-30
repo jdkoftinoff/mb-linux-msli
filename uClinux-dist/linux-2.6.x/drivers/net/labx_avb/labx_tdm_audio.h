@@ -82,11 +82,14 @@
 #  define MAP_CHANNEL_MASK        (0x00FF0000)
 #  define MAP_CHANNEL_SHIFT       (16)
 #  define MAP_STREAM_MASK         (0x0000003F)
-#define TDM_ANALYZER_BASE_ADDRESS (0x004)
 #define TDM_IRQ_MASK_REG          (0x009)
 #define TDM_IRQ_FLAGS_REG         (0x010)
 #  define DMA_ERROR_IRQ           (0x001)
 #  define ANALYSIS_ERROR_IRQ      (0x002)
+
+/* Base address of analyzer/generator registers
+ * (within TDM module), in bytes. */
+#define TDM_ANALYZER_BASE_ADDRESS (0x010)
 
 /* Number of physical banks used for auto-mute mapping */
 #define STREAM_MAP_BANKS  (2)
