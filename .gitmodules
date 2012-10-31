@@ -10,12 +10,6 @@
 [submodule "uClinux-dist/user/gsbd"]
 	path = uClinux-dist/user/gsbd
 	url = ../gsbd
-[submodule "uClinux-dist/user/avbweb"]
-	path = uClinux-dist/user/avbweb
-	url = ../avbweb.git
-[submodule "uClinux-dist/lib/avdecc"]
-	path = uClinux-dist/lib/avdecc
-	url = ../avdecc.git
 [submodule "uClinux-dist/lib/libtc"]
 	path = uClinux-dist/lib/libtc
 	url = ../libtc
