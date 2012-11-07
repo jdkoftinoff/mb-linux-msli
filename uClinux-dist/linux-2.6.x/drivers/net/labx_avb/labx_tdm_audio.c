@@ -494,33 +494,34 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->sampleEdge = ((reg & TDM_LRCLK_RISING_EDGE_CH0) != 0);
       break;
-    
+
     case SAMPLE_RATE:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->sampleRate = (reg & TDM_SAMPLE_RATE_MASK) >> TDM_SAMPLE_RATE_BITS;
       break;
 
-    case SAMPLE_DEPTH:    
+    case SAMPLE_DEPTH:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->sampleDepth = ((reg & TDM_SAMPLE_DEPTH_16BIT) != 0);
       break;
 
-    case TDM_MODULE_OWNER:   
+    case TDM_MODULE_OWNER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->tdmModuleOwner = ((reg & TDM_MODULE_SLAVE_MODE) != 0);
+      tdmControl->tdmModuleOwner = ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+                                     & TDM_MODULE_OWNER_MASK) >> TDM_MODULE_OWNER_BITS) == 0x3;
       break;
 
-    case TDM_TX_OWNER:    
+    case TDM_TX_OWNER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->tdmTxOwner = ((reg & TDM_TX_SLAVE_MODE) != 0);
       break;
 
-    case TDM_RX_OWNER:    
+    case TDM_RX_OWNER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->tdmRxOwner = ((reg & TDM_RX_SLAVE_MODE) != 0);
       break;
 
-    case MCLK_DIVIDER:    
+    case MCLK_DIVIDER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->mclkDivider = (reg & TDM_MCLK_DIVIDER_MASK) >> TDM_MCLK_DIVIDER_BITS;
       break;
@@ -964,7 +965,7 @@ static ssize_t tdm_r_module_owner(struct class *c, char *buf)
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   return (snprintf(buf, PAGE_SIZE, "%d\n",
            ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
-              & TDM_MODULE_OWNER_MASK) >> TDM_MODULE_OWNER_BITS)));
+              & TDM_MODULE_OWNER_MASK) >> TDM_MODULE_OWNER_BITS) == 0x3));
 }
 
 static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t count)
