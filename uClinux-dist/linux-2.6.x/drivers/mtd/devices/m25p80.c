@@ -298,7 +298,9 @@ static int m25p80_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct spi_transfer t[2];
 	struct spi_message m;
 
+#ifdef CONFIG_MTD_SPI_OTP
 	aMtd = mtd;
+#endif
 	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%08x, len %zd\n",
 			dev_name(&flash->spi->dev), __func__, "from",
 			(u32)from, len);
@@ -642,6 +644,10 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x16", 0xef3015, 0, 64 * 1024, 32, SECT_4K, },
 	{ "w25x32", 0xef3016, 0, 64 * 1024, 64, SECT_4K, },
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
+
+	/* Numonyx */
+	{ "n25q128", 0x20ba18, 0, 64 * 1024, 256, },
+
 };
 
 static struct flash_info *__devinit jedec_probe(struct spi_device *spi)

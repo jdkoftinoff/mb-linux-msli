@@ -1,0 +1,37 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+TZ=UTC
+
+echo "Mounting proc, sys, /dev/pts: "
+mount -t proc proc /proc
+mount -t sysfs none /sys
+mount -t devpts none /dev/pts
+
+BUTTONS=`tr ' ' '\\n' < /proc/cmdline | grep BUTTONS | cut -d'=' -f2`
+export BUTTONS
+
+echo "Mounting var: "
+mount -t ramfs none /var
+
+echo "Populating /var: "
+mkdir /var/run
+mkdir /var/tmp
+chmod 1777 /var/tmp
+
+if tr ' ' '\\n' < /proc/cmdline |grep "root=/dev/ram0" > /dev/null 2>&1 ; then
+    echo "Restoring persistent settings:"
+    mkdir /var/tmp/persist
+    touch /var/tmp/persist/environment
+    /bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
+  if [ "$BUTTONS" = "0x00" ]; then
+    . /var/tmp/persist/environment
+  fi
+fi
+echo "Running system startup scripts:"
+for i in /etc/rc.d/S*
+do
+  if [ -x $i ]; then
+    /bin/sh $i
+  fi
+done

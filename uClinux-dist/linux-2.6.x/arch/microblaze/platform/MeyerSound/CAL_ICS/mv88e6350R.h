@@ -39,7 +39,7 @@
 
 struct mvEthSwitch {
   /* Pointer back to the platform device */
-  struct platform_device *pdev;
+  struct phy_device *pdev;
 
   /* Version information read from the hardware */
   uint32_t versionMajor;
@@ -64,12 +64,6 @@ struct mvEthSwitch {
   /* Mutex for the device instance */
   spinlock_t mutex;
   bool opened;
-
-  /* File operations and private data for a polymorphic
-   * driver to use
-   */
-  struct file_operations *derivedFops;
-  void *derivedData;
 };
 
 #endif

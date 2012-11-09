@@ -540,8 +540,13 @@ static int32_t await_synced_write(struct labx_dma *dma) {
     /* If the wait returns zero, then the timeout elapsed; if negative, a signal
      * interrupted the wait.
      */
-    if(waitResult == 0) returnValue = -ETIMEDOUT;
-    else if(waitResult < 0) returnValue = -EAGAIN;
+    if(waitResult == 0) { 
+      if ((XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_SYNC_REG)) & DMA_SYNC_PENDING) == 0) {
+        printk("Missed sync write queue interrupt, cleared and continuing...\n");
+      } else {
+        returnValue = -ETIMEDOUT; 
+      }
+    } else if(waitResult < 0) returnValue = -EAGAIN;
   } else {
     /* No interrupt was supplied during the device probe, simply poll for the bit. */
     while(XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_SYNC_REG)) & DMA_SYNC_PENDING);
@@ -608,6 +613,9 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
       /* Page size chunks or greater will always be aligned */
       pointers[i] = kmalloc(alloc->size, GFP_DMA);
     }
+
+    /* Zero out the buffers */
+    memset(pointers[i], 0, alloc->size);
 
     if (NULL == pointers[i])
     {

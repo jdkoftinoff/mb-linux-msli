@@ -94,6 +94,9 @@ template<class charT, class traits> _UCXXEXPORT basic_istream<charT,traits>&
 	typename basic_istream<charT,traits>::int_type c_i;
 	charT c;
 	streamsize n = str.max_size();
+	if (n < 0) {
+		n = __STRING_MAX_UNITS;
+	}
 	for(i=0;i<n;++i){
 		c_i=is.get();
 		if(c_i == traits::eof() ){

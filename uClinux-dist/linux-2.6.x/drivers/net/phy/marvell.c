@@ -82,6 +82,8 @@
 #define MII_M1011_PHY_STATUS_RESOLVED	0x0800
 #define MII_M1011_PHY_STATUS_LINK	0x0400
 
+#define MII_M1116R_CONTROL_REG_MAC     21
+#define MII_MARVELL_PHY_PAGE           22
 
 MODULE_DESCRIPTION("Marvell PHY driver");
 MODULE_AUTHOR("Andy Fleming");
@@ -182,6 +184,57 @@ static int m88e1121_config_aneg(struct phy_device *phydev)
 
 	return err;
 }
+
+static int m88e1116r_config_init(struct phy_device *phydev)
+{
+       int temp;
+       int err;
+
+       temp = phy_read(phydev, MII_BMCR);
+       temp |= BMCR_RESET;
+       err = phy_write(phydev, MII_BMCR, temp);
+       if (err < 0)
+               return err;
+
+       mdelay(500);
+
+       err = phy_write(phydev, MII_MARVELL_PHY_PAGE, 0);
+       if (err < 0)
+               return err;
+
+       temp = phy_read(phydev, MII_M1011_PHY_SCR);
+       temp |= (7 << 12);      /* max number of gigabit attempts */
+       temp |= (1 << 11);      /* enable downshift */
+       temp |= MII_M1011_PHY_SCR_AUTO_CROSS;
+       err = phy_write(phydev, MII_M1011_PHY_SCR, temp);
+       if (err < 0)
+               return err;
+
+       err = phy_write(phydev, MII_MARVELL_PHY_PAGE, 2);
+       if (err < 0)
+               return err;
+       temp = phy_read(phydev, MII_M1116R_CONTROL_REG_MAC);
+       temp |= (1 << 5);
+       temp |= (1 << 4);
+       err = phy_write(phydev, MII_M1116R_CONTROL_REG_MAC, temp);
+       if (err < 0)
+               return err;
+       err = phy_write(phydev, MII_MARVELL_PHY_PAGE, 0);
+       if (err < 0)
+               return err;
+
+       temp = phy_read(phydev, MII_BMCR);
+       temp |= BMCR_RESET;
+       err = phy_write(phydev, MII_BMCR, temp);
+       if (err < 0)
+               return err;
+
+       mdelay(500);
+
+       return 0;
+}
+
+
 
 static int m88e1111_config_init(struct phy_device *phydev)
 {
@@ -613,6 +666,19 @@ static struct phy_driver marvell_drivers[] = {
 		.features = PHY_GBIT_FEATURES,
 		.flags = PHY_HAS_INTERRUPT,
 		.config_init = &m88e1111_config_init,
+		.config_aneg = &marvell_config_aneg,
+		.read_status = &genphy_read_status,
+		.ack_interrupt = &marvell_ack_interrupt,
+		.config_intr = &marvell_config_intr,
+		.driver = { .owner = THIS_MODULE },
+	},
+	{
+		.phy_id = 0x01410E40,
+		.phy_id_mask = 0xfffffff0,
+		.name = "Marvell 88E1116R",
+		.features = PHY_GBIT_FEATURES,
+		.flags = PHY_HAS_INTERRUPT,
+		.config_init  = &m88e1116r_config_init,
 		.config_aneg = &marvell_config_aneg,
 		.read_status = &genphy_read_status,
 		.ack_interrupt = &marvell_ack_interrupt,

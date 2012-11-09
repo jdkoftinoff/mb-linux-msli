@@ -83,6 +83,7 @@
 
 /* Soft Mute Control */
 #define MUTE_CTRL_REG                (0x26)
+#define AVB_STREAM_CHAN_REG          (0x27)
 #define MUTE_COEFF_REG_BASE_ADDRESS  (0x100)
 
 
@@ -145,7 +146,7 @@ const uint16_t MUTE_COEFF_TABLE[COEFF_TABLE_MAX_NUM][256] = {
 
 /* Xilinx FPGA related */
 #define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->virtualAddress | (offset << 2))
+  ((uintptr_t)(device)->virtualAddress | ((offset) << 2))
 
         
 
@@ -196,7 +197,7 @@ struct sample_pointers {
 
   /* Mutex for the device instance */
   spinlock_t mutex;
-  bool opened;
+  int32_t opened;
 
   /* File operations and private data for a polymorphic
    * driver to use

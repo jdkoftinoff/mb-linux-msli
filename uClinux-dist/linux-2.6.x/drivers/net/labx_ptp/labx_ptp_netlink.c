@@ -50,6 +50,8 @@ static struct genl_multicast_group rtc_mcast = {
   .name = PTP_EVENTS_RTC_GROUP,
 };
 
+static struct workqueue_struct *labx_ptp_netlink_wq = NULL;
+
 /* "Heartbeat" command - this is only sent by the driver; I have this in here
  * along with its policy to serve as a temporary example
  */
@@ -58,6 +60,12 @@ static int ptp_events_rx_heartbeat(struct sk_buff *skb, struct genl_info *info) 
 }
 
 int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_heartbeat);
+  return 0;
+}
+
+int ptp_work_send_heartbeat(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_heartbeat);
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
@@ -84,6 +92,8 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
   case -ESRCH:
@@ -98,6 +108,11 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   }
 
  heartbeat_fail: 
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
+
   return(returnValue);
 }
 
@@ -110,6 +125,12 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
 #define NEW_GM_BUF_SIZE      (strlen(NEW_GM_KEY_STRING) + CLOCK_ID_STRING_SIZE + 1)
 
 int ptp_events_tx_gm_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_gm_change);
+  return 0;
+}
+
+int ptp_work_send_gm_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_gm_change);
   struct sk_buff *skb;
   struct nlattr *valueMap;
   int32_t pairIndex;
@@ -146,11 +167,12 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   pairIndex = PTP_VALUEMAP_A_PAIRS;
 
   /* Capture the Grandmaster identity as a string value */
-  gmIdentity = ptp->presentMaster.grandmasterIdentity;
-  sprintf(gmIdentityString, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+  gmIdentity = ptp->gmPriority->rootSystemIdentity.clockIdentity;
+  snprintf(gmIdentityString, NEW_GM_BUF_SIZE, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
           NEW_GM_KEY_STRING,
           gmIdentity[0], gmIdentity[1], gmIdentity[2], gmIdentity[3], 
           gmIdentity[4], gmIdentity[5], gmIdentity[6], gmIdentity[7]);
+  gmIdentityString[NEW_GM_BUF_SIZE-1] = 0;
   nla_put_string(skb, pairIndex++, gmIdentityString);
 
   /* End the value map nesting */
@@ -159,6 +181,8 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
 	    // Success, simply break
@@ -178,11 +202,27 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   }
 
  gm_change_fail: 
+  if (returnValue != 0) {
+    printk(KERN_INFO DRIVER_NAME ": GM change event failure %d; auto-acknowledging ...\n", returnValue);
+    ack_grandmaster_change(ptp);
+  }
+
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
+
   return(returnValue);
 }
 
 /* Transmits a Netlink packet indicating a change in the RTC status */
 int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_rtc_change);
+  return 0;
+}
+
+int ptp_work_send_rtc_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_rtc_change);
   struct sk_buff *skb;
   uint8_t commandByte;
   void *msgHead;
@@ -217,6 +257,8 @@ int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
   case -ESRCH:
@@ -231,6 +273,11 @@ int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
   }
 
  rtc_change_fail: 
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
+
   return(returnValue);
 }
 
@@ -273,11 +320,19 @@ int register_ptp_netlink(void) {
     goto register_failure;
   }
 
+  labx_ptp_netlink_wq = create_workqueue("labx_ptp_netlink");
+
  register_failure:
   return(returnValue);
 }
 
 void unregister_ptp_netlink(void) {
+
+  if (NULL != labx_ptp_netlink_wq) {
+    destroy_workqueue(labx_ptp_netlink_wq);
+    labx_ptp_netlink_wq = NULL;
+  }
+  
   /* Unregister operations and the family */
   genl_unregister_ops(&ptp_events_genl_family, &ptp_events_gnl_ops_heartbeat);
   genl_unregister_family(&ptp_events_genl_family);

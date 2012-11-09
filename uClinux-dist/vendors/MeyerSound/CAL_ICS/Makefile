@@ -2,6 +2,11 @@
 # Makefile -- Build instructions for Meyer Sound CAL ICS MicroBlaze system
 #
 
+#default RELEASE_VERSION to current date if RELEASE_VERSION is not set
+ifndef RELEASE_VERSION
+	RELEASE_VERSION := $(shell date +%Y%m%d)
+endif
+
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
@@ -76,6 +81,20 @@ DEVICES +=   \
 	mtd13,c,90,26 	mtdr13,c,90,27	mtdblock13,b,31,13	\
 	mtd14,c,90,26 	mtdr14,c,90,29	mtdblock14,b,31,14
 
+ifdef CONFIG_I2C_SERIAL
+DEVICES += 	\
+    dsp1,c,254,0 \
+    dsp1_amp1,c,254,1 \
+    dsp1_amp2,c,254,2 \
+    dsp2,c,254,3 \
+    dsp2_amp1,c,254,4 \
+    dsp2_amp2,c,254,5 \
+    dsp3,c,254,6 \
+    dsp3_amp1,c,254,7 \
+    dsp3_amp2,c,254,8
+endif
+
+
 ifdef CONFIG_MICROBLAZE_FSLFIFO
 DEVICES += 	\
 	fslfifo0,c,10,192 fslfifo1,c,10,193 fslfifo2,c,10,194		\
@@ -135,17 +154,20 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev_scarf,c,153,0 \
-	spidev_aes,c,153,1 \
-	spidev_oled,c,153,2
+	spidev_scarf_dspblock,c,153,0 \
+	spidev_scarf_global,c,153,1 \
+	spidev_scarf_local,c,153,2 \
+	spidev_aes,c,153,3 \
+	spidev_oled,c,153,4 \
+	spidev_led,c,153,5
 endif
 
 # Add the AVB packet engine device nodes
-DEVICES += packetizer0,c,250,0
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
+DEVICES += packetizer0,c,230,0
+DEVICES += depacketizer0,c,232,0
+DEVICES += depacketizer1,c,232,1
 DEVICES += redswitch0,c,248,0
-DEVICES += ptp0,c,253,0
+DEVICES += ptp0,c,233,0
 
 # Add the CAL sample_pointers peripheral device node
 DEVICES += samplepointers0,c,251,0
@@ -176,27 +198,26 @@ romfs:
 	done
 	for i in $(DIRS); do $(MAKE) -C $$i romfs || exit $? ; done
 
+	mkdir -p $(ROMFSDIR)/etc
+	echo "version = $(RELEASE_VERSION)" > $(ROMFSDIR)/etc/firmware_version
+	echo -n "date = " >> $(ROMFSDIR)/etc/firmware_version
+	date >> $(ROMFSDIR)/etc/firmware_version
+
 	mkdir -p $(ROMFSDIR)/etc/init.d
 	mkdir -p $(ROMFSDIR)/etc/rc.d
 	mkdir -p $(ROMFSDIR)/dev/pts
-	mkdir -p $(ROMFSDIR)/etc/avahi.orig
 	mkdir -p $(ROMFSDIR)/etc/dmitripaneld
 
 	$(ROMFSINST) -s /dev/ttyUL2 /dev/ttyMIDI
-	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
-	$(ROMFSINST) -s /var/tmp/dhcpc/resolv.conf /etc/resolv.conf
-	$(ROMFSINST) -s /var/tmp/avahi /etc/avahi
+	$(ROMFSINST) -s /var/tmp/identity /etc/identity
+	$(ROMFSINST) -s /var/tmp/persist /etc/persist
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
+	$(ROMFSINST) $(COMMON)/etc/hosts /etc/hosts
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S10hostname
-	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
-	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
-	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
-	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
-	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
 	$(ROMFSINST) $(COMMON)/etc/logo-1.bin /etc/dmitripaneld/logo-1.bin
 	$(ROMFSINST) $(COMMON)/etc/nixie-16x24-font.bin /etc/dmitripaneld/nixie-16x24-font.bin
 	$(ROMFSINST) $(COMMON)/etc/nixie-alternative-bold-8x12-font.bin /etc/dmitripaneld/nixie-alternative-bold-8x12-font.bin
@@ -245,12 +266,6 @@ endif
 
 	$(ROMFSINST) -A "^root:" -a "root:${CRYPT_PASSWD}:0:0::/:/bin/sh" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^root:" -a "root:x:0:root" $(ETCDIR)/group
-
-	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:200:Avahi Daemon:/:/bin/false" $(ETCDIR)/passwd
-	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:avahi" $(ETCDIR)/group
-
-	$(ROMFSINST) -A "^avahi-autoipd:" -a "avahi-autoipd:x:201:201:Avahi Auto IP Daemon:/:/bin/false" $(ETCDIR)/passwd
-	$(ROMFSINST) -A "^avahi-autoipd:" -a "avahi-autoipd:x:201:avahi-autoipd" $(ETCDIR)/group
 
 ifdef CONFIG_USER_INIT_INIT
 ifdef CONFIG_SERIAL_8250

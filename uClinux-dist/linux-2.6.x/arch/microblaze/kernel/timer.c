@@ -33,8 +33,8 @@
 #include <asm/selfmod.h>
 #define TIMER_BASE	BARRIER_BASE_ADDR
 #else
-static unsigned int timer_baseaddr;
-#define TIMER_BASE	timer_baseaddr
+unsigned int microblaze_timer_baseaddr;
+#define TIMER_BASE	microblaze_timer_baseaddr
 #endif
 
 #define TCSR0	(0x00)
@@ -183,6 +183,13 @@ static cycle_t microblaze_read(struct clocksource *cs)
 	return (cycle_t) (in_be32(TIMER_BASE + TCR1));
 }
 
+#ifdef CONFIG_SELFMOD_TIMER
+cycle_t get_cycles(void)
+{
+	return microblaze_read(NULL);
+}
+#endif
+
 static struct clocksource clocksource_microblaze = {
 	.name		= "microblaze_clocksource",
 	.rating		= 300,
@@ -213,7 +220,7 @@ void __init time_init(void)
 	u32 timer_num = 1;
 	struct device_node *timer = NULL;
 #ifdef CONFIG_SELFMOD_TIMER
-	unsigned int timer_baseaddr = 0;
+	unsigned int microblaze_timer_baseaddr = 0;
 	int arr_func[] = {
 				(int)&microblaze_read,
 				(int)&timer_interrupt,
@@ -237,8 +244,8 @@ void __init time_init(void)
 	}
 	BUG_ON(!timer);
 
-	timer_baseaddr = *(int *) of_get_property(timer, "reg", NULL);
-	timer_baseaddr = (unsigned long) ioremap(timer_baseaddr, PAGE_SIZE);
+	microblaze_timer_baseaddr = *(int *) of_get_property(timer, "reg", NULL);
+	microblaze_timer_baseaddr = (unsigned long) ioremap(microblaze_timer_baseaddr, PAGE_SIZE);
 	irq = *(int *) of_get_property(timer, "interrupts", NULL);
 	timer_num =
 		*(int *) of_get_property(timer, "xlnx,one-timer-only", NULL);
@@ -248,10 +255,10 @@ void __init time_init(void)
 	}
 
 #ifdef CONFIG_SELFMOD_TIMER
-	selfmod_function((int *) arr_func, timer_baseaddr);
+	selfmod_function((int *) arr_func, microblaze_timer_baseaddr);
 #endif
 	printk(KERN_INFO "%s #0 at 0x%08x, irq=%d\n",
-		timer_list[i], timer_baseaddr, irq);
+		timer_list[i], microblaze_timer_baseaddr, irq);
 
 	cpuinfo.freq_div_hz = cpuinfo.cpu_clock_freq / HZ;
 

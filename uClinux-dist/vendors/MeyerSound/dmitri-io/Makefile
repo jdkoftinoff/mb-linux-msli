@@ -209,7 +209,6 @@ romfs:
 	mkdir -p $(ROMFSDIR)/etc/init.d
 	mkdir -p $(ROMFSDIR)/etc/rc.d
 	mkdir -p $(ROMFSDIR)/dev/pts
-	mkdir -p $(ROMFSDIR)/etc/avahi.orig
 	mkdir -p $(ROMFSDIR)/etc/dmitripaneld
 
 	mkdir -p $(ROMFSDIR)/dev/gpio
@@ -221,7 +220,6 @@ romfs:
 	$(ROMFSINST) -s /dev/ttyUL3 /dev/ttyGNET
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
 	$(ROMFSINST) -s /var/tmp/dhcpc/resolv.conf /etc/resolv.conf
-	$(ROMFSINST) -s /var/tmp/avahi /etc/avahi
 	$(ROMFSINST) -s /var/tmp/identity /etc/identity
 	$(ROMFSINST) -s /var/tmp/persist /etc/persist
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
@@ -230,12 +228,7 @@ romfs:
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
-	$(ROMFSINST) $(COMMON)/extras/avahi-daemon-loop /bin/avahi-daemon-loop
-	chmod +x $(ROMFSDIR)/bin/avahi-daemon-loop || true
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
-	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
-	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
-	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
 	$(ROMFSINST) $(COMMON)/etc/logo-1.bin /etc/dmitripaneld/logo-1.bin
 	$(ROMFSINST) $(COMMON)/etc/nixie-16x24-font.bin /etc/dmitripaneld/nixie-16x24-font.bin
 	$(ROMFSINST) $(COMMON)/etc/nixie-alternative-bold-8x12-font.bin /etc/dmitripaneld/nixie-alternative-bold-8x12-font.bin
@@ -284,12 +277,6 @@ endif
 
 	$(ROMFSINST) -A "^root:" -a "root:${CRYPT_PASSWD}:0:0::/:/bin/sh" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^root:" -a "root:x:0:root" $(ETCDIR)/group
-
-	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:200:Avahi Daemon:/:/bin/false" $(ETCDIR)/passwd
-	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:avahi" $(ETCDIR)/group
-
-	$(ROMFSINST) -A "^avahi-autoipd:" -a "avahi-autoipd:x:201:201:Avahi Auto IP Daemon:/:/bin/false" $(ETCDIR)/passwd
-	$(ROMFSINST) -A "^avahi-autoipd:" -a "avahi-autoipd:x:201:avahi-autoipd" $(ETCDIR)/group
 
 ifdef CONFIG_USER_INIT_INIT
 ifdef CONFIG_SERIAL_8250

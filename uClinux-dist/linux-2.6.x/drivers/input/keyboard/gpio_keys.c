@@ -113,7 +113,7 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		bdata->input = input;
 		bdata->button = button;
 		setup_timer(&bdata->timer,
-			    gpio_check_button, (unsigned long)bdata);
+		            gpio_check_button, (unsigned long)bdata);
 
 		error = gpio_request(button->gpio, button->desc ?: "gpio_keys");
 		if (error < 0) {
@@ -157,6 +157,10 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 			wakeup = 1;
 
 		input_set_capability(input, type, button->code);
+
+		// LabX: The invocation above, via setup_timer,
+		// fails, and we need this working. 
+		gpio_check_button((unsigned long)bdata);
 	}
 
 	error = input_register_device(input);

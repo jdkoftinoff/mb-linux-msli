@@ -1,0 +1,53 @@
+File        : stripped
+Author      : Yuriy Dragunov (yuriy.dragunov@labxtechnologies.com)
+Description : This file contains the Linux kernel options I enabled/disabled
+              on 8/27/12 in order to shrink our kernel to fit within 1.25MB
+              (when compressed). Use in case something you expect to work is
+              no longer working. Feel free to delete if you feel that this
+              file is no longer needed.
+
+Copyright (c) 2012, Lab X Technologies, LLC. All rights reserved.
+
+Start size: 4881537/1742211
+
+1st iteration:
+  Device Drivers/Block Devices: Support XIP filesystems
+  Device Drivers: Real Time Clock
+  File systems: Ext3+Ext3 extended
+  File systems: Ext4+Ext4 extended
+  File systems: Quota support
+  File systems: FUSE
+  File systems: Dnotify support
+  General setup: Optimize for size (enabled)
+
+  Size: 3460509/1315050
+
+2nd iteration:
+  File systems/Pseudo filesystems: all
+  Cryptographic API: GF, Authenc support, CBC support
+  Kernel hacking: Kernel debugging, SLUB debugging
+
+  Size: 3376494/1289724
+
+3rd iteration:
+  Cryptographic API: Sequence Number IV Generator, Blowfish, DES/Triple DES, Twofish, LZO
+
+  Size: 3327136/1268217
+
+4th iteration:
+  Enable the block layer: Support for large block devices and files
+  Enable the block layer/IO Schedulers: Anticipatory, CFQ
+
+  Size: 3289973/1253374
+
+5th iteration (8/28/12):
+  Kernel hacking/Tracers: Trace process context switches, Trace various events in the kernel
+  Kernel hacking: Debug Filesystem
+  Enable the block layer: Block layer data integrity support (you may need this for NAND flash)
+  Enable the block layer/IO Schedulers: Deadline I/O scheduler (last enabled one -- disable all)
+  General setup: Activate markers
+  Generic Thermal sysfs driver: Hardware monitoring support
+  Cryptographic API: Blowfish (Re-enable)
+  Cryptographic API: GF(2^128)
+
+  Size: 3085329/1193428

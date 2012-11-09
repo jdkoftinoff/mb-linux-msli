@@ -77,6 +77,8 @@
 #define SEND_SLOPE_REG    (0x006)
 #define IDLE_SLOPE_REG    (0x007)
 
+#define SAMPLE_RATE_REG    (0x008)
+
 #define CAPABILITIES_REG_A  (0x0FD)
 #  define SINGLE_OUTPUT_INSTANCE (0x00)
 #  define DUAL_OUTPUT_INSTANCE   (0x80)

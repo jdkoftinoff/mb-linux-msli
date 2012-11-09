@@ -31,6 +31,7 @@ endif
 LINUXDIR = $(CONFIG_LINUXDIR)
 LIBCDIR  = $(CONFIG_LIBCDIR)
 ROOTDIR  = $(shell pwd)
+STAGEDIR = $(ROOTDIR)/staging
 PATH	 := $(PATH):$(ROOTDIR)/tools
 HOSTCC   = cc
 IMAGEDIR = $(ROOTDIR)/images
@@ -105,6 +106,7 @@ export HOST_NCPU LIBTOOL SUBDIR_SMP_BUILD
 .PHONY: tools
 tools: ucfront cksum
 	chmod +x tools/romfs-inst.sh tools/modules-alias.sh tools/build-udev-perms.sh
+	if [ -x $(PRODUCTDIR)/extras/prepare-extras.sh ]; then $(PRODUCTDIR)/extras/prepare-extras.sh; fi
 
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
@@ -310,6 +312,7 @@ relink:
 clean: modules_clean
 	for dir in $(LINUXDIR) $(DIRS); do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
 	rm -rf $(ROMFSDIR)/*
+	rm -rf $(STAGEDIR)/*
 	rm -rf $(IMAGEDIR)/*
 	rm -f $(LINUXDIR)/linux
 	rm -f $(LINUXDIR)/include/asm

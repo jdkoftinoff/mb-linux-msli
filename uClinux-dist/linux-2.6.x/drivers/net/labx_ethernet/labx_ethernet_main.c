@@ -355,59 +355,6 @@ static inline int _labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
   return status;
 }
 
-static inline u16 _labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
-{
-  u16 speed;
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  speed = labx_eth_GetOperatingSpeed(InstancePtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  return speed;
-}
-
-static inline void _labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_SetOperatingSpeed(InstancePtr, Speed);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  /* We need a delay after we set the speed. Otherwise the PHY will not be ready. */
-  udelay(10000);
-}
-
-static inline void _labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhySetMdioDivisor(InstancePtr, Divisor);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
-			      u32 RegisterNum, u16 *PhyDataPtr)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
-			       u32 RegisterNum, u16 PhyData)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
 static inline int _labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   int status;
@@ -538,7 +485,7 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
     lp->deferred_skb = NULL;
-    lp->ndev->stats.tx_errors++;
+    lp->ndev->stats.tx_dropped++;
   }
 
   /*
@@ -796,6 +743,14 @@ static int xenet_open(struct net_device *dev)
 	 "%s: labx_ethernet: allocating interrupt %d for fifo mode.\n",
 	 dev->name, lp->fifo_irq);
 
+  /* Reset the FIFO core */
+  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
+
+  /* Clear any pending interrupts and disable all interrupts for the moment */
+  Write_Fifo32(lp->Emac, FIFO_ISR_OFFSET, Read_Fifo32(lp->Emac, FIFO_ISR_OFFSET));
+  Write_Fifo32(lp->Emac, FIFO_IER_OFFSET, 0);
+
   /* With the way interrupts are issued on the fifo core, this needs to be
    * fast interrupt handler.
    */
@@ -836,10 +791,6 @@ static int xenet_open(struct net_device *dev)
     }
   }
 
-  /* Reset the FIFO core */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
-
   /* Enable FIFO interrupts  - no polled mode */
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
                        FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
@@ -848,7 +799,7 @@ static int xenet_open(struct net_device *dev)
   _labx_eth_Start(&lp->Emac);
 
   /* We're ready to go. */
-  netif_start_queue(dev);
+  netif_wake_queue(dev);
 
   return 0;
 }
@@ -955,7 +906,7 @@ static int xenet_change_mtu(struct net_device *dev, int new_mtu)
 
 static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 {
-  struct net_local *lp;
+  struct net_local *lp = netdev_priv(dev);
   unsigned long flags, fifo_free_bytes;
   int total_frags = skb_shinfo(skb)->nr_frags + 1;
   unsigned int total_len;
@@ -977,7 +928,6 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
    * or other processor in SMP case.
    */
   spin_lock_irqsave(&XTE_tx_spinlock, flags);
-  lp = netdev_priv(dev);
 
   fifo_free_bytes = (Read_Fifo32(lp->Emac, FIFO_TDFV_OFFSET) << 2);
   if (fifo_free_bytes < total_len) {
@@ -991,6 +941,9 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Write frame data to FIFO, starting with the header and following
    * up with each of the fragments
    */
+
+  /* Place the transmit path into full-word alignment mode */
+  Write_Fifo32(lp->Emac, FIFO_TX_CTRL_OFFSET, FIFO_ALIGN32);
 
   word_len = ((skb_headlen(skb) + 3) >> 2);
 
@@ -1012,10 +965,10 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Initiate transmit */
   Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
   lp->ndev->stats.tx_bytes += total_len;
+  dev->trans_start = jiffies;
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 
   dev_kfree_skb(skb);	/* free skb */
-  dev->trans_start = jiffies;
   return 0;
 }
 
@@ -1678,10 +1631,7 @@ static int xtenet_setup(struct device *dev,
   if (ndev->mtu > XTE_JUMBO_MTU)
     ndev->mtu = XTE_JUMBO_MTU;
 
-
   /* Assign the FIFO transmit callback */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
   ndev->hard_start_xmit = xenet_FifoSend;
 
   /* initialize the netdev structure */
@@ -1734,6 +1684,9 @@ static int xtenet_setup(struct device *dev,
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
+
+  /* Allow VLAN traffic that is not on the AVB class A priority*/
+  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, VLAN_MASK_REG, ~(5<<3));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 
@@ -1879,8 +1832,16 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
   pdata->phy_name[0] = '\0';
   mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-controller", NULL);
   if(!mdio_controller_handle) {
-    dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-bus-name", NULL);
+    if (!mdio_controller_handle) {
+      dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    } else {
+      /* PHY's MDIO bus specified by name */
+      snprintf(pdata->phy_name, BUS_ID_SIZE, "%s:%02x", (const char*)mdio_controller_handle, phy_addr);
+      printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
+    }
   } else {
+    /* PHY's MDIO bus specified by the connected ethernet device */
     mdio_controller_node = of_find_node_by_phandle(*mdio_controller_handle);
     if (!mdio_controller_node) {
       dev_warn(&ofdev->dev, "no MDIO connection found.\n");
@@ -1933,6 +1894,7 @@ static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,labx-ethernet-1.00.a", },
   { .compatible = "xlnx,labx-ethernet-1.01.a", },
   { .compatible = "xlnx,labx-ethernet-1.02.a", },
+  { .compatible = "xlnx,labx-ethernet-1.03.a", },
   { /* end of list */ },
 };
 

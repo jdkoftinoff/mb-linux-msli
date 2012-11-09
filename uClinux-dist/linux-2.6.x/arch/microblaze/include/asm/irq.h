@@ -9,7 +9,9 @@
 #ifndef _ASM_MICROBLAZE_IRQ_H
 #define _ASM_MICROBLAZE_IRQ_H
 
-#define NR_IRQS 32
+/* LabX: increased from 32 to allow for secondary
+         IRQs, currently used for GPIO keys. */
+#define NR_IRQS 128
 
 #include <linux/interrupt.h>
 

@@ -15,6 +15,7 @@ ROOTDIR=$(PWD)/..
 endif
 
 UCLINUX_BUILD_LIB=1
+HOST_NCPU?=1
 -include $(LINUX_CONFIG)
 -include $(CONFIG_CONFIG)
 -include $(ARCH_CONFIG)
@@ -94,6 +95,7 @@ dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
+
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
@@ -188,6 +190,7 @@ romfs:
 ##############################################################################
 
 clean: clean_links
+	rm -f *.a
 	-for i in $(DIRS_all); do \
 		if [ -f $$i/.sgbuilt_lib ]; then \
 			$(MAKE) -C $$i clean ; \
@@ -272,7 +275,8 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libffi/install/lib/*.a \
 	$(ROOTDIR)/lib/libffi/install/lib/*.la \
 	$(ROOTDIR)/lib/libffi/install/lib/pkgconfig/*.pc \
-	$(ROOTDIR)/prop/libtrustedsource/librep/librep.so*
+	$(ROOTDIR)/prop/libtrustedsource/librep/librep.so* \
+	$(STAGEDIR)/usr/lib/*.a
 
 # The dynamic linker library needs to be linked into lib via a different name
 LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
