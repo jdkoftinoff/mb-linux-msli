@@ -74,7 +74,7 @@
 #  define TDM_SAMPLE_RATE_MASK    (0xC0000)
 #  define TDM_SAMPLE_RATE_BITS    (18)
 #  define TDM_MODULE_OWNER_MASK   (0xC00)
-#  define TDM_MODULE_OWNER_BITS   (11)
+#  define TDM_MODULE_OWNER_BITS   (10)
 #  define TDM_MCLK_DIVIDER_MASK   (0xF00000)
 #  define TDM_MCLK_DIVIDER_BITS   (20)
 #define TDM_STREAM_MAP_REG        (0x03)
