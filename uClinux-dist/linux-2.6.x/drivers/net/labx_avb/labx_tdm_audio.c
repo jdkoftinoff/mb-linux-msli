@@ -224,13 +224,18 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       break;
 
     case NUM_CHANNELS:
-      /* Evaluate the number of channels to see if is one of the supported configurations */
+      /* Evaluate the number of channels to see if it is one of the supported configurations */
       if(tdmControl->numChannels != 8 && tdmControl->numChannels != 16 &&
             tdmControl->numChannels != 32 && tdmControl->numChannels != 64 &&
               tdmControl->numChannels != 128 && tdmControl->numChannels != 256) {
         return -ENUMCHNOTSUPPORTED;
       }
      
+      /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
+      if(tdmControl->numChannels > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+        return -ENUMCHNOTSUPPORTED;
+      }
+
       /* Evaluate the number of channels to see if it is not less than the minimum supported */
       if(tdmControl->numChannels < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
         return -ENUMCHNOTSUPPORTED;
@@ -253,16 +258,21 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 #endif
       break;
 
-    case DMA_BURST_LENGTH:
-      if(tdmControl->dmaBurstLength != 2 && tdmControl->dmaBurstLength != 4 &&
-          tdmControl->dmaBurstLength != 8) {
-         return -EDMABADBURSTLEN;
+    case BURST_LENGTH:
+      if(tdmControl->burstLength != 4 && tdmControl->burstLength != 8 &&
+          tdmControl->burstLength != 16) {
+         return -EBADBURSTLEN;
       }
+      
+      if(tdmControl->burstLength > tdm->tdmCaps.maxBurstLength) {
+         return -EBADBURSTLEN;
+      }
+      
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MASK;
-      reg |= (tdmControl-> dmaBurstLength << TDM_BURST_LENGTH_BITS);
+      reg |= (tdmControl-> burstLength << TDM_BURST_LENGTH_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
 #ifdef _LABXDEBUG
-      printk("TDM (ioctl): set burst length to %u\n", tdmControl->dmaBurstLength);
+      printk("TDM (ioctl): set burst length to %u\n", tdmControl->burstLength);
 #endif
       break;
 
@@ -475,9 +485,9 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
       tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount);
       break;
 
-    case DMA_BURST_LENGTH:
+    case BURST_LENGTH:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->dmaBurstLength = (reg & TDM_BURST_LENGTH_MASK) >> TDM_BURST_LENGTH_BITS;
+      tdmControl->burstLength = (reg & TDM_BURST_LENGTH_MASK) >> TDM_BURST_LENGTH_BITS;
       break;
 
     case I2S_ALIGN:
@@ -594,7 +604,7 @@ static int tdm_ioctl(struct inode *inode,
 
   case IOC_ARM_ERROR_IRQS:
     {
-      // Enable the DMA error interrupt as a "one-shot" 
+      // Enable the DMA error interrupt as a "one-shot"
       uint32_t irqMask = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG));
       irqMask |= DMA_ERROR_IRQ;
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG), DMA_ERROR_IRQ);
@@ -637,14 +647,14 @@ static irqreturn_t labx_audio_tdm_interrupt(int irq, void *dev_id) {
     // TEMPORARY - Just announce this and treat it as a one-shot.
     //             Ultimately this should be communicated via generic Netlink.
     irqMask &= ~DMA_ERROR_IRQ;
-    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
-    printk("%s: DMA error!\n", tdm->name);
+    //XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
+    //printk("%s: DMA error!\n", tdm->name);
   }
   
   // Detect the pseudorandom analysis error IRQ 
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
-    labx_tdm_analyzer_interrupt(&tdm->analyzer, irqMask);
+    labx_tdm_analyzer_interrupt(&tdm->analyzer, maskedFlags);
   }
 #endif
 
@@ -706,6 +716,11 @@ static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count)
       return -ENUMCHNOTSUPPORTED;
     }
       
+    /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
+    if(val > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+      return -ENUMCHNOTSUPPORTED;
+    }
+   
     /* Evaluate the number of channels to see if it is not less than the minimum supported */
     if(val < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
       return -ENUMCHNOTSUPPORTED;
@@ -787,7 +802,11 @@ static ssize_t tdm_w_burst_length(struct class *c, const char * buf, size_t coun
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
   if (strict_strtoul(buf, 0, &val) == 0) {
-    if(val != 2 && val != 4 && val != 8) {
+    if(val != 4 && val != 8 && val != 16) {
+      setVal = false;
+    }
+      
+    if(val > tdm->tdmCaps.maxBurstLength) {
       setVal = false;
     }
 
@@ -1189,9 +1208,9 @@ int audio_tdm_probe(const char *name,
    * For now, there is no TDM IRQ, so this is unused.
    */
   if(irq != NULL) {
-	tdm->irq = irq->start;
+    tdm->irq = irq->start;
     returnValue = request_irq(tdm->irq, &labx_audio_tdm_interrupt, IRQF_DISABLED,
-    		tdm->name, tdm);
+    		              tdm->name, tdm);
     if (returnValue) {
       printk(KERN_ERR "%s : Could not allocate Lab X Audio TDM interrupt (%d).\n",
     		  tdm->name, tdm->irq);
@@ -1221,16 +1240,6 @@ int audio_tdm_probe(const char *name,
     goto unmap;
   }
  
-#if 0
-  if(tdm->irq == NO_IRQ_SUPPLIED) {
-    printk("polled operation\n");
-  } else {
-    printk("IRQ %d\n", tdm->irq);
-  }
-#else
-  printk("No interrupts supported\n");
-#endif
-
   /* Initialize other resources */
   spin_lock_init(&tdm->mutex);
   tdm->opened = false;
@@ -1266,6 +1275,7 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.laneCount             = pdata->lane_count;
   tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
   tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
+  tdm->tdmCaps.maxBurstLength        = pdata->burst_length;
   tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
   tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
   tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
@@ -1367,6 +1377,7 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   pdata_struct.lane_count               = get_u32(ofdev, "xlnx,tdm-lane-count");
   pdata_struct.num_streams              = get_u32(ofdev, "xlnx,max-num-streams");
   pdata_struct.slot_density             = get_u32(ofdev, "xlnx,tdm-max-slot-density");
+  pdata_struct.burst_length             = get_u32(ofdev, "xlnx,tdm-max-burst-length");
   pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
   pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
   pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");

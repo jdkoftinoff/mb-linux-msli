@@ -49,7 +49,7 @@
 #  define TDM_GENERATOR_SLOT_MASK     (0x3F0)
 #  define TDM_GENERATOR_SLOT_SHIFT    (4)
 #define ANALYZER_CONTROL_REG  (0x001)
-#  define TDM_ANALYZER_RAMP           (0x20000000)
+#  define TDM_ANALYZER_RAMP           (0x40000000)
 #  define TDM_ANALYZER_LANE_MASK      (0x00F)
 #  define TDM_ANALYZER_SLOT_MASK      (0x3F0)
 #  define TDM_ANALYZER_SLOT_SHIFT     (4)
@@ -60,7 +60,7 @@
 #define ERROR_ACTUAL_REG      (0x004)
 
 #define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->baseAddress | (offset << 2))
+  ((uintptr_t)device->baseAddress + (offset << 2))
 
 /* Configures the pseudorandom generator */
 static void configure_generator(struct tdm_analyzer *analyzer,
@@ -77,7 +77,7 @@ static void configure_generator(struct tdm_analyzer *analyzer,
     controlRegister |= TDM_GENERATOR_ENABLE;
 
 #ifdef _LABXDEBUG
-    printk("TDM: enabled generator on lane %u, channel %u\n", generatorConfig->tdmLane, generatorConfig->tdmChannel);
+    printk("TDM: enabled generator on lane %u, channel %u, signalMode: %u\n", generatorConfig->tdmLane, generatorConfig->tdmChannel, generatorConfig->signalControl);
 #endif
   } else {
     // Just disable the generator  
@@ -210,14 +210,14 @@ EXPORT_SYMBOL(labx_tdm_analyzer_ioctl);
 
 /* Interrupt service routine for the driver */
 irqreturn_t labx_tdm_analyzer_interrupt(struct tdm_analyzer *analyzer, 
-                                          uint32_t irqMask) {
+                                        uint32_t maskedFlags) {
 
   /* TEMPORARY - Just announce this and treat it as a one-shot.
    *             Ultimately this should be communicated via generic Netlink.
    */
-  irqMask &= ~analyzer->errorIrq;
-  XIo_Out32(REGISTER_ADDRESS(analyzer, analyzer->irqFlagsReg), irqMask);
-  printk("%s: Analysis error!\n", analyzer->tdmName);
+  maskedFlags &= ~analyzer->errorIrq;
+  //XIo_Out32(REGISTER_ADDRESS(analyzer, analyzer->irqFlagsReg), maskedFlags);
+  //printk("%s: Analysis error!\n", analyzer->tdmName);
   
   return(IRQ_HANDLED);
 }

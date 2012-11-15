@@ -40,12 +40,12 @@
   ((uintptr_t)device->virtualAddress | (offset << 2))
 
 // There's a single register, at offset 0x00000008 (byte address, is actually register 0x02 in 32-bit offset-speak)
-   // Bits[22:19]  - MCLK divisor
-   // Bits[18:17]  - Sample rate
+   // Bits[23:20]  - MCLK divisor
+   // Bits[19:18]  - Sample rate
    //                "00" - Single rate
    //                "01" - Double rate
    //                "10" - Quad rate                                 
-   // Bits[16:13]  - Burst length (2, 4, 8 are the only valid burst sizes)
+   // Bits[17:13]  - Burst length (4, 8, 16 are the only valid burst sizes)
    // Bit[12]      - Sample depth
    //                '0' 24-bits
    //                '1' 16-bits
@@ -69,24 +69,27 @@
 /* Global control registers */
 #define TDM_CONTROL_REG           (0x02)
 #  define TDM_SLOT_DENSITY_MASK   (0x7F)
-#  define TDM_BURST_LENGTH_MASK   (0x1E000)
+#  define TDM_BURST_LENGTH_MASK   (0x3C000)
 #  define TDM_BURST_LENGTH_BITS   (13)
-#  define TDM_SAMPLE_RATE_MASK    (0x60000)
-#  define TDM_SAMPLE_RATE_BITS    (17)
+#  define TDM_SAMPLE_RATE_MASK    (0xC0000)
+#  define TDM_SAMPLE_RATE_BITS    (18)
 #  define TDM_MODULE_OWNER_MASK   (0xC00)
 #  define TDM_MODULE_OWNER_BITS   (11)
-#  define TDM_MCLK_DIVIDER_MASK   (0x780000)
-#  define TDM_MCLK_DIVIDER_BITS   (19)
+#  define TDM_MCLK_DIVIDER_MASK   (0xF00000)
+#  define TDM_MCLK_DIVIDER_BITS   (20)
 #define TDM_STREAM_MAP_REG        (0x03)
 #  define MAP_SWAP_BANK           (0x80000000)
 #  define MAP_CHANNEL_MASK        (0x00FF0000)
 #  define MAP_CHANNEL_SHIFT       (16)
 #  define MAP_STREAM_MASK         (0x0000003F)
-#define TDM_ANALYZER_BASE_ADDRESS (0x004)
 #define TDM_IRQ_MASK_REG          (0x009)
-#define TDM_IRQ_FLAGS_REG         (0x010)
+#define TDM_IRQ_FLAGS_REG         (0x00A)
 #  define DMA_ERROR_IRQ           (0x001)
 #  define ANALYSIS_ERROR_IRQ      (0x002)
+
+/* Base address for generator / analyzer sub-module 
+ * Address is passed to module as a word address */
+#define TDM_ANALYZER_BASE_ADDRESS (0x010)
 
 /* Number of physical banks used for auto-mute mapping */
 #define STREAM_MAP_BANKS  (2)
@@ -130,6 +133,7 @@ struct labx_tdm_platform_data {
   uint8_t lane_count;
   uint8_t num_streams;
   uint8_t slot_density;
+  uint8_t burst_length;
   uint32_t mclk_ratio;
   uint8_t has_loopback;
   uint8_t slave_manager;

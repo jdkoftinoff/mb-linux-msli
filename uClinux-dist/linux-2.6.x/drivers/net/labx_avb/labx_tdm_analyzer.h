@@ -54,7 +54,7 @@ int         labx_tdm_analyzer_ioctl(struct tdm_analyzer *analyzer,
                                     unsigned int command, 
                                     unsigned long arg);
 irqreturn_t labx_tdm_analyzer_interrupt(struct tdm_analyzer *analyzer, 
-                                        uint32_t irqMask);
+                                        uint32_t maskedFlags);
 
 #endif /* _LABX_TDM_ANALYZER_H_ */
 
