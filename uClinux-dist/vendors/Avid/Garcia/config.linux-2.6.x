@@ -620,7 +620,7 @@ CONFIG_GPIO_SYSFS=y
 #
 # Memory mapped GPIO expanders:
 #
-CONFIG_GPIO_XILINX=y
+CONFIG_GPIO_XILINX=n
 
 #
 # I2C GPIO expanders:
