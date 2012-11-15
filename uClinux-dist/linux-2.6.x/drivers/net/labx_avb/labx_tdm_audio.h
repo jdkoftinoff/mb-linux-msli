@@ -87,8 +87,8 @@
 #  define DMA_ERROR_IRQ           (0x001)
 #  define ANALYSIS_ERROR_IRQ      (0x002)
 
-/* Base address for generator / analyzer sub-module 
- * Address is passed to module as a word address */
+/* Base address of analyzer/generator registers
+ * (within TDM module), in bytes. */
 #define TDM_ANALYZER_BASE_ADDRESS (0x010)
 
 /* Number of physical banks used for auto-mute mapping */
