@@ -1286,9 +1286,9 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, %s",
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, max burst length %d, %s",
 		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.laneCount,
-                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio,
+                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.maxBurstLength,
                   (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
