@@ -576,7 +576,12 @@ static inline DMAInstruction DMA_BUFFER_INCREMENT(DMAConfiguration config, int32
   return (increment_Value);
 }
   
-/* Returns a JOIN_TRANSFER instruction */
+/* Returns a JOIN_TRANSFER instruction
+ *
+ * At least one instruction cycle must separate a DMA_BUFFER_READ / _WRITE
+ * and this instruction to ensure that a new transfer has been registered
+ * in the event that one is not already pending.
+ */
 static inline DMAInstruction DMA_JOIN_TRANSFER(DMAConfiguration config)
 {
   return (DMA_OPCODE_JOIN_TRANSFER << DMA_OPCODE_SHIFT(config));
