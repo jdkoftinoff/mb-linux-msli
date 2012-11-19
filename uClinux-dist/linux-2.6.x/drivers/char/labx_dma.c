@@ -53,6 +53,11 @@
 #define DATA_WIDTH_VERSION_MIN   0x14
 #define DEFAULT_DATA_BYTE_WIDTH     4
 
+/*
+ * Revision of the hardware at which "free-run" capability is supported.
+ */
+#define FREE_RUN_VERSION_MIN  0x14
+
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
@@ -404,6 +409,8 @@ int32_t labx_dma_probe(struct labx_dma *dma,
            versionMajor, versionMinor, dma->virtualAddress);
     return(-ENODEV);
   }
+  dma->capabilities.versionMajor = versionMajor;
+  dma->capabilities.versionMinor = versionMinor;
 
   /* Decode the various bits in the capabilities word */
   if (versionCompare < CAPS_INDEX_VERSION) {
@@ -777,9 +784,33 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     break;
 
   case DMA_IOC_START_CHANNEL:
+    {
+      uint32_t regValue;
+      uint32_t versionCompare = ((dma->capabilities.versionMajor << DMA_REVISION_FIELD_BITS) | 
+                                 dma->capabilities.versionMinor);
+
+      /* Set the "free run" bit for the channel appropriately.  Versions prior
+       * to when this capability was added cannot free-run a channel.
+       */
+      if(versionCompare < FREE_RUN_VERSION_MIN) {
+        /* Free-run was requested, and the hardware doesn't support it. */
+        if(arg & DMA_CHANNEL_FREE_RUN) return(-EINVAL);
+      } else {
+        regValue = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_FREE_RUN_REG));
+        if(arg & DMA_CHANNEL_FREE_RUN) {
+          regValue |= (0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+        } else {
+          regValue &= ~(0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+        }
+        XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_FREE_RUN_REG), regValue);
+      }
+
+      /* Mask off the "free run" bit from the channel */
     /* printk(KERN_INFO "DMA (%p) Start Channel %08X (%p)\n", dma, (int)arg, (void*)DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)); */
-    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), 
-              XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) | (1<<arg));
+      regValue  = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
+      regValue |= (0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+      XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), regValue);
+    }
     break;
 
   case DMA_IOC_STOP_CHANNEL:

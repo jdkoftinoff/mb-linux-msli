@@ -695,6 +695,8 @@ static inline DMAInstruction DMA_PUSH_STATUS_ALU(DMAConfiguration config,
 
 /* DMA channel control */
 
+#define DMA_CHANNEL_FREE_RUN  (0x80000000)
+
 #define DMA_IOC_START_CHANNEL  _IOW(DMA_IOC_CHAR, 0x05, uint32_t)
 #define DMA_IOC_STOP_CHANNEL   _IOW(DMA_IOC_CHAR, 0x06, uint32_t)
 
@@ -717,6 +719,8 @@ typedef struct {
 #define DMA_IOC_SET_VECTOR     _IOW(DMA_IOC_CHAR, 0x09, uint32_t)
 
 typedef struct {
+  uint32_t versionMajor;
+  uint32_t versionMinor;
   uint32_t indexCounters;
   uint32_t dmaChannels;
   uint32_t alus;
