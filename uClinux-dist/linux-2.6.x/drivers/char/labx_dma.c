@@ -47,6 +47,12 @@
 #define DRIVER_VERSION_MAX  0x12
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
+/* Revision of the hardware at which DMA datapath width is reported in
+ * the capabilities register.  The default is 32 bits, or 4 bytes.
+ */
+#define DATA_WIDTH_VERSION_MIN   0x14
+#define DEFAULT_DATA_BYTE_WIDTH     4
+
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
@@ -433,6 +439,14 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Check to see if the hardware has a status FIFO */
   dma->capabilities.hasStatusFifo = 
     ((capsWord & DMA_CAPS_STATUS_FIFO_BIT) ? DMA_HAS_STATUS_FIFO : DMA_NO_STATUS_FIFO);
+
+  /* Report the byte width of the datapath */
+  if(versionCompare >= DATA_WIDTH_VERSION_MIN) {
+    dma->capabilities.dataByteWidth = 
+      (0x01 << ((capsWord >> DMA_CAPS_LOG_WIDTH_SHIFT) & DMA_CAPS_LOG_WIDTH_MASK));
+  } else {
+    dma->capabilities.dataByteWidth = DEFAULT_DATA_BYTE_WIDTH;
+  }
 
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(dma->syncedWriteQueue));

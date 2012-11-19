@@ -724,6 +724,7 @@ typedef struct {
   uint32_t codeAddressBits;
   uint32_t microcodeWords;
   uint32_t hasStatusFifo;
+  uint32_t dataByteWidth;
 } DMACapabilities;
 
 #define DMA_IOC_GET_CAPS      _IOR(DMA_IOC_CHAR, 0x0A, DMACapabilities)
