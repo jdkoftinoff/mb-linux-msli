@@ -443,6 +443,15 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     dma->capabilities.microcodeWords = microcodeWords;
   }
 
+  /* If the instance has the "internal parameters" bit set in the capabilities
+   * word, then it is of a sufficient hardware version to automatically double
+   * the parameter address bus width, assigning the upper half to the external
+   * parameter interface, whether it is wired to anything or not.
+   */
+  if(capsWord & DMA_CAPS_INTERNAL_PARAMS_BIT) {
+    dma->capabilities.parameterAddressBits++;
+  }
+
   /* Check to see if the hardware has a status FIFO */
   dma->capabilities.hasStatusFifo = 
     ((capsWord & DMA_CAPS_STATUS_FIFO_BIT) ? DMA_HAS_STATUS_FIFO : DMA_NO_STATUS_FIFO);
