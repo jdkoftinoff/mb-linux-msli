@@ -729,12 +729,19 @@ typedef struct {
   uint32_t microcodeWords;
   uint32_t hasStatusFifo;
   uint32_t dataByteWidth;
+  uint32_t parameterMap;
 } DMACapabilities;
 
 #define DMA_IOC_GET_CAPS      _IOR(DMA_IOC_CHAR, 0x0A, DMACapabilities)
 
+/* Enumerated values for status FIFO availability */
 #define DMA_NO_STATUS_FIFO  (0)
 #define DMA_HAS_STATUS_FIFO (1)
+
+/* Enumerated values for different parameter address maps */
+#define DMA_PARAM_MAP_UNKNOWN   0
+#define DMA_PARAM_MAP_EXTERNAL  1
+#define DMA_PARAM_MAP_SPLIT     2
 
 /* Indices for identifying memory resources */
 #define LABX_DMA_ADDRESS_RANGE_RESOURCE    (0)

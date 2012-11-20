@@ -58,6 +58,11 @@
  */
 #define FREE_RUN_VERSION_MIN  0x14
 
+/* Revision of the hardware at which the "internal parameters" bit exists
+ * within the capabilities register.
+ */
+#define PARAMS_BIT_VERSION_MIN 0x14
+
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
@@ -443,13 +448,27 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     dma->capabilities.microcodeWords = microcodeWords;
   }
 
-  /* If the instance has the "internal parameters" bit set in the capabilities
-   * word, then it is of a sufficient hardware version to automatically double
-   * the parameter address bus width, assigning the upper half to the external
-   * parameter interface, whether it is wired to anything or not.
+  /* Determine whether the hardware reflects the "internal parameters" bit of
+   * the capabilities register or not.
    */
-  if(capsWord & DMA_CAPS_INTERNAL_PARAMS_BIT) {
-    dma->capabilities.parameterAddressBits++;
+  if(versionCompare >= PARAMS_BIT_VERSION_MIN) {
+    /* Inspect the "internal parameters" bit */
+    if(capsWord & DMA_CAPS_INTERNAL_PARAMS_BIT) {
+      /* The instance has an internal parameter RAM mapped to the lower half of
+       * the parameter space, and external parameters in the upper half.  Increment
+       * the parameter address width to account for this.
+       */
+      dma->capabilities.parameterMap = DMA_PARAM_MAP_SPLIT;
+      dma->capabilities.parameterAddressBits++;
+    } else {
+      /* No internal parameters, the full map corresponds to external */
+      dma->capabilities.parameterMap = DMA_PARAM_MAP_EXTERNAL;
+    }
+  } else {
+    /* The internal parameters bit is not supported in this hardware, declare
+     * the parameter map "unknown" and keep the parameter address width.
+     */
+    dma->capabilities.parameterMap = DMA_PARAM_MAP_UNKNOWN;
   }
 
   /* Check to see if the hardware has a status FIFO */
@@ -523,8 +542,10 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Make a note if the instance is inferring its microcode size */
   printk(KERN_INFO "\nFound DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
     dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
-  printk(KERN_INFO "  %d param bits, %d code bits, %d microcode words%s, %s status FIFO\n",
+  printk(KERN_INFO "  %d param bits (%s), %d code bits, %d microcode words%s, %s status FIFO\n",
          dma->capabilities.parameterAddressBits,
+         ((dma->capabilities.parameterMap == DMA_PARAM_MAP_EXTERNAL) ? "EXTERNAL" :
+          ((dma->capabilities.parameterMap == DMA_PARAM_MAP_SPLIT) ? "SPLIT" : "UNKNOWN")),
          dma->capabilities.codeAddressBits, 
          dma->capabilities.microcodeWords,
          ((microcodeWords <= 0) ? " (INFERRED)" : ""),
