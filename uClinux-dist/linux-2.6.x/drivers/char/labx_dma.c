@@ -455,11 +455,9 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     /* Inspect the "internal parameters" bit */
     if(capsWord & DMA_CAPS_INTERNAL_PARAMS_BIT) {
       /* The instance has an internal parameter RAM mapped to the lower half of
-       * the parameter space, and external parameters in the upper half.  Increment
-       * the parameter address width to account for this.
+       * the parameter space, and external parameters in the upper half.
        */
       dma->capabilities.parameterMap = DMA_PARAM_MAP_SPLIT;
-      dma->capabilities.parameterAddressBits++;
     } else {
       /* No internal parameters, the full map corresponds to external */
       dma->capabilities.parameterMap = DMA_PARAM_MAP_EXTERNAL;
