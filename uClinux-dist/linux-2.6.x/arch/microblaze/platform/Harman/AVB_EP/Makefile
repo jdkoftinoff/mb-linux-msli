@@ -11,4 +11,6 @@ EXTRA_CFLAGS += -I$(TOPDIR)/drivers/net/labx_avb
 
 obj-y += avb_ep64_tdm_output.o
 obj-y += avb_ep64_packetizer.o
+obj-y += avb_ep384_tdm_output.o
+obj-y += avb_ep384_packetizer.o
 obj-y += studer_legacy_bridge.o
