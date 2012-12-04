@@ -68,7 +68,7 @@ static struct phy_device* internalPhy = NULL;
 #  define FORCE_SPEED_10           (0x0000)
 #  define FORCE_SPEED_100          (0x0001)
 #  define FORCE_SPEED_1000         (0x0002)
-#  define SPEED_AUTO_DETECT        (0x0003)
+#  define SPEED_NO_FORCE           (0x0003)
 
 /* Register settings assigned to the CPU port:
  * Link forced up, 1 Gbps full-duplex
@@ -83,7 +83,7 @@ static struct phy_device* internalPhy = NULL;
 
                                          
 /* Register settings assigned to the SFP port:
- * Link forced up, 1 Gbps full-duplex
+ * Link forced up, speed left alone
  * Using RGMII delay on switch IND input data
  * Using RGMII delay on switch OUTD output data
  */
@@ -91,7 +91,7 @@ static struct phy_device* internalPhy = NULL;
                                           RGMII_MODE_GTXCLK_DELAY | \
                                           FORCE_LINK_UP           | \
                                           FORCE_DUPLEX_FULL       | \
-                                          FORCE_SPEED_1000)
+                                          SPEED_NO_FORCE)
 
                                           
 /* Bit-mask of enabled ports  */
