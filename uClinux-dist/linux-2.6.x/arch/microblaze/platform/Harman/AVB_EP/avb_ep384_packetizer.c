@@ -27,6 +27,7 @@
 #include "avb_ep384_packetizer.h"
 #include "labx_audio_packetizer.h"
 #include <linux/platform_device.h>
+#include <linux/labx_tdm_analyzer_defs.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -76,25 +77,25 @@ static void configure_generator(struct avb_ep384_packetizer *packetizer,
   if(generatorConfig->enable == LFSR_GENERATOR_ENABLE) {
     /* Enable the generator on the appropriate channel */
     controlRegister &= ~(GENERATOR_LANE_MASK | GENERATOR_SLOT_MASK);
-    controlRegister |= ((generatorConfig->sportPort << GENERATOR_LANE_SHIFT) &
+    controlRegister |= ((generatorConfig->tdmLane << GENERATOR_LANE_SHIFT) &
                         GENERATOR_LANE_MASK);
-    controlRegister |= (generatorConfig->sportChannel & GENERATOR_SLOT_MASK);
+    controlRegister |= (generatorConfig->tdmChannel & GENERATOR_SLOT_MASK);
     controlRegister |= GENERATOR_ENABLE;
 
     /* Test to see whether we are muting the channel or applying the
      * psuedo-random sequence to it
      */
     switch(generatorConfig->signalControl) {
-    case SIGNAL_PSUEDORANDOM:
+    case EP_SIGNAL_PSUEDORANDOM:
       controlRegister &= ~(GENERATOR_MUTE | GENERATOR_DC_PATTERN | GENERATOR_RAMP);
       break;
 
-    case SIGNAL_RAMP:
+    case EP_SIGNAL_RAMP:
       controlRegister &= ~(GENERATOR_MUTE | GENERATOR_DC_PATTERN);
       controlRegister |= GENERATOR_RAMP;
       break;
 
-    case SIGNAL_MUTE:
+    case EP_SIGNAL_MUTE:
       controlRegister &= ~(GENERATOR_DC_PATTERN | GENERATOR_RAMP);
       controlRegister |= GENERATOR_MUTE;
       break;

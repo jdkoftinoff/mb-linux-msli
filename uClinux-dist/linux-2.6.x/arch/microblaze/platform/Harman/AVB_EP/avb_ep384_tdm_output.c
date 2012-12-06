@@ -28,6 +28,7 @@
 #include <asm/uaccess.h>
 #include <linux/labx_local_audio.h>
 #include <linux/labx_local_audio_defs.h>
+#include <linux/labx_tdm_analyzer_defs.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -103,9 +104,9 @@ static void configure_analyzer(struct avb_ep384_tdm_output *tdmOutput,
   if(analyzerConfig->enable == LFSR_ANALYZER_ENABLE) {
     /* Enable the analyzer on the appropriate channel */
     controlRegister &= ~(ANALYZER_LANE_MASK | ANALYZER_SLOT_MASK);
-    controlRegister |= ((analyzerConfig->sportPort << ANALYZER_LANE_SHIFT) &
+    controlRegister |= ((analyzerConfig->tdmLane << ANALYZER_LANE_SHIFT) &
                         ANALYZER_LANE_MASK);
-    controlRegister |= (analyzerConfig->sportChannel & ANALYZER_SLOT_MASK);
+    controlRegister |= (analyzerConfig->tdmChannel & ANALYZER_SLOT_MASK);
     controlRegister |= ANALYZER_ENABLE;
 
     /* Set up the analyzer to predict either a pseudorandom or linear ramp */

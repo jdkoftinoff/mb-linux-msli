@@ -40,28 +40,6 @@ struct avb_ep384_tdm_output {
 };
 
 /* I/O control commands defined by the driver */
-#define LFSR_ANALYZER_DISABLE  (0x00)
-#define LFSR_ANALYZER_ENABLE   (0x01)
-
-#define ANALYSIS_PSEUDORANDOM  (0x00)
-#define ANALYSIS_RAMP          (0x01)
-
-typedef struct {
-  uint32_t enable;
-  uint32_t signalControl;
-  uint32_t sportPort;
-  uint32_t sportChannel;
-} AnalyzerConfig;
-
-#define IOC_CONFIG_ANALYZER  _IOR('W', 0x01, AnalyzerConfig)
-
-typedef struct {
-  uint32_t errorCount;
-  uint32_t predictedSample;
-  uint32_t actualSample;
-} AnalyzerResults;
-
-#define IOC_GET_ANALYZER_RESULTS  _IOW('W', 0x02, AnalyzerResults)
 
 #define IOC_ARM_ERROR_IRQS        _IO('W', 0x03)
 

@@ -37,23 +37,10 @@ struct avb_ep384_packetizer {
 };
 
 /* I/O control commands defined by the driver */
-#define LFSR_GENERATOR_DISABLE  (0x00)
-#define LFSR_GENERATOR_ENABLE   (0x01)
 
-#define SIGNAL_PSUEDORANDOM  (0x00)
-#define SIGNAL_MUTE          (0x01)
-#define SIGNAL_DC_PATTERN    (0x02)
-#define SIGNAL_RAMP          (0x03)
-
-typedef struct {
-  uint32_t enable;
-  uint32_t signalControl;
-  uint32_t sportPort;
-  uint32_t sportChannel;
-} GeneratorConfig;
-
-#define IOC_CONFIG_GENERATOR  _IOR('l', 0x01, GeneratorConfig)
-
-#define IOC_GET_LATENCY _IOW('l', 0x02, uint32_t)
+#define EP_SIGNAL_PSUEDORANDOM  (0x00)
+#define EP_SIGNAL_MUTE          (0x01)
+#define EP_SIGNAL_DC_PATTERN    (0x02)
+#define EP_SIGNAL_RAMP          (0x03)
 
 #endif
