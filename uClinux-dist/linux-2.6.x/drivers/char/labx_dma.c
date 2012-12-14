@@ -614,18 +614,18 @@ static int alloc_buffers(struct labx_dma* dma, DMAAlloc* alloc)
       pointers[i] = kmalloc(alloc->size, GFP_DMA);
     }
 
-    /* Zero out the buffers */
-    memset(pointers[i], 0, alloc->size);
-
     if (NULL == pointers[i])
     {
       for (j=0; j<i; j++)
       {
         kfree(pointers[i]);
       }
+      printk("alloc_buffers failed\n");
       return -ENOMEM;
     }
-  memset(pointers[i], 0, alloc->size);
+
+    /* Zero out the buffers */
+    memset(pointers[i], 0, alloc->size);
   }
 
   return 0;
@@ -778,14 +778,19 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     {
       DMAAlloc alloc;
 
+      printk("DMA_IOC_ALLOC_BUFFERS 1\n");
       if(copy_from_user(&alloc, (void __user*)arg, sizeof(alloc)) != 0) {
+        printk("DMA_IOC_ALLOC_BUFFERS 2\n");
         return(-EFAULT);
       }
 
+      printk("DMA_IOC_ALLOC_BUFFERS 3: nbufs %d, size %d\n", alloc.nBufs, alloc.size);
       if (alloc_buffers(dma, &alloc) < 0) return -ENOMEM;
 
+      printk("DMA_IOC_ALLOC_BUFFERS 4\n");
       if(copy_to_user((void __user*)alloc.buffers, configWords,
                         (alloc.nBufs * sizeof(void*))) != 0) {
+        printk("DMA_IOC_ALLOC_BUFFERS 5\n");
         return(-EFAULT);
       }
     }
