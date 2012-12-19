@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Meyer Sound CAL ICS MicroBlaze system
+# Makefile -- Build instructions for Harman AVB_EP MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -7,138 +7,21 @@ include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
 
 LINUX	 = $(ROOTDIR)/$(LINUXDIR)/linux 
-LINUXBIN = $(IMAGEDIR)/linux.bin
-ROMFSIMG = $(IMAGEDIR)/romfs.img
-JFFS2IMG = $(IMAGEDIR)/jffs2.img
-IMAGE    = $(IMAGEDIR)/image.bin
-ELFIMAGE = $(IMAGEDIR)/image.elf
-CKSUM	 = $(ROOTDIR)/tools/cksum
-SREC_IMAGE= $(IMAGEDIR)/image.srec
+SQFS_DEVTABLE = $(IMAGEDIR)/sqfs_devtab
 
 COMMON=$(VEND)/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)/
 
-DIRS = 
-
 ROMFS_DIRS = bin dev dev/flash etc home lib mnt mnt/apps mnt/config proc usr var
-
 
 ROMFS_DIRS-$(CONFIG_SYSFS) += sys
 
-ROMFS_DIRS-$(CONFIG_DEBUG_FS) += debugfs
-
 ROMFS_DIRS += $(ROMFS_DIRS-y)
-
-ifdef CONFIG_SYSTEM_ROOTFS_JFFS2
-    ROMFS_DIRS += tmp var/run var/log var/tmp /var/lock var/empty
-	FSIMG = $(JFFS2IMG)
-else
-ifdef CONFIG_SYSTEM_ROOTFS_INITRAMFS
-	FSIMG = $(INITRAMFSIMG)
-else
-	FSIMG = $(ROMFSIMG)
-endif
-endif
 
 ifdef CONFIG_USER_FLATFSD_FLATFSD
 	ETCDIR = /etc/default
 else
 	ETCDIR = /etc
 endif
-
-DEVICES =								      \
-	tty,c,5,0      console,c,5,1   mem,c,1,1     kmem,c,1,2    null,c,1,3 \
-									      \
-	ttyS0,c,4,64   ttyS1,c,4,65    ttyS2,c,4,66  ttyS3,c,4,67	      \
-	ttyUL0,c,204,187	ttyUL1,c,204,188			      \
-	ttyUL2,c,204,189	ttyUL3,c,204,190			      \
-	rtc,c,10,135   nvram,c,10,144					      \
-									      \
-	zero,c,1,5     random,c,1,8    urandom,c,1,9			      \
-									      \
-        fb0,c,29,0                                                            \
-                                                                              \
-        ptmx,c,5,2                                                            \
-
-DEVICES +=   \
-	mtd0,c,90,0	mtdr0,c,90,1	mtdblock0,b,31,0	\
-	mtd1,c,90,2	mtdr1,c,90,3	mtdblock1,b,31,1	\
-	mtd2,c,90,4	mtdr2,c,90,5	mtdblock2,b,31,2	\
-	mtd3,c,90,6	mtdr3,c,90,7	mtdblock3,b,31,3	\
-	mtd4,c,90,8 	mtdr4,c,90,9	mtdblock4,b,31,4	\
-	mtd5,c,90,10 	mtdr5,c,90,11	mtdblock5,b,31,5	\
-	mtd6,c,90,12 	mtdr6,c,90,13	mtdblock6,b,31,6	\
-	mtd7,c,90,14 	mtdr7,c,90,15	mtdblock7,b,31,7	\
-	mtd8,c,90,16 	mtdr8,c,90,17	mtdblock8,b,31,8	\
-	mtd9,c,90,18 	mtdr9,c,90,19	mtdblock9,b,31,9	\
-	mtd10,c,90,20 	mtdr10,c,90,21	mtdblock10,b,31,10  \
-	mtd11,c,90,22 	mtdr11,c,90,23	mtdblock11,b,31,11	\
-	mtd12,c,90,24 	mtdr12,c,90,25	mtdblock12,b,31,12	\
-	mtd13,c,90,26 	mtdr13,c,90,27	mtdblock13,b,31,13	\
-	mtd14,c,90,26 	mtdr14,c,90,29	mtdblock14,b,31,14
-
-ifdef CONFIG_MICROBLAZE_FSLFIFO
-DEVICES += 	\
-	fslfifo0,c,10,192 fslfifo1,c,10,193 fslfifo2,c,10,194		\
-	fslfifo3,c,10,195 fslfifo4,c,10,196 fslfifo5,c,10,197		\
-	fslfifo6,c,10,198 fslfifo7,c,10,199
-endif
-
-ifdef CONFIG_UIO
-DEVICES +=	\
-	uio0,c,254,0	uio1,c,254,1	uio2,c,254,2	uio3,c,254,3	\
-	uio4,c,254,4	uio5,c,254,5	uio6,c,254,6	uio7,c,254,7	\
-	uio8,c,254,8	uio9,c,254,9	uio10,c,254,10	uio11,c,254,11
-endif
-
-ifdef CONFIG_XILINX_SYSACE                                                  
-DEVICES +=    \
-	xsysacea,b,254,0        xsysacea1,b,254,1       xsysacea2,b,254,2  \
-	xsysacea3,b,254,3       xsysacea4,b,254,4       xsysacea5,b,254,5  \
-	xsysacea6,b,254,6       xsysacea7,b,254,7       xsysacea8,b,254,8  \
-	xsysacea9,b,254,9       xsysacea10,b,254,10     xsysacea11,b,254,11 \
-	xsysacea12,b,254,12     xsysacea12,b,254,13     xsysacea14,b,254,14 \
-	xsysacea15,b,254,15 
-endif 
-
-# sd? dev nodes if SCSI is enabled
-ifdef CONFIG_SCSI
-DEVICES +=	sda,b,8,0	\
-	sda1,b,8,1	sda2,b,8,2	sda3,b,8,3	sda4,b,8,4	\
-	sda5,b,8,5	sda6,b,8,6	sda7,b,8,7	sda8,b,8,8	\
-	sda9,b,8,9	sda10,b,8,10	sda11,b,8,11	sda12,b,8,12	\
-	sda13,b,8,13	sda14,b,8,14	sda15,b,8,15			\
-	sdb,b,8,16							\
-	sdb1,b,8,17	sdb2,b,8,18	sdb3,b,8,19	sdb4,b,8,20	\
-	sdb5,b,8,21	sdb6,b,8,22	sdb7,b,8,23	sdb8,b,8,24	\
-	sdb9,b,8,25	sdb10,b,8,26	sdb11,b,8,27	sdb12,b,8,28	\
-	sdb13,b,8,29	sdb14,b,8,30	sdb15,b,8,31
-endif
-
-ifdef CONFIG_XILINX_GPIO
-DEVICES +=      \
-        gpio,c,10,185	gpio0,c,10,185	gpio1,c,10,186,	gpio2,c,10,187	\
-	gpio3,c,10,188	gpio4,c,10,189
-endif
-
-ifdef CONFIG_INPUT_EVDEV
-DEVICES +=      \
-event0,c,13,64  event1,c,13,65  event2,c,13,66  event3,c,13,67 \
-event4,c,13,68  event5,c,13,69  event6,c,13,70  event7,c,13,71 \
-event8,c,13,72  event9,c,13,73  event10,c,13,74  event11,c,13,75 \
-event12,c,13,76  event13,c,13,77  event14,c,13,78  event15,c,13,79
-endif
-
-ifdef CONFIG_VIDEO_DEV
-DEVICES +=	\
-	video0,c,81,0
-endif
-
-# Add the AVB packet engine device nodes
-DEVICES += packetizer0,c,250,0
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
-DEVICES += redswitch0,c,248,0
-DEVICES += ptp0,c,253,0
 
 ifndef CONFIG_SYSTEM_ROOT_PASSWD
 CONFIG_SYSTEM_ROOT_PASSWD := "root"
@@ -154,12 +37,11 @@ clean:
 	for i in $$dirs; do [ ! -d $$i ] || $(MAKE) -C $$i clean; done
 	-rm -f mkcramfs
 
-romfs:
+romfs:  $(SQFS_DEVTABLE)
 	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
 	for i in $(ROMFS_DIRS); do \
 		[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)/$$i; \
 	done
-	for i in $(DIRS); do $(MAKE) -C $$i romfs || exit $? ; done
 
 	mkdir -p $(ROMFSDIR)/etc/init.d
 	mkdir -p $(ROMFSDIR)/etc/rc.d
@@ -189,31 +71,7 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \
 		-s /etc/config/passwd /etc/passwd
 
-ifndef CONFIG_SYSTEM_ROOTFS_JFFS2
-	for i in $(DEVICES); do \
-		touch $(ROMFSDIR)/dev/@$$i; \
-	done
-	for i in $(FLASH_DEVICES); do \
-		touch $(ROMFSDIR)/dev/flash/@$$i; \
-	done
 	$(ROMFSINST) -s /var/tmp /tmp
-
-	# make I2C nodes if necessary 
-ifdef CONFIG_I2C
-	for i in 0 1 2 3 4 5 6 7; do \
-		touch $(ROMFSDIR)/dev/@i2c-$$i,c,$(I2C_MAJOR),$$i; \
-	done
-endif #IIC
-
-else
-	$(ROMFSINST) $(COMMON)/etc/rc/checkroot /etc/init.d/checkroot
-	$(ROMFSINST) -s /etc/init.d/checkroot /etc/rc.d/S01checkroot
-endif
-
-ifdef CONFIG_DEBUG_FS
-	$(ROMFSINST) $(COMMON)/etc/rc/debugfs /etc/init.d/debugfs
-	$(ROMFSINST) -s /etc/init.d/debugfs /etc/rc.d/S02debufs
-endif
 
 ifdef CONFIG_USB_DEVICEFS
 	$(ROMFSINST) $(COMMON)/etc/rc/usbfs /etc/init.d/usbfs
@@ -252,11 +110,7 @@ else
 endif
 endif
 
-
-############################################
-
 ifdef CONFIG_NET
-
 # setup /etc/init.d/network and other network-related files
 #	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
 	$(ROMFSINST) ../../Generic/romfs/etc/services /etc/services
@@ -264,29 +118,157 @@ endif
 	# Ensure init.d scripts are executable
 	chmod +x $(ROMFSDIR)/etc/init.d/* || true
 
-$(LINUXBIN): $(ROOTDIR)/$(LINUXDIR)/linux
+# Dev table file for squashfs, which is used to
+# create dev nodes within the file system, as opposed
+# to creating specially-named files within /dev, such
+# as "/dev/@tty,c,5,0", which other FS tools convert
+# to dev nodes, but squashfs doesn't support.
+#
+# Format:
+#    filename type permissions uid gid major minor
+$(SQFS_DEVTABLE): Makefile
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
-	$(CROSS)objcopy -O binary $(LINUX) $@
-
-$(ROMFSIMG): $(LINUXBIN)
-ifdef CONFIG_BINFMT_ZFLAT
-	$(CROSS)flthdr -z $(ROMFSDIR)/bin/*
+	@echo "/dev/tty           c 666 0 0    5   0" >  $(SQFS_DEVTABLE)
+	@echo "/dev/console       c 666 0 0    5   1" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mem           c 666 0 0    1   1" >> $(SQFS_DEVTABLE)
+	@echo "/dev/kmem          c 666 0 0    1   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/null          c 666 0 0    1   3" >> $(SQFS_DEVTABLE)
+	@echo "/dev/zero          c 666 0 0    1   5" >> $(SQFS_DEVTABLE)
+	@echo "/dev/random        c 666 0 0    1   8" >> $(SQFS_DEVTABLE)
+	@echo "/dev/urandom       c 666 0 0    1   9" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyS0         c 666 0 0    4  64" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyS1         c 666 0 0    4  65" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyS2         c 666 0 0    4  66" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyS3         c 666 0 0    4  67" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ptmx          c 666 0 0    5   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/rtc           c 666 0 0   10 135" >> $(SQFS_DEVTABLE)
+	@echo "/dev/nvram         c 666 0 0   10 144" >> $(SQFS_DEVTABLE)
+ifdef CONFIG_XILINX_GPIO
+	@echo "/dev/gpio          c 666 0 0   10 185" >> $(SQFS_DEVTABLE)
+	@echo "/dev/gpio0         c 666 0 0   10 185" >> $(SQFS_DEVTABLE)
+	@echo "/dev/gpio1         c 666 0 0   10 186" >> $(SQFS_DEVTABLE)
+	@echo "/dev/gpio2         c 666 0 0   10 187" >> $(SQFS_DEVTABLE)
+	@echo "/dev/gpio3         c 666 0 0   10 188" >> $(SQFS_DEVTABLE)
+	@echo "/dev/gpio4         c 666 0 0   10 189" >> $(SQFS_DEVTABLE)
 endif
-ifdef USE_CRAMFS
-	./mkcramfs -z -r $(ROMFSDIR) $(ROMFSIMG)
-else
-	genromfs -v -V "ROMdisk" -x *~ -f $(ROMFSIMG) -d $(ROMFSDIR)
+ifdef CONFIG_MICROBLAZE_FSLFIFO
+	@echo "/dev/fslfifo0      c 666 0 0   10 192" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo1      c 666 0 0   10 193" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo2      c 666 0 0   10 194" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo3      c 666 0 0   10 195" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo4      c 666 0 0   10 196" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo5      c 666 0 0   10 197" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo6      c 666 0 0   10 198" >> $(SQFS_DEVTABLE)
+	@echo "/dev/fslfifo7      c 666 0 0   10 199" >> $(SQFS_DEVTABLE)
 endif
-	cat $(LINUXBIN) $(ROMFSIMG) > $(IMAGE)
-
-$(JFFS2IMG):
-# current mkfs.jffs2 in uclinux dist doesn't work.
-# assume we have good working mkfs.jffs2 installed on host system
-	mkfs.jffs2 --big-endian --pad=1966080 --squash --eraseblock=65536 \
-                   --devtable jffs2_devtable.txt --root=$(ROMFSDIR) --output=$(JFFS2IMG)
-	cp $(LINUXBIN) $(IMAGE)
-	dd if=$(JFFS2IMG) of=$(IMAGE) bs=1024 seek=1472
-
-mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(ROOTDIR)/$(LINUXDIR)/include $< -lz
+ifdef CONFIG_INPUT_EVDEV
+	@echo "/dev/event0        c 666 0 0   13  64" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event1        c 666 0 0   13  65" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event2        c 666 0 0   13  66" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event3        c 666 0 0   13  67" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event4        c 666 0 0   13  68" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event5        c 666 0 0   13  69" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event6        c 666 0 0   13  70" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event7        c 666 0 0   13  71" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event8        c 666 0 0   13  72" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event9        c 666 0 0   13  73" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event10       c 666 0 0   13  74" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event11       c 666 0 0   13  75" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event12       c 666 0 0   13  76" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event13       c 666 0 0   13  77" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event14       c 666 0 0   13  78" >> $(SQFS_DEVTABLE)
+	@echo "/dev/event15       c 666 0 0   13  79" >> $(SQFS_DEVTABLE)
+endif
+	@echo "/dev/fb0           c 666 0 0   29   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock0     b 666 0 0   31   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock1     b 666 0 0   31   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock2     b 666 0 0   31   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock3     b 666 0 0   31   3" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock4     b 666 0 0   31   4" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock5     b 666 0 0   31   5" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock6     b 666 0 0   31   6" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock7     b 666 0 0   31   7" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock8     b 666 0 0   31   8" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock9     b 666 0 0   31   9" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock10    b 666 0 0   31  10" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock11    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock12    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock13    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock14    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock15    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+ifdef CONFIG_VIDEO_DEV
+	@echo "/dev/video0        c 666 0 0   81   0" >> $(SQFS_DEVTABLE)
+endif
+	@echo "/dev/mtd0          c 666 0 0   90   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd1          c 666 0 0   90   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd2          c 666 0 0   90   4" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd3          c 666 0 0   90   6" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd4          c 666 0 0   90   8" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd5          c 666 0 0   90  10" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd6          c 666 0 0   90  12" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd7          c 666 0 0   90  14" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd8          c 666 0 0   90  16" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd9          c 666 0 0   90  18" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd10         c 666 0 0   90  20" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd11         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd12         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd13         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd14         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd15         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr0         c 666 0 0   90   1" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr1         c 666 0 0   90   3" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr2         c 666 0 0   90   5" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr3         c 666 0 0   90   7" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr4         c 666 0 0   90   9" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr5         c 666 0 0   90  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr6         c 666 0 0   90  13" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr7         c 666 0 0   90  15" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr8         c 666 0 0   90  17" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr9         c 666 0 0   90  19" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr10        c 666 0 0   90  21" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr11        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr12        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr13        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr14        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr15        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyUL0        c 666 0 0  204 187" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyUL1        c 666 0 0  204 188" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyUL2        c 666 0 0  204 189" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ttyUL3        c 666 0 0  204 190" >> $(SQFS_DEVTABLE)
+ifdef CONFIG_UIO
+	@echo "/dev/uio0          c 666 0 0  254   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio1          c 666 0 0  254   1" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio2          c 666 0 0  254   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio3          c 666 0 0  254   3" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio4          c 666 0 0  254   4" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio5          c 666 0 0  254   5" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio6          c 666 0 0  254   6" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio7          c 666 0 0  254   7" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio8          c 666 0 0  254   8" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio9          c 666 0 0  254   9" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio10         c 666 0 0  254  10" >> $(SQFS_DEVTABLE)
+	@echo "/dev/uio11         c 666 0 0  254  11" >> $(SQFS_DEVTABLE)
+endif
+ifdef CONFIG_XILINX_SYSACE                                                  
+	@echo "/dev/xsysacea      b 666 0 0  254   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea0     b 666 0 0  254   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea1     b 666 0 0  254   1" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea2     b 666 0 0  254   2" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea3     b 666 0 0  254   3" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea4     b 666 0 0  254   4" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea5     b 666 0 0  254   5" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea6     b 666 0 0  254   6" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea7     b 666 0 0  254   7" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea8     b 666 0 0  254   8" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea9     b 666 0 0  254   9" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea10    b 666 0 0  254  10" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea11    b 666 0 0  254  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea12    b 666 0 0  254  12" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea13    b 666 0 0  254  13" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea14    b 666 0 0  254  14" >> $(SQFS_DEVTABLE)
+	@echo "/dev/xsysacea15    b 666 0 0  254  15" >> $(SQFS_DEVTABLE)
+endif
+	@echo "/dev/packetizer0   c 666 0 0  250   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/depacketizer0 c 666 0 0  252   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/ptp0          c 666 0 0  253   0" >> $(SQFS_DEVTABLE)
 
