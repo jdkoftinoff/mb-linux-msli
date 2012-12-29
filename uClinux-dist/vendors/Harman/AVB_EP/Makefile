@@ -28,15 +28,6 @@ CONFIG_SYSTEM_ROOT_PASSWD := "root"
 endif
 CRYPT_PASSWD       := $(shell perl $(ROOTDIR)/tools/crypt.pl $(CONFIG_SYSTEM_ROOT_PASSWD))
 
-all:
-	dirs=$(DIRS) ; \
-	for i in $$dirs ; do  $(MAKE) -C $$i || exit $? ; done
-
-clean:
-	-dirs=$(DIRS) ; \
-	for i in $$dirs; do [ ! -d $$i ] || $(MAKE) -C $$i clean; done
-	-rm -f mkcramfs
-
 romfs:  $(SQFS_DEVTABLE)
 	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
 	for i in $(ROMFS_DIRS); do \
