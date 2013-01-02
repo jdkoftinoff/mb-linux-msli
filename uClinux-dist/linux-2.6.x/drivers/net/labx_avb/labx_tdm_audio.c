@@ -47,7 +47,7 @@
   */
 #define DRIVER_NAME "labx_tdm_audio"
 #define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x11
+#define DRIVER_VERSION_MAX  0x13
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
@@ -1405,6 +1405,7 @@ static int __devexit audio_tdm_of_remove(struct of_device *dev)
 static struct of_device_id tdm_of_match[] = {
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
   { /* end of list */ },
 };
 
