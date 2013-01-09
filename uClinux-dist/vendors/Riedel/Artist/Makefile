@@ -128,7 +128,7 @@ endif
 #
 # Format:
 #    filename type permissions uid gid major minor
-$(SQFS_DEVTABLE):
+$(SQFS_DEVTABLE): Makefile
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	@echo "/dev/tty           c 666 0 0    5   0" >  $(SQFS_DEVTABLE)
 	@echo "/dev/console       c 666 0 0    5   1" >> $(SQFS_DEVTABLE)
@@ -221,6 +221,9 @@ endif
 	@echo "/dev/mtdr9         c 666 0 0   90  19" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr10        c 666 0 0   90  21" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr11        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+ifdef CONFIG_SPI_SPIDEV
+	@echo "/dev/spidev0       c 666 0 0  153   0" >> $(SQFS_DEVTABLE)
+endif
 	@echo "/dev/ttyUL0        c 666 0 0  204 187" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL1        c 666 0 0  204 188" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL2        c 666 0 0  204 189" >> $(SQFS_DEVTABLE)
@@ -259,6 +262,6 @@ ifdef CONFIG_XILINX_SYSACE
 	@echo "/dev/xsysacea15    b 666 0 0  254  15" >> $(SQFS_DEVTABLE)
 endif
 	@echo "/dev/packetizer0   c 666 0 0  250   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/aes3_rx0      c 666 0 0  251   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/depacketizer0 c 666 0 0  252   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ptp0          c 666 0 0  253   0" >> $(SQFS_DEVTABLE)
-	@echo "/dev/mvEthSwitch0  c 666 0 0  255   0" >> $(SQFS_DEVTABLE)

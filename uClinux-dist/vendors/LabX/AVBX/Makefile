@@ -243,6 +243,9 @@ endif
 	@echo "/dev/mtdr12        c 666 0 0   90  25" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr13        c 666 0 0   90  27" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr14        c 666 0 0   90  29" >> $(SQFS_DEVTABLE)
+ifdef CONFIG_SPI_SPIDEV
+	@echo "/dev/spidev0       c 666 0 0  153   0" >> $(SQFS_DEVTABLE)
+endif
 	@echo "/dev/ttyUL0        c 666 0 0  204 187" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL1        c 666 0 0  204 188" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ttyUL2        c 666 0 0  204 189" >> $(SQFS_DEVTABLE)
