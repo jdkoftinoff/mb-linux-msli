@@ -39,7 +39,7 @@ config LABX_LEGACY_BRIDGE
 	  This configures support for the Lab X AVB legacy packet bridge driver
 
 config LABX_REDUNDANCY_SWITCH
-	bool "AVB Legacy Packet Bridge support"
+	bool "AVB Redundancy Switch support"
         depends on LABX_AUDIO_DEPACKETIZER
 	help
 	  This configures support for the Lab X AVB redundancy switch driver

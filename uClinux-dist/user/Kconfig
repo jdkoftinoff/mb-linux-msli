@@ -3064,24 +3064,24 @@ config USER_HD_HD
 
 config USER_INOTIFYTOOLS
 	bool "inotifytools"
-	default y
+	default n
 	help
 	  Tools for interfacing with the inotify kernel interface.
 	  Requires kernel inotify interface to be enabled.
 
 config USER_INOTIFYTOOLS_WAIT
-	bool "inotifywait (~135KB)"
-	depends on USER_INOTIFYTOOLS
-	default y
-	help
-	  Command to wait for events in the filesystem.
-
-config USER_INOTIFYTOOLS_WATCH
-	bool "inotifywatch (~131KB)"
+	bool "inotifywait"
 	depends on USER_INOTIFYTOOLS
 	default n
 	help
-	  Command to gather statistics in the filesystem.
+	  Command to wait for events in the filesystem. (~135K)
+
+config USER_INOTIFYTOOLS_WATCH
+	bool "inotifywatch"
+	depends on USER_INOTIFYTOOLS
+	default n
+	help
+	  Command to gather statistics in the filesystem. (~131K)
 
 config USER_LOAD_LOAD
 	bool "load"

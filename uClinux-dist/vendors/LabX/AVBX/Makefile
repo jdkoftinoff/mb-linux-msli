@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Riedel Artst MicroBlaze system
+# Makefile -- Build instructions for LabX AVBX MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -28,15 +28,6 @@ CONFIG_SYSTEM_ROOT_PASSWD := "root"
 endif
 CRYPT_PASSWD       := $(shell perl $(ROOTDIR)/tools/crypt.pl $(CONFIG_SYSTEM_ROOT_PASSWD))
 
-all:
-	dirs=$(DIRS) ; \
-	for i in $$dirs ; do  $(MAKE) -C $$i || exit $? ; done
-
-clean:
-	-dirs=$(DIRS) ; \
-	for i in $$dirs; do [ ! -d $$i ] || $(MAKE) -C $$i clean; done
-	-rm -f mkcramfs
-
 romfs: $(SQFS_DEVTABLE)
 	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
 	for i in $(ROMFS_DIRS); do \
@@ -60,8 +51,6 @@ romfs: $(SQFS_DEVTABLE)
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
-	$(ROMFSINST) $(COMMON)/etc/rc/avb_startup /etc/init.d/avb_startup
-	$(ROMFSINST) -s /etc/init.d/avb_startup /etc/rc.d/S31avb_startup
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
@@ -73,7 +62,31 @@ romfs: $(SQFS_DEVTABLE)
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \
 		-s /etc/config/passwd /etc/passwd
 
+ifndef CONFIG_SYSTEM_ROOTFS_JFFS2
+	for i in $(DEVICES); do \
+		touch $(ROMFSDIR)/dev/@$$i; \
+	done
+	for i in $(FLASH_DEVICES); do \
+		touch $(ROMFSDIR)/dev/flash/@$$i; \
+	done
 	$(ROMFSINST) -s /var/tmp /tmp
+
+	# make I2C nodes if necessary 
+ifdef CONFIG_I2C
+	for i in 0 1 2 3 4 5 6 7; do \
+		touch $(ROMFSDIR)/dev/@i2c-$$i,c,$(I2C_MAJOR),$$i; \
+	done
+endif #IIC
+
+else
+	$(ROMFSINST) $(COMMON)/etc/rc/checkroot /etc/init.d/checkroot
+	$(ROMFSINST) -s /etc/init.d/checkroot /etc/rc.d/S01checkroot
+endif
+
+#ifdef CONFIG_DEBUG_FS
+#	$(ROMFSINST) $(COMMON)/etc/rc/debugfs /etc/init.d/debugfs
+#	$(ROMFSINST) -s /etc/init.d/debugfs /etc/rc.d/S02debufs
+#endif
 
 ifdef CONFIG_USB_DEVICEFS
 	$(ROMFSINST) $(COMMON)/etc/rc/usbfs /etc/init.d/usbfs
@@ -194,6 +207,9 @@ endif
 	@echo "/dev/mtdblock9     b 666 0 0   31   9" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdblock10    b 666 0 0   31  10" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdblock11    b 666 0 0   31  11" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock12    b 666 0 0   31  12" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock13    b 666 0 0   31  13" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdblock14    b 666 0 0   31  14" >> $(SQFS_DEVTABLE)
 ifdef CONFIG_VIDEO_DEV
 	@echo "/dev/video0        c 666 0 0   81   0" >> $(SQFS_DEVTABLE)
 endif
@@ -209,6 +225,9 @@ endif
 	@echo "/dev/mtd9          c 666 0 0   90  18" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtd10         c 666 0 0   90  20" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtd11         c 666 0 0   90  22" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd12         c 666 0 0   90  24" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd13         c 666 0 0   90  26" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtd14         c 666 0 0   90  28" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr0         c 666 0 0   90   1" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr1         c 666 0 0   90   3" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr2         c 666 0 0   90   5" >> $(SQFS_DEVTABLE)
@@ -221,6 +240,9 @@ endif
 	@echo "/dev/mtdr9         c 666 0 0   90  19" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr10        c 666 0 0   90  21" >> $(SQFS_DEVTABLE)
 	@echo "/dev/mtdr11        c 666 0 0   90  23" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr12        c 666 0 0   90  25" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr13        c 666 0 0   90  27" >> $(SQFS_DEVTABLE)
+	@echo "/dev/mtdr14        c 666 0 0   90  29" >> $(SQFS_DEVTABLE)
 ifdef CONFIG_SPI_SPIDEV
 	@echo "/dev/spidev0       c 666 0 0  153   0" >> $(SQFS_DEVTABLE)
 endif
@@ -261,7 +283,8 @@ ifdef CONFIG_XILINX_SYSACE
 	@echo "/dev/xsysacea14    b 666 0 0  254  14" >> $(SQFS_DEVTABLE)
 	@echo "/dev/xsysacea15    b 666 0 0  254  15" >> $(SQFS_DEVTABLE)
 endif
+	@echo "/dev/redswitch0    c 666 0 0  248   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/packetizer0   c 666 0 0  250   0" >> $(SQFS_DEVTABLE)
-	@echo "/dev/aes3_rx0      c 666 0 0  251   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/depacketizer0 c 666 0 0  252   0" >> $(SQFS_DEVTABLE)
+	@echo "/dev/depacketizer1 c 666 0 0  252   1" >> $(SQFS_DEVTABLE)
 	@echo "/dev/ptp0          c 666 0 0  253   0" >> $(SQFS_DEVTABLE)
