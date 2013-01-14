@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Harman AVB_EP MicroBlaze system
+# Makefile -- Build instructions for AVB_EP AVB Platform MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
