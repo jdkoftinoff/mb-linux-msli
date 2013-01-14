@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Bose Chara II MicroBlaze system
+# Makefile -- Build instructions for LabX Revolver MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
