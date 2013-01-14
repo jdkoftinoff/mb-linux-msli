@@ -1,5 +1,5 @@
 /*
- * garcia_control.c -- Control device for Avid Garcia sound cards
+ * garcia_control.c -- Control device for Garcia sound cards
  *
  * Copyright (C) 2011 Lab X Technologies, LLC
  *	Scott Wagner <scott.wagner@labxtechnologies.com>
@@ -1198,6 +1198,6 @@ static void __exit agctl_exit(void)
 module_exit(agctl_exit);
 
 MODULE_AUTHOR("Scott Wagner <scott.wagner@labxtechnologies.com>");
-MODULE_DESCRIPTION("Avid Garcia audio control bus interface");
+MODULE_DESCRIPTION("Garcia audio control bus interface");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS(DRIVER_NAME);

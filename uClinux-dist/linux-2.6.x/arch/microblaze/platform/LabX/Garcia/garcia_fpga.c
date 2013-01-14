@@ -1,5 +1,5 @@
 /*
- *  garcia_fpga.c - Avid Garcia FPGA base driver
+ *  garcia_fpga.c - Garcia FPGA base driver
  *
  *  Copyright (C) 2011 Lab X Technologies, LLC
  *  Written by Scott Wagner <scott.wagner@labxtechnologies.com>
@@ -629,7 +629,7 @@ static void __exit garcia_fpga_exit(void)
 }
 
 MODULE_AUTHOR("Scott Wagner <scott.wagner@labxtechnologies.com>");
-MODULE_DESCRIPTION("Base Avid Garcia FPGA driver");
+MODULE_DESCRIPTION("Base Garcia FPGA driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRIVER_VERSION);
 
