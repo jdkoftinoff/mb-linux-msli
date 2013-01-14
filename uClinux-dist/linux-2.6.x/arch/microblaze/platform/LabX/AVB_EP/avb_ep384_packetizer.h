@@ -1,8 +1,8 @@
 /*
- *  linux/arch/microblaze/platform/Harman/AVB_EP/avb_ep384_packetizer.h
+ *  linux/arch/microblaze/platform/LabX/AVB_EP/avb_ep384_packetizer.h
  *
  *  Lab X Technologies AVB flexible audio packetizer derived driver,
- *  adding some Studer-specific extensions
+ *  adding some AVBEP-specific extensions
  *
  *  Written by Eldridge M. Mount IV (eldridge.mount@labxtechnologies.com)
  *

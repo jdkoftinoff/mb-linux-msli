@@ -1,12 +1,12 @@
 /*
- *  linux/arch/microblaze/platform/Harman/AVB_EP/avb_ep384_packetizer.h
+ *  linux/arch/microblaze/platform/LabX/AVB_EP/avb_ep384_packetizer.h
  *
  *  Lab X Technologies AVB flexible audio packetizer derived driver,
- *  adding some Studer-specific extensions
+ *  adding some AVBEP-specific extensions
  *
  *  Written by Eldridge M. Mount IV (eldridge.mount@labxtechnologies.com)
  *
- *  Copyright (C) 2012 Harman, All Rights Reserved.
+ *  Copyright (C) 2012 Lab X Technologies, LLC, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -353,8 +353,8 @@ static struct platform_driver avb_ep384_packetizer_driver = {
 static int __devinit avb_ep384_packetizer_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": Studer AVB EP384 Audio Packetizer driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Harman\n");
+  printk(KERN_INFO DRIVER_NAME ": AVB EP384 Audio Packetizer driver\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_avb_ep384_packetizer_driver);
@@ -379,5 +379,5 @@ module_init(avb_ep384_packetizer_driver_init);
 module_exit(avb_ep384_packetizer_driver_exit);
 
 MODULE_AUTHOR("Eldridge M. Mount IV <eldridge.mount@labxtechnologies.com>");
-MODULE_DESCRIPTION("Studer AVB EP384 Audio Packetizer driver");
+MODULE_DESCRIPTION("AVB EP384 Audio Packetizer driver");
 MODULE_LICENSE("GPL");

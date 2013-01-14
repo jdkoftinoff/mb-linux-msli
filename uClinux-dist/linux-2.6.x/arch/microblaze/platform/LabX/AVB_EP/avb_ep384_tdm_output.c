@@ -1,12 +1,12 @@
 /*
- *  linux/arch/microblaze/platform/Harman/AVB_EP/avb_ep384_tdm_output.c
+ *  linux/arch/microblaze/platform/LabX/AVB_EP/avb_ep384_tdm_output.c
  *
  *  Lab X Technologies AVB local audio output derived driver,
- *  adding some Studer-specific extensions
+ *  adding some AVBEP-specific extensions
  *
  *  Written by Eldridge M. Mount IV (eldridge.mount@labxtechnologies.com)
  *
- *  Copyright (C) 2012 Harman, All Rights Reserved.
+ *  Copyright (C) 2012 Lab X Technologies, LLC, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -495,7 +495,7 @@ static int __devinit avb_ep384_tdm_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": AVB EP384 Audio TDM Output driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Harman\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_avb_ep384_tdm_driver);
