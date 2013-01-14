@@ -1,0 +1,27 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+TZ=UTC
+
+echo "Mounting proc, sys, /dev/pts: "
+mount -t proc proc /proc
+mount -t sysfs none /sys
+mount -t devpts none /dev/pts
+
+echo "Mounting var: "
+mount -t ramfs none /var
+
+echo "Populating /var: "
+mkdir /var/run
+mkdir /var/tmp
+chmod 1777 /var/tmp
+
+echo "Running system startup scripts."
+for i in /etc/rc.d/S*
+do
+  if [ -x $i ]; then
+    /bin/sh $i
+  fi
+done
+
+
