@@ -287,6 +287,18 @@ typedef struct {
 /* AS Grandmaster */
 #define IOC_PTP_GET_AS_GRANDMASTER  _IOR('p', 0x1e, PtpProperties)
 
+/* Path Trace */
+#define PTP_MAX_PATH_TRACE 50
+typedef struct
+{
+  uint32_t index;   /* Port index to get Path Trace Data from*/
+  uint32_t           pathTraceLength;
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE];
+} PtpPathTrace;
+
+/* PTP Path Trace */
+#define IOC_PTP_GET_PATH_TRACE  _IOR('p', 0x1f, PtpProperties)
+
 /* PTP events Generic Netlink family name, version, and multicast groups */
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
 #define PTP_EVENTS_FAMILY_VERSION  1

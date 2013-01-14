@@ -1,5 +1,5 @@
 #
-# Makefile for the Avid Garcia Snake board
+# Makefile for the LabX Garcia Snake board
 #
 
 # Include Xilinx common definitions and Lab X AVB headers

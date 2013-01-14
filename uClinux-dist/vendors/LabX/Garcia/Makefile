@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Avid Garcia MicroBlaze system
+# Makefile -- Build instructions for LabX Garcia MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
