@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for BeyerDynamic SP605 MicroBlaze system
+# Makefile -- Build instructions for the SP605 AVB Platform MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
