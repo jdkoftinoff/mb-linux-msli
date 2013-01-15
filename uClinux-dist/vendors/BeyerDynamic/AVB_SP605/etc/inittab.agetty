@@ -1,6 +1,0 @@
-::sysinit:/etc/rc.sysinit
-
-::respawn:/bin/agetty ttyUL0 115200
-
-::shutdown:/etc/rc.reboot
-::ctrlaltdel:/sbin/reboot

@@ -1,6 +1,0 @@
-#!/bin/sh
-
-# Start the BOA web server
-echo "Starting BOA server"
-/bin/boa -c /etc &
-
