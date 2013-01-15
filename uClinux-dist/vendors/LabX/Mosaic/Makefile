@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Riedel Artst MicroBlaze system
+# Makefile -- Build instructions for LabX Mosaic MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
