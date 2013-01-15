@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.30
+# Tue Jan 15 12:19:49 2013
 #
 CONFIG_MICROBLAZE=y
 # CONFIG_SWAP is not set
@@ -567,6 +568,7 @@ CONFIG_LEGACY_PTY_COUNT=0
 # CONFIG_GEN_RTC is not set
 CONFIG_XILINX_HWICAP=y
 CONFIG_SPARTAN6_RESET=y
+# CONFIG_SPARTAN6_RESET_SPI is not set
 # CONFIG_R3964 is not set
 
 #
