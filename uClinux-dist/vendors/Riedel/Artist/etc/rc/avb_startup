@@ -1,6 +1,0 @@
-#!/bin/sh
-
-# Call a script located on the read-write Flash filesystem to
-# permit users to easily modify the persistent avb settings
-echo "Calling platform-specific AVB script"
-/mnt/config/scripts/avb_config
