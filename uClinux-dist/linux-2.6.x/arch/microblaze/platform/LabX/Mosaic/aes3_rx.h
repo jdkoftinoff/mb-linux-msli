@@ -1,11 +1,11 @@
 /*
- *  linux/arch/microblaze/platform/Riedel/Artist/aes3_rx.h
+ *  linux/arch/microblaze/platform/LabX/Mosaic/aes3_rx.h
  *
- *  Lab X Technologies AVB Riedel Artist AES receiver driver
+ *  Lab X Technologies AVB Lab X Mosaic AES receiver driver
  *
  *  Written by Yi Cao (yi.cao@labxtechnologies.com)
  *
- *  Copyright (C) 2012 Riedel Communications, All Rights Reserved.
+ *  Copyright (C) 2012 Lab X Technologies, LLC, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

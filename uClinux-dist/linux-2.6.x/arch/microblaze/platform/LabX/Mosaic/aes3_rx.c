@@ -1,11 +1,11 @@
 /*
- *  linux/arch/microblaze/platform/Riedel/Artist/aes3_rx.c
+ *  linux/arch/microblaze/platform/LabX/Mosaic/aes3_rx.c
  *
- *  Lab X Technologies AVB Riedel Artist AES receiver driver
+ *  Lab X Technologies AVB Lab X Mosaic AES receiver driver
  *
  *  Written by Yi Cao (yi.cao@labxtechnologies.com)
  *
- *  Copyright (C) 2012 Riedel Communications, All Rights Reserved.
+ *  Copyright (C) 2012 Lab X Technologies, LLC, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -454,7 +454,7 @@ int aes3_rx_probe(const char *name,
     returnValue = request_irq(rx->irq, &aes3_rx_interrupt, IRQF_DISABLED, 
                               rx->name, rx);
     if (returnValue) {
-      printk(KERN_ERR "%s : Could not allocate Lab X Riedel Artist AES3 RX interrupt (%d).\n",
+      printk(KERN_ERR "%s : Could not allocate Lab X Mosaic AES3 RX interrupt (%d).\n",
              rx->name, rx->irq);
       goto unmap;
     }
@@ -618,7 +618,7 @@ static int __devinit aes3_rx_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": AES3 Receiver driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Riedel Communications\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_aes3_rx_driver);

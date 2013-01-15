@@ -35,5 +35,5 @@ static int __init gpiobuttons_platform_init(void)
 device_initcall(gpiobuttons_platform_init);
 
 #else
-#error "No GPIO events available for Riedel platform!"
+#error "No GPIO events available for Mosaic platform!"
 #endif
