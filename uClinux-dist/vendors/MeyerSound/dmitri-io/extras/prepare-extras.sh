@@ -4,10 +4,10 @@ ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/microsupport.mk lib/microsuppo
 
 ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/libtc.mk lib/libtc/Makefile
 
-ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/avdecc.mk lib/avdecc/Makefile
+#ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/avdecc.mk lib/avdecc/Makefile
 
 ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/io-osc.mk user/io-osc/Makefile
 
-ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/avbweb.mk user/avbweb/Makefile
+#ln -sf "$PWD"/vendors/MeyerSound/dmitri-io/extras/avbweb.mk user/avbweb/Makefile
 
 
