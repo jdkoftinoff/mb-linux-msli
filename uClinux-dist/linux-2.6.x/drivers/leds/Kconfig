@@ -228,10 +228,10 @@ config LEDS_BD2802
 	  accessed via the I2C bus.
 
 config LEDS_GARCIA
-	tristate "LED driver for Avid Garcia"
+	tristate "LED driver for Garcia"
 	depends on LEDS_CLASS
 	help
-	  This option enables support for LEDs on the Avid Garcia board.
+	  This option enables support for LEDs on the Garcia board.
 
 comment "LED Triggers"
 
