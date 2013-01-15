@@ -1,0 +1,37 @@
+#!/bin/sh
+
+echo "Invoking board-specific daemons"
+
+# Launch the AVB daemon application
+echo "Launching AVB daemon..."
+
+# Look for config file in jffs file system first, then fall back to romfs
+XMLFILE=/mnt/config/LabrinthPlatform.xml
+if [ ! -f $XMLFILE ] ; then
+  echo "Using platform configuration from ROMfs"
+  XMLFILE=/mnt/apps/LabrinthPlatform.xml
+else
+  echo "Using platform configuration from JFFS2"
+fi
+
+AVBDFILE=/mnt/config/avbd
+if [ ! -f $AVBDFILE ] ; then
+  echo "Using avbd application from ROMfs"
+  AVBDFILE=/mnt/apps/avbd
+else
+  echo "Using avbd application from JFFS2"
+fi
+
+# Look for p1722d in jffs file system first, then fall back to romfs
+P17221DFILE=/mnt/config/p17221d
+if [ ! -f $P17221DFILE ] ; then
+  echo "Using p17221d application from ROMfs"
+  P17221DFILE=/mnt/apps/p17221d
+fi
+
+$AVBDFILE platformFile=$XMLFILE &
+if [ -f $P17721DFILE ] ; then
+  echo "Launching 1722.1 daemon..."
+  $P17221DFILE 127.0.0.1 8080 &
+fi
+
