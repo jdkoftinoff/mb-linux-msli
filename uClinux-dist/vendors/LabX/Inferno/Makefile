@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Shure Inferno MicroBlaze system
+# Makefile -- Build instructions for the Inferno MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
