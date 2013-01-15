@@ -1,3 +1,0 @@
-#!/bin/sh
-
-/mnt/apps/avb_demo /mnt/config/AVBXStream*.xml
