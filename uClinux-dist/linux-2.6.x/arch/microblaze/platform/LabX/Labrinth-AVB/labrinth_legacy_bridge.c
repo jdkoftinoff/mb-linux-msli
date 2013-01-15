@@ -812,7 +812,7 @@ static struct platform_driver legacy_bridge_driver = {
 static int __devinit legacy_bridge_driver_init(void)
 {
   int returnValue;
-  printk(KERN_INFO DRIVER_NAME ": Biamp Labrinth Legacy Bridge driver\n");
+  printk(KERN_INFO DRIVER_NAME ": Lab X Labrinth Legacy Bridge driver\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_legacy_bridge_driver);
@@ -845,5 +845,5 @@ module_init(legacy_bridge_driver_init);
 module_exit(legacy_bridge_driver_exit);
 
 MODULE_AUTHOR("Eldridge M. Mount IV <eldridge.mount@labxtechnologies.com>");
-MODULE_DESCRIPTION("Biamp Labrinth Legacy Bridge driver");
+MODULE_DESCRIPTION("Lab X Labrinth Legacy Bridge driver");
 MODULE_LICENSE("GPL");

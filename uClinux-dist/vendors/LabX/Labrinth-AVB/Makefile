@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Biamp Labrinth-Superio MicroBlaze system
+# Makefile -- Build instructions for Lab X Labrinth-AVB MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -144,10 +144,10 @@ DEVICES += depacketizer1,c,252,1
 DEVICES += redswitch0,c,248,0
 DEVICES += ptp0,c,253,0
 
-# Add the Biamp SPI mailbox peripheral device node
+# Add the Labrinth SPI mailbox peripheral device node
 DEVICES += mailbox0,c,255,0
 
-# Add the Biamp legacy packet bridge device node
+# Add the Labrinth legacy packet bridge device node
 DEVICES += legacy_bridge0,c,222,0
 
 # Add the Xilinx SPI Master peripheral device node
