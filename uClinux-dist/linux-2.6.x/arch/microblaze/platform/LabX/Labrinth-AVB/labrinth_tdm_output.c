@@ -1,12 +1,12 @@
 /*
- *  linux/arch/microblaze/platform/Biamp/labrinth_tdm_output.c
+ *  linux/arch/microblaze/platform/LabX/Labrinth-AVB/labrinth_tdm_output.c
  *
  *  Lab X Technologies AVB local audio output derived driver,
  *  adding some Labrinth-specific extensions
  *
  *  Written by Eldridge M. Mount IV (eldridge.mount@labxtechnologies.com)
  *
- *  Copyright (C) 2010 Biamp Systems, All Rights Reserved.
+ *  Copyright (C) 2010 Lab X Technologies, LLC, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -494,7 +494,7 @@ static int __devinit labrinth_tdm_driver_init(void)
 {
   int returnValue;
   printk(KERN_INFO DRIVER_NAME ": Labrinth Audio TDM Output driver\n");
-  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Biamp Systems\n");
+  printk(KERN_INFO DRIVER_NAME ": Copyright(c) Lab X Technologies, LLC\n");
 
 #ifdef CONFIG_OF
   returnValue = of_register_platform_driver(&of_labrinth_tdm_driver);
