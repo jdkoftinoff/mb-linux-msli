@@ -1,8 +1,28 @@
 #!/bin/sh
 
+ROOTPART=`cat /proc/cmdline | tr ' ' '\\n' | grep root=`
+if [ "$ROOTPART" == 'root=/dev/mtdblock6' ]; then
+  GOLDEN_LINUX=1
+else
+  GOLDEN_LINUX=0
+fi
+
+if [ $GOLDEN_LINUX == 1 ]; then
+  echo
+  echo \####################################
+  echo \########## Golden Linux \############
+  echo \####################################
+  echo
+fi
+
 # Mount the application ROMfs
-echo "Mounting application ROMfs image"
-mount -t romfs /dev/mtdblock13 /mnt/apps
+if [ $GOLDEN_LINUX == 1 ]; then
+  echo "Mounting golden application ROMfs image"
+  mount -t romfs /dev/mtdblock7 /mnt/apps
+else
+  echo "Mounting application ROMfs image"
+  mount -t romfs /dev/mtdblock13 /mnt/apps
+fi
 
 # Mount the configuration JFFS2
 echo "Mounting configuration JFFS2 image"
