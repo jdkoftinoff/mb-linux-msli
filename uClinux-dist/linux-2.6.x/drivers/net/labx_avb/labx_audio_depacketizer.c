@@ -23,13 +23,15 @@
  *
  */
 
-#include <linux/autoconf.h>
 #include "labx_audio_depacketizer.h"
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/kthread.h>
+#include <linux/module.h>
+#include <linux/version.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -923,11 +925,19 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
-static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+static long audio_depacketizer_ioctl(struct file *filp,
+                                     unsigned int command, unsigned long arg)
+{
+  long returnValue = 0;
+#else
+static int audio_depacketizer_ioctl(struct inode *inode,
+                                    struct file *filp,
                                     unsigned int command, unsigned long arg)
 {
-  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
   int returnValue = 0;
+#endif
+  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
 
   // Switch on the request
   switch(command) {
@@ -1136,10 +1146,14 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
 
 /* Character device file operations structure */
 static struct file_operations audio_depacketizer_fops = {
-  .open	   = audio_depacketizer_open,
-  .release = audio_depacketizer_release,
-  .ioctl   = audio_depacketizer_ioctl,
-  .owner   = THIS_MODULE,
+  .open	          = audio_depacketizer_open,
+  .release        = audio_depacketizer_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+  .unlocked_ioctl = audio_depacketizer_ioctl,
+#else
+  .ioctl          = audio_depacketizer_ioctl,
+#endif
+  .owner          = THIS_MODULE,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by

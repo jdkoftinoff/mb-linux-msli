@@ -27,6 +27,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
+#include <linux/sched.h>
+#include <linux/module.h>
+#include <linux/version.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -503,13 +507,21 @@ static int audio_packetizer_release(struct inode *inode, struct file *filp)
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
-static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+static long audio_packetizer_ioctl(struct file *filp,
+                                   unsigned int command, unsigned long arg)
+{
+  long returnValue = 0;
+#else
+static int audio_packetizer_ioctl(struct inode *inode,
+                                  struct file *filp,
                                   unsigned int command, unsigned long arg)
 {
-  // Switch on the request
   int returnValue = 0;
+#endif
   struct audio_packetizer *packetizer = (struct audio_packetizer*)filp->private_data;
 
+  // Switch on the request
   switch(command) {
   case IOC_START_ENGINE:
     enable_packetizer(packetizer);
@@ -691,9 +703,15 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
     /* We don't recognize this command; give our derived driver's ioctl()
      * a crack at it, if one exists.
      */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+    if((packetizer->derivedFops != NULL) && 
+       (packetizer->derivedFops->unlocked_ioctl != NULL)) {
+      returnValue = packetizer->derivedFops->unlocked_ioctl(filp, command, arg);
+#else
     if((packetizer->derivedFops != NULL) && 
        (packetizer->derivedFops->ioctl != NULL)) {
       returnValue = packetizer->derivedFops->ioctl(inode, filp, command, arg);
+#endif
     } else returnValue = -EINVAL;
   }
 
@@ -703,10 +721,14 @@ static int audio_packetizer_ioctl(struct inode *inode, struct file *filp,
 
 /* Character device file operations structure */
 static struct file_operations audio_packetizer_fops = {
-  .open	   = audio_packetizer_open,
-  .release = audio_packetizer_release,
-  .ioctl   = audio_packetizer_ioctl,
-  .owner   = THIS_MODULE,
+  .open	          = audio_packetizer_open,
+  .release        = audio_packetizer_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+  .unlocked_ioctl = audio_packetizer_ioctl,
+#else
+  .ioctl          = audio_packetizer_ioctl,
+#endif
+  .owner          = THIS_MODULE,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by
