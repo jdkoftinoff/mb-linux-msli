@@ -908,6 +908,12 @@ config SPARTAN6_RESET
 	  This option enables use of the ICAP peripheral's ability only
 	  to reset the system for a Spartan-6 processor. 
 
+config SPARTAN6_RESET_SPI
+		tristate "Spartan-6 SPI ICAP Reset"
+	depends on SPARTAN6_RESET
+	help
+    	Reset out of SPI flash
+
 config R3964
 	tristate "Siemens R3964 line discipline"
 	---help---
