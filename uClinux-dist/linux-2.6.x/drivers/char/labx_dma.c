@@ -47,6 +47,22 @@
 #define DRIVER_VERSION_MAX  0x12
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
+/* Revision of the hardware at which DMA datapath width is reported in
+ * the capabilities register.  The default is 32 bits, or 4 bytes.
+ */
+#define DATA_WIDTH_VERSION_MIN   0x14
+#define DEFAULT_DATA_BYTE_WIDTH     4
+
+/*
+ * Revision of the hardware at which "free-run" capability is supported.
+ */
+#define FREE_RUN_VERSION_MIN  0x14
+
+/* Revision of the hardware at which the "internal parameters" bit exists
+ * within the capabilities register.
+ */
+#define PARAMS_BIT_VERSION_MIN 0x14
+
 /* Number of milliseconds we will wait before bailing out of a synced write */
 #define SYNCED_WRITE_TIMEOUT_MSECS  (100)
 
@@ -398,6 +414,8 @@ int32_t labx_dma_probe(struct labx_dma *dma,
            versionMajor, versionMinor, dma->virtualAddress);
     return(-ENODEV);
   }
+  dma->capabilities.versionMajor = versionMajor;
+  dma->capabilities.versionMinor = versionMinor;
 
   /* Decode the various bits in the capabilities word */
   if (versionCompare < CAPS_INDEX_VERSION) {
@@ -430,9 +448,38 @@ int32_t labx_dma_probe(struct labx_dma *dma,
     dma->capabilities.microcodeWords = microcodeWords;
   }
 
+  /* Determine whether the hardware reflects the "internal parameters" bit of
+   * the capabilities register or not.
+   */
+  if(versionCompare >= PARAMS_BIT_VERSION_MIN) {
+    /* Inspect the "internal parameters" bit */
+    if(capsWord & DMA_CAPS_INTERNAL_PARAMS_BIT) {
+      /* The instance has an internal parameter RAM mapped to the lower half of
+       * the parameter space, and external parameters in the upper half.
+       */
+      dma->capabilities.parameterMap = DMA_PARAM_MAP_SPLIT;
+    } else {
+      /* No internal parameters, the full map corresponds to external */
+      dma->capabilities.parameterMap = DMA_PARAM_MAP_EXTERNAL;
+    }
+  } else {
+    /* The internal parameters bit is not supported in this hardware, declare
+     * the parameter map "unknown" and keep the parameter address width.
+     */
+    dma->capabilities.parameterMap = DMA_PARAM_MAP_UNKNOWN;
+  }
+
   /* Check to see if the hardware has a status FIFO */
   dma->capabilities.hasStatusFifo = 
     ((capsWord & DMA_CAPS_STATUS_FIFO_BIT) ? DMA_HAS_STATUS_FIFO : DMA_NO_STATUS_FIFO);
+
+  /* Report the byte width of the datapath */
+  if(versionCompare >= DATA_WIDTH_VERSION_MIN) {
+    dma->capabilities.dataByteWidth = 
+      (0x01 << ((capsWord >> DMA_CAPS_LOG_WIDTH_SHIFT) & DMA_CAPS_LOG_WIDTH_MASK));
+  } else {
+    dma->capabilities.dataByteWidth = DEFAULT_DATA_BYTE_WIDTH;
+  }
 
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(dma->syncedWriteQueue));
@@ -493,8 +540,10 @@ int32_t labx_dma_probe(struct labx_dma *dma,
   /* Make a note if the instance is inferring its microcode size */
   printk(KERN_INFO "\nFound DMA unit %d.%d at %p: %d index counters, %d channels, %d alus\n", versionMajor, versionMinor,
     dma->virtualAddress, dma->capabilities.indexCounters, dma->capabilities.dmaChannels, dma->capabilities.alus);
-  printk(KERN_INFO "  %d param bits, %d code bits, %d microcode words%s, %s status FIFO\n",
+  printk(KERN_INFO "  %d param bits (%s), %d code bits, %d microcode words%s, %s status FIFO\n",
          dma->capabilities.parameterAddressBits,
+         ((dma->capabilities.parameterMap == DMA_PARAM_MAP_EXTERNAL) ? "EXTERNAL" :
+          ((dma->capabilities.parameterMap == DMA_PARAM_MAP_SPLIT) ? "SPLIT" : "UNKNOWN")),
          dma->capabilities.codeAddressBits, 
          dma->capabilities.microcodeWords,
          ((microcodeWords <= 0) ? " (INFERRED)" : ""),
@@ -763,9 +812,33 @@ int labx_dma_ioctl(struct labx_dma* dma, unsigned int command, unsigned long arg
     break;
 
   case DMA_IOC_START_CHANNEL:
+    {
+      uint32_t regValue;
+      uint32_t versionCompare = ((dma->capabilities.versionMajor << DMA_REVISION_FIELD_BITS) | 
+                                 dma->capabilities.versionMinor);
+
+      /* Set the "free run" bit for the channel appropriately.  Versions prior
+       * to when this capability was added cannot free-run a channel.
+       */
+      if(versionCompare < FREE_RUN_VERSION_MIN) {
+        /* Free-run was requested, and the hardware doesn't support it. */
+        if(arg & DMA_CHANNEL_FREE_RUN) return(-EINVAL);
+      } else {
+        regValue = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_FREE_RUN_REG));
+        if(arg & DMA_CHANNEL_FREE_RUN) {
+          regValue |= (0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+        } else {
+          regValue &= ~(0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+        }
+        XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_FREE_RUN_REG), regValue);
+      }
+
+      /* Mask off the "free run" bit from the channel */
     /* printk(KERN_INFO "DMA (%p) Start Channel %08X (%p)\n", dma, (int)arg, (void*)DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)); */
-    XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), 
-              XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG)) | (1<<arg));
+      regValue  = XIo_In32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG));
+      regValue |= (0x01 << (arg & ~DMA_CHANNEL_FREE_RUN));
+      XIo_Out32(DMA_REGISTER_ADDRESS(dma, DMA_CHANNEL_ENABLE_REG), regValue);
+    }
     break;
 
   case DMA_IOC_STOP_CHANNEL:

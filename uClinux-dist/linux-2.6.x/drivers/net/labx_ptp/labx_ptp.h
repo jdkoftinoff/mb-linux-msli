@@ -465,11 +465,14 @@ struct ptp_port {
 
   /* Packet statistics */
   PtpAsPortStatistics stats;
+
+  /* Per port path trace data */
+  uint32_t           pathTraceLength;               
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; 
 };
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
-#define PTP_MAX_PATH_TRACE 50
 struct ptp_device {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
