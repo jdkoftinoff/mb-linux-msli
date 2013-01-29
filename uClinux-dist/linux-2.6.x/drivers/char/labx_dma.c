@@ -44,7 +44,7 @@
 
 /* Hardware version number definitions for detecting compatability */
 #define DRIVER_VERSION_MIN  0x10
-#define DRIVER_VERSION_MAX  0x12
+#define DRIVER_VERSION_MAX  0x13
 #define CAPS_INDEX_VERSION  0x11 /* First version with # index counters in CAPS word */
 
 /* Revision of the hardware at which DMA datapath width is reported in
