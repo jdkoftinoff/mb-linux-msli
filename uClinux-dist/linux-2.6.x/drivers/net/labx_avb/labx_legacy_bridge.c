@@ -559,10 +559,12 @@ static int legacy_bridge_probe(const char *name,
                                uint32_t macMatchUnits,
                                uint32_t phy_type,
                                uint32_t phy_addr,
-                               const char *phy_name) {
+                               const char *phy_name,
+                               struct legacy_bridge **newInstance) {
   struct legacy_bridge *bridge;
   struct net_device *ndev = NULL;
   int returnValue;
+  uint32_t deviceIndex;
 
   /* Create an Ethernet device instance, sized with enough extra data to
    * encapsulate a struct legacy_bridge as its private data
@@ -645,9 +647,27 @@ static int legacy_bridge_probe(const char *name,
     printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
     goto unmap;
   }
+  
+  /* Locate and occupy the first available device index for future navigation in
+   * the call to legacy_bridge_open()
+   */
+  for (deviceIndex = 0; deviceIndex < MAX_INSTANCES; deviceIndex++) {
+    if (NULL == devices[deviceIndex]) {
+      devices[deviceIndex] = bridge;
+      break;
+    }
+  }
 
-  /* Return success */
-  return(0);
+  /* Ensure that we haven't been asked to probe for too many devices */
+  if(deviceIndex >= MAX_INSTANCES) {
+    printk(KERN_WARNING DRIVER_NAME ": Maximum device count (%d) exceeded during probe\n",
+           MAX_INSTANCES);
+    goto unmap;
+  }
+
+  /* Return success, setting the return pointer if valid */
+  if(newInstance != NULL) *newInstance = bridge;
+  return(returnValue);
 
  unmap:
   iounmap(bridge->virtualAddress);
@@ -742,7 +762,7 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev,
   }
 
   /* Dispatch to the generic function */
-  return(legacy_bridge_probe(name, pdev, addressRange, macMatchUnits, phy_type, phy_addr, phy_name));
+  return(legacy_bridge_probe(name, pdev, addressRange, macMatchUnits, phy_type, phy_addr, phy_name, NULL));
 }
 
 static int __devexit legacy_bridge_of_remove(struct of_device *dev)
@@ -792,6 +812,7 @@ static int legacy_bridge_platform_probe(struct platform_device *pdev) {
                              DEFAULT_MAC_MATCH_UNITS, 
                              NO_PHY_SUPPLIED_TYPE, 
                              0, 
+                             NULL,
                              NULL));
 }
 
