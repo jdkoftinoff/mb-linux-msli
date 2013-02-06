@@ -649,7 +649,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   default:
     ;
   }
-  //XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP
@@ -1242,7 +1242,10 @@ static int audio_depacketizer_probe(const char *name,
       returnValue = -ENXIO;
       goto unmap;
     }
-  } else depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+  } else {
+    depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+    depacketizer->capabilities.dynamicSampleRates = ((capsWord >> DYN_SAMPLE_RATES_SHIFT) & 0x1);
+  }
 
   /* Capture more capabilities information */
   depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
