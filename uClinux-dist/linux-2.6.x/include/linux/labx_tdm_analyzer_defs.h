@@ -70,7 +70,7 @@ typedef struct {
 
 /* I/O control commands and structures specific to the audio tdm hardware */
 #define ANALYZER_IOC_CHAR          ('l')
-#define IOC_CONFIG_GENERATOR      _IOR(ANALYZER_IOC_CHAR, 0x00, AnalyzerConfig)
+#define IOC_CONFIG_GENERATOR      _IOR(ANALYZER_IOC_CHAR, 0x00, GeneratorConfig)
 #define IOC_CONFIG_ANALYZER       _IOR(ANALYZER_IOC_CHAR, 0x01, AnalyzerConfig)
 #define IOC_GET_ANALYZER_RESULTS  _IOW(ANALYZER_IOC_CHAR, 0x02, AnalyzerResults)
 #endif
