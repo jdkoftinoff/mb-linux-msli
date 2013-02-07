@@ -136,6 +136,7 @@ typedef struct {
   uint32_t maxTemplateBytes;
   uint32_t maxClockDomains;
   uint32_t shaperFractionBits;
+  uint32_t dynamicSampleRates;
 } PacketizerCaps;
 
 #define IOC_GET_PACKETIZER_CAPS      _IOR(ENGINE_IOC_CHAR,               \
@@ -479,6 +480,7 @@ typedef struct {
   uint32_t maxParameters;
   uint32_t maxClockDomains;
   uint32_t maxStreams;
+  uint32_t dynamicSampleRates;
 } DepacketizerCaps;
 
 #define IOC_GET_DEPACKETIZER_CAPS  _IOR(ENGINE_IOC_CHAR,               \
