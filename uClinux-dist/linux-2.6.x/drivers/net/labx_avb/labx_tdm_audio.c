@@ -258,21 +258,17 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 #endif
       break;
 
-    case BURST_LENGTH:
-      if(tdmControl->burstLength != 4 && tdmControl->burstLength != 8 &&
-          tdmControl->burstLength != 16) {
-         return -EBADBURSTLEN;
+    case BURST_LENGTH_DIVIDER:
+      if(tdmControl->burstLengthDivider != 1 && tdmControl->burstLengthDivider != 2 &&
+          tdmControl->burstLengthDivider != 4) {
+         return -EBADBURSTLENDIV;
       }
       
-      if(tdmControl->burstLength > tdm->tdmCaps.maxBurstLength) {
-         return -EBADBURSTLEN;
-      }
-      
-      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MASK;
-      reg |= (tdmControl-> burstLength << TDM_BURST_LENGTH_BITS);
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_DIV_MASK;
+      reg |= (tdmControl-> burstLengthDivider << TDM_BURST_LENGTH_DIV_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
 #ifdef _LABXDEBUG
-      printk("TDM (ioctl): set burst length to %u\n", tdmControl->burstLength);
+      printk("TDM (ioctl): set burst length to %u\n", (tdm->tdmCaps.maxBurstLength / tdmControl->burstLengthDivider));
 #endif
       break;
 
@@ -485,9 +481,9 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
       tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount);
       break;
 
-    case BURST_LENGTH:
+    case BURST_LENGTH_DIVIDER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->burstLength = (reg & TDM_BURST_LENGTH_MASK) >> TDM_BURST_LENGTH_BITS;
+      tdmControl->burstLengthDivider = (reg & TDM_BURST_LENGTH_DIV_MASK) >> TDM_BURST_LENGTH_DIV_BITS;
       break;
 
     case I2S_ALIGN:
@@ -786,16 +782,16 @@ static ssize_t tdm_w_slot_density(struct class *c, const char * buf, size_t coun
   return (err < 0 ? err : count);
 }
 
-static ssize_t tdm_r_burst_length(struct class *c, char *buf)
+static ssize_t tdm_r_burst_length_div(struct class *c, char *buf)
 {
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   return (snprintf(buf, PAGE_SIZE, "%d\n",
            (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
-              & TDM_BURST_LENGTH_MASK) >> TDM_BURST_LENGTH_BITS));
+              & TDM_BURST_LENGTH_DIV_MASK) >> TDM_BURST_LENGTH_DIV_BITS));
 }
 
 
-static ssize_t tdm_w_burst_length(struct class *c, const char * buf, size_t count)
+static ssize_t tdm_w_burst_length_div(struct class *c, const char * buf, size_t count)
 {
   uint32_t reg;
   bool setVal = true;
@@ -803,20 +799,16 @@ static ssize_t tdm_w_burst_length(struct class *c, const char * buf, size_t coun
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
   if (strict_strtoul(buf, 0, &val) == 0) {
-    if(val != 4 && val != 8 && val != 16) {
+    if(val != 1 && val != 2 && val != 4) {
       setVal = false;
     }
       
-    if(val > tdm->tdmCaps.maxBurstLength) {
-      setVal = false;
-    }
-
     if(setVal) {
-      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MASK;
-      reg |= (val << TDM_BURST_LENGTH_BITS);
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_DIV_MASK;
+      reg |= (val << TDM_BURST_LENGTH_DIV_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
 #ifdef _LABXDEBUG
-      printk("TDM: set burst length to %u\n", (uint32_t)val);
+      printk("TDM: set burst length to %u\n", (tdm->tdmCaps.maxBurstLength / (uint32_t)val));
 #endif
     }
   }
@@ -1131,18 +1123,18 @@ static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t coun
 }
 
 static struct class_attribute audio_tdm_class_attrs[] = {
-  __ATTR(channels,      S_IRUGO | S_IWUGO, tdm_r_channels,      tdm_w_channels),
-  __ATTR(slot_density,  S_IRUGO | S_IWUGO, tdm_r_slot_density,  tdm_w_slot_density),
-  __ATTR(burst_length,  S_IRUGO | S_IWUGO, tdm_r_burst_length,  tdm_w_burst_length),
-  __ATTR(sample_edge,   S_IRUGO | S_IWUGO, tdm_r_sample_edge,   tdm_w_sample_edge),
-  __ATTR(i2s_align,     S_IRUGO | S_IWUGO, tdm_r_i2s_align,     tdm_w_i2s_align),
-  __ATTR(lr_clock_mode, S_IRUGO | S_IWUGO, tdm_r_lr_clock_mode, tdm_w_lr_clock_mode),
-  __ATTR(sample_rate,   S_IRUGO | S_IWUGO, tdm_r_sample_rate,   tdm_w_sample_rate),
-  __ATTR(sample_depth,  S_IRUGO | S_IWUGO, tdm_r_sample_depth,  tdm_w_sample_depth),
-  __ATTR(module_owner,  S_IRUGO | S_IWUGO, tdm_r_module_owner,  tdm_w_module_owner),
-  __ATTR(tx_owner,      S_IRUGO | S_IWUGO, tdm_r_tx_owner,      tdm_w_tx_owner),
-  __ATTR(rx_owner,      S_IRUGO | S_IWUGO, tdm_r_rx_owner,      tdm_w_rx_owner),
-  __ATTR(mclk_divider,  S_IRUGO | S_IWUGO, tdm_r_mclk_divider,  tdm_w_mclk_divider),
+  __ATTR(channels,          S_IRUGO | S_IWUGO, tdm_r_channels,         tdm_w_channels),
+  __ATTR(slot_density,      S_IRUGO | S_IWUGO, tdm_r_slot_density,     tdm_w_slot_density),
+  __ATTR(burst_length_div,  S_IRUGO | S_IWUGO, tdm_r_burst_length_div, tdm_w_burst_length_div),
+  __ATTR(sample_edge,       S_IRUGO | S_IWUGO, tdm_r_sample_edge,      tdm_w_sample_edge),
+  __ATTR(i2s_align,         S_IRUGO | S_IWUGO, tdm_r_i2s_align,        tdm_w_i2s_align),
+  __ATTR(lr_clock_mode,     S_IRUGO | S_IWUGO, tdm_r_lr_clock_mode,    tdm_w_lr_clock_mode),
+  __ATTR(sample_rate,       S_IRUGO | S_IWUGO, tdm_r_sample_rate,      tdm_w_sample_rate),
+  __ATTR(sample_depth,      S_IRUGO | S_IWUGO, tdm_r_sample_depth,     tdm_w_sample_depth),
+  __ATTR(module_owner,      S_IRUGO | S_IWUGO, tdm_r_module_owner,     tdm_w_module_owner),
+  __ATTR(tx_owner,          S_IRUGO | S_IWUGO, tdm_r_tx_owner,         tdm_w_tx_owner),
+  __ATTR(rx_owner,          S_IRUGO | S_IWUGO, tdm_r_rx_owner,         tdm_w_rx_owner),
+  __ATTR(mclk_divider,      S_IRUGO | S_IWUGO, tdm_r_mclk_divider,     tdm_w_mclk_divider),
   __ATTR_NULL,
 };
 
@@ -1405,6 +1397,7 @@ static int __devexit audio_tdm_of_remove(struct of_device *dev)
 static struct of_device_id tdm_of_match[] = {
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
   { /* end of list */ },
 };
 
