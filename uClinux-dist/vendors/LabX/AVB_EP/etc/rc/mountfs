@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Mount the application ROMfs
+echo "Mounting application ROMfs image"
+mount -t romfs /dev/mtdblock13 /mnt/apps
+
+# Mount the configuration JFFS2
+echo "Mounting configuration JFFS2 image"
+mount -t jffs2 /dev/mtdblock14 /mnt/config
+

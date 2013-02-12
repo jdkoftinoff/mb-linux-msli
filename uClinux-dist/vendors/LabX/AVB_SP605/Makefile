@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for LabX Garcia MicroBlaze system
+# Makefile -- Build instructions for the SP605 AVB Platform MicroBlaze system
 #
 
 include $(LINUX_CONFIG)
@@ -20,6 +20,7 @@ COMMON=$(VEND)/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)/
 DIRS = 
 
 ROMFS_DIRS = bin dev dev/flash etc home lib mnt mnt/apps mnt/config proc usr var
+
 
 ROMFS_DIRS-$(CONFIG_SYSFS) += sys
 
@@ -98,7 +99,7 @@ DEVICES +=    \
 	xsysacea12,b,254,12     xsysacea12,b,254,13     xsysacea14,b,254,14 \
 	xsysacea15,b,254,15 
 endif 
-      
+
 # sd? dev nodes if SCSI is enabled
 ifdef CONFIG_SCSI
 DEVICES +=	sda,b,8,0	\
@@ -134,42 +135,17 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev0,c,153,0 \
-	spidev1,c,153,1 \
-	spidev2,c,153,2 \
-	spidev3,c,153,3 \
-	spidev4,c,153,4
+	spidev0,c,153,0
 endif
 
 # Add the AVB packet engine device nodes
-ifdef CONFIG_LABX_AUDIO_PACKETIZER
 DEVICES += packetizer0,c,250,0
-DEVICES += packetizer1,c,250,1
-endif
-ifdef CONFIG_LABX_AUDIO_DEPACKETIZER
-DEVICES += depacketizer0,c,252,0
-DEVICES += depacketizer1,c,252,1
-DEVICES += depacketizer2,c,252,2
-DEVICES += depacketizer3,c,252,3
-endif
-ifdef CONFIG_LABX_PTP
 DEVICES += ptp0,c,253,0
-endif
+
 
 # Add the Xilinx SPI Master peripheral device node
-DEVICES += \
-	agcontrol0,c,101,0 \
-	agcontrol1,c,101,1 \
-	agcontrol2,c,101,2 \
-	agcontrol3,c,101,3 \
-	agcontrol4,c,101,4
 ifdef CONFIG_XILINX_SPI
-DEVICES += \
-	spidev0,c,153,0 \
-	spidev1,c,153,1 \
-	spidev2,c,153,2 \
-	spidev3,c,153,3 \
-	spidev4,c,153,4
+DEVICES += spidev0,c,153,0
 endif
 
 I2C_MAJOR = 89
@@ -207,21 +183,16 @@ romfs:
 	$(ROMFSINST) -s /proc/mounts /etc/mtab
 	$(ROMFSINST) $(COMMON)/etc/inetd.conf /etc/inetd.conf
 	$(ROMFSINST) $(COMMON)/etc/rc/hostname /etc/init.d/hostname
-	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S30hostname
-	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
-	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
+	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S10hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
-	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S50mountfs
-	$(ROMFSINST) $(COMMON)/etc/rc/startapps /etc/init.d/startapps
-	$(ROMFSINST) -s /etc/init.d/startapps /etc/rc.d/S90startapps
-	$(ROMFSINST) $(COMMON)/etc/rc/boa /etc/init.d/boa
-        # Uncomment to autostart the BOA web server
-	# $(ROMFSINST) -s /etc/init.d/boa /etc/rc.d/S60boa
+	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
+	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
+	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
+	$(ROMFSINST) $(COMMON)/etc/rc/avb_startup /etc/init.d/avb_startup
+	$(ROMFSINST) -s /etc/init.d/avb_startup /etc/rc.d/S31avb_startup
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
-	$(ROMFSINST) $(COMMON)/etc/boa.conf /etc/boa.conf
-	$(ROMFSINST) $(COMMON)/etc/mime.types /etc/mime.types
 
 	# Symbolic link for fstab into configurable area
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \
@@ -264,9 +235,6 @@ endif
 	$(ROMFSINST) -A "^root:" -a "root:${CRYPT_PASSWD}:0:0::/:/bin/sh" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^root:" -a "root:x:0:root" $(ETCDIR)/group
 
-	$(ROMFSINST) -A "^nobody:" -a "nobody:x:65534:65534::/var/tmp:/bin/sh" $(ETCDIR)/passwd
-	$(ROMFSINST) -A "^nogroup:" -a "nogroup:x:65534:nobody" $(ETCDIR)/group
-
 	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:200:Avahi Daemon:/:/bin/false" $(ETCDIR)/passwd
 	$(ROMFSINST) -A "^avahi:" -a "avahi:x:200:avahi" $(ETCDIR)/group
 
@@ -302,7 +270,7 @@ endif
 ifdef CONFIG_NET
 
 # setup /etc/init.d/network and other network-related files
-	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
+#	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S40network
 	$(ROMFSINST) ../../Generic/romfs/etc/services /etc/services
 endif
 	# Ensure init.d scripts are executable
