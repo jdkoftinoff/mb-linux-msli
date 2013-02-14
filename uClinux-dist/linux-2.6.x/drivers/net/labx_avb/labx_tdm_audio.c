@@ -258,17 +258,17 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
 #endif
       break;
 
-    case BURST_LENGTH_DIVIDER:
-      if(tdmControl->burstLengthDivider != 1 && tdmControl->burstLengthDivider != 2 &&
-          tdmControl->burstLengthDivider != 4) {
-         return -EBADBURSTLENDIV;
+    case BURST_LENGTH_MULTIPLE:
+      if(tdmControl->burstLengthMultiple != 1 && tdmControl->burstLengthMultiple != 2 &&
+          tdmControl->burstLengthMultiple != 4) {
+         return -EBADBURSTLENMUL;
       }
       
-      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_DIV_MASK;
-      reg |= (tdmControl-> burstLengthDivider << TDM_BURST_LENGTH_DIV_BITS);
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MUL_MASK;
+      reg |= (tdmControl-> burstLengthMultiple << TDM_BURST_LENGTH_MUL_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
 #ifdef _LABXDEBUG
-      printk("TDM (ioctl): set burst length to %u\n", (tdm->tdmCaps.maxBurstLength / tdmControl->burstLengthDivider));
+      printk("TDM (ioctl): set burst length to %u\n", (tdm->tdmCaps.minBurstLength * tdmControl->burstLengthMultiple));
 #endif
       break;
 
@@ -481,9 +481,9 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
       tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount);
       break;
 
-    case BURST_LENGTH_DIVIDER:
+    case BURST_LENGTH_MULTIPLE:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->burstLengthDivider = (reg & TDM_BURST_LENGTH_DIV_MASK) >> TDM_BURST_LENGTH_DIV_BITS;
+      tdmControl->burstLengthMultiple = (reg & TDM_BURST_LENGTH_MUL_MASK) >> TDM_BURST_LENGTH_MUL_BITS;
       break;
 
     case I2S_ALIGN:
@@ -782,16 +782,16 @@ static ssize_t tdm_w_slot_density(struct class *c, const char * buf, size_t coun
   return (err < 0 ? err : count);
 }
 
-static ssize_t tdm_r_burst_length_div(struct class *c, char *buf)
+static ssize_t tdm_r_burst_length_mul(struct class *c, char *buf)
 {
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   return (snprintf(buf, PAGE_SIZE, "%d\n",
            (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
-              & TDM_BURST_LENGTH_DIV_MASK) >> TDM_BURST_LENGTH_DIV_BITS));
+              & TDM_BURST_LENGTH_MUL_MASK) >> TDM_BURST_LENGTH_MUL_BITS));
 }
 
 
-static ssize_t tdm_w_burst_length_div(struct class *c, const char * buf, size_t count)
+static ssize_t tdm_w_burst_length_mul(struct class *c, const char * buf, size_t count)
 {
   uint32_t reg;
   bool setVal = true;
@@ -804,11 +804,11 @@ static ssize_t tdm_w_burst_length_div(struct class *c, const char * buf, size_t 
     }
       
     if(setVal) {
-      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_DIV_MASK;
-      reg |= (val << TDM_BURST_LENGTH_DIV_BITS);
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MUL_MASK;
+      reg |= (val << TDM_BURST_LENGTH_MUL_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
 #ifdef _LABXDEBUG
-      printk("TDM: set burst length to %u\n", (tdm->tdmCaps.maxBurstLength / (uint32_t)val));
+      printk("TDM: set burst length to %u\n", (tdm->tdmCaps.minBurstLength * (uint32_t)val));
 #endif
     }
   }
@@ -1125,7 +1125,7 @@ static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t coun
 static struct class_attribute audio_tdm_class_attrs[] = {
   __ATTR(channels,          S_IRUGO | S_IWUGO, tdm_r_channels,         tdm_w_channels),
   __ATTR(slot_density,      S_IRUGO | S_IWUGO, tdm_r_slot_density,     tdm_w_slot_density),
-  __ATTR(burst_length_div,  S_IRUGO | S_IWUGO, tdm_r_burst_length_div, tdm_w_burst_length_div),
+  __ATTR(burst_length_mul,  S_IRUGO | S_IWUGO, tdm_r_burst_length_mul, tdm_w_burst_length_mul),
   __ATTR(sample_edge,       S_IRUGO | S_IWUGO, tdm_r_sample_edge,      tdm_w_sample_edge),
   __ATTR(i2s_align,         S_IRUGO | S_IWUGO, tdm_r_i2s_align,        tdm_w_i2s_align),
   __ATTR(lr_clock_mode,     S_IRUGO | S_IWUGO, tdm_r_lr_clock_mode,    tdm_w_lr_clock_mode),
@@ -1268,7 +1268,8 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.laneCount             = pdata->lane_count;
   tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
   tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
-  tdm->tdmCaps.maxBurstLength        = pdata->burst_length;
+  tdm->tdmCaps.minBurstLength        = pdata->burst_length;
+  tdm->tdmCaps.maxBurstMultiple      = pdata->burst_length_multiple;
   tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
   tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
   tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
@@ -1278,9 +1279,9 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, max burst length %d, %s",
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, min burst length %d, max burst multiple %d, %s",
 		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.laneCount,
-                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.maxBurstLength,
+                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.minBurstLength, tdm->tdmCaps.maxBurstMultiple,
                   (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
@@ -1370,7 +1371,8 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   pdata_struct.lane_count               = get_u32(ofdev, "xlnx,tdm-lane-count");
   pdata_struct.num_streams              = get_u32(ofdev, "xlnx,max-num-streams");
   pdata_struct.slot_density             = get_u32(ofdev, "xlnx,tdm-max-slot-density");
-  pdata_struct.burst_length             = get_u32(ofdev, "xlnx,tdm-max-burst-length");
+  pdata_struct.burst_length             = get_u32(ofdev, "xlnx,tdm-min-burst-length");
+  pdata_struct.burst_length_multiple    = get_u32(ofdev, "xlnx,tdm-max-burst-multiple");
   pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
   pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
   pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");

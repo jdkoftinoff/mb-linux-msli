@@ -69,8 +69,8 @@
 /* Global control registers */
 #define TDM_CONTROL_REG             (0x02)
 #  define TDM_SLOT_DENSITY_MASK     (0x7F)
-#  define TDM_BURST_LENGTH_DIV_MASK (0xE000)
-#  define TDM_BURST_LENGTH_DIV_BITS (13)
+#  define TDM_BURST_LENGTH_MUL_MASK (0xE000)
+#  define TDM_BURST_LENGTH_MUL_BITS (13)
 #  define TDM_SAMPLE_RATE_MASK      (0xC0000)
 #  define TDM_SAMPLE_RATE_BITS      (18)
 #  define TDM_MODULE_OWNER_MASK     (0xC00)
@@ -134,6 +134,7 @@ struct labx_tdm_platform_data {
   uint8_t num_streams;
   uint8_t slot_density;
   uint8_t burst_length;
+  uint8_t burst_length_multiple;
   uint32_t mclk_ratio;
   uint8_t has_loopback;
   uint8_t slave_manager;
