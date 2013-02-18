@@ -387,6 +387,7 @@ static int legacy_bridge_open(struct inode *inode, struct file *filp) {
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
   spin_lock_irqsave(&bridge->mutex, flags);
+  
   if(bridge->opened) {
     returnValue = -1;
   } else {
@@ -691,7 +692,8 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev,
   struct resource *addressRange = &r_mem_struct;
   struct resource r_connected_mdio_mem_struct;
   struct platform_device *pdev  = to_platform_device(&ofdev->dev);
-  const char *name = dev_name(&ofdev->dev);
+  const char *name; 
+  const char *full_name = dev_name(&ofdev->dev);
   uint32_t macMatchUnits = DEFAULT_MAC_MATCH_UNITS;
   uint32_t phy_type;
   uint32_t phy_addr = 0;
@@ -701,7 +703,13 @@ static int __devinit legacy_bridge_of_probe(struct of_device *ofdev,
   uint32_t *uint32Ptr;
   int rc = 0;
 
-  printk("Probing device \"%s\"\n", name);
+  printk(KERN_INFO "Device Tree Probing \'%s\'\n",ofdev->node->name);
+  
+  if ((name = strchr(full_name, '.')) == NULL) {
+	  name = full_name;
+  } else {
+	  ++name;
+  }
 
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
