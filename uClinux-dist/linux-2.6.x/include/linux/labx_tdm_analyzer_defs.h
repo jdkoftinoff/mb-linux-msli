@@ -73,4 +73,5 @@ typedef struct {
 #define IOC_CONFIG_GENERATOR      _IOR(ANALYZER_IOC_CHAR, 0x00, GeneratorConfig)
 #define IOC_CONFIG_ANALYZER       _IOR(ANALYZER_IOC_CHAR, 0x01, AnalyzerConfig)
 #define IOC_GET_ANALYZER_RESULTS  _IOW(ANALYZER_IOC_CHAR, 0x02, AnalyzerResults)
+#define IOC_GET_LATENCY           _IOW(ANALYZER_IOC_CHAR, 0x03, uint32_t)
 #endif
