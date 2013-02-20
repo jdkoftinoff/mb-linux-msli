@@ -775,7 +775,9 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	flash->mtd.erase = m25p80_erase;
 	flash->mtd.read = m25p80_read;
 	flash->mtd.write = m25p80_write;
+#ifdef CONFIG_HAVE_MTD_OTP
 	flash->mtd.read_fact_prot_reg = m25p80_otp_read;
+#endif
 
 	/* prefer "small sector" erase if possible */
 	if (info->flags & SECT_4K) {
