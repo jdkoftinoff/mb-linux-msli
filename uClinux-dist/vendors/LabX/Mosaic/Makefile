@@ -261,6 +261,7 @@ ifdef CONFIG_XILINX_SYSACE
 	@echo "/dev/xsysacea14    b 666 0 0  254  14" >> $(SQFS_DEVTABLE)
 	@echo "/dev/xsysacea15    b 666 0 0  254  15" >> $(SQFS_DEVTABLE)
 endif
+	@echo "/dev/mosaic_meter0 c 666 0 0  249   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/packetizer0   c 666 0 0  250   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/aes3_rx0      c 666 0 0  251   0" >> $(SQFS_DEVTABLE)
 	@echo "/dev/depacketizer0 c 666 0 0  252   0" >> $(SQFS_DEVTABLE)

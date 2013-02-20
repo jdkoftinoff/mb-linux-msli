@@ -88,7 +88,6 @@ struct aes3_rx {
 
   /* Mutex for the device instance */
   spinlock_t mutex;
-  bool opened;
 
   /* File operations and private data for a polymorphic
    * driver to use

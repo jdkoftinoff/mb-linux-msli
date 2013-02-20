@@ -235,11 +235,6 @@ static int aes3_rx_open(struct inode *inode, struct file *filp)
   /* Lock the mutex and ensure there is only one owner */
   preempt_disable();
   spin_lock_irqsave(&rx->mutex, flags);
-  if(rx->opened) {
-    returnValue = -1;
-  } else {
-    rx->opened = true;
-  }
 
   /* Invoke the open() operation on the derived driver, if there is one */
   if((rx->derivedFops != NULL) && 
@@ -260,7 +255,6 @@ static int aes3_rx_release(struct inode *inode, struct file *filp)
 
   preempt_disable();
   spin_lock_irqsave(&rx->mutex, flags);
-  rx->opened = false;
 
   /* Invoke the release() operation on the derived driver, if there is one */
   if((rx->derivedFops != NULL) && 
@@ -473,7 +467,6 @@ int aes3_rx_probe(const char *name,
 
   /* Initialize other resources */
   spin_lock_init(&rx->mutex);
-  rx->opened = false;
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, rx);
