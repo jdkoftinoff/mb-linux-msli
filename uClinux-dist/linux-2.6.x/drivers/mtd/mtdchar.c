@@ -339,7 +339,7 @@ static int otp_select_filemode(struct mtd_file_info *mfi, int mode)
 			mfi->mode = MTD_MODE_OTP_FACTORY;
 		break;
 	case MTD_OTP_USER:
-		if (!mtd->read_fact_prot_reg)
+		if (!mtd->read_user_prot_reg)
 			ret = -EOPNOTSUPP;
 		else
 			mfi->mode = MTD_MODE_OTP_USER;
