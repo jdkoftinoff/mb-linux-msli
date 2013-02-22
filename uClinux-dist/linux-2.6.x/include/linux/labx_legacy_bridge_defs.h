@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef _LABX_LEGACY_BRIDGE_H_
-#define _LABX_LEGACY_BRIDGE_H_
+#ifndef _LABX_LEGACY_BRIDGE_DEFS_H_
+#define _LABX_LEGACY_BRIDGE_DEFS_H_
 
 #include <linux/types.h>
 
