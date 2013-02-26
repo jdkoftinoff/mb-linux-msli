@@ -87,6 +87,8 @@
 #define CAPABILITIES_REG_B  (0x0FE)
 #  define SHAPER_FRACT_BITS_SHIFT     (24)
 #  define SHAPER_FRACT_BITS_MASK      (0x07F)
+#  define DYN_SAMPLE_RATES_SHIFT      (31)
+#  define DYN_SAMPLE_RATES_MASK       (1)
 #  define CLOCK_DOMAINS_SHIFT         (16)
 #  define CLOCK_DOMAINS_MASK          (0x0FF)
 #  define TEMPLATE_ADDRESS_SHIFT      (8)

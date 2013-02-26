@@ -168,7 +168,7 @@ static void configure_clock_domain(struct audio_packetizer *packetizer,
   default:
     ;
   }
-  //XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
+  XIo_Out32(REGISTER_ADDRESS(packetizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Enable the clock domain */
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(packetizer, clockDomainSettings->clockDomain,
@@ -827,6 +827,7 @@ int audio_packetizer_probe(const char *name,
     (0x04 << ((capsWord >> TEMPLATE_ADDRESS_SHIFT) & TEMPLATE_ADDRESS_BITS_MASK));
   packetizer->capabilities.maxClockDomains = ((capsWord >> CLOCK_DOMAINS_SHIFT) & CLOCK_DOMAINS_MASK);
   packetizer->capabilities.shaperFractionBits = ((capsWord >> SHAPER_FRACT_BITS_SHIFT) & SHAPER_FRACT_BITS_MASK);
+  packetizer->capabilities.dynamicSampleRates = ((capsWord >> DYN_SAMPLE_RATES_SHIFT) & DYN_SAMPLE_RATES_MASK);
 
   /* Fetch the 'A' capabilities register and determine whether this is a
    * single- or dual-output instance

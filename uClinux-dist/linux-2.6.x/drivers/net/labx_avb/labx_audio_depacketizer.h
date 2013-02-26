@@ -94,6 +94,8 @@
 #define CAPABILITIES_REG_B   (0x0FE)
 #  define MATCH_ARCH_SHIFT          24
 #  define MATCH_ARCH_MASK           0x0FF
+#  define DYN_SAMPLE_RATES_SHIFT    24
+#  define DYN_SAMPLE_RATES_MASK     1
 #  define MAX_STREAMS_SHIFT         16
 #  define MAX_STREAMS_MASK          0x0FF
 #  define CLOCK_DOMAINS_SHIFT       8
@@ -231,8 +233,8 @@ struct audio_depacketizer {
   DepacketizerCaps capabilities;
 
   /* DMA instance (if supported) */
-#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   uint32_t hasDma;
+#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   struct labx_dma dma;
 #endif
 

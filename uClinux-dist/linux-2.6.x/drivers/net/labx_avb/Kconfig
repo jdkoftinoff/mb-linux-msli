@@ -33,6 +33,11 @@ config LABX_AUDIO_TDM
 	help
 	  This configures support for the Lab X AVB audio time domain multiplexer driver
 
+config LABX_AUDIO_TDM_ANALYZER
+	bool "Audio TDM analyzer support"
+	help
+	  This configures support for the Lab X AVB TDM audio analyzer
+
 config LABX_LEGACY_BRIDGE
 	bool "AVB Legacy Packet Bridge support"
 	help
