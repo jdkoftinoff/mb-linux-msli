@@ -552,12 +552,12 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       copyResult = copy_from_user(&pathTrace, (void __user*)arg, sizeof(PtpPathTrace));
       if(copyResult != 0) return(-EFAULT);
 
-      memcpy(&pathTrace,&ptp->ports[pathTrace.index].pathTrace,sizeof(PtpPathTrace)*ptp->ports[pathTrace.index].pathTraceLength);
-
       /* Verify that it is a valid port number */
       if(pathTrace.index >= ptp->numPorts) return (-EINVAL);
 
       /* Copy the pathTrace into the userspace argument */
+      pathTrace.pathTraceLength = ptp->ports[pathTrace.index].pathTraceLength;
+      memcpy(&pathTrace.pathTrace,ptp->ports[pathTrace.index].pathTrace,sizeof(PtpClockIdentity)*pathTrace.pathTraceLength);
       copyResult = copy_to_user((void __user*)arg,&pathTrace,sizeof(PtpPathTrace));
       if(copyResult != 0) return(-EFAULT);
     }
