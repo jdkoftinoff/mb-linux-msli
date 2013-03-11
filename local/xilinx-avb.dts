@@ -304,7 +304,7 @@
 			xlnx,mplb-smallest-slave = <0x20>;
 			xlnx,npi-data-width = <0x20>;
 			xlnx,num-clock-domains = <0x1>;
-			xlnx,num-streams = <0x18>;
+			xlnx,num-streams = <0x1a>;
 			xlnx,package = "ff665";
 			xlnx,param-address-width = <0xa>;
 		} ;
@@ -332,7 +332,7 @@
 			xlnx,mplb-smallest-slave = <0x20>;
 			xlnx,npi-data-width = <0x20>;
 			xlnx,num-clock-domains = <0x1>;
-			xlnx,num-streams = <0x18>;
+			xlnx,num-streams = <0x1a>;
 			xlnx,package = "ff665";
 			xlnx,param-address-width = <0xa>;
 		} ;
