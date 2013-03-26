@@ -57,7 +57,7 @@ static uint32_t instanceCount;
 /* Number of milliseconds to wait before permitting consecutive events from
  * being propagated up to userspace
  */
-#define EVENT_THROTTLE_MSECS (100)
+#define EVENT_THROTTLE_MSECS (50)
 
 #if 0
 #define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
@@ -67,26 +67,33 @@ static uint32_t instanceCount;
 
 
 
-/* Interrupt service routine for the instance */
+/* Interrupt service routine for AES stream statuses */
 static irqreturn_t aes3_rx_interrupt(int irq, void *dev_id) {
   struct aes3_rx *rx = (struct aes3_rx*) dev_id;
-  uint32_t maskedFlags;
-  irqreturn_t returnValue = IRQ_NONE;
 
-  /* write into the status reg will clear the interrupt */
-  maskedFlags = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
-  XIo_Out32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG), maskedFlags);
+  /* reading the status reg will clear the interrupt */
+  XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
 
-  /* To add the service routine of IRQ */
-  
   /* Wake up the Netlink thread to consume status data */
-  rx->statusReady = AES_NEW_STATUS_READY;
+  rx->statusReadyAes = AES_NEW_STATUS_READY;
   wake_up_interruptible(&(rx->statusFifoQueue));
-  returnValue = IRQ_HANDLED;
 
   return(IRQ_HANDLED);
 }
 
+/* Interrupt service routine for metering status */
+static irqreturn_t meter_interrupt(int irq, void *dev_id) {
+  struct aes3_rx *rx = (struct aes3_rx*) dev_id;
+
+  /* Reading either metering register clears the interrupt */
+  XIo_In32(REGISTER_ADDRESS(rx, AES_TX_AUDIO_METER_REG));
+
+  /* Wake up the Netlink thread to consume status data */
+  rx->statusReadyMeter = AES_NEW_STATUS_READY;
+  wake_up_interruptible(&(rx->statusFifoQueue));
+
+  return(IRQ_HANDLED);
+}
 
 /* Generic Netlink family definition */
 static struct genl_family events_genl_family = {
@@ -103,25 +110,24 @@ static struct genl_multicast_group labx_aes_mcast = {
 };
 
 /* Method to conditionally transmit a Netlink packet containing one or more
- * packets of information from the status FIFO
- */
+ * packets of information from the status FIFO */
 static int tx_netlink_status(struct aes3_rx *rx) {
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
-  uint32_t aesStatus;
+  uint32_t status;
+
+  /* Make sure we have something to do */
+  if(rx->statusReadyAes != AES_NEW_STATUS_READY && rx->statusReadyMeter != AES_NEW_STATUS_READY) {
+    return(returnValue);
+  }
 
   /* We will send a packet, allocate a socket buffer */
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
   if(skb == NULL) return(-ENOMEM);
 
-  /* Create the message headers */
-  msgHead = genlmsg_put(skb, 
-                        0, 
-                        rx->netlinkSequence++, 
-                        &events_genl_family, 
-                        0, 
-                        LABX_AES_EVENTS_C_STATUS_PACKETS);
+  /* Create the message headers. AES status messages get priority. */
+  msgHead = genlmsg_put(skb, 0, rx->netlinkSequence++, &events_genl_family, 0, (rx->statusReadyAes == AES_NEW_STATUS_READY ? LABX_AES_EVENTS_C_AES_STATUS_PACKETS : LABX_AES_EVENTS_C_METER_STATUS_PACKETS));
   if(msgHead == NULL) {
     returnValue = -ENOMEM;
     goto tx_failure;
@@ -129,26 +135,39 @@ static int tx_netlink_status(struct aes3_rx *rx) {
 
   /* Write the AES device's ID, properly translated for userspace, to identify the
    * message source.  The full ID is required since this driver can be used encapsulated 
-   * within any number of more complex devices.
-   */
+   * within any number of more complex devices. */
   returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_AES_DEVICE, new_encode_dev(rx->deviceNode));
   if(returnValue != 0) goto tx_failure;
 
-  /* Read the AES rx status register and send it out
-   */
-  aesStatus = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
-  returnValue = nla_put_u32(skb, 
-                            LABX_AES_EVENTS_A_AES_RX_STATUS, 
-                            aesStatus);
-  if(returnValue != 0) goto tx_failure;
+  /* AES interrupts get priority. Calling code must make sure to call us multiple
+   * times if there are multiple statuses to send out. */
+  if(rx->statusReadyAes == AES_NEW_STATUS_READY) {
+    /* Clear the AES status flag */
+    rx->statusReadyAes = AES_STATUS_IDLE;
 
-  /* Read the AES tx status register and send it out
-   */
-  aesStatus = XIo_In32(REGISTER_ADDRESS(rx, AES_TX_STREAM_STATUS_REG));
-  returnValue = nla_put_u32(skb, 
-                            LABX_AES_EVENTS_A_AES_TX_STATUS, 
-                            aesStatus);
-  if(returnValue != 0) goto tx_failure;
+    /* Read the AES rx status register and send it out */
+    status = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG));
+    returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_AES_RX_STATUS, status);
+    if(returnValue != 0) goto tx_failure;
+
+    /* Read the AES tx status register and send it out */
+    status = XIo_In32(REGISTER_ADDRESS(rx, AES_TX_STREAM_STATUS_REG));
+    returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_AES_TX_STATUS, status);
+    if(returnValue != 0) goto tx_failure;
+  } else if(rx->statusReadyMeter == AES_NEW_STATUS_READY) {
+    /* Clear the metering status flag */
+    rx->statusReadyMeter = AES_STATUS_IDLE;
+
+    /* Read the metering rx status register and send it out */
+    status = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_AUDIO_METER_REG));
+    returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_METER_RX_STATUS, status);
+    if(returnValue != 0) goto tx_failure;
+
+    /* Read the metering tx status register and send it out */
+    status = XIo_In32(REGISTER_ADDRESS(rx, AES_TX_AUDIO_METER_REG));
+    returnValue = nla_put_u32(skb, LABX_AES_EVENTS_A_METER_TX_STATUS, status);
+    if(returnValue != 0) goto tx_failure;
+  }
 
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
@@ -157,16 +176,13 @@ static int tx_netlink_status(struct aes3_rx *rx) {
   switch(returnValue) {
   case 0:
   case -ESRCH:
-    // Success or no process was listening, simply break
+    /* Success or no process was listening, simply break */
     break;
-
   default:
-    // This is an actual error, print the return code
-    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
-           returnValue);
+    /* This is an actual error, print the return code */
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n", returnValue);
     goto tx_failure;
   }
-
 
  tx_failure:
   return(returnValue);
@@ -175,6 +191,7 @@ static int tx_netlink_status(struct aes3_rx *rx) {
 /* Kernel thread used to produce Netlink packets based upon the status FIFO */
 static int netlink_thread(void *data) {
   struct aes3_rx *rx = (struct aes3_rx*) data;
+  int returnValue;
 
   /* Use the "__" version to avoid using a memory barrier, no need since
    * we're going to the running state
@@ -185,22 +202,21 @@ static int netlink_thread(void *data) {
     set_current_state(TASK_INTERRUPTIBLE);
 
     /* Go to sleep only if the status FIFO is empty */
-    wait_event_interruptible(rx->statusFifoQueue, (rx->statusReady == AES_NEW_STATUS_READY) || kthread_should_stop());
+    wait_event_interruptible(rx->statusFifoQueue, (rx->statusReadyAes == AES_NEW_STATUS_READY) || (rx->statusReadyMeter == AES_NEW_STATUS_READY) || kthread_should_stop());
 
     if (kthread_should_stop()) break;
 
     __set_current_state(TASK_RUNNING);
 
-    /* Set the status flag as "idle"; the status ready IRQ is triggered only
-     * when the FIFO goes from an empty to not-empty state, so there's no race
-     * condition here.
-     */
-    rx->statusReady = AES_STATUS_IDLE;
-
-    /* Transmit a Netlink
-     * packet if there are any complete status packets to be sent.
-     */
-    tx_netlink_status(rx);
+    /* Keep looping and sending until all necessary status messages have been
+     * sent. tx_netlink_status() will clear the flags as it sends messages. */
+    while(rx->statusReadyAes != AES_STATUS_IDLE || rx->statusReadyMeter != AES_STATUS_IDLE) {
+      if(tx_netlink_status(rx) < 0) {
+        rx->statusReadyAes = AES_STATUS_IDLE;
+        rx->statusReadyMeter = AES_STATUS_IDLE;
+        break;
+      }
+    }
 
     /* Before returning to waiting, optionally sleep a little bit.  
      * There should be no need to disable
@@ -341,35 +357,55 @@ static int aes3_rx_ioctl(struct inode *inode,
   }
    break;
    
- case IOC_READ_AES_MASK:
-   {
-     /* Get the stream mask, then copy into the userspace pointer */
-     Value = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG));
-     if(copy_to_user((void __user*)arg, &Value, 
-                     sizeof(uint32_t)) != 0) {
-       return(-EFAULT);
-     }
-   }
-   break;
-   
- case IOC_SET_AES_MASK: 
-  {
-   if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
+  case IOC_READ_AES_MASK:
+    {
+      /* Get the stream mask, then copy into the userspace pointer */
+      Value = XIo_In32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG));
+      if(copy_to_user((void __user*)arg, &Value, 
+                      sizeof(uint32_t)) != 0) {
         return(-EFAULT);
-   }
-   XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG), Value);
+      }
+    }
+    break;
+   
+  case IOC_SET_AES_MASK: 
+    {
+      if(copy_from_user(&Value, (void __user*)arg, sizeof(Value)) != 0) {
+           return(-EFAULT);
+      }
+      XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG), Value);
+    }
+    break;
+
+  case IOC_READ_RX_METER_STATUS:
+    {
+      /* Get the stream mask, then copy into the userspace pointer */
+      Value = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_AUDIO_METER_REG));
+      if(copy_to_user((void __user*)arg, &Value, sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+   
+  case IOC_READ_TX_METER_STATUS:
+    {
+      /* Get the stream mask, then copy into the userspace pointer */
+      Value = XIo_In32(REGISTER_ADDRESS(rx, AES_RX_AUDIO_METER_REG));
+      if(copy_to_user((void __user*)arg, &Value, sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+   
+  default:
+    if((rx->derivedFops != NULL) && 
+       (rx->derivedFops->ioctl != NULL)) {
+      returnValue = rx->derivedFops->ioctl(inode, filp, command, arg);
+    } else returnValue = -EINVAL;  
+ 
   }
-   break;
- 
- default:
-     if((rx->derivedFops != NULL) && 
-        (rx->derivedFops->ioctl != NULL)) {
-       returnValue = rx->derivedFops->ioctl(inode, filp, command, arg);
-     } else returnValue = -EINVAL;  
- 
- }
- /* Return an error code appropriate to the command */
- return(returnValue);
+  /* Return an error code appropriate to the command */
+  return(returnValue);
 }
 
 /* Character device file operations structure */
@@ -390,12 +426,12 @@ static struct file_operations aes3_rx_fops = {
  * @param irq          - Resource describing the hardware's interrupt
  */
 int aes3_rx_probe(const char *name, 
-                              struct platform_device *pdev,
-                              struct resource *addressRange,
-                              struct resource *irq,
-                              struct file_operations *derivedFops,
-                              void *derivedData,
-                              struct aes3_rx **newInstance) {
+                  struct platform_device *pdev,
+                  struct resource *addressRange,
+                  struct resource *irq,
+                  struct file_operations *derivedFops,
+                  void *derivedData,
+                  struct aes3_rx **newInstance) {
   struct aes3_rx *rx;
   int returnValue;
 
@@ -427,14 +463,15 @@ int aes3_rx_probe(const char *name,
 
   /* Ensure that the engine and its interrupts are disabled */
   XIo_Out32(REGISTER_ADDRESS(rx, AES_RX_STREAM_STATUS_REG), NO_IRQS);
-  
+
   /*Initialize the Stream mask, enable all the 8 streams*/
   XIo_Out32(REGISTER_ADDRESS(rx, AES_STREAM_MASK_REG), 0xff);
-  
+
   /* Run the thread assigned to converting status FIFO words into Netlink packets
    * after initializing its state to wait for the ISR
    */
-  rx->statusReady = AES_STATUS_IDLE;
+  rx->statusReadyAes = AES_STATUS_IDLE;
+  rx->statusReadyMeter = AES_STATUS_IDLE;
   rx->netlinkSequence = 0;
   rx->netlinkTask = kthread_run(netlink_thread, (void*) rx, "%s:netlink", rx->name);
   if (IS_ERR(rx->netlinkTask)) {
@@ -444,25 +481,29 @@ int aes3_rx_probe(const char *name,
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
   if(irq != NULL) {
-    rx->irq = irq->start;
-    returnValue = request_irq(rx->irq, &aes3_rx_interrupt, IRQF_DISABLED, 
-                              rx->name, rx);
+    rx->meter_irq = irq[0].start;
+    returnValue = request_irq(rx->meter_irq, &meter_interrupt, IRQF_DISABLED, rx->name, rx);
     if (returnValue) {
-      printk(KERN_ERR "%s : Could not allocate Lab X Mosaic AES3 RX interrupt (%d).\n",
-             rx->name, rx->irq);
+      printk(KERN_ERR "%s : Could not allocate Lab X Mosaic AES3 RX metering interrupt (%d).\n",
+             rx->name, rx->meter_irq);
       goto unmap;
     }
-  } else rx->irq = NO_IRQ_SUPPLIED;
-
-  /* Inspect and check the version to ensure it lies within the range of hardware
-   * we support.
-   */
-
-  
-  if(rx->irq == NO_IRQ_SUPPLIED) {
-    printk("polled commands\n");
+    rx->aes_irq = irq[1].start;
+    returnValue = request_irq(rx->aes_irq, &aes3_rx_interrupt, IRQF_DISABLED, rx->name, rx);
+    if (returnValue) {
+      printk(KERN_ERR "%s : Could not allocate Lab X Mosaic AES3 RX channel interrupt (%d).\n",
+             rx->name, rx->aes_irq);
+      goto unmap;
+    }
   } else {
-    printk("IRQ %d\n", rx->irq);
+    rx->meter_irq = NO_IRQ_SUPPLIED;
+    rx->aes_irq = NO_IRQ_SUPPLIED;
+  }
+
+  if(rx->meter_irq == NO_IRQ_SUPPLIED && rx->aes_irq == NO_IRQ_SUPPLIED) {
+    printk("%s: polled commands\n", rx->name);
+  } else {
+    printk("%s: IRQ %d, %d\n", rx->name, rx->meter_irq, rx->aes_irq);
   }
 
   /* Initialize other resources */
@@ -506,11 +547,13 @@ static int aes3_rx_platform_remove(struct platform_device *pdev);
 /* Probe for registered devices */
 static int __devinit aes3_rx_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
-  struct resource r_mem_struct = {};
-  struct resource r_irq_struct = {};
-  struct resource *addressRange = &r_mem_struct;
-  struct resource *irq          = &r_irq_struct;
-  struct platform_device *pdev  = to_platform_device(&ofdev->dev);
+  struct resource r_mem_struct    = {};
+  struct resource r_irq_struct[2] = {};
+  struct resource *addressRange   = &r_mem_struct;
+  struct resource *irq            = r_irq_struct;
+  struct resource *meter_irq      = &r_irq_struct[0];
+  struct resource *aes_irq        = &r_irq_struct[1];
+  struct platform_device *pdev    = to_platform_device(&ofdev->dev);
   const char *name = ofdev->node->name;
   int rc = 0;
 
@@ -521,9 +564,15 @@ static int __devinit aes3_rx_of_probe(struct of_device *ofdev, const struct of_d
     return(rc);
   }
 
-  rc = of_irq_to_resource(ofdev->node, 0, irq);
+  rc = of_irq_to_resource(ofdev->node, 0, meter_irq);
   if(rc == NO_IRQ) {
-    printk(KERN_ERR "%s : No IRQ found in device tree\n", name);
+    printk(KERN_ERR "%s : No metering IRQ found in device tree\n", name);
+    return(rc);
+  }
+
+  rc = of_irq_to_resource(ofdev->node, 1, aes_irq);
+  if(rc == NO_IRQ) {
+    printk(KERN_ERR "%s : No channel IRQ found in device tree\n", name);
     return(rc);
   }
 

@@ -7,20 +7,20 @@
 #include <linux/platform_device.h>
 #include <asm-generic/gpio.h>
 
-#define GPIO_WCLOCK_VALID (230)
-#define GPIO_FN_BTN1      (231)
-#define GPIO_FN_BTN2      (232)
-#define GPIO_WCLK_SW      (233)
-#define GPIO_SYNC_STATUS  (234)
+#define GPIO_WCLOCK_VALID (199)
+#define GPIO_FN_BTN1      (224)
+#define GPIO_FN_BTN2      (225)
+#define GPIO_WCLK_SW      (226)
+#define GPIO_PLL_LOCKED   (227)
 
-#define DEBOUNCE_INTERVAL_MS 100 // Set to 100 until CO 3 boards arrive, which will have debounced buttons and all
+#define DEBOUNCE_INTERVAL_MS 10
 
 static struct gpio_keys_button microblaze_gpio_keys_table[] = {
         { BTN_0, GPIO_WCLOCK_VALID, 0, "gpio-wclock", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
         { BTN_1, GPIO_FN_BTN1     , 0, "gpio-fnbtn1", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
         { BTN_2, GPIO_FN_BTN2     , 0, "gpio-fnbtn2", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
         { BTN_3, GPIO_WCLK_SW     , 0, "gpio-wclksw", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
-        { BTN_4, GPIO_SYNC_STATUS , 0, "gpio-syncst", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
+        { BTN_4, GPIO_PLL_LOCKED  , 0, "gpio-syncst", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
 };
 
 static struct gpio_keys_platform_data microblaze_gpio_keys_data __initdata = {

@@ -44,6 +44,8 @@
 #define AES_TX_PCM_MODE_REG       (0x04)
 #define AES_TX_2CHAN_MODE_REG     (0x05)
 #define AES_TX_STREAM_STATUS_REG  (0x06)
+#define AES_TX_AUDIO_METER_REG    (0x07)
+#define AES_RX_AUDIO_METER_REG    (0x08)
 
 /* Xilinx FPGA related */
 #define REGISTER_ADDRESS(device, offset) \
@@ -81,10 +83,12 @@ struct aes3_rx {
   wait_queue_head_t statusFifoQueue;
   uint32_t netlinkSequence;
   struct task_struct *netlinkTask;
-  uint32_t statusReady;
+  uint32_t statusReadyAes;
+  uint32_t statusReadyMeter;
   
-  /* Interrupt request number */
-  int32_t irq;
+  /* Interrupt request numbers */
+  int32_t aes_irq;
+  int32_t meter_irq;
 
   /* Mutex for the device instance */
   spinlock_t mutex;
