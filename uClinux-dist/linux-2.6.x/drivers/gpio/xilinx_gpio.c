@@ -67,8 +67,8 @@ static irqreturn_t xgpio_isr(int irq, void *dev_id)
 	u32 mIrq = NO_IRQ;
 	u32 irq_idx;
 	int port_width = (chip->isdual) ? (chip->gpio_managed_irqs/2) : chip->gpio_managed_irqs;
-	int port1_start = chip->gpio_managed_irq_start + ((chip->isdual) ? (chip->gpio_managed_irqs/2) : 0);
-	int port2_start = chip->gpio_managed_irq_start;
+	int port1_start = chip->gpio_managed_irq_start;
+	int port2_start = chip->gpio_managed_irq_start + ((chip->isdual) ? (chip->gpio_managed_irqs/2) : 0);
 
 	isr = in_be32((void *)(chip->gpio_baseaddr + XGPIO_IPISR_OFFSET));
 	out_be32((void *)(chip->gpio_baseaddr + XGPIO_IPISR_OFFSET),isr);
