@@ -1292,8 +1292,12 @@ labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
  * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
  */
 #define RX_CRC_ERRS_INDEX  (0)
+#define TX_FRAMES_INDEX    (1)
+#define RX_FRAMES_INDEX    (2)
 static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
   "RxCrcErrors",
+  "TxFrames",
+  "RxFrames"
 };
 
 #define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
@@ -1392,6 +1396,9 @@ static void labx_ethtool_get_stats(struct net_device *dev,
   if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
     data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
   } else data[RX_CRC_ERRS_INDEX] = 0ULL;
+
+  data[TX_FRAMES_INDEX] = dev->stats.tx_packets;
+  data[RX_FRAMES_INDEX] = dev->stats.rx_packets;
 }
 
 /* ethtool operations structure */
