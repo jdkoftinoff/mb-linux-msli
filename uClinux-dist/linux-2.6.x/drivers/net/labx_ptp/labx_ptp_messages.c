@@ -708,8 +708,8 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   uint8_t *txBuffer;
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
-  /* Update the sequence ID */
-  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId++);
+  /* Update the sequence ID (incremented in the pdelay state machine) */
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
