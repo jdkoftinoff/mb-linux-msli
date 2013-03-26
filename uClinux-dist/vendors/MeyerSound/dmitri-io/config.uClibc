@@ -208,6 +208,7 @@ UCLIBC_EXTRA_CFLAGS=""
 DOSTRIP=y
 # DOASSERTS is not set
 # UCLIBC_MALLOC_DEBUGGING is not set
+# UCLIBC_MALLOC_DEBUG_FILL is not set
 WARNINGS="-Wall"
 # EXTRA_WARNINGS is not set
 # DOMULTI is not set

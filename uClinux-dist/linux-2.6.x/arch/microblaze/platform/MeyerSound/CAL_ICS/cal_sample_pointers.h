@@ -84,6 +84,7 @@
 /* Soft Mute Control */
 #define MUTE_CTRL_REG                (0x26)
 #define AVB_STREAM_CHAN_REG          (0x27)
+#define AVB_RATE_SELECT_REG          (0x28)
 #define MUTE_COEFF_REG_BASE_ADDRESS  (0x100)
 
 

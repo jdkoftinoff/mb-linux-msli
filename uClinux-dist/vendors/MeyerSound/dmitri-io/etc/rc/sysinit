@@ -24,7 +24,9 @@ else
   GNETOUTDEV="253"
 fi
 echo -e "${OLEDINDEV}\n${OLEDOUTDEV}\n${GNETOUTDEV}" > /sys/class/gpio/export
+# Output side forced high, then used as an input (OLED Button)
 echo high > "/sys/class/gpio/gpio${OLEDINDEV}/direction"
+echo in  > "/sys/class/gpio/gpio${OLEDINDEV}/direction"
 echo out > "/sys/class/gpio/gpio${OLEDOUTDEV}/direction"
 echo out > "/sys/class/gpio/gpio${GNETOUTDEV}/direction"
 echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
