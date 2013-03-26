@@ -503,7 +503,7 @@ xdbg_stmnt(extern int indent_on);
  *    u32 labx_eth_mReadReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_ReadReg(BaseAddress, RegOffset) \
 ({ \
 	u32 value; \
@@ -533,7 +533,7 @@ xdbg_stmnt(extern int indent_on);
  *    void labx_eth_mWriteReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_WriteReg(BaseAddress, RegOffset, Data) \
 ({ \
 	labx_eth_print_reg_o((BaseAddress), (RegOffset), (Data)); \
@@ -560,7 +560,7 @@ xdbg_stmnt(extern int indent_on);
  *    u32 labx_eth_mReadIndirectReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 extern u32 _xlltemac_rir_value;
 
 #define labx_eth_ReadIndirectReg(BaseAddress, RegOffset) \
@@ -595,7 +595,7 @@ extern u32 _xlltemac_rir_value;
  *    void labx_eth_WriteIndirectReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_WriteIndirectReg(BaseAddress, RegOffset, Data) \
 ( \
 	indent_on = 1, \
