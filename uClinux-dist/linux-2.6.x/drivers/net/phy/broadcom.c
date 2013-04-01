@@ -582,7 +582,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 
 	if (bc5481_high_performance_enable != 0) {
 	        reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII);
-		reg = reg | MII_BCM54XX_AUXCTL_PMII_HPE;
+		reg = reg | ~MII_BCM54XX_AUXCTL_PMII_HPE;
 		bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII, reg);
 		printk("High-Performance Enable: %d (0x%04X) => %d\n",
 		       ((reg & MII_BCM54XX_AUXCTL_PMII_HPE) != 0), reg,
