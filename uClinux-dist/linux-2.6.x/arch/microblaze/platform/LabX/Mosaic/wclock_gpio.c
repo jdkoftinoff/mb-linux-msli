@@ -23,13 +23,13 @@ static struct gpio_keys_button microblaze_gpio_keys_table[] = {
         { BTN_4, GPIO_PLL_LOCKED  , 0, "gpio-syncst", EV_KEY, 0, DEBOUNCE_INTERVAL_MS },
 };
 
-static struct gpio_keys_platform_data microblaze_gpio_keys_data __initdata = {
+static struct gpio_keys_platform_data microblaze_gpio_keys_data = {
         .buttons        = microblaze_gpio_keys_table,
         .nbuttons       = ARRAY_SIZE(microblaze_gpio_keys_table),
         .rep            = 0,
 };
 
-static struct platform_device microblaze_device_gpiokeys __initdata = {
+static struct platform_device microblaze_device_gpiokeys = {
         .name   = "gpio-keys",
         .dev = {
                 .platform_data = &microblaze_gpio_keys_data,
@@ -38,8 +38,11 @@ static struct platform_device microblaze_device_gpiokeys __initdata = {
 
 static int __init gpiobuttons_platform_init(void)
 {
-        platform_device_register(&microblaze_device_gpiokeys);
-        return 0;
+  int retValue = platform_device_register(&microblaze_device_gpiokeys);
+  if(retValue != 0) {
+    printk("Failed to register gpio_keys device\n");
+  }
+  return retValue;
 }
 
 device_initcall(gpiobuttons_platform_init);
