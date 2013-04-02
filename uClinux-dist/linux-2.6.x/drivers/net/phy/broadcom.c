@@ -374,7 +374,7 @@ module_param(bc5481_high_performance_enable, int, 0);
 MODULE_PARM_DESC(bc5481_high_performance_enable, "Enable Broadcom 5481 high-performance behaviour");
 
 static int bc5482_clk125_output_enable;
-module_param(bc5482_clk125_output_enable, int, 0);
+module_param(bc5482_clk125_output_enable, int, 1);
 MODULE_PARM_DESC(bc5482_clk125_output_enable, "Enable Broadcom 5482 125Mhz output clock");
 
 #ifdef DUMP_PHY_REGISTERS
