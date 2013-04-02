@@ -374,7 +374,7 @@ module_param(bc5481_high_performance_enable, int, 0);
 MODULE_PARM_DESC(bc5481_high_performance_enable, "Enable Broadcom 5481 high-performance behaviour");
 
 static int bc5482_clk125_output_enable;
-module_param(bc5482_clk125_output_enable, int, 1);
+module_param(bc5482_clk125_output_enable, int, 0);
 MODULE_PARM_DESC(bc5482_clk125_output_enable, "Enable Broadcom 5482 125Mhz output clock");
 
 #ifdef DUMP_PHY_REGISTERS
@@ -586,7 +586,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		       ((bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII) & MII_BCM54XX_AUXCTL_PMII_HPE) == 0));
 	}
 
-	if (bc5482_clk125_output_enable != 0) {
+	if (bc5482_clk125_output_enable == 0) {
 	        reg = bcm54xx_shadow_read(phydev, BCM5482_SPARE_CTRL3);
 		reg = reg & ~BCM5482_CLK125_OUTPUT;
 		bcm54xx_shadow_write(phydev, BCM5482_SPARE_CTRL3, reg);
