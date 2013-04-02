@@ -70,8 +70,8 @@
 /*
  * AUXILIARY CONTROL SHADOW ACCESS REGISTERS.  (PHY REG 0x18)
  */
-#define MII_BCM54XX_AUX_VAL(x)	(((x & 0x07) << 12) | (x & 0x07))
-#define MII_BCM54XX_AUX_DATA(x)	(x & 0x0ff8)
+#define MII_BCM54XX_AUXCTL_SHADOW_MASK 7
+#define MII_BCM54XX_AUXCTL_SHADOW_READSHIFT 12
 
 #define MII_BCM54XX_AUXCTL_ACTL_TX_6DB		0x0400
 #define MII_BCM54XX_AUXCTL_ACTL_SMDSP_ENA	0x0800
@@ -246,16 +246,13 @@ static int bcm54xx_exp_write(struct phy_device *phydev, u16 regnum, u16 val)
 
 static int bcm54xx_auxctl_read(struct phy_device *phydev, u16 shadow)
 {
-	phy_write(phydev, MII_BCM54XX_AUX_CTL, MII_BCM54XX_AUX_VAL(shadow));
-	return MII_BCM54XX_AUX_DATA(phy_read(phydev, MII_BCM54XX_AUX_CTL));
+        phy_write(phydev, MII_BCM54XX_AUX_CTL, ((shadow << MII_BCM54XX_AUXCTL_SHADOW_READSHIFT) | MII_BCM54XX_AUXCTL_SHDWSEL_MISC));
+	return phy_read(phydev, MII_BCM54XX_AUX_CTL);
 }
 
 static int bcm54xx_auxctl_write(struct phy_device *phydev, u16 shadow, u16 val)
 {
-	return phy_write(phydev, MII_BCM54XX_AUX_CTL,
-			 MII_BCM54XX_SHD_WRITE |
-			 MII_BCM54XX_AUX_VAL(shadow) |
-			 MII_BCM54XX_AUX_DATA(val));
+	return phy_write(phydev, MII_BCM54XX_AUX_CTL, ((val & ~MII_BCM54XX_AUXCTL_SHADOW_MASK) | shadow));
 }
 
 static int bcm50610_a0_workaround(struct phy_device *phydev)
@@ -582,11 +579,11 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 
 	if (bc5481_high_performance_enable != 0) {
 	        reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII);
-		reg = reg | ~MII_BCM54XX_AUXCTL_PMII_HPE;
-		bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII, reg);
+                reg |= MII_BCM54XX_AUXCTL_PMII_HPE;
+                bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII, reg);
 		printk("High-Performance Enable: %d (0x%04X) => %d\n",
 		       ((reg & MII_BCM54XX_AUXCTL_PMII_HPE) != 0), reg,
-		       ((bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII) & MII_BCM54XX_AUXCTL_PMII_HPE) != 0));
+		       ((bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII) & MII_BCM54XX_AUXCTL_PMII_HPE) == 0));
 	}
 
 	if (bc5482_clk125_output_enable != 0) {
@@ -594,7 +591,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 		reg = reg & ~BCM5482_CLK125_OUTPUT;
 		bcm54xx_shadow_write(phydev, BCM5482_SPARE_CTRL3, reg);
 		printk("Clock 125Mhz Enable: %d (0x%04X) => %d\n",
-		       ((reg & BCM5482_CLK125_OUTPUT) != 0), reg,
+		       ((reg & ~BCM5482_CLK125_OUTPUT) != 0), reg,
 		       ((bcm54xx_shadow_read(phydev, BCM5482_SPARE_CTRL3) & BCM5482_CLK125_OUTPUT) != 0));
 	}
 
