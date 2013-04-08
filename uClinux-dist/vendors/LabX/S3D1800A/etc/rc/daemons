@@ -21,6 +21,19 @@ fi
 
 $AVBDFILE platformFile=$XMLFILE &
 
+echo "Launching 1722.1 daemon..."
+
+# Look for p1722d in jffs file system first, then fall back to romfs
+P17221DFILE=/mnt/config/p17221d
+if [ ! -f $P17221DFILE ] ; then
+  echo "Using p17221d application from ROMfs"
+  P17221DFILE=/mnt/apps/p17221d
+else
+  echo "Using p17221d application from JFFS2"
+fi
+ 
+$P17221DFILE 127.0.0.1 8080 &
+
 # If there is an XML file named Config*.xml in /mnt/config, feed it to avb_config to set up streams
 AVB_CONFIGFILE=/mnt/apps/avb_config
 AVB_CONFIGXML=`ls -1 /mnt/config/Config*.xml 2>/dev/null | head -1`

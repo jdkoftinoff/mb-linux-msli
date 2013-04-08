@@ -133,6 +133,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
   {
     default:
     case MDPdelayReq_NOT_ENABLED:
+      ptp->ports[port].asCapable = FALSE;
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      ptp->ports[port].multiplePdelayResponses = 0;
       break;
 
     case MDPdelayReq_INITIAL_SEND_PDELAY_REQ:
@@ -148,6 +152,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].isMeasuringDelay = FALSE;
       ptp->ports[port].asCapable = FALSE;
       ptp->ports[port].neighborRateRatioValid = FALSE;
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      ptp->ports[port].pdelayResponses = 0;
+      ptp->ports[port].multiplePdelayResponses = 0;
       break;
 
     case MDPdelayReq_RESET:
@@ -169,6 +177,19 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].pdelayReqSequenceId++;
       transmit_pdelay_request(ptp, port);
       ptp->ports[port].pdelayIntervalTimer = 0; // currentTime ("now" is zero ticks)
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      if (ptp->ports[port].pdelayResponses == 1) {
+        ptp->ports[port].multiplePdelayResponses = 0;
+      } else if (ptp->ports[port].pdelayResponses > 1) {
+        ptp->ports[port].multiplePdelayResponses++;
+        if (ptp->ports[port].multiplePdelayResponses >= 3) {
+          printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
+            port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+          ptp->ports[port].portEnabled = FALSE;
+        }
+      }
+      ptp->ports[port].pdelayResponses = 0;
       break;
 
     case MDPdelayReq_WAITING_FOR_PDELAY_RESP:
@@ -235,6 +256,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       }
       else
       {
+        if (ptp->ports[port].asCapable && (ptp->ports[port].neighborPropDelay > ptp->ports[port].neighborPropDelayThresh)) {
+          printk("Disabling port %d. Delay over threshold (%d ns > %d ns)\n", port + 1,
+            ptp->ports[port].neighborPropDelay, ptp->ports[port].neighborPropDelayThresh);
+        }
         ptp->ports[port].asCapable = FALSE;
       }
       break;

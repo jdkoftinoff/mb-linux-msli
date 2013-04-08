@@ -425,6 +425,10 @@ struct ptp_port {
   uint32_t lostResponses;
   uint32_t neighborRateRatioValid;
 
+  /* AVnu_PTP-5 PICS */
+  uint32_t pdelayResponses;
+  uint32_t multiplePdelayResponses;
+
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
   uint32_t rcvdSignalingMsg1;
@@ -461,11 +465,14 @@ struct ptp_port {
 
   /* Packet statistics */
   PtpAsPortStatistics stats;
+
+  /* Per port path trace data */
+  uint32_t           pathTraceLength;               
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; 
 };
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
-#define PTP_MAX_PATH_TRACE 50
 struct ptp_device {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -661,9 +668,9 @@ void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
 int ptp_events_tx_rtc_change(struct ptp_device *ptp);
-int ptp_work_send_heartbeat(struct work_struct *work);
-int ptp_work_send_gm_change(struct work_struct *work);
-int ptp_work_send_rtc_change(struct work_struct *work);
+void ptp_work_send_heartbeat(struct work_struct *work);
+void ptp_work_send_gm_change(struct work_struct *work);
+void ptp_work_send_rtc_change(struct work_struct *work);
 
 /* From Platform Specific Files */
 void ptp_disable_irqs(struct ptp_device *ptp, int port);

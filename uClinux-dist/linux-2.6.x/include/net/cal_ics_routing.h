@@ -35,5 +35,7 @@
 #define IOC_CAL_SET_AVB_MUTE             4
 #define   CAL_AVB_MUTE_FORCE 0x8
 #define   CAL_AVB_MUTE       0x4
+#define IOC_CAL_SET_SRC                  5
+#define IOC_CAL_SET_RECOVERY_RATE        6
 
 #endif

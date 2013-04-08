@@ -33,7 +33,7 @@
 #define LA_DMA_INTERFACE_EXTERNAL "DMA_EXT"
 #define LA_DMA_INTERFACE_NPI      "DMA_NPI"
 #define LA_DMA_INTERFACE_PLB      "DMA_PLB"
-
+#define LA_DMA_INTERFACE_MCB      "DMA_MCB"
 struct LocalAudioChannelMapping {
 	uint32_t channel;
 	uint32_t streams;
@@ -41,7 +41,6 @@ struct LocalAudioChannelMapping {
 
 #define IOC_LA_SET_CHANNEL_MAPPING _IOW('L', 0x01, struct LocalAudioChannelMapping)
 #define IOC_LA_GET_CHANNEL_MAPPING _IOWR('L', 0x02, struct LocalAudioChannelMapping)
-
 
 /* Data insertion control */
 #define LA_INSERT_MODE_OFF  0

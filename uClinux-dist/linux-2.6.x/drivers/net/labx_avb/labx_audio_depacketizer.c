@@ -23,13 +23,15 @@
  *
  */
 
-#include <linux/autoconf.h>
 #include "labx_audio_depacketizer.h"
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/kthread.h>
+#include <linux/module.h>
+#include <linux/version.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -88,7 +90,7 @@ DMA_CALLBACKS_EXTERN
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   uint32_t ctrlStatusReg;
-  DBG("Disbling the depacketizer\n");
+  DBG("Disabling the depacketizer\n");
 
   /* Disable the micro-engine */
   ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
@@ -606,6 +608,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   uint32_t clockDomain;
   uint32_t recoveryIndex;
   uint32_t controlValue = 0;
+  uint32_t sampleRate = SINGLE_SAMPLE_RATE;
 
   /* Configure the timestamp interval for the domain first.  This informs the basic
    * reference clock recovery hardware of how many samples are being averaged each
@@ -626,6 +629,29 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
                    MC_CONTROL_SYNC_EXTERNAL : MC_CONTROL_SYNC_INTERNAL;
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
             controlValue);
+
+  /* Set the sample rate for the clock domain */
+  switch(clockDomainSettings->sampleRate) {
+  case ENGINE_SAMPLE_RATE_32_KHZ:
+  case ENGINE_SAMPLE_RATE_44_1_KHZ:
+  case ENGINE_SAMPLE_RATE_48_KHZ:
+    sampleRate = SINGLE_SAMPLE_RATE;
+    break;
+
+  case ENGINE_SAMPLE_RATE_88_2_KHZ:
+  case ENGINE_SAMPLE_RATE_96_KHZ:
+    sampleRate = DOUBLE_SAMPLE_RATE;
+    break;
+  
+  case ENGINE_SAMPLE_RATE_176_4_KHZ:
+  case ENGINE_SAMPLE_RATE_192_KHZ:
+    sampleRate = QUAD_SAMPLE_RATE;
+    break;
+
+  default:
+    ;
+  }
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
 
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP
@@ -899,11 +925,19 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
-static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+static long audio_depacketizer_ioctl(struct file *filp,
+                                     unsigned int command, unsigned long arg)
+{
+  long returnValue = 0;
+#else
+static int audio_depacketizer_ioctl(struct inode *inode,
+                                    struct file *filp,
                                     unsigned int command, unsigned long arg)
 {
-  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
   int returnValue = 0;
+#endif
+  struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
 
   // Switch on the request
   switch(command) {
@@ -1096,7 +1130,7 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
       }
     }
     break;
-
+  
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
@@ -1112,10 +1146,14 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
 
 /* Character device file operations structure */
 static struct file_operations audio_depacketizer_fops = {
-  .open	   = audio_depacketizer_open,
-  .release = audio_depacketizer_release,
-  .ioctl   = audio_depacketizer_ioctl,
-  .owner   = THIS_MODULE,
+  .open	          = audio_depacketizer_open,
+  .release        = audio_depacketizer_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+  .unlocked_ioctl = audio_depacketizer_ioctl,
+#else
+  .ioctl          = audio_depacketizer_ioctl,
+#endif
+  .owner          = THIS_MODULE,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by
@@ -1218,7 +1256,10 @@ static int audio_depacketizer_probe(const char *name,
       returnValue = -ENXIO;
       goto unmap;
     }
-  } else depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+  } else {
+    depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+    depacketizer->capabilities.dynamicSampleRates = ((capsWord >> DYN_SAMPLE_RATES_SHIFT) & 0x1);
+  }
 
   /* Capture more capabilities information */
   depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));

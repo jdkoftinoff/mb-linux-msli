@@ -708,8 +708,8 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   uint8_t *txBuffer;
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
-  /* Update the sequence ID */
-  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId++);
+  /* Update the sequence ID (incremented in the pdelay state machine) */
+  set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId);
 
   /* Update the origin timestamp with the present state of the RTC */
   get_rtc_time(ptp, &presentTime);
@@ -738,9 +738,10 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
   set_requesting_port_id(ptp, port, txBuffer, ptp->ports[port].lastPeerRequestPortId);
 
   /* Update the requestReceiptTimestamp with the timestamp captured in the peer delay
-   * request's Rx buffer
+   * request's Rx buffer.  Use the monotonic local counter, per 802.1AS section
+   * 10.1.1: "All timestamps are taken relative to the LocalClock entity".
    */
-  get_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
+  get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
 
   set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
 
@@ -769,10 +770,11 @@ void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
 
   /* Update the precise origin timestamp with the hardware timestamp from when
    * the preceding PDELAY_RESP was accepted into the MAC, augmented by the MAC's TX
-   * latency.
+   * latency.  Use the monotonic local counter, per 802.1AS section
+   * 10.1.1: "All timestamps are taken relative to the LocalClock entity".
    */
-  get_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txRespBuffer, 
-                         &pdelayRespTxTimestamp);
+  get_local_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txRespBuffer, 
+                               &pdelayRespTxTimestamp);
 
   set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestamp);
 

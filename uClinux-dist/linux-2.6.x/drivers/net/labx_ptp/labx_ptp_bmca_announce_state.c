@@ -139,6 +139,11 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
     ptp->pathTraceLength = pathTraceLength;
   }
 
+   if (ptp->ports[port].selectedRole == PTP_SLAVE || ptp->ports[port].selectedRole == PTP_PASSIVE ) {
+     memcpy(ptp->ports[port].pathTrace,pathTrace,sizeof(PtpClockIdentity)*pathTraceLength);
+     ptp->ports[port].pathTraceLength = pathTraceLength;
+     }
+
   return TRUE;
 }
 
@@ -423,11 +428,15 @@ static void updtRolesTree(struct ptp_device *ptp)
 
       case InfoIs_Aged:
         pPort->selectedRole = PTP_MASTER;
+        pPort->pathTraceLength = 1;
+        memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
         pPort->updtInfo = TRUE;
         break;
 
       case InfoIs_Mine:
         pPort->selectedRole = PTP_MASTER;
+        pPort->pathTraceLength = 1;
+        memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
         if ((pPort->portStepsRemoved != ptp->masterStepsRemoved) ||
             (IS_PRESENT_MASTER != bmca_comparison(&pPort->portPriority, &pPort->masterPriority))) {
           pPort->updtInfo = TRUE;
@@ -440,6 +449,8 @@ static void updtRolesTree(struct ptp_device *ptp)
           pPort->updtInfo = FALSE;
         } else if (REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) {
           pPort->selectedRole = PTP_MASTER;
+          pPort->pathTraceLength = 1;
+          memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
           pPort->updtInfo = TRUE;
         } else {
           pPort->selectedRole = PTP_PASSIVE;

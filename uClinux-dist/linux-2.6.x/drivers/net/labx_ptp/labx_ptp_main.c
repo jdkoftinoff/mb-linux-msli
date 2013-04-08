@@ -157,11 +157,11 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
         /* Enable Rx/Tx when the link comes up */
 
         ptp_enable_port(ptp,i);
-        ptp->ports[i].portEnabled = 1;
+        ptp->ports[i].portEnabled = TRUE;
       } else {
         /* Disable Rx/Tx when the link goes down */
         ptp_disable_port(ptp,i);
-        ptp->ports[i].portEnabled = 0;
+        ptp->ports[i].portEnabled = FALSE;
       }
 
       break;
@@ -231,6 +231,37 @@ static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortData
   dataSet->nup                            = 0;
   dataSet->ndown                          = 0;
   dataSet->acceptableMasterTableEnabled   = 0;
+
+  dataSet->setMask                        = 0; /* Always zero on get */
+}
+
+static void SetFromDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
+ 
+  struct ptp_port *pPort = &ptp->ports[port];
+
+  if (dataSet->setMask & PTP_SET_PORT_ENABLED) {
+    pPort->pttPortEnabled = dataSet->pttPortEnabled;
+  }
+
+  if (dataSet->setMask & PTP_SET_NEIGHBOR_PROP_DELAY_THRESH) {
+    pPort->neighborPropDelayThresh = dataSet->neighborPropDelayThresh;
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_ANNOUNCE_INTERVAL) {
+    pPort->currentLogAnnounceInterval = dataSet->currentLogAnnounceInterval;
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_SYNC_INTERVAL) {
+    pPort->currentLogSyncInterval = dataSet->currentLogSyncInterval; 
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_PDELAY_REQ_INTERVAL) {
+    pPort->currentLogPdelayReqInterval = dataSet->currentLogPdelayReqInterval;
+  }
+
+  if (dataSet->setMask & PTP_SET_ALLOWED_LOST_RESPONSES) {
+    pPort->allowedLostResponses = dataSet->allowedLostResponses;
+  }
 }
 
 /* I/O control operations for the driver */
@@ -432,6 +463,22 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_PTP_SET_AS_PORT_DATA_SET:
+    {
+      uint32_t copyResult;
+      PtpAsPortDataSet dataSet = {};
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&dataSet, (void __user*)arg, sizeof(PtpAsPortDataSet));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(dataSet.index >= ptp->numPorts) return (-EINVAL);
+
+      SetFromDataSet(ptp, dataSet.index, &dataSet);
+    }
+    break;
+
   case IOC_PTP_GET_AS_PORT_STATISTICS:
     {
       uint32_t copyResult;
@@ -449,6 +496,22 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       if(copyResult != 0) return(-EFAULT);
     }
     break;
+
+  case IOC_PTP_CLEAR_AS_PORT_STATISTICS:
+    {
+      uint32_t copyResult;
+      uint32_t portIndex = 0;
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&portIndex, (void __user*)arg, sizeof(portIndex));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(portIndex >= ptp->numPorts) return (-EINVAL);
+
+      /* Clear stats for this port */
+      memset(&ptp->ports[portIndex].stats, 0, sizeof(ptp->ports[portIndex].stats));
+    }
 
   case IOC_PTP_ACK_GM_CHANGE:
     /* Simply acknowledge the Grandmaster change for the instance */
@@ -476,6 +539,27 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       if (0 != copy_to_user((void __user*)arg, &presentMaster, sizeof(PtpProperties))) {
         return (-EFAULT);
       }
+    }
+    break;
+
+  case IOC_PTP_GET_PATH_TRACE:
+    {
+      
+      uint32_t copyResult;
+      PtpPathTrace pathTrace = {};
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&pathTrace, (void __user*)arg, sizeof(PtpPathTrace));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(pathTrace.index >= ptp->numPorts) return (-EINVAL);
+
+      /* Copy the pathTrace into the userspace argument */
+      pathTrace.pathTraceLength = ptp->ports[pathTrace.index].pathTraceLength;
+      memcpy(&pathTrace.pathTrace,ptp->ports[pathTrace.index].pathTrace,sizeof(PtpClockIdentity)*pathTrace.pathTraceLength);
+      copyResult = copy_to_user((void __user*)arg,&pathTrace,sizeof(PtpPathTrace));
+      if(copyResult != 0) return(-EFAULT);
     }
     break;
 
