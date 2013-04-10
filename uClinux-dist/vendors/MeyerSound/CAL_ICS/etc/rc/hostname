@@ -3,5 +3,5 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 mkdir /var/tmp/identity
 /bin/mbbl-imagetool -i /var/tmp/identity/identity.txt -I /dev/mtd0
-/bin/dmitri-sethostname
+/usr/bin/dmitri-sethostname
 
