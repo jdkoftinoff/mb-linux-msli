@@ -46,8 +46,8 @@
  * This driver will work with revision 1.1 only.
   */
 #define DRIVER_NAME "labx_tdm_audio"
-#define DRIVER_VERSION_MIN  0x13
-#define DRIVER_VERSION_MAX  0x13
+#define DRIVER_VERSION_MIN  0x14
+#define DRIVER_VERSION_MAX  0x14
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
@@ -1192,9 +1192,10 @@ int audio_tdm_probe(const char *name,
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   strcpy(tdm->analyzer.tdmName, tdm->name);
   tdm->analyzer.baseAddress = tdm->virtualAddress + TDM_ANALYZER_BASE_ADDRESS;
-  tdm->analyzer.errorIrq    = ANALYSIS_ERROR_IRQ;
-  tdm->analyzer.irqFlagsReg = TDM_IRQ_FLAGS_REG;
-  tdm->analyzer.irqMaskReg  = TDM_IRQ_MASK_REG;
+  tdm->analyzer.numAnalyzers = tdm->tdmCaps.numTransmitters;
+  tdm->analyzer.errorIrq     = ANALYSIS_ERROR_IRQ;
+  tdm->analyzer.irqFlagsReg  = TDM_IRQ_FLAGS_REG;
+  tdm->analyzer.irqMaskReg   = TDM_IRQ_MASK_REG;
 #endif
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied.
@@ -1265,6 +1266,8 @@ int audio_tdm_probe(const char *name,
   /* Setup the Config structure */
   tdm->tdmCaps.versionMajor          = versionMajor;
   tdm->tdmCaps.versionMinor          = versionMinor;
+  tdm->tdmCaps.numTransmitters       = pdata->num_transmitters;
+  tdm->tdmCaps.numReceivers          = pdata->num_receivers;
   tdm->tdmCaps.laneCount             = pdata->lane_count;
   tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
   tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
@@ -1279,9 +1282,9 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d lanes, %d max slots, %d mclk ratio, min burst length %d, max burst multiple %d, %s",
-		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.laneCount,
-                  tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.minBurstLength, tdm->tdmCaps.maxBurstMultiple,
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d transmitters, %d receviers, %d lanes, %d max slots, %d mclk ratio, min burst length %d, max burst multiple %d, %s",
+		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.numTransmitters, tdm->tdmCaps.numReceivers,
+                  tdm->tdmCaps.laneCount, tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.minBurstLength, tdm->tdmCaps.maxBurstMultiple,
                   (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
@@ -1368,6 +1371,8 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
     irq = NULL;
   }
 
+  pdata_struct.num_transmitters         = get_u32(ofdev, "xlnx,tdm-num-transmitters");
+  pdata_struct.num_receivers            = get_u32(ofdev, "xlnx,tdm-num-receivers");
   pdata_struct.lane_count               = get_u32(ofdev, "xlnx,tdm-lane-count");
   pdata_struct.num_streams              = get_u32(ofdev, "xlnx,max-num-streams");
   pdata_struct.slot_density             = get_u32(ofdev, "xlnx,tdm-max-slot-density");
@@ -1400,6 +1405,7 @@ static struct of_device_id tdm_of_match[] = {
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.04.a", },
   { /* end of list */ },
 };
 

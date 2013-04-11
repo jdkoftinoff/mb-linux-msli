@@ -48,6 +48,10 @@
 #define ANALYSIS_PSEUDORANDOM 0
 #define ANALYSIS_RAMP 1
 
+/* Maximum number of analyzers, based on max number
+   of TDM transmitters allowed*/
+#define MAX_NUM_ANALYZERS (4)
+
 typedef struct {
   uint32_t enable;
   uint32_t signalControl;
@@ -63,9 +67,9 @@ typedef struct {
 } GeneratorConfig;
 
 typedef struct {
-  uint32_t errorCount;
-  uint32_t predictedSample;
-  uint32_t actualSample;
+  uint32_t errorCount[MAX_NUM_ANALYZERS];
+  uint32_t predictedSample[MAX_NUM_ANALYZERS];
+  uint32_t actualSample[MAX_NUM_ANALYZERS];
 } AnalyzerResults;
 
 /* I/O control commands and structures specific to the audio tdm hardware */

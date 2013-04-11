@@ -130,6 +130,8 @@
 
 /* Structures for storing physical hardware attributes */
 struct labx_tdm_platform_data {
+  uint8_t num_transmitters;
+  uint8_t num_receivers;
   uint8_t lane_count;
   uint8_t num_streams;
   uint8_t slot_density;
