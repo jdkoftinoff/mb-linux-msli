@@ -35,6 +35,7 @@
 #define LFSR_GENERATOR_ENABLE   (0x01)
 
 /* Data insertion control */
+#define SIGNAL_PASSTHROUGH  0
 #define SIGNAL_MUTE         1
 #define SIGNAL_DC_PATTERN   2
 #define SIGNAL_RAMP         4 
