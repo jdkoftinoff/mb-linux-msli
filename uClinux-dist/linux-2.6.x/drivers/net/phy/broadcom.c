@@ -568,7 +568,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 	}
 
 	// Enable auto-negotiation and high-performance modes
-	if (bc5481_auto_negotiate_enable != 0) {
+	if (bc5481_auto_negotiate_enable == 0) {
 	        reg = phy_read(phydev, 0x00);
 		reg = reg | BCM5481_AUTO_NEGOTIATE_ENABLE;
 		phy_write(phydev, 0x00, reg);
@@ -577,7 +577,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 	                ((phy_read(phydev, 0x00) & BCM5481_AUTO_NEGOTIATE_ENABLE) != 0));
 	}
 
-	if (bc5481_high_performance_enable != 0) {
+	if (bc5481_high_performance_enable == 0) {
 	        reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII);
                 reg |= MII_BCM54XX_AUXCTL_PMII_HPE;
                 bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII, reg);
