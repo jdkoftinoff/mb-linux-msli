@@ -1397,6 +1397,7 @@ static int __devexit audio_tdm_of_remove(struct of_device *dev)
  *
  */
 static struct of_device_id tdm_of_match[] = {
+  { .compatible = "xlnx,labx-tdm-audio-1.00.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
