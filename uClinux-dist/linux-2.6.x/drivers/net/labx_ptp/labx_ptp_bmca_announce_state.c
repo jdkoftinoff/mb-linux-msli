@@ -383,18 +383,15 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute gmPathPriority vectors */
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-    // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-    int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, i) * pPort->syncReceiptTimeout * 2);
-    int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i) * pPort->announceReceiptTimeout);
-    if (!announceTimeout & (!ptp->gmPresent || !syncTimeout)) {
-      memcpy(&pPort->gmPathPriority, &pPort->portPriority, sizeof(PtpPriorityVector));
+    /* Note: The spec lists several conditions here, but these can all be derived from
+       infoIs. When we have received a message and it hasn't aged out, we use that message
+       priority for determining that port's path. */
+    if (pPort->infoIs == InfoIs_Received) {
+      memcpy(&pPort->gmPathPriority, &pPort->messagePriority, sizeof(PtpPriorityVector));
       set_steps_removed(pPort->gmPathPriority.stepsRemoved,
-                        (get_steps_removed(pPort->gmPathPriority.stepsRemoved) + 1));
+                        (get_steps_removed(pPort->messagePriority.stepsRemoved) + 1));
     } else {
       memset(&pPort->gmPathPriority, 0xFF, sizeof(PtpPriorityVector));
-      if (syncTimeout) {
-        pPort->syncTimeoutCounter = 0;
-      }
     }
   }
 
