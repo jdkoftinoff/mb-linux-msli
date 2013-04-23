@@ -40,7 +40,7 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
-// #define _LABXDEBUG
+ #define _LABXDEBUG
 
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
@@ -196,6 +196,10 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
   int returnValue = 0;
   uint32_t reg;
 
+  /* The hardware can be configured with a varying number of instances of transmitters
+     and receivers.  At the moment the channel configuration between each can not vary */
+  uint32_t numChansPerInstance; 
+
   switch (tdmControl->bitMask)
   {
     case SLOT_DENSITY: 
@@ -224,32 +228,33 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       break;
 
     case NUM_CHANNELS:
+      numChansPerInstance = tdmControl->numChannels / tdm->tdmCaps.numTransmitters;
       /* Evaluate the number of channels to see if it is one of the supported configurations */
-      if(tdmControl->numChannels != 8 && tdmControl->numChannels != 16 &&
-            tdmControl->numChannels != 32 && tdmControl->numChannels != 64 &&
-              tdmControl->numChannels != 128 && tdmControl->numChannels != 256) {
+      if(numChansPerInstance != 8 && numChansPerInstance != 16 &&
+            numChansPerInstance != 32 && numChansPerInstance != 64 &&
+              numChansPerInstance != 128 && tdmControl->numChannels != 256) {
         return -ENUMCHNOTSUPPORTED;
       }
      
       /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
-      if(tdmControl->numChannels > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+      if(numChansPerInstance > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
         return -ENUMCHNOTSUPPORTED;
       }
 
       /* Evaluate the number of channels to see if it is not less than the minimum supported */
-      if(tdmControl->numChannels < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+      if(numChansPerInstance < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
         return -ENUMCHNOTSUPPORTED;
       }
 
       /* Evaluate the current sample rate, the maximum number channels supported
          scales based on the current TDM configuration. TdmSampleRate << 1 results
          in the multiplier from 48K to the current sample rate. */
-      if(((tdmControl->numChannels / tdm->tdmCaps.laneCount) >
+      if(((numChansPerInstance / tdm->tdmCaps.laneCount) >
           (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
         return -ENUMCHEXCDSCONF;
       }
 
-      tdm->opConfig.TdmSlotDensity = (tdmControl->numChannels / tdm->tdmCaps.laneCount);
+      tdm->opConfig.TdmSlotDensity = (numChansPerInstance / tdm->tdmCaps.laneCount);
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
       reg |= tdm->opConfig.TdmSlotDensity;
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
@@ -478,7 +483,7 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
 
     case NUM_CHANNELS:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount);
+      tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount * tdm->tdmCaps.numTransmitters);
       break;
 
     case BURST_LENGTH_MULTIPLE:
@@ -698,7 +703,7 @@ static ssize_t tdm_r_channels(struct class *c, char *buf)
 {
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
   return (snprintf(buf, PAGE_SIZE, "%d\n",
-           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount));
+           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount * tdm->tdmCaps.numTransmitters));
 }
 
 static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count) 
@@ -706,31 +711,33 @@ static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count)
   uint32_t reg;
   unsigned long int val;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  uint32_t numChansPerInstance;
 
   if (strict_strtoul(buf, 0, &val) == 0) {
+    numChansPerInstance = val / tdm->tdmCaps.numTransmitters;
     /* Evaluate the number of channels to see if is one of the supported configurations */
     if(val != 8 && val != 16 && val != 32 && val != 64 && val != 128 && val != 256) {
       return -ENUMCHNOTSUPPORTED;
     }
       
     /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
-    if(val > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+    if(numChansPerInstance > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
       return -ENUMCHNOTSUPPORTED;
     }
    
     /* Evaluate the number of channels to see if it is not less than the minimum supported */
-    if(val < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+    if(numChansPerInstance < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
       return -ENUMCHNOTSUPPORTED;
     }
 
     /* Evaluate the current sample rate, the maximum number channels supported
        scales based on the current TDM configuration. TdmSampleRate << 1 results
        in the multiplier from 48K to the current sample rate. */
-    if((val / tdm->tdmCaps.laneCount) > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+    if((numChansPerInstance / tdm->tdmCaps.laneCount) > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
       return -ENUMCHEXCDSCONF;
     }
 
-    tdm->opConfig.TdmSlotDensity = (val / tdm->tdmCaps.laneCount);
+    tdm->opConfig.TdmSlotDensity = (numChansPerInstance / tdm->tdmCaps.laneCount);
     reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
     reg |= tdm->opConfig.TdmSlotDensity;
     XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
@@ -1402,6 +1409,7 @@ static int __devexit audio_tdm_of_remove(struct of_device *dev)
  *
  */
 static struct of_device_id tdm_of_match[] = {
+  { .compatible = "xlnx,labx-tdm-audio-1.00.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
