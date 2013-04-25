@@ -754,8 +754,9 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->newMaster              = TRUE;
   ptp->rtcChangesAllowed      = TRUE;
 
-  ptp->masterRateRatio = 0;
+  ptp->masterRateRatio = 0x80000000;
   ptp->masterRateRatioValid = FALSE;
+  ptp->prevRtcIncrement = 0;
 
 #ifndef CONFIG_LABX_PTP_NO_TASKLET
   tasklet_init(&ptp->rxTasklet, &labx_ptp_rx_state_task, (unsigned long) ptp);

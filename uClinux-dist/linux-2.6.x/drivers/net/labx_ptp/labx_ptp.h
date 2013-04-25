@@ -528,6 +528,7 @@ struct ptp_device {
   PtpCoefficients coefficients;
   uint32_t masterRateRatio;
   uint32_t masterRateRatioValid;
+  uint32_t prevRtcIncrement;
 
   /* RTC control loop persistent values */
   int64_t  integral;
