@@ -305,7 +305,16 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     /* Update the servo with the present value; begin with the master rate ratio
      * if it is available, otherwise start with the nominal increment */
     if (ptp->masterRateRatioValid) {
-      newRtcIncrement = ptp->masterRateRatio >> 1;
+      uint32_t scaledMasterRateRatio = ptp->masterRateRatio >> 1;
+      int32_t rateDiff = (int32_t)(scaledMasterRateRatio - ptp->prevRtcIncrement);
+      if (rateDiff < 1000 && rateDiff > -1000) {
+        // Use the previous value as a base. Include a portion of the master rate ratio to speed up corrections.
+        newRtcIncrement = ptp->prevRtcIncrement + (rateDiff>>4);
+      } else {
+        // Use the master rate ratio as a base
+        newRtcIncrement = scaledMasterRateRatio;
+      }
+      ptp->prevRtcIncrement = newRtcIncrement;
 
       /* If we crossed the midpoint, damp the integral */
       if (((slaveOffset < 0) && (ptp->previousOffset > 0)) ||
