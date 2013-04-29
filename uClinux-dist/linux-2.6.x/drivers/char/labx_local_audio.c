@@ -309,7 +309,7 @@ int labx_local_audio_probe(const char *name,
                          NULL);
     if(ret) {
       printk(KERN_WARNING DRIVER_NAME ": Probe of encapsulated DMA failed\n");
-      goto unmap;
+      goto unmap_dereg;
     }
   }
 
@@ -327,7 +327,7 @@ int labx_local_audio_probe(const char *name,
   if(deviceIndex >= MAX_LA_DEVICES) {
     printk(KERN_WARNING DRIVER_NAME ": Maximum device count (%d) exceeded during probe\n",
            MAX_LA_DEVICES);
-    goto unmap;
+    goto unmap_dereg;
   }
 
   /* Retain any derived file operations & data to dispatch to */
@@ -338,6 +338,8 @@ int labx_local_audio_probe(const char *name,
   if(newInstance != NULL) *newInstance = local_audio_pdev;
   return(0);
 
+ unmap_dereg:
+  misc_deregister(&local_audio_pdev->miscdev);
  unmap:
   iounmap(local_audio_pdev->virtualAddress);
  release:

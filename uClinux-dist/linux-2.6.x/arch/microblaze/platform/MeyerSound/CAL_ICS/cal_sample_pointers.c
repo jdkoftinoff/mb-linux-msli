@@ -240,6 +240,39 @@ static int sample_pointers_ioctl(struct inode *inode,
       XIo_Out32(REGISTER_ADDRESS(sample_pointers, AVB_STREAM_CHAN_REG), Value);
     }
     break;
+
+  case IOC_CAL_SET_SRC:
+    {
+      uint32_t userVal = 0;
+      uint32_t channel = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      channel = userVal & 0x3;
+      Value = XIo_In32(REGISTER_ADDRESS(sample_pointers, AVB_RATE_SELECT_REG));
+      Value &= ~(0x1 << channel);
+      Value |= ((userVal >> 8) & 0x1) << channel;
+      XIo_Out32(REGISTER_ADDRESS(sample_pointers, AVB_RATE_SELECT_REG), Value);
+    }
+    break;
+
+  case IOC_CAL_SET_RECOVERY_RATE:
+    {
+      uint32_t userVal = 0;
+      if(copy_from_user(&userVal, (void __user*)arg, 
+                        sizeof(uint32_t)) != 0) {
+        return(-EFAULT);
+      }
+      Value = XIo_In32(REGISTER_ADDRESS(sample_pointers, AVB_RATE_SELECT_REG));
+      if (userVal == 0) {
+        Value &= ~0x80000000;
+      } else {
+        Value |= 0x80000000;
+      }
+      XIo_Out32(REGISTER_ADDRESS(sample_pointers, AVB_RATE_SELECT_REG), Value);
+    }
+    break;
   
   default:
       if((sample_pointers->derivedFops != NULL) && 

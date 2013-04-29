@@ -64,14 +64,14 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   return 0;
 }
 
-int ptp_work_send_heartbeat(struct work_struct *work) {
+void ptp_work_send_heartbeat(struct work_struct *work) {
   struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_heartbeat);
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Create the message headers */
   msgHead = genlmsg_put(skb, 
@@ -112,8 +112,6 @@ int ptp_work_send_heartbeat(struct work_struct *work) {
     nlmsg_free(skb);
     skb = NULL;
   }
-
-  return(returnValue);
 }
 
 /* Size of a character string buffer, in bytes; this allocates enough
@@ -129,7 +127,7 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   return 0;
 }
 
-int ptp_work_send_gm_change(struct work_struct *work) {
+void ptp_work_send_gm_change(struct work_struct *work) {
   struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_gm_change);
   struct sk_buff *skb;
   struct nlattr *valueMap;
@@ -140,7 +138,7 @@ int ptp_work_send_gm_change(struct work_struct *work) {
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Create the message headers */
   msgHead = genlmsg_put(skb, 
@@ -211,8 +209,6 @@ int ptp_work_send_gm_change(struct work_struct *work) {
     nlmsg_free(skb);
     skb = NULL;
   }
-
-  return(returnValue);
 }
 
 /* Transmits a Netlink packet indicating a change in the RTC status */
@@ -221,7 +217,7 @@ int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
   return 0;
 }
 
-int ptp_work_send_rtc_change(struct work_struct *work) {
+void ptp_work_send_rtc_change(struct work_struct *work) {
   struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_rtc_change);
   struct sk_buff *skb;
   uint8_t commandByte;
@@ -229,7 +225,7 @@ int ptp_work_send_rtc_change(struct work_struct *work) {
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Decide which command byte to send with the message based upon the lock state */
   if(ptp->rtcLockState == PTP_RTC_LOCKED) {
@@ -277,8 +273,6 @@ int ptp_work_send_rtc_change(struct work_struct *work) {
     nlmsg_free(skb);
     skb = NULL;
   }
-
-  return(returnValue);
 }
 
 /* foo */

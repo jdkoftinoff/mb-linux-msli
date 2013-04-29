@@ -628,7 +628,7 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "m25p16",  0x202015,  0, 64 * 1024, 32, },
 	{ "m25p32",  0x202016,  0, 64 * 1024, 64, },
 	{ "m25p64",  0x202017,  0, 64 * 1024, 128, },
-	{ "m25p128", 0x202018, 0, 256 * 1024, 64, },
+	{ "m25p128", 0x202018,  0, 256 * 1024, 64, },
 
 	{ "m45pe80", 0x204014,  0, 64 * 1024, 16, },
 	{ "m45pe16", 0x204015,  0, 64 * 1024, 32, },
@@ -646,9 +646,14 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
 
 	/* Numonyx */
-	{ "n25q128", 0x20ba18, 0, 64 * 1024, 256, },
+	{ "n25q128",  0x20ba18, 0, 64 * 1024, 256, },
+    { "n25q128a", 0x20bb18, 0, 64 * 1024, 256, },
+    
 
 };
+#define STM_ID_N25Q128			0xba18
+#define STM_ID_N25Q128A			0xbb18
+#define STM_ID_N25Q256			0xba19
 
 static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 {
@@ -770,6 +775,9 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	flash->mtd.erase = m25p80_erase;
 	flash->mtd.read = m25p80_read;
 	flash->mtd.write = m25p80_write;
+#ifdef CONFIG_HAVE_MTD_OTP
+	flash->mtd.read_fact_prot_reg = m25p80_otp_read;
+#endif
 
 	/* prefer "small sector" erase if possible */
 	if (info->flags & SECT_4K) {

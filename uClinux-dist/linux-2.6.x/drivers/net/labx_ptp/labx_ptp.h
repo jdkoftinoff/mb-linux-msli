@@ -379,6 +379,13 @@ struct ptp_port {
   uint32_t portEnabled;
   uint32_t pttPortEnabled;
 
+  /* 802.1AS PortSyncSyncSend state machine variables (10.2.11) */
+  PtpTime  lastPreciseOriginTimestamp;  /* 10.2.11.1.4 */
+  PtpTime  lastFollowUpCorrectionField; /* 10.2.11.1.5 */
+
+  uint32_t fupPreciseOriginTimestampReceived;
+  uint32_t syncTxLocalTimestampValid;
+
   /* 802.1AS per-port variables (10.3.8 - 10.3.9) - BMCA/Announce state machines */
   int8_t            reselect;                   /* 10.3.8.1 (bool) */
   int8_t            selected;                   /* 10.3.8.2 (bool) */
@@ -450,6 +457,9 @@ struct ptp_port {
   /* pdelay response variables */
   uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
 
+  /* sync/fup response variables */
+  uint8_t syncSourcePortId[PORT_ID_BYTES];
+
   /* Timer state space */
   uint32_t announceCounter;
   uint16_t announceSequenceId;
@@ -465,11 +475,14 @@ struct ptp_port {
 
   /* Packet statistics */
   PtpAsPortStatistics stats;
+
+  /* Per port path trace data */
+  uint32_t           pathTraceLength;               
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; 
 };
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
-#define PTP_MAX_PATH_TRACE 50
 struct ptp_device {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
@@ -515,6 +528,7 @@ struct ptp_device {
   PtpCoefficients coefficients;
   uint32_t masterRateRatio;
   uint32_t masterRateRatioValid;
+  uint32_t prevRtcIncrement;
 
   /* RTC control loop persistent values */
   int64_t  integral;
@@ -588,7 +602,8 @@ typedef enum {
 void init_tx_templates(struct ptp_device *ptp, uint32_t port);
 uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
 void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress);
-void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t * rxBuffer, uint8_t *sourcePortId);
+void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
+void set_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
 void get_rx_requesting_port_id(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *requestingPortId);
 uint16_t get_rx_announce_steps_removed(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
 uint16_t get_rx_announce_path_trace(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer, PtpClockIdentity *pathTrace);
@@ -665,9 +680,9 @@ void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
 int ptp_events_tx_rtc_change(struct ptp_device *ptp);
-int ptp_work_send_heartbeat(struct work_struct *work);
-int ptp_work_send_gm_change(struct work_struct *work);
-int ptp_work_send_rtc_change(struct work_struct *work);
+void ptp_work_send_heartbeat(struct work_struct *work);
+void ptp_work_send_gm_change(struct work_struct *work);
+void ptp_work_send_rtc_change(struct work_struct *work);
 
 /* From Platform Specific Files */
 void ptp_disable_irqs(struct ptp_device *ptp, int port);

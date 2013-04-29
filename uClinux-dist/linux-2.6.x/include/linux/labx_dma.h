@@ -195,8 +195,13 @@ extern int32_t labx_dma_remove(struct labx_dma *dma);
 
 #define DMA_STATUS_FIFO_DATA_REG        0x07
 
+#define DMA_CHANNEL_FREE_RUN_REG        0x08
+
 #define DMA_CAPABILITIES_REG            0x7E
-#  define DMA_CAPS_STATUS_FIFO_BIT           0x010000
+#  define DMA_CAPS_INTERNAL_PARAMS_BIT       0x00100000
+#  define DMA_CAPS_LOG_WIDTH_SHIFT           17
+#  define DMA_CAPS_LOG_WIDTH_MASK            0x07
+#  define DMA_CAPS_STATUS_FIFO_BIT           0x00010000
 #  define DMA_CAPS_INDEX_SHIFT               12
 #  define DMA_CAPS_INDEX_MASK                0x0F
 #  define DMA_CAPS_CHANNELS_SHIFT            10

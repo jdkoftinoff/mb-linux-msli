@@ -89,11 +89,21 @@ void labx_ptp_timer_state_task(unsigned long data) {
       ptp->ports[i].syncCounter += timerTicks;
       if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].syncCounter = 0;
-        transmit_sync(ptp, i);
-        if(ptp->rtcChangesAllowed && localMaster) {
-          /* Periodically update the RTC to get update listeners to
-             notice (IE when they are not coasting) */
-          set_rtc_increment(ptp, &ptp->nominalIncrement);
+
+        /* If we are the grandmaster send sync messages. If we are not,
+           we will forward sync/fup messages when we receive them from the GM. */
+        if (localMaster) {
+          /* Set the source port ID back to this node when we are the GM */
+          memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
+          ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
+          ptp->ports[i].syncSourcePortId[9] = (i+1);
+
+          transmit_sync(ptp, i);
+          if (ptp->rtcChangesAllowed) {
+            /* Periodically update the RTC to get update listeners to
+               notice (IE when they are not coasting) */
+            set_rtc_increment(ptp, &ptp->nominalIncrement);
+          }
         }
       }
       break;
@@ -222,6 +232,7 @@ static void process_rx_announce(struct ptp_device *ptp, uint32_t port, uint8_t *
 static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
   PtpPortIdentity rxIdentity;
+  int i;
 
   ptp->ports[port].stats.rxSyncCount++;
   ptp->ports[port].syncTimeoutCounter = 0;
@@ -231,7 +242,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
    * us from ever seeing our own SYNC packets, but better safe than sorry.
    */
   get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
-  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) &&
      (0 == memcmp(&rxIdentity, &ptp->gmPriority->sourcePortIdentity, sizeof(PtpPortIdentity)))) {
     PtpTime tempTimestamp;
     PtpTime correctionField;
@@ -252,6 +263,25 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     ptp->ports[port].syncSequenceIdValid = 1;
     spin_unlock_irqrestore(&ptp->mutex, flags);
     preempt_enable();
+
+    /* Forward the sync to any master ports if the sync is coming in on a slave port */
+    if (ptp->ports[port].selectedRole == PTP_SLAVE) {
+      PtpTime syncRxTimestamp;
+      PtpTime linkDelay;
+      get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET, rxBuffer, &syncRxTimestamp);
+      linkDelay.secondsUpper = 0;
+      linkDelay.secondsLower = 0;
+      linkDelay.nanoseconds = ptp->ports[port].neighborPropDelay;
+      for (i=0; i<ptp->numPorts; i++) {
+	if (ptp->ports[i].selectedRole == PTP_MASTER) {
+          // Save the received time (with link delay) for later calculation of residency time
+          timestamp_difference(&syncRxTimestamp, &linkDelay, &ptp->ports[i].syncRxTimestamp);
+          get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, &ptp->ports[i].syncSourcePortId[0]);
+          ptp->ports[i].syncSequenceId = ptp->ports[port].syncSequenceId;
+          transmit_sync(ptp, i);
+	}
+      }
+    } /* if(received sync on SLAVE port) */
   }
 }
 
@@ -259,6 +289,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
 static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
   PtpPortIdentity rxIdentity;
+  int i;
 
   ptp->ports[port].stats.rxFollowupCount++;
 
@@ -268,9 +299,9 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
    * - The sequence ID matches the last valid SYNC message
    */
   get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
-  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) &&
      (0 == memcmp(&rxIdentity, &ptp->gmPriority->sourcePortIdentity, sizeof(PtpPortIdentity))) &&
-     ptp->ports[port].syncSequenceIdValid && 
+     ptp->ports[port].syncSequenceIdValid &&
      (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == ptp->ports[port].syncSequenceId)) {
     PtpTime syncTxTimestamp;
     PtpTime correctionField;
@@ -286,6 +317,16 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
 
     /* Correct the Tx timestamp with the received correction field */
     get_correction_field(ptp, port, rxBuffer, &correctionField);
+
+    /* Save off the timestamp and correction field info for any ports that need to forward it */
+    for (i=0; i<ptp->numPorts; i++) {
+      if (ptp->ports[i].selectedRole == PTP_MASTER) {
+        timestamp_copy(&ptp->ports[i].lastPreciseOriginTimestamp, &syncTxTimestamp);
+        timestamp_copy(&ptp->ports[i].lastFollowUpCorrectionField, &correctionField);
+        ptp->ports[i].fupPreciseOriginTimestampReceived = TRUE;
+      }
+    }
+
     timestamp_sum(&syncTxTimestamp, &correctionField, &correctedTimestamp);
 
     preempt_disable();
@@ -336,6 +377,15 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
     }
+
+    /* Forward the follow-up to any master ports */
+    for (i=0; i<ptp->numPorts; i++) {
+      if (ptp->ports[i].selectedRole == PTP_MASTER) {
+        if (ptp->ports[i].syncTxLocalTimestampValid) {
+          transmit_fup(ptp, i);
+        }
+      }
+    }
   }
 }
 
@@ -376,13 +426,13 @@ static void process_rx_delay_resp(struct ptp_device *ptp, uint32_t port, uint8_t
   get_rx_mac_address(ptp, port, rxBuffer, rxMacAddress);
   get_rx_requesting_port_id(ptp, port, rxBuffer, rxRequestingPortId);
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
-  get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, 
+  get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer,
                      txRequestingPortId);
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_DELAY_REQ_BUFFER);
-  if((ptp->ports[port].selectedRole == PTP_SLAVE) && 
+  if((ptp->ports[port].selectedRole == PTP_SLAVE) &&
      (compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0) &&
-     (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) == 
+     (get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer) ==
       get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer))) {
     PtpTime delayReqRxTimestamp;
     PtpTime difference;
@@ -536,6 +586,14 @@ void labx_ptp_tx_state_task(unsigned long data) {
   unsigned long flags;
   uint8_t *txBuffer;
   int i;
+  bool localMaster = true;
+
+  for (i=0; i<ptp->numPorts; i++) {
+    if (ptp->ports[i].selectedRole == PTP_SLAVE) {
+      localMaster = false;
+      break;
+    }
+  }
 
   for(i=0; i<ptp->numPorts; i++) {
     /* A packet has been transmitted; examine the pending flags to to see which one(s).
@@ -561,44 +619,59 @@ void labx_ptp_tx_state_task(unsigned long data) {
         pendingTxFlags &= ~bufferMask;
         switch(whichBuffer) {
         case PTP_TX_SYNC_BUFFER: {
-          /* A sync message was just transmitted; send a followup message containing the 
-           * hardware-timestamped transmit time of the SYNC.
-           */
-          transmit_fup(ptp, i);
+          txBuffer = get_output_buffer(ptp, i, PTP_TX_SYNC_BUFFER);
+
+          if (localMaster) {
+            /* A sync message was just transmitted; send a followup message containing the
+             * hardware-timestamped transmit time of the SYNC.
+             */
+            get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, &ptp->ports[i].syncTxTimestamp);
+            transmit_fup(ptp, i);
+          } else {
+            /* Save the sync transmit time to calculate residency time once the follow-up comes in. */
+            get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer,
+                                         &ptp->ports[i].syncTxTimestamp);
+            ptp->ports[i].syncTxLocalTimestampValid = TRUE;
+
+            /* If the follow-up already arrived, forward it now. */
+            if (ptp->ports[i].fupPreciseOriginTimestampReceived) {
+              transmit_fup(ptp, i);
+            }
+          }
         } break;
-        
+
         case PTP_TX_DELAY_REQ_BUFFER: {
-          /* A delay request message has just been sent; capture and store the 
+          /* A delay request message has just been sent; capture and store the
            * transmission timestamp for later use.
            */
           txBuffer = get_output_buffer(ptp,i,PTP_TX_DELAY_REQ_BUFFER);
-          get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, 
+          get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer,
                                  &ptp->ports[i].delayReqTxTimestampTemp);
-          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, 
+          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer,
                                        &ptp->ports[i].delayReqTxLocalTimestampTemp);
 
         } break;
-        
+
         case PTP_TX_PDELAY_REQ_BUFFER: {
           /* A peer delay request message has just been sent; capture and store the
            * transmission timestamp for later use. (Treq1 - our local clock)
            */
           uint8_t *txBuffer = get_output_buffer(ptp,i,PTP_TX_PDELAY_REQ_BUFFER);
-          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer , 
+          get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer ,
                                        &ptp->ports[i].pdelayReqTxTimestamp);
 
           ptp->ports[i].rcvdMDTimestampReceive = TRUE;
           MDPdelayReq_StateMachine(ptp, i);
         } break;
-        
+
         case PTP_TX_PDELAY_RESP_BUFFER: {
-          /* A peer delay response message was just transmitted; send a peer delay 
-           * response followup message containing the hardware-timestamped transmit 
+          /* A peer delay response message was just transmitted; send a peer delay
+           * response followup message containing the hardware-timestamped transmit
            * time of the response.
            */
           transmit_pdelay_response_fup(ptp, i);
         } break;
-        
+
         default:
           /* A message was sent that requires no follow-up action */
           break;
@@ -613,7 +686,7 @@ void labx_ptp_tx_state_task(unsigned long data) {
  */
 void ack_grandmaster_change(struct ptp_device *ptp) {
   unsigned long flags;
-  
+
   /* Re-enable the changing of RTC parameters */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
@@ -681,8 +754,9 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->newMaster              = TRUE;
   ptp->rtcChangesAllowed      = TRUE;
 
-  ptp->masterRateRatio = 0;
+  ptp->masterRateRatio = 0x80000000;
   ptp->masterRateRatioValid = FALSE;
+  ptp->prevRtcIncrement = 0;
 
 #ifndef CONFIG_LABX_PTP_NO_TASKLET
   tasklet_init(&ptp->rxTasklet, &labx_ptp_rx_state_task, (unsigned long) ptp);

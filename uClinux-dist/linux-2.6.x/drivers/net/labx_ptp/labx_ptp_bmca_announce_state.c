@@ -118,7 +118,7 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
   stepsRemoved = get_rx_announce_steps_removed(ptp, port, ptp->ports[port].rcvdAnnouncePtr);
 
   BMCA_DBG_2("QA: SR %d\n", stepsRemoved);
-  
+
   if (stepsRemoved > 255) {
     return FALSE;
   }
@@ -135,8 +135,21 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
   }
 
   if (ptp->ports[port].selectedRole == PTP_SLAVE) {
+    /* Copy the path trace from the GM */
     memcpy(ptp->pathTrace, pathTrace, sizeof(PtpClockIdentity)*pathTraceLength);
     ptp->pathTraceLength = pathTraceLength;
+
+    if (pathTraceLength < PTP_MAX_PATH_TRACE) {
+      /* Add ourselves at the end for when we forward this along. */
+      memcpy(ptp->pathTrace + pathTraceLength, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity));
+      ptp->pathTraceLength++;
+    }
+  }
+
+  /* Update the per-port path trace */
+  if (ptp->ports[port].selectedRole == PTP_SLAVE || ptp->ports[port].selectedRole == PTP_PASSIVE ) {
+    memcpy(ptp->ports[port].pathTrace, pathTrace, sizeof(PtpClockIdentity)*pathTraceLength);
+    ptp->ports[port].pathTraceLength = pathTraceLength;
   }
 
   return TRUE;
@@ -266,7 +279,7 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
         case PortAnnounceInformation_BEGIN:
           PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_DISABLED);
           break;
-            
+
         case PortAnnounceInformation_DISABLED:
           if (pPort->portEnabled && pPort->pttPortEnabled && pPort->asCapable) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
@@ -370,18 +383,15 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute gmPathPriority vectors */
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-    // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-    int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, i) * pPort->syncReceiptTimeout * 2);
-    int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i) * pPort->announceReceiptTimeout);
-    if (!announceTimeout & (!ptp->gmPresent || !syncTimeout)) {
-      memcpy(&pPort->gmPathPriority, &pPort->portPriority, sizeof(PtpPriorityVector));
+    /* Note: The spec lists several conditions here, but these can all be derived from
+       infoIs. When we have received a message and it hasn't aged out, we use that message
+       priority for determining that port's path. */
+    if (pPort->infoIs == InfoIs_Received) {
+      memcpy(&pPort->gmPathPriority, &pPort->messagePriority, sizeof(PtpPriorityVector));
       set_steps_removed(pPort->gmPathPriority.stepsRemoved,
-                        (get_steps_removed(pPort->gmPathPriority.stepsRemoved) + 1));
+                        (get_steps_removed(pPort->messagePriority.stepsRemoved) + 1));
     } else {
       memset(&pPort->gmPathPriority, 0xFF, sizeof(PtpPriorityVector));
-      if (syncTimeout) {
-        pPort->syncTimeoutCounter = 0;
-      }
     }
   }
 
@@ -423,11 +433,15 @@ static void updtRolesTree(struct ptp_device *ptp)
 
       case InfoIs_Aged:
         pPort->selectedRole = PTP_MASTER;
+        pPort->pathTraceLength = 1;
+        memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
         pPort->updtInfo = TRUE;
         break;
 
       case InfoIs_Mine:
         pPort->selectedRole = PTP_MASTER;
+        pPort->pathTraceLength = 1;
+        memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
         if ((pPort->portStepsRemoved != ptp->masterStepsRemoved) ||
             (IS_PRESENT_MASTER != bmca_comparison(&pPort->portPriority, &pPort->masterPriority))) {
           pPort->updtInfo = TRUE;
@@ -440,6 +454,8 @@ static void updtRolesTree(struct ptp_device *ptp)
           pPort->updtInfo = FALSE;
         } else if (REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) {
           pPort->selectedRole = PTP_MASTER;
+          pPort->pathTraceLength = 1;
+          memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
           pPort->updtInfo = TRUE;
         } else {
           pPort->selectedRole = PTP_PASSIVE;
