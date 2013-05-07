@@ -142,7 +142,7 @@ if [ -f "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" ]
     cp "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" update/download.bit
     cp dt-avb.dtb update/dt.dtb
     cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
-    tar czf firmware-avb.tar.gz update
+    tar czf firmware-dgpio-avb.tar.gz update
     echo "done: Output file at $PWD/firmware-dgpio-avb.tar.gz"
 else
     echo "***********************************************************************"
