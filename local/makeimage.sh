@@ -12,6 +12,10 @@ if [ -z "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]; then
   DMITRI_IO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA/Synthesis/IO_Link_top.bit"
 fi
 
+if [ -z "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" ]; then
+  DMITRI_DGPIO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA_DGPIO/Synthesis/IO_Link_top.bit"
+fi
+
 if [ -z "${DMITRI_IO_MAINT_DTS}" ]; then
   DMITRI_IO_MAINT_DTS="xilinx.dts"
 fi
@@ -125,3 +129,27 @@ else
     echo " and re-run $0"
     echo "***********************************************************************"
 fi
+
+if [ -f "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" ]
+    then
+    ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}"
+    echo "AVB tar file..."
+    if [ -d update ]
+	then
+	rm -rf update
+    fi
+    mkdir -p update
+    cp "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" update/download.bit
+    cp dt-avb.dtb update/dt.dtb
+    cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
+    tar czf firmware-avb.tar.gz update
+    echo "done: Output file at $PWD/firmware-dgpio-avb.tar.gz"
+else
+    echo "***********************************************************************"
+    echo " FPGA bitstream file"
+    echo " ${DMITRI_DGPIO_AVB_DOWNLOAD_BIT} is not found."
+    echo " To build firmware-dgpio-avb.tar.gz, please generate this file from XPS"
+    echo " and re-run $0"
+    echo "***********************************************************************"
+fi
+
