@@ -1199,7 +1199,6 @@ int audio_tdm_probe(const char *name,
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   strcpy(tdm->analyzer.tdmName, tdm->name);
   tdm->analyzer.baseAddress = tdm->virtualAddress + TDM_ANALYZER_BASE_ADDRESS;
-  tdm->analyzer.numAnalyzers = tdm->tdmCaps.numTransmitters;
   tdm->analyzer.errorIrq     = ANALYSIS_ERROR_IRQ;
   tdm->analyzer.irqFlagsReg  = TDM_IRQ_FLAGS_REG;
   tdm->analyzer.irqMaskReg   = TDM_IRQ_MASK_REG;

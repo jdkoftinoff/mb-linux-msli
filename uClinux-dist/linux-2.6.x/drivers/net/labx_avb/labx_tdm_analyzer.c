@@ -54,8 +54,6 @@
 #  define TDM_ANALYZER_SLOT_MASK      (0x3F0)
 #  define TDM_ANALYZER_SLOT_SHIFT     (4)
 #  define TDM_ANALYZER_LFSR_MODE      (0x40000000)
-#  define TDM_ANALYZER_SELECT_MASK    (0x18000000)         
-#  define TDM_ANALYZER_SELECT_SHIFT   (27)         
 #define ERROR_COUNT_REG       (0x002)
 #define ERROR_PREDICT_REG     (0x003)
 #define ERROR_ACTUAL_REG      (0x004)
@@ -114,7 +112,8 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
       printk("TDM: enabled ramp analyzer on lane %u, channel %u\n", analyzerConfig->tdmLane, analyzerConfig->tdmChannel);
 #endif
     }
-    controlRegister |= TDM_ANALYZER_ENABLE;
+    /* Enable the analyzer */ 
+    controlRegister |= TDM_ANALYZER_ENABLE; 
 
     /* Enable the analysis error interrupt as a "one-shot" */
     irqMask |= analyzer->errorIrq;
@@ -132,24 +131,16 @@ static void configure_analyzer(struct tdm_analyzer *analyzer,
 }
 
 static void get_analyzer_results(struct tdm_analyzer *analyzer,
-                                 AnalyzerResults *analyzerResults) {
-  uint32_t controlRegister;
-  uint32_t idx;
+                                 AnalysisResults *analyzerResults) {
   
-  // Fetch the most recent snapshot of analysis results
-  controlRegister = XIo_In32(REGISTER_ADDRESS(analyzer, ANALYZER_CONTROL_REG));
-  for(idx = 0; idx < analyzer->numAnalyzers; idx++) {
-    controlRegister &= ~TDM_ANALYZER_SELECT_MASK;
-    controlRegister |= idx << TDM_ANALYZER_SELECT_SHIFT;
-    XIo_Out32(REGISTER_ADDRESS(analyzer, ANALYZER_CONTROL_REG), controlRegister);
-    analyzerResults->errorCount[idx] = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_COUNT_REG));
-    analyzerResults->predictedSample[idx] = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_PREDICT_REG));
-    analyzerResults->actualSample[idx] = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_ACTUAL_REG));
+  // Fetch the most recent snapshot of analysis results 
+  analyzerResults->errorCount = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_COUNT_REG));
+  analyzerResults->predictedSample = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_PREDICT_REG));
+  analyzerResults->actualSample = XIo_In32(REGISTER_ADDRESS(analyzer, ERROR_ACTUAL_REG));
 #ifdef _LABXDEBUG
-    printk("TDM: analyzer %d results: %u errors, most recent error: (predicted=0x%X,actual=0x%X)\n",
-           idx, analyzerResults->errorCount[idx], analyzerResults->predictedSample[idx], analyzerResults->actualSample[idx]);
+  printk("TDM: analyzer results: %u errors, most recent error: (predicted=0x%X,actual=0x%X)\n",
+         analyzerResults->errorCount, analyzerResults->predictedSample, analyzerResults->actualSample);
 #endif
-  }
 }
 
 /* Resets the instance, placing the hardware into a known state */
@@ -168,8 +159,8 @@ EXPORT_SYMBOL(labx_tdm_analyzer_reset);
 
 /* I/O control operations for the driver */
 int labx_tdm_analyzer_ioctl(struct tdm_analyzer* analyzer, 
-                       unsigned int command, 
-                       unsigned long arg) {
+                            unsigned int command, 
+                            unsigned long arg) {
   // Switch on the request
   int returnValue = 0;
 
@@ -199,7 +190,7 @@ int labx_tdm_analyzer_ioctl(struct tdm_analyzer* analyzer,
   
   case IOC_GET_ANALYZER_RESULTS:
     {
-      AnalyzerResults analyzerResults;
+      AnalysisResults analyzerResults;
 
       get_analyzer_results(analyzer, &analyzerResults);
       if(copy_to_user((void __user*)arg, &analyzerResults, sizeof(analyzerResults)) != 0) {
