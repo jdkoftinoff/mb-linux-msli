@@ -110,7 +110,7 @@ fi
 if [ -f "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]
     then
     ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_IO_AVB_DOWNLOAD_BIT}"
-    echo "AVB tar file..."
+    echo "AVB tar file..." "${DMITRI_IO_AVB_DOWNLOAD_BIT}"
     if [ -d update ]
 	then
 	rm -rf update
@@ -133,7 +133,7 @@ fi
 if [ -f "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}" ]
     then
     ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}"
-    echo "AVB tar file..."
+    echo "AVB tar file... " ${DMITRI_DGPIO_AVB_DOWNLOAD_BIT}
     if [ -d update ]
 	then
 	rm -rf update
