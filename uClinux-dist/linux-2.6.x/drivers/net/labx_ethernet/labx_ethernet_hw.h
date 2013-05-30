@@ -91,7 +91,11 @@ extern "C" {
 #  define NO_IRQS             (0x00000000)
 #  define MDIO_IRQ_MASK       (0x00000001)
 #  define PHY_IRQ_MASK        (0x00000002)
-#define VLAN_MASK_REG         (0x00000010)
+#define VLAN_LTF_MASK_REG     (0x00000010)
+#  define VLAN_PRIORITY_MASK  (0x000000FF)
+#  define LTF_VALUE_MASK      (0x00FFFF00)
+#  define LTF_VALUE_SHIFT     (8)
+#  define LTF_FILTER_ACTIVE   (0x01000000)
 #define MAC_SELECT_REG        (0x00000014)
 #define MAC_CONTROL_REG       (0x00000018)
 #define   MAC_ADDRESS_LOAD_ACTIVE 0x00000100
