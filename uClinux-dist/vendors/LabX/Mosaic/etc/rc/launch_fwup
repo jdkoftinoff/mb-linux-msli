@@ -1,0 +1,6 @@
+
+# This script needs to run after ROM FS has been mounted.
+
+echo "Launching firmware update..."
+/mnt/apps/wait_fwup artistUpdate.bin.ub &
+

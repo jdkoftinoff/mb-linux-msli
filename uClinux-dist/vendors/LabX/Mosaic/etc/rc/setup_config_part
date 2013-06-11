@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Parse /proc/cmdline to find which flash partition
+# holds configuration settings, and create a symbolic
+# link to it at /tmp/flash_config_dev.
+
+# The bootargs from the device tree need to have a string
+# of the form flash_config_part=<index> to define a partition
+# for storing various configuration parameters. The system
+# and/or applications can use that partition in any way
+# they see fit.
+
+cat /proc/cmdline | tr ' ' '\\12' | grep flash_config_part | cut -d'=' -f2 | read CONFIG_PART_INDEX
+if [ $CONFIG_PART_INDEX ]; then
+  ln -s /dev/mtdblock$CONFIG_PART_INDEX /tmp/flash_config_dev
+fi;

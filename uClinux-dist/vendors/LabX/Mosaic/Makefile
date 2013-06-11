@@ -58,6 +58,10 @@ romfs: $(SQFS_DEVTABLE)
 	$(ROMFSINST) -s /etc/init.d/hostname /etc/rc.d/S10hostname
 	$(ROMFSINST) $(COMMON)/etc/rc/mountfs /etc/init.d/mountfs
 	$(ROMFSINST) -s /etc/init.d/mountfs /etc/rc.d/S20mountfs
+	$(ROMFSINST) $(COMMON)/etc/rc/setup_config_part /etc/init.d/setup_config_part
+	$(ROMFSINST) -s /etc/init.d/setup_config_part /etc/rc.d/S25setup_config_part
+	$(ROMFSINST) $(COMMON)/etc/rc/launch_fwup /etc/init.d/launch_fwup
+	$(ROMFSINST) -s /etc/init.d/launch_fwup /etc/rc.d/S26launch_fwup
 	$(ROMFSINST) $(COMMON)/etc/rc/network /etc/init.d/network
 	$(ROMFSINST) -s /etc/init.d/network /etc/rc.d/S30network
 	$(ROMFSINST) $(COMMON)/etc/rc/avb_startup /etc/init.d/avb_startup
