@@ -41,7 +41,7 @@
 		ethernet1 = &labx_ethernet_1;
 		serial0 = &xps_uartlite_0;
 		serial1 = &RS232_Atmel;
-		serial2 = &MIDI;
+/*		serial2 = &MIDI; */
 	} ;
 	chosen {
 		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00";
@@ -250,23 +250,23 @@
 			xlnx,xcl3-linesize = <0x4>;
 			xlnx,xcl3-writexfer = <0x1>;
 		} ;
-
-	MIDI: serial@84030000 {
-		clock-frequency = <125000000>;
-		compatible = "xlnx,xps-uartlite-1.02.a", "xlnx,xps-uartlite-1.00.a";
-		current-speed = <31250>;
-		device_type = "serial";
-		interrupt-parent = <&xps_intc_0>;
-		interrupts = < 16 0 >;
-		port-number = <2>;
-		reg = < 0x84030000 0x10000 >;
-		xlnx,baudrate = <0x7a12>;
-		xlnx,data-bits = <0x8>;
-		xlnx,family = "virtex5";
-		xlnx,odd-parity = <0x1>;
-		xlnx,use-parity = <0x0>;
-	} ;
-
+/*
+*	MIDI: serial@84030000 {
+*		clock-frequency = <125000000>;
+*		compatible = "xlnx,xps-uartlite-1.02.a", "xlnx,xps-uartlite-1.00.a";
+*		current-speed = <31250>;
+*		device_type = "serial";
+*		interrupt-parent = <&xps_intc_0>;
+*		interrupts = < 16 0 >;
+*		port-number = <2>;
+*		reg = < 0x84030000 0x10000 >;
+*		xlnx,baudrate = <0x7a12>;
+*		xlnx,data-bits = <0x8>;
+*		xlnx,family = "virtex5";
+*		xlnx,odd-parity = <0x1>;
+*		xlnx,use-parity = <0x0>;
+*	} ;
+*/
 		RS232_Atmel: serial@84040000 {
 			clock-frequency = <125000000>;
 			compatible = "xlnx,xps-uartlite-1.02.a", "xlnx,xps-uartlite-1.00.a";
@@ -544,5 +544,15 @@
 			xlnx,odd-parity = <0x1>;
 			xlnx,use-parity = <0x0>;
 		} ;
+		smpte_decoder_0: smpte-decoder@84050000 {
+			compatible = "xlnx,smpte-decoder-1.00.a";
+			xlnx,audio-format = "I2S";
+			interrupt-parent = <&xps_intc_0>;
+			interrupts = < 16 0 >;
+			reg = < 0x84050000 0x10000 >;
+			xlnx,family = "virtex5";
+			xlnx,include-dphase-timer = <0x1>;
+		} ;
+
 	} ;
 }  ;
