@@ -46,6 +46,12 @@
 
 /************************** Constant Definitions *****************************/
 
+/* "Blacklisted" LTF (Ethertype) for the driver.
+ * Ideally, this should be configurable via ethtool; for the moment, it is
+ * set to block 802.1AS traffic, as it uses link-local multicast and is not
+ * processed by this peripheral in Lab X AVB applications.
+ */
+#define FILTER_LTF_PTP_V2  (0x88F7)
 
 /**************************** Type Definitions *******************************/
 
@@ -607,6 +613,15 @@ static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[
 void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 {
 	int i;
+
+        /* Set up the VLAN filter register; by default, this will disable reception
+         * of any VLAN-tagged packets (any QoS priority), and will also "blacklist"
+         * 802.1AS packets.
+         *
+         * In the future, this capability should be exposed via ethtool.
+         */
+        labx_eth_WriteReg(InstancePtr->Config.BaseAddress, VLAN_LTF_MASK_REG,
+                          ((FILTER_LTF_PTP_V2 << LTF_VALUE_SHIFT) | LTF_FILTER_ACTIVE));
 
 	/* Always allow our unicast mac */
 	ConfigureMacFilter(InstancePtr, 0, InstancePtr->Config.MacAddress, MAC_MATCH_ALL);
