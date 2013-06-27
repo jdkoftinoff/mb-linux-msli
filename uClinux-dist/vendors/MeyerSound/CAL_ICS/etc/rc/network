@@ -50,6 +50,16 @@ if [ -x /etc/persist/config/network_config ]
       $AVBDFILE platformFile=$XMLFILE &
   fi
 
+  if grep -q "BUTTONS=0x01" /proc/cmdline; then
+      if [ -f /etc/persist/bin/avbd ]
+        then
+        AVBDFILE=/etc/persist/bin/avbd
+        else
+        AVBDFILE=/usr/bin/avbd
+      fi
+      $AVBDFILE platformFile=$XMLFILE &
+  fi
+
   if [ -f $STATIC_AVB_XML ]
     then
     if [ -f /etc/persist/bin/static_avb_config ]
