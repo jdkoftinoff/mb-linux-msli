@@ -181,6 +181,8 @@ static int mtd_bridge_cmd(struct mtd_bridge *bridge, uint32_t offset, uint32_t l
     } while(!time_after_eq(jiffies, deadline));
   }
 
+  if(rc != 0) printk("<<ERR %d!>>\n", rc);
+
 	return rc;
 }
 
@@ -372,6 +374,13 @@ int mtd_bridge_probe(const char *name,
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(bridge->queue));
 
+  /* Now that the device is configured, enable interrupts if they are to be used */
+  if(bridge->irq != NO_IRQ_SUPPLIED) {
+    printk("<< TEMPORARY - Not enabling MTD bridge IRQ >>\n");
+    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
+    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
+  }
+
   /* Initialize the MTD driver structure and register the device as a memory chip */
   bridge->mtd.name       = "mtdbridge0";
   bridge->mtd.type       = MTD_NORFLASH;
@@ -437,16 +446,8 @@ int mtd_bridge_probe(const char *name,
   /* Map the device into the MTD layer */
   returnValue = add_mtd_device(&bridge->mtd);
   if (returnValue) {
-    printk(KERN_ERR "%s : Could not map MTD bridge as  allocate Lab X Audio Bridge interrupt (%d).\n",
-           bridge->name, bridge->irq);
+    printk(KERN_ERR "%s : Could not map MTD bridge as MTD device\n", bridge->name);
     goto free_irq;
-  }
-
-  /* Now that the device is configured, enable interrupts if they are to be used */
-  if(bridge->irq != NO_IRQ_SUPPLIED) {
-    printk("<< TEMPORARY - Not enabling MTD bridge IRQ >>\n");
-    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
-    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
   }
 
   return 0;
