@@ -34,7 +34,7 @@
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
-#endif // CONFIG_OF
+#endif /* CONFIG_OF */
 
 
 #if 0
@@ -44,6 +44,8 @@
 #endif
 
 #define DRIVER_NAME "labx_mtd_bridge"
+
+#define	MAX_WAIT_JIFFIES (HZ / 4)
 
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE    (256)
@@ -136,6 +138,52 @@ static irqreturn_t labx_mtd_bridge_interrupt(int irq, void *dev_id) {
   return(IRQ_HANDLED);
 }
 
+/* Helper function which issues a command to the MTD bridge and returns
+ * the resulting status.  Timeouts are implemented.
+ */
+static int mtd_bridge_cmd(struct mtd_bridge *bridge, uint32_t offset, uint32_t len, uint32_t opcode) {
+  unsigned long deadline;
+	int32_t rc;
+
+  /* Issue the requested command to the MTD bridge:
+   *
+   * * Clear the "operation complete" IRQ flag bit
+   * * Set the Flash offset and length
+   * * Trigger the operation by writing the opcode
+   */
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_ADDRESS_REG_ADDR), offset);
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_LENGTH_REG_ADDR), len);
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_COMMAND_REG_ADDR), opcode);
+
+  /* Poll until a response is received from the MTD bridge daemon, or we time out */
+  rc       = -EFAULT;
+	deadline = (jiffies + MAX_WAIT_JIFFIES);
+  do {
+    if((XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR)) & MTDBRIDGE_IRQ_COMPLETE) != 0) {
+      rc = 0;
+      break;
+    }
+    cond_resched();
+  } while(!time_after_eq(jiffies, deadline));
+
+  /* Fetch the response if there was one, and loop waiting if the returned code was
+   * "operation in progress", up until the timeout period.
+   */
+  if(rc == 0) {
+    deadline = (jiffies + MAX_WAIT_JIFFIES);
+    do {
+      rc = XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_STATUS_REG_ADDR));
+      if((rc & MTDBRIDGE_SR_OIP) == 0) {
+        break;
+      }
+      cond_resched();
+    } while(!time_after_eq(jiffies, deadline));
+  }
+
+	return rc;
+}
+
 /* MTD Flash operation routines */
 
 static inline struct mtd_bridge *mtd_to_bridge(struct mtd_info *mtd)
@@ -145,26 +193,112 @@ static inline struct mtd_bridge *mtd_to_bridge(struct mtd_info *mtd)
 
 static int mtd_bridge_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
-	struct mtd_bridge *flash = mtd_to_bridge(mtd);
-  printk("<E>");
-  return 0;
+	struct mtd_bridge *bridge = mtd_to_bridge(mtd);
+	uint32_t rem;
+
+	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%llx, len %lld\n",
+	      dev_name(&bridge->pdev->dev), __func__, "at",
+	      (long long)instr->addr, (long long)instr->len);
+
+	/* Sanity checks */
+	if((instr->addr + instr->len) > bridge->mtd.size) return -EINVAL;
+	div_u64_rem(instr->len, mtd->erasesize, &rem);
+	if (rem) return -EINVAL;
+
+  /* The sector erase command is monolithic - nothing needs to be broken into chunks. */
+  return(mtd_bridge_cmd(bridge, instr->addr, instr->len, MTDBRIDGE_OPCODE_SE));
 }
 
 static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
-	size_t *retlen, u_char *buf)
+                           size_t *retlen, u_char *buf)
 {
-	struct mtd_bridge *flash = mtd_to_bridge(mtd);
-  printk("<R>");
-  return 0;
+	struct mtd_bridge *bridge = mtd_to_bridge(mtd);
+	int rc;
+  size_t len_rem;
+  size_t next_len;
+  u32 *word_ptr;
+
+  /* Loop, performing reads over the MTD bridge in chunks sized to match the
+   * peripheral's memory buffer
+   */
+  rc       = 0;
+  len_rem  = len;
+  word_ptr = (u32*) buf;
+  *retlen  = 0;
+  while((rc == 0) & (len_rem > 0)) {
+    /* Size the next request */
+    next_len  = (len_rem > MTDBRIDGE_BUFFER_SIZE) ? MTDBRIDGE_BUFFER_SIZE : len_rem;
+    len_rem  -= next_len;
+
+    /* Issue a read command to the MTD bridge */
+    rc = mtd_bridge_cmd(bridge, from, next_len, MTDBRIDGE_OPCODE_READ);
+    
+    /* If the read returned without an error code, copy bytes into the destination buffer */
+    if(rc == 0) {
+      int word_index;
+      int word_len;
+      int buf_offset = MTDBRIDGE_MAILBOX_RAM_ADDR;
+    
+      /* Transfer in 32-bit words */
+      word_len = ((next_len + 3) >> 2);
+      for(word_index = 0; word_index < word_len; word_index++) {
+        *word_ptr++ = XIo_In32(REGISTER_ADDRESS(bridge, buf_offset));
+        buf_offset++;
+      }
+
+      /* Advance the returned length */
+      *retlen += next_len;
+    }
+
+    /* Advance the offset in Flash */
+    from += next_len;
+  } /* while(bytes left and no error) */
+
+	return rc;
 }
 
 static int mtd_bridge_write(struct mtd_info *mtd, loff_t to, size_t len,
-	size_t *retlen, const u_char *buf)
+                            size_t *retlen, const u_char *buf)
 {
-	struct mtd_bridge *flash = mtd_to_bridge(mtd);
-	u32 page_offset, page_size;
-  printk("<W>");
-  return 0;
+	struct mtd_bridge *bridge = mtd_to_bridge(mtd);
+	int rc;
+  size_t len_rem;
+  size_t next_len;
+  u32 *word_ptr;
+
+  /* Loop, performing reads over the MTD bridge in chunks sized to match the
+   * peripheral's memory buffer
+   */
+  rc       = 0;
+  len_rem  = len;
+  word_ptr = (u32*) buf;
+  *retlen  = 0;
+  while((rc == 0) & (len_rem > 0)) {
+    int word_index;
+    int word_len;
+    int buf_offset;
+
+    /* Size the next request */
+    next_len  = (len_rem > MTDBRIDGE_BUFFER_SIZE) ? MTDBRIDGE_BUFFER_SIZE : len_rem;
+    len_rem  -= next_len;
+
+    /* Copy the next buffer's worth of data to the bridge peripheral */
+    buf_offset = MTDBRIDGE_MAILBOX_RAM_ADDR;
+    word_len = ((next_len + 3) >> 2);
+    for(word_index = 0; word_index < word_len; word_index++) {
+      XIo_Out32(REGISTER_ADDRESS(bridge, buf_offset), *word_ptr++);
+      buf_offset++;
+    }
+
+    /* Issue a write command to the MTD bridge */
+    rc = mtd_bridge_cmd(bridge, to, next_len, MTDBRIDGE_OPCODE_WRITE);
+    if(rc == 0) *retlen += next_len;
+
+    /* Advance the offset in Flash */
+    to += next_len;
+  } /* while(bytes left and no error) */
+
+	return rc;
 }
 
 /* Function containing the "meat" of the probe mechanism - this is used by
@@ -310,8 +444,9 @@ int mtd_bridge_probe(const char *name,
 
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(bridge->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
-    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
+    printk("<< TEMPORARY - Not enabling MTD bridge IRQ >>\n");
+    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
+    /*    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE); */
   }
 
   return 0;
