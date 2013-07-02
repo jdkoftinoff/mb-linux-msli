@@ -28,6 +28,9 @@
 #include <linux/platform_device.h>
 #include <xio.h>
 
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/partitions.h>
+
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
@@ -49,6 +52,9 @@ struct mtd_bridge {
   /* Pointer back to the platform device */
   struct platform_device *pdev;
 
+  /* MTD driver info structure */
+	struct mtd_info mtd;
+
   /* Name for use in identification */
   char name[NAME_MAX_SIZE];
 
@@ -59,6 +65,9 @@ struct mtd_bridge {
 
   /* Interrupt request number */
   int32_t irq;
+
+  /* Partitioned flag */
+  uint32_t partitioned;
 
   /* Wait queue for putting threads to sleep */
   wait_queue_head_t queue;
@@ -127,6 +136,37 @@ static irqreturn_t labx_mtd_bridge_interrupt(int irq, void *dev_id) {
   return(IRQ_HANDLED);
 }
 
+/* MTD Flash operation routines */
+
+static inline struct mtd_bridge *mtd_to_bridge(struct mtd_info *mtd)
+{
+	return container_of(mtd, struct mtd_bridge, mtd);
+}
+
+static int mtd_bridge_erase(struct mtd_info *mtd, struct erase_info *instr)
+{
+	struct mtd_bridge *flash = mtd_to_bridge(mtd);
+  printk("<E>");
+  return 0;
+}
+
+static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
+	size_t *retlen, u_char *buf)
+{
+	struct mtd_bridge *flash = mtd_to_bridge(mtd);
+  printk("<R>");
+  return 0;
+}
+
+static int mtd_bridge_write(struct mtd_info *mtd, loff_t to, size_t len,
+	size_t *retlen, const u_char *buf)
+{
+	struct mtd_bridge *flash = mtd_to_bridge(mtd);
+	u32 page_offset, page_size;
+  printk("<W>");
+  return 0;
+}
+
 /* Function containing the "meat" of the probe mechanism - this is used by
  * the OpenFirmware probe as well as the standard platform device mechanism.
  * This is exported to allow polymorphic drivers to invoke it.
@@ -144,10 +184,12 @@ int mtd_bridge_probe(const char *name,
                      struct resource *irq) {
   struct mtd_bridge *bridge;
   int returnValue;
+  int i;
 
   /* Create and populate a device structure */
   bridge = (struct mtd_bridge*) kmalloc(sizeof(struct mtd_bridge), GFP_KERNEL);
   if(!bridge) return(-ENOMEM);
+  memset(bridge, 0, sizeof(struct mtd_bridge));
 
   /* Request and map the device's I/O memory region into uncacheable space */
   bridge->physicalAddress = addressRange->start;
@@ -196,6 +238,76 @@ int mtd_bridge_probe(const char *name,
   /* Initialize the waitqueue used for synchronized writes */
   init_waitqueue_head(&(bridge->queue));
 
+  /* Initialize the MTD driver structure and register the device as a memory chip */
+  bridge->mtd.name       = "mtdbridge0";
+  bridge->mtd.type       = MTD_NORFLASH;
+  bridge->mtd.writesize  = 1;
+	bridge->mtd.flags      = MTD_CAP_NORFLASH;
+	bridge->mtd.size       = (128 * 1024 * 128);  /* Hard code!  128x128KiB sectors = 16 MiB */
+	bridge->mtd.erase      = mtd_bridge_erase;
+	bridge->mtd.read       = mtd_bridge_read;
+	bridge->mtd.write      = mtd_bridge_write;
+  bridge->mtd.erasesize  = (128 * 1024);  /* Hard code!  128 KiB sector size */
+	bridge->mtd.dev.parent = &pdev->dev;
+
+	DEBUG(MTD_DEBUG_LEVEL2,
+		"mtd .name = %s, .size = 0x%llx (%lldMiB) "
+			".erasesize = 0x%.8x (%uKiB) .numeraseregions = %d\n",
+		bridge->mtd.name,
+		(long long)bridge->mtd.size, (long long)(bridge->mtd.size >> 20),
+		bridge->mtd.erasesize, bridge->mtd.erasesize / 1024,
+		bridge->mtd.numeraseregions);
+
+	if (bridge->mtd.numeraseregions)
+		for (i = 0; i < bridge->mtd.numeraseregions; i++)
+			DEBUG(MTD_DEBUG_LEVEL2,
+				"mtd.eraseregions[%d] = { .offset = 0x%llx, "
+				".erasesize = 0x%.8x (%uKiB), "
+				".numblocks = %d }\n",
+				i, (long long)bridge->mtd.eraseregions[i].offset,
+				bridge->mtd.eraseregions[i].erasesize,
+				bridge->mtd.eraseregions[i].erasesize / 1024,
+				bridge->mtd.eraseregions[i].numblocks);
+
+
+	/* partitions should match sector boundaries; and it may be good to
+	 * use readonly partitions for writeprotected sectors (BP2..BP0).
+	 */
+	if (mtd_has_partitions()) {
+		struct mtd_partition	*parts = NULL;
+		int			nr_parts = 0;
+
+		if (mtd_has_cmdlinepart()) {
+			static const char *part_probes[]
+					= { "cmdlinepart", NULL, };
+
+			nr_parts = parse_mtd_partitions(&bridge->mtd,
+					part_probes, &parts, 0);
+		}
+
+		if (nr_parts > 0) {
+			for (i = 0; i < nr_parts; i++) {
+				DEBUG(MTD_DEBUG_LEVEL2, "partitions[%d] = "
+					"{.name = %s, .offset = 0x%llx, "
+						".size = 0x%llx (%lldKiB) }\n",
+					i, parts[i].name,
+					(long long)parts[i].offset,
+					(long long)parts[i].size,
+					(long long)(parts[i].size >> 10));
+			}
+			bridge->partitioned = 1;
+			return add_mtd_partitions(&bridge->mtd, parts, nr_parts);
+		}
+	}
+
+  /* Map the device into the MTD layer */
+  returnValue = add_mtd_device(&bridge->mtd);
+  if (returnValue) {
+    printk(KERN_ERR "%s : Could not map MTD bridge as  allocate Lab X Audio Bridge interrupt (%d).\n",
+           bridge->name, bridge->irq);
+    goto free_irq;
+  }
+
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(bridge->irq != NO_IRQ_SUPPLIED) {
     XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
@@ -204,6 +316,8 @@ int mtd_bridge_probe(const char *name,
 
   return 0;
 
+ free_irq:
+  if(bridge->irq != NO_IRQ_SUPPLIED) free_irq(bridge->irq, bridge);
  unmap:
   iounmap(bridge->virtualAddress);
  release:
@@ -295,6 +409,7 @@ static int mtd_bridge_platform_probe(struct platform_device *pdev) {
 
 /* This is exported to allow polymorphic drivers to invoke it. */
 int mtd_bridge_remove(struct mtd_bridge *bridge) {
+  if(bridge->irq != NO_IRQ_SUPPLIED) free_irq(bridge->irq, bridge);
   iounmap(bridge->virtualAddress);
   release_mem_region(bridge->physicalAddress, bridge->addressRangeSize);
   kfree(bridge);
