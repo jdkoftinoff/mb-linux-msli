@@ -111,6 +111,12 @@ config  MTD_SPI_OTP
 	help
 	  Enables usage of values stored within OTP registers
 
+config MTD_BRIDGE
+	tristate "Lab X MTD Bridge"
+	help
+	  This is a driver which maps Flash behind a bridge to another processor
+	  which actually hosts non-volatile memory.
+
 config MTD_SLRAM
 	tristate "Uncached system RAM"
 	help
