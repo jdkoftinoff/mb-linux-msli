@@ -67,52 +67,62 @@ struct mtd_bridge {
   spinlock_t mutex;
 };
 
+/* MTD bridge register definitions */
+#define UART_FIFO_READ_ADDR        0x000
+#define UART_FIFO_WRITE_ADDR       0x001
+#define UART_STATUS_REG_ADDR       0x002
+#define UART_CTRL_REG_ADDR         0x003
+#define MTDBRIDGE_IRQ_REG_ADDR     0x004
+#define MTDBRIDGE_MASK_REG_ADDR    0x005
+#define MTDBRIDGE_COMMAND_REG_ADDR 0x006
+#define MTDBRIDGE_STATUS_REG_ADDR  0x007
+#define MTDBRIDGE_ADDRESS_REG_ADDR 0x008
+#define MTDBRIDGE_LENGTH_REG_ADDR  0x009
+#define MTDBRIDGE_MAILBOX_RAM_ADDR 0x200
+
+#define UART_STATUS_RX_DATA_BIT    (1 << 0)
+#define UART_STATUS_RX_FULL_BIT    (1 << 1)
+#define UART_STATUS_TX_EMPTY_BIT   (1 << 2)
+#define UART_STATUS_TX_FULL_BIT    (1 << 3)
+#define UART_STATUS_INT_EN_BIT     (1 << 4)
+#define MTDBRIDGE_IRQ_COMPLETE     (1 << 0)
+#define MTDBRIDGE_NO_IRQS          0
+#define MTDBRIDGE_OPCODE_WRITE     0x02
+#define MTDBRIDGE_OPCODE_READ      0x03
+#define MTDBRIDGE_OPCODE_SE        0xD8
+
+/* Status Register bits. */
+#define	MTDBRIDGE_SR_OIP           1	/* Operation in progress */
+#define	MTDBRIDGE_SR_WEL           2	/* Write enable latch */
+/* meaning of other SR_* bits may differ between vendors */
+#define MTDBRIDGE_SR_NORESP        0x04	/* No response from MTD bridge */
+#define MTDBRIDGE_SR_RWERROR       0x08	/* Error in read/write operation on file */
+#define	MTDBRIDGE_SR_UNMAPPED      0x10	/* Address specified in command is not mapped to a file */
+#define	MTDBRIDGE_SR_RANGE_ERR     0x20	/* Specified block goes beyond mapped area end  */
+#define	MTDBRIDGE_SR_RDONLY        0x40	/* Attempt to write or erase a read-only map */
+#define MTDBRIDGE_SR_INVALID       0x80	/* Invalid MTD command */
+#define MTDBRIDGE_BUFFER_SIZE      2048 /* Size of mtdbridge mailbox RAM */
+
+#define REGISTER_ADDRESS(device, offset) ((uintptr_t)device->virtualAddress | (offset << 2))
+
 /* Interrupt service routine for the instance */
 static irqreturn_t labx_mtd_bridge_interrupt(int irq, void *dev_id) {
   struct mtd_bridge *bridge = (struct mtd_bridge*) dev_id;
   uint32_t maskedFlags;
   uint32_t irqMask;
 
-#if 0
   /* Read the interrupt flags and immediately clear them */
-  maskedFlags = XIo_In32(REGISTER_ADDRESS(bridge, IRQ_FLAGS_REG));
-  irqMask = XIo_In32(REGISTER_ADDRESS(bridge, IRQ_MASK_REG));
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR));
+  irqMask = XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR));
   maskedFlags &= irqMask;
-  XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_FLAGS_REG), maskedFlags);
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), maskedFlags);
 
-  /* Detect the synchronized write IRQ */
-  if((maskedFlags & SYNC_IRQ) != 0) {
+  /* Detect the command completion IRQ */
+  if((maskedFlags & MTDBRIDGE_IRQ_COMPLETE) != 0) {
     /* Wake up all threads waiting for a synchronization event */
+    printk("<<COMPLETE>>\n");
     wake_up_interruptible(&(bridge->queue));
   }
-
-  /* Detect the engine late IRQ */
-  if((maskedFlags & ENGINE_LATE_IRQ) != 0) {  
-    /* TODO - We need to create an AVB event mechanism using kernel events, so
-     *        that they can be propagated up to the user API!!!
-     */
-    printk("%s: Engine not idle at beginning of shaping interval!\n", 
-           bridge->name);
-
-    /* Disable the interrupt source to prevent ongoing interrupts; this indicates
-     * a systemic problem.  Either the bandwidth credit has been misconfigured, or
-     * something at the system level is taking strict priority over this credit-based
-     * shaping stage, which is not permitted.
-     */
-    irqMask &= ~ENGINE_LATE_IRQ;
-    XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_MASK_REG), irqMask);
-  }
-
-  /* Detect the shaper overrun IRQ; the comments for the "engine late" IRQ
-   * are equally applicable to this as well.
-   */
-  if((maskedFlags & OVERRUN_IRQ) != 0) {  
-    printk("%s: Packet overrun at output stage!\n", bridge->name);
-    irqMask &= ~OVERRUN_IRQ;
-    XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_MASK_REG), irqMask);
-  }
-
-#endif
 
   return(IRQ_HANDLED);
 }
@@ -158,12 +168,9 @@ int mtd_bridge_probe(const char *name,
   }
 
   /* Ensure that the interrupts are disabled */
-  printk("<<DISABLE IRQ>>\n");
-  // XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_MASK_REG), NO_IRQS);
+  XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_NO_IRQS);
 
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied. */
-  printk("<<NO IRQ YET>>\n");
-#if 0
   if(irq != NULL) {
     bridge->irq = irq->start;
     returnValue = request_irq(bridge->irq, &labx_mtd_bridge_interrupt, IRQF_DISABLED, 
@@ -174,7 +181,6 @@ int mtd_bridge_probe(const char *name,
       goto unmap;
     }
   } else bridge->irq = NO_IRQ_SUPPLIED;
-#endif
 
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X MTD Bridge at 0x%08X, IRQ %d\n", 
@@ -192,8 +198,8 @@ int mtd_bridge_probe(const char *name,
 
   /* Now that the device is configured, enable interrupts if they are to be used */
   if(bridge->irq != NO_IRQ_SUPPLIED) {
-    //    XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_FLAGS_REG), ALL_IRQS);
-    //    XIo_Out32(REGISTER_ADDRESS(bridge, IRQ_MASK_REG), SYNC_IRQ);
+    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
+    XIo_Out32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR), MTDBRIDGE_IRQ_COMPLETE);
   }
 
   return 0;
