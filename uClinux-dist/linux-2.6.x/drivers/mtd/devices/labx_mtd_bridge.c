@@ -122,6 +122,8 @@ static irqreturn_t labx_mtd_bridge_interrupt(int irq, void *dev_id) {
   uint32_t maskedFlags;
   uint32_t irqMask;
 
+  printk("<I>\n");
+
   /* Read the interrupt flags and immediately clear them */
   maskedFlags = XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_IRQ_REG_ADDR));
   irqMask = XIo_In32(REGISTER_ADDRESS(bridge, MTDBRIDGE_MASK_REG_ADDR));
@@ -181,8 +183,6 @@ static int mtd_bridge_cmd(struct mtd_bridge *bridge, uint32_t offset, uint32_t l
     } while(!time_after_eq(jiffies, deadline));
   }
 
-  if(rc != 0) printk("<<ERR %d!>>\n", rc);
-
 	return rc;
 }
 
@@ -198,7 +198,7 @@ static int mtd_bridge_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct mtd_bridge *bridge = mtd_to_bridge(mtd);
 	uint32_t rem;
 
-	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%llx, len %lld\n",
+  DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%llx, len %lld\n",
 	      dev_name(&bridge->pdev->dev), __func__, "at",
 	      (long long)instr->addr, (long long)instr->len);
 
@@ -250,11 +250,15 @@ static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
 
       /* Advance the returned length */
       *retlen += next_len;
-    }
 
-    /* Advance the offset in Flash */
-    from += next_len;
+      /* Advance the offset in Flash */
+      from += next_len;
+    }
   } /* while(bytes left and no error) */
+
+  if(rc != 0) {
+    printk(KERN_ERR "%s : Read error (%d) : %d bytes at 0x%08X\n", bridge->name, rc, (uint32_t) len, (uint32_t) from);
+  }
 
 	return rc;
 }
