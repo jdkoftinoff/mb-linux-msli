@@ -25,6 +25,7 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <xio.h>
 
@@ -75,7 +76,7 @@ struct mtd_bridge {
   wait_queue_head_t queue;
 
   /* Mutex for the device instance */
-  spinlock_t mutex;
+  struct mutex mutex;
 };
 
 /* MTD bridge register definitions */
@@ -142,6 +143,8 @@ static irqreturn_t labx_mtd_bridge_interrupt(int irq, void *dev_id) {
 
 /* Helper function which issues a command to the MTD bridge and returns
  * the resulting status.  Timeouts are implemented.
+ *
+ * This function requires the calling context to ensure mutual exclusion.
  */
 static int mtd_bridge_cmd(struct mtd_bridge *bridge, uint32_t offset, uint32_t len, uint32_t opcode) {
   unsigned long deadline;
@@ -197,6 +200,7 @@ static int mtd_bridge_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
 	struct mtd_bridge *bridge = mtd_to_bridge(mtd);
 	uint32_t rem;
+  int rc;
 
   DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%llx, len %lld\n",
 	      dev_name(&bridge->pdev->dev), __func__, "at",
@@ -208,7 +212,10 @@ static int mtd_bridge_erase(struct mtd_info *mtd, struct erase_info *instr)
 	if (rem) return -EINVAL;
 
   /* The sector erase command is monolithic - nothing needs to be broken into chunks. */
-  return(mtd_bridge_cmd(bridge, instr->addr, instr->len, MTDBRIDGE_OPCODE_SE));
+  while(mutex_lock_interruptible(&bridge->mutex) != 0);
+  rc = mtd_bridge_cmd(bridge, instr->addr, instr->len, MTDBRIDGE_OPCODE_SE);
+  mutex_unlock(&bridge->mutex);
+  return rc;
 }
 
 static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
@@ -220,6 +227,9 @@ static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
   size_t next_len;
   u32 *word_ptr;
 
+  /* Obtain mutually-exclusive access to the bridge */
+  while(mutex_lock_interruptible(&bridge->mutex) != 0);
+
   /* Loop, performing reads over the MTD bridge in chunks sized to match the
    * peripheral's memory buffer
    */
@@ -228,6 +238,8 @@ static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
   word_ptr = (u32*) buf;
   *retlen  = 0;
   while((rc == 0) & (len_rem > 0)) {
+    u8 *debug_ptr = (u8*) word_ptr;
+
     /* Size the next request */
     next_len  = (len_rem > MTDBRIDGE_BUFFER_SIZE) ? MTDBRIDGE_BUFFER_SIZE : len_rem;
     len_rem  -= next_len;
@@ -256,6 +268,9 @@ static int mtd_bridge_read(struct mtd_info *mtd, loff_t from, size_t len,
     }
   } /* while(bytes left and no error) */
 
+  /* Release the bridge */
+  mutex_unlock(&bridge->mutex);
+
   if(rc != 0) {
     printk(KERN_ERR "%s : Read error (%d) : %d bytes at 0x%08X\n", bridge->name, rc, (uint32_t) len, (uint32_t) from);
   }
@@ -271,6 +286,9 @@ static int mtd_bridge_write(struct mtd_info *mtd, loff_t to, size_t len,
   size_t len_rem;
   size_t next_len;
   u32 *word_ptr;
+
+  /* Obtain mutually-exclusive access to the bridge */
+  while(mutex_lock_interruptible(&bridge->mutex) != 0);
 
   /* Loop, performing reads over the MTD bridge in chunks sized to match the
    * peripheral's memory buffer
@@ -303,6 +321,9 @@ static int mtd_bridge_write(struct mtd_info *mtd, loff_t to, size_t len,
     /* Advance the offset in Flash */
     to += next_len;
   } /* while(bytes left and no error) */
+
+  /* Release the bridge */
+  mutex_unlock(&bridge->mutex);
 
 	return rc;
 }
@@ -369,7 +390,7 @@ int mtd_bridge_probe(const char *name,
          bridge->name, (uint32_t) bridge->physicalAddress, bridge->irq);
 
   /* Initialize other resources */
-  spin_lock_init(&bridge->mutex);
+  mutex_init(&bridge->mutex);
 
   /* Provide navigation between the device structures */
   platform_set_drvdata(pdev, bridge);
