@@ -1401,6 +1401,7 @@ static struct of_device_id tdm_of_match[] = {
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
+  { .compatible = "xlnx,lawo-audio-block-1.00.b", },
   { /* end of list */ },
 };
 
