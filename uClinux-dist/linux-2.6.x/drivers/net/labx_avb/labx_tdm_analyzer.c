@@ -35,7 +35,7 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
-#define _LABXDEBUG
+//#define _LABXDEBUG
 
 #define NAME_MAX_SIZE    (256)
 

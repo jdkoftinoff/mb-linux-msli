@@ -79,7 +79,6 @@
 #  define TDM_MCLK_DIVIDER_BITS     (20)
 #define TDM_STREAM_MAP_REG          (0x03)
 #  define MAP_SWAP_BANK             (0x80000000)
-#  define MAP_CHANNEL_MASK          (0x00FF0000)
 #  define MAP_CHANNEL_SHIFT         (16)
 #  define MAP_STREAM_MASK           (0x0000003F)
 #define TDM_IRQ_MASK_REG            (0x009)
@@ -149,6 +148,7 @@ struct labx_tdm_platform_data {
 typedef struct {
   u32 TdmSampleRate;
   u32 TdmSlotDensity;
+  u32 TdmChannelBits;
 } labx_tdm_operating_Config;
 
 struct audio_tdm {
