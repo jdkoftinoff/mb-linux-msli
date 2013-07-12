@@ -465,8 +465,8 @@
 			compatible = "xlnx,xps-intc-2.01.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x81800000 0x10000 >;
-			xlnx,kind-of-intr = <0x30181>;
-			xlnx,num-intr-inputs = <0x12>;
+			xlnx,kind-of-intr = <0x10181>;
+			xlnx,num-intr-inputs = <0x11>;
 		} ;
 		xps_spi_0: xps-spi@83400000 {
 			compatible = "xlnx,xps-spi-2.02.a", "xlnx,xps-spi-2.00.a";
@@ -513,33 +513,15 @@
 			xlnx,odd-parity = <0x1>;
 			xlnx,use-parity = <0x0>;
 		} ;
-		smpte_decoder_0: smpte-decoder@84050000 {
-			compatible = "xlnx,smpte-decoder-1.00.a";
-			xlnx,audio-format = "I2S";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 16 0 >;
-			reg = < 0x84050000 0x10000 >;
-			xlnx,family = "virtex5";
-			xlnx,include-dphase-timer = <0x1>;
-		} ;
 
-		smpte_generator_0: smpte-generator@84060000 {
-			compatible = "xlnx,smpte-generator-1.00.a";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 17 0 >;
-			reg = < 0x84060000 0x10000 >;
-			xlnx,family = "virtex5";
-			xlnx,include-dphase-timer = <0x1>;
-		} ;
-
-		UART_DGPIO: serial@84070000 {
+		UART_DGPIO: serial@84050000 {
 			clock-frequency = <125000000>;
 			compatible = "xlnx,xps-uart16550-3.00.a", "ns16550";
 			current-speed = <9600>;
 			device_type = "serial";
 			interrupt-parent = <&xps_intc_0>;
 			interrupts = < 1 2 >;
-			reg = < 0x84070000 0x10000 >;
+			reg = < 0x84050000 0x10000 >;
 			reg-offset = <0x1003>;
 			reg-shift = <2>;
 			xlnx,clock-hz = <0x3ef1480>;
@@ -548,6 +530,16 @@
 			xlnx,has-external-rclk = <0x0>;
 			xlnx,has-external-xin = <0x0>;
 			xlnx,is-a-16550 = <0x1>;
+		} ;
+
+		dgpio_0: smpte-decoder@84060000 {
+			compatible = "xlnx,smpte-generator-1.00.a";
+			xlnx,audio-format = "I2S";
+			interrupt-parent = <&xps_intc_0>;
+			interrupts = < 16 0 >;
+			reg = < 0x84060000 0x10000 >;
+			xlnx,family = "virtex5";
+			xlnx,include-dphase-timer = <0x1>;
 		} ;
 
 	} ;
