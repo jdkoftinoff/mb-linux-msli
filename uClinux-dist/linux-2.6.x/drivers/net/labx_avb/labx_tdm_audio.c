@@ -222,7 +222,7 @@ static void configure_auto_mute(struct audio_tdm *tdm,
         printk("Inst Channel: %d\n", instanceChannel);
         printk("Global mute status: %d\n", autoMuteConfig->enable);
         printk("Channel mute status: %d\n", entryPtr->enable);
-        printk("Mute slot: %d\n", (entryWord & INSTANCE_CHANNEL_MASK) >> MAP_CHANNEL_SHIFT);
+        printk("Mute slot: %d\n", (entryWord & MAP_CHANNEL_MASK) >> MAP_CHANNEL_SHIFT);
         printk("Transmitter instance: %d\n", (entryPtr->tdmChannel >> tdm->opConfig.TdmChannelBits));
         printk("Entry word: 0x%08X\n", entryWord);
         printk("Instance channel mask: 0x%08X\n", INSTANCE_CHANNEL_MASK);
@@ -390,7 +390,6 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       case SAMPLE_RATE_44_1_KHZ:
       case SAMPLE_RATE_48_KHZ:
         tdm->opConfig.TdmSampleRate = SINGLE_SAMPLE_RATE;
-        tdm->opConfig.TdmChannelBits = min_bits((tdm->tdmCaps.maxSlotDensity * tdm->tdmCaps.laneCount) - 1);
   if(debugOn) {
         printk("TDM (ioctl): set sample rate to 48K\n");
   }
@@ -399,7 +398,6 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       case SAMPLE_RATE_88_2_KHZ:
       case SAMPLE_RATE_96_KHZ:
         tdm->opConfig.TdmSampleRate = DOUBLE_SAMPLE_RATE;
-        tdm->opConfig.TdmChannelBits = min_bits(((tdm->tdmCaps.maxSlotDensity / 2) * tdm->tdmCaps.laneCount) - 1);
   if(debugOn) {
         printk("TDM (ioctl): set sample rate to 96K\n");
   }
@@ -408,7 +406,6 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       case SAMPLE_RATE_176_4_KHZ:
       case SAMPLE_RATE_192_KHZ:
         tdm->opConfig.TdmSampleRate = QUAD_SAMPLE_RATE;
-        tdm->opConfig.TdmChannelBits = min_bits(((tdm->tdmCaps.maxSlotDensity / 4) * tdm->tdmCaps.laneCount) - 1);
   if(debugOn) {
         printk("TDM (ioctl): set sample rate to 192K\n");
   }
@@ -432,12 +429,6 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SAMPLE_RATE_MASK;
       reg |= (tdm->opConfig.TdmSampleRate << TDM_SAMPLE_RATE_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
-  
-      // Set the up the channel mask for each instance
-      INSTANCE_CHANNEL_MASK = 0;
-      for(idx = 0; idx < tdm->opConfig.TdmChannelBits; idx++) {
-        INSTANCE_CHANNEL_MASK |= (1 << idx);
-      }
       break;
 
     case SAMPLE_DEPTH:    
