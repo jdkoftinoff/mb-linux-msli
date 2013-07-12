@@ -560,6 +560,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       /* debug
        * if (irq_status == 0) printk("Temac: spurious fifo int\n");
        */
+      break;
     }
   }
 
