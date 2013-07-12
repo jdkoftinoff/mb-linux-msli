@@ -1011,27 +1011,8 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
              (val == QUAD_SAMPLE_RATE ? 192 : (val == DOUBLE_SAMPLE_RATE ? 96 : 48)));
   }
       
-      switch(tdm->opConfig.TdmSampleRate) {
-      case SINGLE_SAMPLE_RATE:
-        tdm->opConfig.TdmChannelBits = min_bits((tdm->tdmCaps.maxSlotDensity * tdm->tdmCaps.laneCount) - 1);
-        break;
-
-      case DOUBLE_SAMPLE_RATE:
-        tdm->opConfig.TdmChannelBits = min_bits(((tdm->tdmCaps.maxSlotDensity / 2) * tdm->tdmCaps.laneCount) - 1);
-        break;
-  
-      case QUAD_SAMPLE_RATE:
-        tdm->opConfig.TdmChannelBits = min_bits(((tdm->tdmCaps.maxSlotDensity / 4) * tdm->tdmCaps.laneCount) - 1);
-        break;
-
       default:
         break;
-      }
-      
-      // Set the up the channel mask for each instance
-      INSTANCE_CHANNEL_MASK = 0;
-      for(idx = 0; idx < tdm->opConfig.TdmChannelBits; idx++) {
-        INSTANCE_CHANNEL_MASK |= (1 << idx);
       }
     }
   }
