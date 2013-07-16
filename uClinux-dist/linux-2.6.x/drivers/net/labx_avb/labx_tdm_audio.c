@@ -986,7 +986,6 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
 {
   uint32_t reg;
   int32_t err = 0;
-  uint32_t idx;
   unsigned long int val;
   struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
@@ -1010,9 +1009,6 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
       printk("TDM: sample rate set to %uK\n",
              (val == QUAD_SAMPLE_RATE ? 192 : (val == DOUBLE_SAMPLE_RATE ? 96 : 48)));
   }
-      
-      default:
-        break;
       }
     }
   }
