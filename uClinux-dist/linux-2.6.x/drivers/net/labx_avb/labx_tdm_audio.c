@@ -1005,10 +1005,10 @@ static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count
       reg |= (val << TDM_SAMPLE_RATE_BITS);
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
       tdm->opConfig.TdmSampleRate = val;
-  if(debugOn) {
-      printk("TDM: sample rate set to %uK\n",
-             (val == QUAD_SAMPLE_RATE ? 192 : (val == DOUBLE_SAMPLE_RATE ? 96 : 48)));
-  }
+      
+      if(debugOn) {
+        printk("TDM: sample rate set to %uK\n",
+               (val == QUAD_SAMPLE_RATE ? 192 : (val == DOUBLE_SAMPLE_RATE ? 96 : 48)));
       }
     }
   }
