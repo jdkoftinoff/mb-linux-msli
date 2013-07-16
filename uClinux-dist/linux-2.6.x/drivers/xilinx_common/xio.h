@@ -172,13 +172,13 @@ typedef u32 XIo_Address;
  * optimization.
  */
 
-static inline u8 XIo_In8(XIo_Address InAddress) { SYNCHRONIZE_IO; return *(volatile u8*)InAddress; }
-static inline u16 XIo_In16(XIo_Address InAddress) { SYNCHRONIZE_IO; return *(volatile u16*)InAddress; }
-static inline u32 XIo_In32(XIo_Address InAddress) { SYNCHRONIZE_IO; return *(volatile u32*)InAddress; }
+static __always_inline u8  XIo_In8(XIo_Address InAddress)  { SYNCHRONIZE_IO; return *(volatile u8*)InAddress; }
+static __always_inline u16 XIo_In16(XIo_Address InAddress) { SYNCHRONIZE_IO; return *(volatile u16*)InAddress; }
+static __always_inline u32 XIo_In32(XIo_Address InAddress) { SYNCHRONIZE_IO; return *(volatile u32*)InAddress; }
 
-static inline void XIo_Out8(XIo_Address OutAddress, u8 Value) { *(volatile u8*)OutAddress = Value; SYNCHRONIZE_IO; }
-static inline void XIo_Out16(XIo_Address OutAddress, u16 Value) { *(volatile u16*)OutAddress = Value; SYNCHRONIZE_IO; }
-static inline void XIo_Out32(XIo_Address OutAddress, u32 Value) { *(volatile u32*)OutAddress = Value; SYNCHRONIZE_IO; }
+static __always_inline void XIo_Out8(XIo_Address OutAddress, u8 Value) { *(volatile u8*)OutAddress = Value; SYNCHRONIZE_IO; }
+static __always_inline void XIo_Out16(XIo_Address OutAddress, u16 Value) { *(volatile u16*)OutAddress = Value; SYNCHRONIZE_IO; }
+static __always_inline void XIo_Out32(XIo_Address OutAddress, u32 Value) { *(volatile u32*)OutAddress = Value; SYNCHRONIZE_IO; }
 
 
 /*
