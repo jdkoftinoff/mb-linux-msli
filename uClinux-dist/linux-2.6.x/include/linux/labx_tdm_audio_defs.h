@@ -73,6 +73,8 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t numTransmitters;
+  uint32_t numReceivers;
   uint32_t laneCount;
   uint32_t mclkRatio;
   uint32_t maxNumStreams;

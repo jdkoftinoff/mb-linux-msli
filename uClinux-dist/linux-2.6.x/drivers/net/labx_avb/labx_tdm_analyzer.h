@@ -36,7 +36,7 @@
 struct tdm_analyzer {
   /* Name for used for identification */
   char tdmName[NAME_MAX_SIZE];
-  
+
   /* Base address of analyzer register set */
   void __iomem  *baseAddress;
 

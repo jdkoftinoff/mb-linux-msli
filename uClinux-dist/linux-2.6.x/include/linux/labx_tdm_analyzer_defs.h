@@ -35,6 +35,7 @@
 #define LFSR_GENERATOR_ENABLE   (0x01)
 
 /* Data insertion control */
+#define SIGNAL_PASSTHROUGH  0
 #define SIGNAL_MUTE         1
 #define SIGNAL_DC_PATTERN   2
 #define SIGNAL_RAMP         4 
@@ -66,12 +67,12 @@ typedef struct {
   uint32_t errorCount;
   uint32_t predictedSample;
   uint32_t actualSample;
-} AnalyzerResults;
+} AnalysisResults;
 
 /* I/O control commands and structures specific to the audio tdm hardware */
 #define ANALYZER_IOC_CHAR          ('l')
 #define IOC_CONFIG_GENERATOR      _IOR(ANALYZER_IOC_CHAR, 0x00, GeneratorConfig)
 #define IOC_CONFIG_ANALYZER       _IOR(ANALYZER_IOC_CHAR, 0x01, AnalyzerConfig)
-#define IOC_GET_ANALYZER_RESULTS  _IOW(ANALYZER_IOC_CHAR, 0x02, AnalyzerResults)
+#define IOC_GET_ANALYZER_RESULTS  _IOW(ANALYZER_IOC_CHAR, 0x02, AnalysisResults)
 #define IOC_GET_LATENCY           _IOW(ANALYZER_IOC_CHAR, 0x03, uint32_t)
 #endif
