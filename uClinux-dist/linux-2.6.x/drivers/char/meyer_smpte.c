@@ -57,6 +57,7 @@
 #define SMPTE_BIT_CTRL_IE            0x40000000
 
 /* Generator control register bits */
+#define SMPTE_REG_GEN_OPTS_DECODE    0x01000000
 #define SMPTE_REG_GEN_OPTS_LOAD      0x02000000
 #define SMPTE_REG_GEN_OPTS_TIME_RUN  0x04000000
 #define SMPTE_REG_GEN_OPTS_GEN_RUN   0x08000000
@@ -437,16 +438,24 @@ static ssize_t smpte_dev_write(struct file *filp, const char __user *buf,
 	    {
 	    case 1:
 	      /* start */
+	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
 	      client->cmd_gen|=(SMPTE_REG_GEN_OPTS_TIME_RUN
 				|SMPTE_REG_GEN_OPTS_GEN_RUN);
 	      break;
 	    case 2:
 	      /* pause */
+	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
 	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_TIME_RUN;
 	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_RUN;
 	      break;
+            case 3:
+	      client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
+			 |SMPTE_REG_GEN_OPTS_GEN_RUN);
+	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DECODE;
+              break;
 	    default:
 	      /* stop */
+	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
 	      client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
 			 |SMPTE_REG_GEN_OPTS_GEN_RUN);
 	      break;

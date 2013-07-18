@@ -566,6 +566,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       /* debug
        * if (irq_status == 0) printk("Temac: spurious fifo int\n");
        */
+      break;
     }
   }
 
@@ -1779,9 +1780,6 @@ static int xtenet_setup(struct device *dev,
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, NO_IRQS);
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_FLAGS_REG, (PHY_IRQ_MASK | MDIO_IRQ_MASK));
   labx_eth_WriteReg(lp->Emac.Config.BaseAddress, INT_MASK_REG, (PHY_IRQ_LOW | MDIO_IRQ_MASK));
-
-  /* Allow VLAN traffic that is not on the AVB class A priority*/
-  labx_eth_WriteReg(lp->Emac.Config.BaseAddress, VLAN_MASK_REG, ~(5<<3));
 
   lp->gmii_addr = lp->Emac.Config.PhyAddr;
 

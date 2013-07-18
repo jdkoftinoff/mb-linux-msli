@@ -177,7 +177,7 @@ static __init void microblaze_clockevent_init(void)
 	clockevents_register_device(&clockevent_microblaze_timer);
 }
 
-static cycle_t microblaze_read(struct clocksource *cs)
+static inline cycle_t microblaze_read(struct clocksource *cs)
 {
 	/* reading actual value of timer 1 */
 	return (cycle_t) (in_be32(TIMER_BASE + TCR1));
@@ -272,15 +272,22 @@ void __init time_init(void)
 
 unsigned long long sched_clock(void)
 {
-	static u32 timeUpper = 0;
+	static u64 timeNS = 0;
 	static u32 prevTime = 0;
-	u32 time = (u32)microblaze_read(&clocksource_microblaze);
+	u32 time;
+	u64 result;
+	unsigned long flags;
 
-	// Prevent wraparound (for a very long time)
-	if (time < prevTime) timeUpper++;
+	raw_local_irq_save(flags);
+	time = (u32)microblaze_read(&clocksource_microblaze);
+
+	timeNS += ((((u64)(time - prevTime)) * clocksource_microblaze.mult) >> clocksource_microblaze.shift);
+
 	prevTime = time;
+	result = timeNS;
 
-        return ((((u64)timeUpper) * clocksource_microblaze.mult) << (32 - clocksource_microblaze.shift)) +
-	       ((((u64)time) * clocksource_microblaze.mult) >> clocksource_microblaze.shift);
+	raw_local_irq_restore(flags);
+
+	return result;
 }
 
