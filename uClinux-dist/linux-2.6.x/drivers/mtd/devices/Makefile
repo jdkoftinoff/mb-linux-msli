@@ -2,6 +2,8 @@
 # linux/drivers/devices/Makefile
 #
 
+EXTRA_CFLAGS += -I$(TOPDIR)/drivers/xilinx_common
+
 obj-$(CONFIG_MTD_DOC2000)	+= doc2000.o
 obj-$(CONFIG_MTD_DOC2001)	+= doc2001.o
 obj-$(CONFIG_MTD_DOC2001PLUS)	+= doc2001plus.o
@@ -16,3 +18,4 @@ obj-$(CONFIG_MTD_LART)		+= lart.o
 obj-$(CONFIG_MTD_BLOCK2MTD)	+= block2mtd.o
 obj-$(CONFIG_MTD_DATAFLASH)	+= mtd_dataflash.o
 obj-$(CONFIG_MTD_M25P80)	+= m25p80.o
+obj-$(CONFIG_MTD_BRIDGE) += labx_mtd_bridge.o

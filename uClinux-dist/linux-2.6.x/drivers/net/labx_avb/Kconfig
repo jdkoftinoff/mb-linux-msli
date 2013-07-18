@@ -21,6 +21,12 @@ config LABX_AUDIO_DEPACKETIZER
 	help
 	  This configures support for the Lab X AVB audio depacketizer engine
 
+config SOFTWARE_MUTE_ENABLED
+	bool "Audio depacketizer software mute support"
+	depends on LABX_AUDIO_DEPACKETIZER
+    help
+    	This configures support for the Lab X AVB software muting
+
 config LABX_AUDIO_DEPACKETIZER_DMA
 	bool "Audio depacketizer DMA interface support"
 	depends on LABX_AUDIO_DEPACKETIZER
