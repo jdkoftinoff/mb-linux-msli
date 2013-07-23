@@ -1352,8 +1352,8 @@ int audio_tdm_probe(const char *name,
   /* Setup the Config structure */
   tdm->tdmCaps.versionMajor          = versionMajor;
   tdm->tdmCaps.versionMinor          = versionMinor;
-  tdm->tdmCaps.numTransmitters       = pdata->num_transmitters;
-  tdm->tdmCaps.numReceivers          = pdata->num_receivers;
+  tdm->tdmCaps.numTransmitters       = (pdata->num_transmitters < 1) ? 1 : pdata->num_transmitters;
+  tdm->tdmCaps.numReceivers          = (pdata->num_receivers < 1) ? 1 : pdata->num_receivers;
   tdm->tdmCaps.laneCount             = pdata->lane_count;
   tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
   tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
