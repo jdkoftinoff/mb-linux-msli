@@ -10,7 +10,7 @@ CONFIG_DEFAULTS_LABX=y
 #
 # Select the Product you wish to target
 #
-CONFIG_DEFAULTS_LABX_AVBX=y
+CONFIG_DEFAULTS_LABX_METALHEART=y
 
 #
 # Kernel/Library/Defaults Selection
