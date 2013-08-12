@@ -445,6 +445,12 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
   correctionField->nanoseconds = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
 }
 
+/* Get the gmTimeBaseIndicator from the follow-up TLV */
+uint16_t get_gm_time_base_indicator_field(uint8_t *rxBuffer) {
+  uint32_t wordOffset = GM_TIME_BASE_INDICATOR_OFFSET;
+  return read_packet(rxBuffer, &wordOffset) >> 16;
+}
+
 /* Get the cumulative scaled rate offset from the follow-up TLV */
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer) {
   uint32_t wordOffset = CUMULATIVE_SCALED_RATE_OFFSET_OFFSET;

@@ -285,6 +285,22 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
   }
 }
 
+
+void labx_ptp_signal_gm_change(struct ptp_device *ptp) {
+
+  ptp->newMaster          = TRUE;
+
+  /* Do not permit the RTC to change until userspace permits it, and also
+   * reset the lock state
+   */
+  ptp->acquiring          = PTP_RTC_ACQUIRING;
+  ptp->rtcLockState       = PTP_RTC_UNLOCKED;
+  ptp->rtcLockCounter     = 0;
+  ptp->rtcChangesAllowed  = FALSE;
+  ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
+  ptp->rtcLastOffset      = 0;
+}
+
 /* Processes a newly-received FUP packet for the passed instance */
 static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
   unsigned long flags;
@@ -340,6 +356,14 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
     /* Retrieve the scaled rate offset */
     ptp->ports[port].cumulativeScaledRateOffset = get_cumulative_scaled_rate_offset_field(rxBuffer);
 
+    /* Treat GM phase change just like a GM change */
+    if (get_gm_time_base_indicator_field(rxBuffer) != ptp->lastGmTimeBaseIndicator) {
+      printk("GM Phase Change\n");
+      labx_ptp_signal_gm_change(ptp);
+
+      ptp->lastGmTimeBaseIndicator = get_gm_time_base_indicator_field(rxBuffer);
+    }
+
     /* Compare the timestamps; if the one-way offset plus delay is greater than
      * the reset threshold, we need to reset our RTC before beginning to servo.  Regardless
      * of what we do, we need to invalidate the sync sequence ID, it's been "used up."
@@ -349,6 +373,13 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
     timestamp_abs(&difference, &absDifference);
     if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0) ||
        (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
+
+      /* Treat clock changes just like a GM change when we think we are locked */
+      if (ptp->rtcLockState == PTP_RTC_LOCKED) {
+        printk("RTC Change while locked\n");
+        labx_ptp_signal_gm_change(ptp);
+      }
+
       /* Reset the time using the corrected timestamp adjusted by the time it has been
        * resident locally since it was received; also re-load the nominal
        * RTC increment in advance in order to always have a known starting point
@@ -687,6 +718,7 @@ void labx_ptp_tx_state_task(unsigned long data) {
 void ack_grandmaster_change(struct ptp_device *ptp) {
   unsigned long flags;
 
+  printk("GM ACK\n");
   /* Re-enable the changing of RTC parameters */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
@@ -757,6 +789,8 @@ void init_state_machines(struct ptp_device *ptp) {
   ptp->masterRateRatio = 0x80000000;
   ptp->masterRateRatioValid = FALSE;
   ptp->prevRtcIncrement = 0;
+
+  ptp->lastGmTimeBaseIndicator = 0;
 
 #ifndef CONFIG_LABX_PTP_NO_TASKLET
   tasklet_init(&ptp->rxTasklet, &labx_ptp_rx_state_task, (unsigned long) ptp);
