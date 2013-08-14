@@ -429,8 +429,8 @@
 			xlnx,nominal-increment-fraction = <0x0>;
 			xlnx,nominal-increment-mantissa = <0x8>;
 			xlnx,num-ports = <0x2>;
-			xlnx,phy-mac-rx-delay = <0x2bc>;
-			xlnx,phy-mac-tx-delay = <0x226>;
+			xlnx,phy-mac-rx-delay = <0x384>;
+			xlnx,phy-mac-tx-delay = <0x307>;
 			xlnx,port-interface-0 = "labx_ethernet_0";
 			xlnx,port-interface-1 = "labx_ethernet_1";
 			xlnx,port-interface-2 = "Invalid";
