@@ -68,7 +68,8 @@
 
 #ifdef CONFIG_MTD_SPI_OTP
 static struct mtd_info *aMtd;
-#define OTP_REGION_OFFSET 0x010
+static uint16_t OTP_REGION_OFFSET = 0x00;
+//#define OTP_REGION_OFFSET 0x010
 #define N_OTP_ADDRESSES 30
 #endif
 
@@ -536,17 +537,23 @@ int read_otp_reg(otp_register addr, securityword_t *otp)
                 return 0;
 	}
 
-	if (addr == REGISTER31) {
-		readbytes = 10;
-	} else { 
-		readbytes = 16;
-	}
+    // for S25L128S
+    if(OTP_REGION_OFFSET == 0x10){
+        if (addr == REGISTER31) {
+            readbytes = 10;
+        } else { 
+            readbytes = 16;
+        }
 
-	if (addr < 16) {
-		otpbase = 0x114;
-	} else {
-		otpbase = 0x216;
-	}
+	    if (addr < 16) {
+		    otpbase = 0x114;
+	    } else {
+		    otpbase = 0x216;
+	    }
+    }else{
+        readbytes = 32;
+        // S25FL128S has OTP base address of 0
+    }
 	
 	m25p80_otp_read(aMtd, (otpbase+(addr*OTP_REGION_OFFSET)), readbytes, &retlen, ((u_char *)otp));
        
@@ -659,7 +666,7 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 {
 	int			tmp;
 	u8			code = OPCODE_RDID;
-	u8			id[5];
+	u8			id[6];
 	u32			jedec;
 	u16                     ext_jedec;
 	struct flash_info	*info;
@@ -668,7 +675,7 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	 * string for after vendor-specific data, after the three bytes
 	 * we use here.  Supporting some chips might require using it.
 	 */
-	tmp = spi_write_then_read(spi, &code, 1, id, 5);
+	tmp = spi_write_then_read(spi, &code, 1, id, 6);
 	if (tmp < 0) {
 		DEBUG(MTD_DEBUG_LEVEL0, "%s: error %d reading JEDEC ID\n",
 			dev_name(&spi->dev), tmp);
@@ -681,6 +688,13 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	jedec |= id[2];
 
 	ext_jedec = id[3] << 8 | id[4];
+
+    // Setup for spansion S25FL128S
+    if(id[5] == 0x80){ // FL-S family
+        OTP_REGION_OFFSET = 0x20;
+    }else{ // S25FL128S
+        OTP_REGION_OFFSET = 0x10;
+    }
 
 	for (tmp = 0, info = m25p_data;
 			tmp < ARRAY_SIZE(m25p_data);
