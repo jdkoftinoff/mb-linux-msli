@@ -213,6 +213,7 @@
 #define CUMULATIVE_SCALED_RATE_OFFSET_OFFSET (17 * BYTES_PER_WORD)
 #define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
 #define STEPS_REMOVED_OFFSET                 (18 * BYTES_PER_WORD)
+#define GM_TIME_BASE_INDICATOR_OFFSET        (18 * BYTES_PER_WORD)
 #define PATH_TRACE_OFFSET                    (20 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
@@ -523,6 +524,8 @@ struct ptp_device {
   uint32_t           pathTraceLength;               /* Number of paths listed in the pathTrace array */
   PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; /* 10.3.8.21 */
 
+  uint16_t lastGmTimeBaseIndicator;
+
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
   PtpCoefficients coefficients;
@@ -632,6 +635,7 @@ void get_local_hardware_timestamp(struct ptp_device *ptp, uint32_t port, PacketD
 void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection,
                    uint8_t * packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
+uint16_t get_gm_time_base_indicator_field(uint8_t *rxBuffer);
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer);
 uint16_t get_port_number(const uint8_t *portNumber);
 void set_port_number(uint8_t *portNumber, uint16_t setValue);
