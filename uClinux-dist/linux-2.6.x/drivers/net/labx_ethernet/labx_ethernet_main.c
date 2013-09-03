@@ -707,6 +707,9 @@ static int flash_assign_mac_address(void *private_data)
    * address can be erased, but a MAC address in OTP
    * can't be.)
    */
+  if(base_otp_reg == 0 && getOtpRegionOffset() == 0x20){
+      base_otp_reg = 1;
+  }
   read_otp_reg(base_otp_reg + ifIndex, &otp_mac);
   if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
       memcmp(otp_mac, zeroes, 6) != 0 && memcmp(otp_mac, ffs, 6) != 0) {

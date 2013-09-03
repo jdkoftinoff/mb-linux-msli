@@ -533,7 +533,7 @@ int read_otp_reg(otp_register addr, securityword_t *otp)
 	uint32_t otpbase = 0x00;
 	uint32_t readbytes = 0;
 
-        if (addr >= N_OTP_ADDRESSES) {
+    if (addr >= N_OTP_ADDRESSES) {
                 return 0;
 	}
 
@@ -707,6 +707,11 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	}
 	dev_err(&spi->dev, "unrecognized JEDEC id %06x\n", jedec);
 	return NULL;
+}
+
+uint16_t getOtpRegionOffset(void)
+{
+    return OTP_REGION_OFFSET;
 }
 
 
