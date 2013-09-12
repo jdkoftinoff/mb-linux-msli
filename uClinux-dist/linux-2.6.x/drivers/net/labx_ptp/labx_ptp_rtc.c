@@ -82,7 +82,7 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
        * been so for long enough.
        */
       if((ptp->rtcLastOffset > -lockRangeSigned) & (ptp->rtcLastOffset < lockRangeSigned) &
-          (ptp->rtcLastIncrementDelta > -0x80) & (ptp->rtcLastIncrementDelta < 0x80)) {
+          (ptp->rtcLastIncrementDelta > -0x1000) & (ptp->rtcLastIncrementDelta < 0x1000)) {
         /* Within lock range, check counter */
         if(++ptp->rtcLockCounter >= ptp->rtcLockTicks) {
           /* Achieved lock! Change state and send a Netlink message. */
@@ -431,6 +431,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
           (newRtcIncrement - ptp->prevAppliedRtcIncrement) < 0x200) {
         newRtcIncrement = (newRtcIncrement >> 1) + (ptp->prevAppliedRtcIncrement >> 1);
       }
+      ptp->rtcLastIncrementDelta = newRtcIncrement - ptp->prevAppliedRtcIncrement;
       ptp->prevAppliedRtcIncrement = tempRtcIncrement;
 
       RtcIncrement newIncrement;
@@ -454,7 +455,6 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       servoCount = 0;
     }
 #endif
-    ptp->rtcLastIncrementDelta = newRtcIncrement - ptp->prevAppliedRtcIncrement;
   } /* if(slaveOffsetValid) */
 
   /* Store the offset and its validity to the device structure for use by
