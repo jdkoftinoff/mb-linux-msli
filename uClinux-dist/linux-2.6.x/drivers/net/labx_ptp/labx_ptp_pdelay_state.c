@@ -469,6 +469,7 @@ static void LinkDelaySyncIntervalSetting_StateMachine_SetState(struct ptp_device
           break;
         case 126: /* set interval to initial value */
           ptp->ports[port].currentLogPdelayReqInterval = ptp->ports[port].initialLogPdelayReqInterval;
+          break;
         default: /* use the indicated value */
           ptp->ports[port].currentLogPdelayReqInterval = linkDelayInterval;
           break;

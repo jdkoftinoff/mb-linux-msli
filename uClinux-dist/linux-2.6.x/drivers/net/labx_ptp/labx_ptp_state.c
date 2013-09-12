@@ -289,6 +289,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
 void labx_ptp_signal_gm_change(struct ptp_device *ptp) {
 
   ptp->newMaster          = TRUE;
+  ptp->rtcReset           = TRUE;
 
   /* Do not permit the RTC to change until userspace permits it, and also
    * reset the lock state
@@ -372,7 +373,7 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
     timestamp_difference(&ptp->ports[port].syncRxTimestampTemp, &correctedTimestamp, &difference);
     timestamp_abs(&difference, &absDifference);
     if((absDifference.secondsUpper > 0) || (absDifference.secondsLower > 0) ||
-       (absDifference.nanoseconds > RESET_THRESHOLD_NS)) {
+       (absDifference.nanoseconds > RESET_THRESHOLD_NS) || ptp->rtcReset) {
 
       /* Treat clock changes just like a GM change when we think we are locked */
       if (ptp->rtcLockState == PTP_RTC_LOCKED) {
@@ -390,8 +391,9 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
         printk("Resetting RTC!\n");
         set_rtc_increment(ptp, &ptp->nominalIncrement);
         set_rtc_time_adjusted(ptp, &correctedTimestamp, &ptp->ports[port].syncRxTimestampTemp);
+        ptp->rtcReset = FALSE;
       }
-   } else {
+    } else {
       /* Less than a second, leave these timestamps and update the servo */
 #ifdef SYNC_DEBUG
       printk("Sync Rx: %08X%08X.%08X\n", ptp->ports[port].syncRxTimestampTemp.secondsUpper,
@@ -788,7 +790,8 @@ void init_state_machines(struct ptp_device *ptp) {
 
   ptp->masterRateRatio = 0x80000000;
   ptp->masterRateRatioValid = FALSE;
-  ptp->prevRtcIncrement = 0;
+  ptp->prevBaseRtcIncrement = 0;
+  ptp->prevAppliedRtcIncrement = 0;
 
   ptp->lastGmTimeBaseIndicator = 0;
 
@@ -806,6 +809,7 @@ void init_state_machines(struct ptp_device *ptp) {
   }
 
   ptp->integral       = 0;
+  ptp->zeroCrossingIntegral = 0;
   ptp->derivative     = 0;
   ptp->previousOffset = 0;
   set_rtc_increment(ptp, &ptp->nominalIncrement);
