@@ -217,7 +217,7 @@ void get_hardware_timestamp(struct ptp_device *ptp,
    * timestamp data must begin, as well as the stride between two values.
    */
   wordOffset = (ptp->portWidth == 8) ? HW_TIMESTAMP_OFFSET_X8 : HW_TIMESTAMP_OFFSET_X64;
-  skipIncrement = (ptp->portWidth = 8) ? 0 : BYTES_PER_WORD;
+  skipIncrement = (ptp->portWidth == 8) ? 0 : BYTES_PER_WORD;
   tempTimestamp.secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
   wordOffset += skipIncrement;
   tempTimestamp.secondsLower = read_packet(packetBuffer, &wordOffset);
@@ -253,7 +253,7 @@ void get_local_hardware_timestamp(struct ptp_device *ptp,
    */
 
   wordOffset = (ptp->portWidth == 8) ? HW_LOCAL_TIMESTAMP_OFFSET_X8 : HW_LOCAL_TIMESTAMP_OFFSET_X64;
-  skipIncrement = (ptp->portWidth = 8) ? 0 : BYTES_PER_WORD;
+  skipIncrement = (ptp->portWidth == 8) ? 0 : BYTES_PER_WORD;
   tempTimestamp.secondsUpper = (int32_t)(read_packet(packetBuffer, &wordOffset) & 0x0FFFF);
   wordOffset += skipIncrement;
   tempTimestamp.secondsLower = read_packet(packetBuffer, &wordOffset);

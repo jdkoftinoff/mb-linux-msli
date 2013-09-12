@@ -531,13 +531,17 @@ struct ptp_device {
   PtpCoefficients coefficients;
   uint32_t masterRateRatio;
   uint32_t masterRateRatioValid;
-  uint32_t prevRtcIncrement;
 
   /* RTC control loop persistent values */
   int64_t  integral;
+  int64_t  zeroCrossingIntegral;
   int32_t  derivative;
   int32_t  previousOffset;
+  uint32_t prevBaseRtcIncrement;
+  uint32_t prevAppliedRtcIncrement;
+  int32_t  rtcLastIncrementDelta;
   uint32_t rtcChangesAllowed;
+  uint32_t rtcReset;
   int32_t  rtcLastOffset;
   uint32_t rtcLastOffsetValid;
   uint32_t rtcLastLockState;
