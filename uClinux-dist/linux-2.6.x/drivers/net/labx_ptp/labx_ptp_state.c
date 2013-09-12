@@ -168,8 +168,9 @@ void labx_ptp_timer_state_task(unsigned long data) {
     /* Always flag the RTC offset as valid, and zero since we're the master */
     preempt_disable();
     spin_lock_irqsave(&ptp->mutex, flags);
-    ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-    ptp->rtcLastOffset      = 0;
+    ptp->rtcLastOffsetValid    = PTP_RTC_OFFSET_VALID;
+    ptp->rtcLastOffset         = 0;
+    ptp->rtcLastIncrementDelta = 0;
     spin_unlock_irqrestore(&ptp->mutex, flags);
     preempt_enable();
   }
@@ -294,12 +295,13 @@ void labx_ptp_signal_gm_change(struct ptp_device *ptp) {
   /* Do not permit the RTC to change until userspace permits it, and also
    * reset the lock state
    */
-  ptp->acquiring          = PTP_RTC_ACQUIRING;
-  ptp->rtcLockState       = PTP_RTC_UNLOCKED;
-  ptp->rtcLockCounter     = 0;
-  ptp->rtcChangesAllowed  = FALSE;
-  ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-  ptp->rtcLastOffset      = 0;
+  ptp->acquiring             = PTP_RTC_ACQUIRING;
+  ptp->rtcLockState          = PTP_RTC_UNLOCKED;
+  ptp->rtcLockCounter        = 0;
+  ptp->rtcChangesAllowed     = FALSE;
+  ptp->rtcLastOffsetValid    = PTP_RTC_OFFSET_VALID;
+  ptp->rtcLastOffset         = 0;
+  ptp->rtcLastIncrementDelta = 0;
 }
 
 /* Processes a newly-received FUP packet for the passed instance */
@@ -808,22 +810,23 @@ void init_state_machines(struct ptp_device *ptp) {
     ptp->ports[i].syncTimeoutCounter      = 0;
   }
 
-  ptp->integral       = 0;
+  ptp->integral             = 0;
   ptp->zeroCrossingIntegral = 0;
-  ptp->derivative     = 0;
-  ptp->previousOffset = 0;
+  ptp->derivative           = 0;
+  ptp->previousOffset       = 0;
   set_rtc_increment(ptp, &ptp->nominalIncrement);
 
   /* Declare the RTC as initially unlocked, but put a valid, zero, offset
    * in so that it will lock shortly after the lock detection state machine
    * has run for a little bit.
    */
-  ptp->acquiring          = PTP_RTC_ACQUIRING;
-  ptp->rtcLastLockState   = PTP_RTC_UNLOCKED;
-  ptp->rtcLockState       = PTP_RTC_UNLOCKED;
-  ptp->rtcLockCounter     = 0;
-  ptp->rtcLastOffsetValid = PTP_RTC_OFFSET_VALID;
-  ptp->rtcLastOffset      = 0;
+  ptp->acquiring             = PTP_RTC_ACQUIRING;
+  ptp->rtcLastLockState      = PTP_RTC_UNLOCKED;
+  ptp->rtcLockState          = PTP_RTC_UNLOCKED;
+  ptp->rtcLockCounter        = 0;
+  ptp->rtcLastOffsetValid    = PTP_RTC_OFFSET_VALID;
+  ptp->rtcLastOffset         = 0;
+  ptp->rtcLastIncrementDelta = 0;
 
   printk("PTP master\n");
 
