@@ -15,20 +15,48 @@ echo "Locking flash:"
 
 echo "Configuring devices: "
 if [ -d /sys/class/gpio/gpiochip240 ]; then
-  OLEDINDEV="247"
-  OLEDOUTDEV="246"
-  GNETOUTDEV="245"
+  OLEDBUTTONDEV="247"
+  OLEDDATADEV="246"
+  OLEDPOWERDEV="245"
 else
-  OLEDINDEV="255"
-  OLEDOUTDEV="254"
+  OLEDBUTTONDEV="255"
+  OLEDDATADEV="254"
   GNETOUTDEV="253"
 fi
-echo -e "${OLEDINDEV}\n${OLEDOUTDEV}\n${GNETOUTDEV}" > /sys/class/gpio/export
+if [ ! -z "${OLEDBUTTONDEV}" ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+    echo -e "${OLEDBUTTONDEV}"  > /sys/class/gpio/export
+  fi
+fi
+if [ ! -z $OLEDDATADEV ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+    echo -e "${OLEDDATADEV}"  > /sys/class/gpio/export
+  fi
+fi
+if [ ! -z $OLEDPOWERDEV ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+    echo -e "${OLEDPOWERDEV}"  > /sys/class/gpio/export
+  fi
+fi
+if [ ! -z $GNETOUTDEV ]; then
+  if [ ! -d "/sys/class/gpio/gpio${GNETOUTDEV}" ]; then
+    echo -e "${GNETOUTDEV}"  > /sys/class/gpio/export
+  fi
+fi
 # Output side forced high, then used as an input (OLED Button)
-echo high > "/sys/class/gpio/gpio${OLEDINDEV}/direction"
-echo in  > "/sys/class/gpio/gpio${OLEDINDEV}/direction"
-echo out > "/sys/class/gpio/gpio${OLEDOUTDEV}/direction"
-echo out > "/sys/class/gpio/gpio${GNETOUTDEV}/direction"
+if [ -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+  echo high > "/sys/class/gpio/gpio${OLEDBUTTONDEV}/direction"
+  echo in  > "/sys/class/gpio/gpio${OLEDBUTTONDEV}/direction"
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+  echo out > "/sys/class/gpio/gpio${OLEDDATADEV}/direction"
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+  echo high > "/sys/class/gpio/gpio${OLEDPOWERDEV}/direction"
+fi
+if [ -d "/sys/class/gpio/gpio${GNETOUTDEV}" ]; then
+  echo out > "/sys/class/gpio/gpio${GNETOUTDEV}/direction"
+fi
 echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
 echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
 echo -en "\x27\x5e\x00\x0c\x00\x00\x2f" > /dev/spidev0
@@ -42,9 +70,18 @@ mkdir /var/tmp
 chmod 1777 /var/tmp
 mkdir /var/devices
 mkdir /var/devices/gpio
-ln -s "/sys/class/gpio/gpio${OLEDINDEV}/value" /var/devices/gpio/oled_in
-ln -s "/sys/class/gpio/gpio${OLEDOUTDEV}/value" /var/devices/gpio/oled_out
-ln -s "/sys/class/gpio/gpio${GNETOUTDEV}/value" /var/devices/gpio/gnet_out
+if [ -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDBUTTONDEV}/value" /var/devices/gpio/oled_in
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDDATADEV}/value" /var/devices/gpio/oled_out
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDPOWERDEV}/value" /var/devices/gpio/oled_power
+fi
+if [ -d "/sys/class/gpio/gpio${GNETOUTDEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${GNETOUTDEV}/value" /var/devices/gpio/gnet_out
+fi
 
 echo "Restoring persistent settings:"
 mkdir /var/tmp/persist
