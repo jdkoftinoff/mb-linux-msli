@@ -295,26 +295,30 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     {
       uint32_t copyResult;
       int i;
+      uint32_t currentDelayMechanism = ptp->properties.delayMechanism;
 
       /* Copy the userspace argument into the device */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       copyResult = copy_from_user(&ptp->properties, (void __user*)arg, sizeof(PtpProperties));
 
-      /* Having set the properties, load a set of default coefficients in depending
-       * upon the selected delay mechanism
-       */
-      if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
-        /* Apply coefficients for the peer-to-peer delay mechanism */
-        ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
-        ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
-        ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
-      } else {
-        /* Apply coefficients for the end-to-end delay mechanism */
-        printk("Using E2E coefficients\n");
-        ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
-        ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
-        ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+      if (ptp->properties.delayMechanism != currentDelayMechanism) {
+        /* Having set the properties, load a set of default coefficients in depending
+         * upon the selected delay mechanism if it has changed.
+         */
+        if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
+          /* Apply coefficients for the peer-to-peer delay mechanism */
+          printk("Using P2P coefficients\n");
+          ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+          ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+          ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+        } else {
+          /* Apply coefficients for the end-to-end delay mechanism */
+          printk("Using E2E coefficients\n");
+          ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+          ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+          ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+        }
       }
 
       /* Convert the millisecond values for RTC lock settings into timer ticks.
@@ -729,7 +733,16 @@ static int ptp_probe(const char *name,
   ptp->properties.grandmasterIdentity[6] = DEFAULT_SOURCE_MAC[4];
   ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
 
-  ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
+  ptp->properties.delayMechanism = DEFAULT_DELAY_MECHANISM;
+  if (DEFAULT_DELAY_MECHANISM == PTP_DELAY_MECHANISM_P2P) {
+    ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+    ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+    ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+  } else {
+    ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+    ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+    ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+  }
 
   /* Update the system priority vector to match the new properties */
   ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
@@ -774,11 +787,6 @@ static int ptp_probe(const char *name,
   }    
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
-
-  /* Zero the coefficients initially; they will be inferred from the port mode */
-  ptp->coefficients.P = 0x00000000;
-  ptp->coefficients.I = 0x00000000;
-  ptp->coefficients.D = 0x00000000;
 
   /* Assign the MAC transmit and receive latency */
   for(i=0; i<ptp->numPorts; i++) {
