@@ -1089,6 +1089,18 @@ static int audio_depacketizer_ioctl(struct inode *inode,
     set_rtc_unstable(depacketizer);
     break;
 
+  case IOC_SET_MCR_RTC_INCREMENT:
+    {
+      ClockDomainIncrement cdi;
+
+      if(copy_from_user(&cdi, (void __user*)arg, sizeof(cdi)) != 0) {
+        return(-EFAULT);
+      }
+
+      XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, cdi.clockDomain, MC_RTC_INCREMENT_REG), cdi.increment);
+    }
+    break;
+
   case IOC_SET_AUTOMUTE_STREAM:
     {
       struct depacketizer_presentation_channels *channels;

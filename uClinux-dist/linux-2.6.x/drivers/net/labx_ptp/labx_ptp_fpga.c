@@ -310,6 +310,8 @@ void set_rtc_increment(struct ptp_device *ptp, RtcIncrement *increment) {
 
   /* The actual write is already atomic, so no need to ensure mutual exclusion */
   iowrite32(incrementWord, REGISTER_ADDRESS(ptp, 0, PTP_RTC_INC_REG));
+
+  ptp_events_tx_rtc_increment_change(ptp);
 }
 
 /* Return the current increment value */
