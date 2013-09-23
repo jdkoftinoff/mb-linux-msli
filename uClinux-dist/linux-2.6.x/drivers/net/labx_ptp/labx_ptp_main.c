@@ -703,6 +703,7 @@ static int ptp_probe(const char *name,
   INIT_WORK(&ptp->work_send_gm_change, ptp_work_send_gm_change);
   INIT_WORK(&ptp->work_send_rtc_change, ptp_work_send_rtc_change);
   INIT_WORK(&ptp->work_send_heartbeat, ptp_work_send_heartbeat);
+  INIT_WORK(&ptp->work_send_rtc_increment_change, ptp_work_send_rtc_increment_change);
 
   /* Configure defaults and initialize the transmit templates */
   quality = &ptp->properties.grandmasterClockQuality;

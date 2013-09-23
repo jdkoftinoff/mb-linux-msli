@@ -569,6 +569,7 @@ struct ptp_device {
   struct work_struct work_send_gm_change;
   struct work_struct work_send_rtc_change;
   struct work_struct work_send_heartbeat;
+  struct work_struct work_send_rtc_increment_change;
 
   /* Packet Rx state space */
 #ifndef CONFIG_LABX_PTP_NO_TASKLET
@@ -688,9 +689,11 @@ void unregister_ptp_netlink(void);
 int ptp_events_tx_heartbeat(struct ptp_device *ptp);
 int ptp_events_tx_gm_change(struct ptp_device *ptp);
 int ptp_events_tx_rtc_change(struct ptp_device *ptp);
+int ptp_events_tx_rtc_increment_change(struct ptp_device *ptp);
 void ptp_work_send_heartbeat(struct work_struct *work);
 void ptp_work_send_gm_change(struct work_struct *work);
 void ptp_work_send_rtc_change(struct work_struct *work);
+void ptp_work_send_rtc_increment_change(struct work_struct *work);
 
 /* From Platform Specific Files */
 void ptp_disable_irqs(struct ptp_device *ptp, int port);

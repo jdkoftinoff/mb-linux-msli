@@ -275,6 +275,70 @@ void ptp_work_send_rtc_change(struct work_struct *work) {
   }
 }
 
+/* Transmits a Netlink packet indicating a change in the RTC increment */
+int ptp_events_tx_rtc_increment_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_rtc_increment_change);
+  return 0;
+}
+
+void ptp_work_send_rtc_increment_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_rtc_increment_change);
+  struct sk_buff *skb;
+  uint8_t commandByte;
+  void *msgHead;
+  int returnValue = 0;
+
+  skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+  if(skb == NULL) return;
+
+  commandByte = PTP_EVENTS_C_RTC_INCREMENT;
+
+  /* Create the message headers */
+  msgHead = genlmsg_put(skb, 
+                        0, 
+                        ptp->netlinkSequence++, 
+                        &ptp_events_genl_family, 
+                        0, 
+                        commandByte);
+  if (msgHead == NULL) {
+    returnValue = -ENOMEM;
+    goto fail;
+  }
+
+  /* Write the PTP domain identifier to the message */
+  returnValue = nla_put_u8(skb, PTP_EVENTS_A_DOMAIN, ptp->properties.domainNumber);
+  if (returnValue != 0) goto fail;
+
+  returnValue = nla_put_u32(skb, PTP_EVENTS_A_INCREMENT_M, ptp->currentIncrement.mantissa);
+  if (returnValue != 0) goto fail;
+
+  returnValue = nla_put_u32(skb, PTP_EVENTS_A_INCREMENT_F, ptp->currentIncrement.fraction);
+  if (returnValue != 0) goto fail;
+
+  /* Finalize the message and multicast it */
+  genlmsg_end(skb, msgHead);
+  returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
+  switch(returnValue) {
+  case 0:
+  case -ESRCH:
+    // Success or no process was listening, simply break
+    break;
+
+  default:
+    // This is an actual error, print the return code
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+           returnValue);
+    goto fail;
+  }
+
+ fail: 
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
+}
 /* foo */
 
 static struct genl_ops ptp_events_gnl_ops_heartbeat = {

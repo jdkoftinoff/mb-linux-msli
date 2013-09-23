@@ -509,8 +509,16 @@ typedef struct {
 } SetAutomuteStream;
 
 #define IOC_SET_AUTOMUTE_STREAM   _IOW(ENGINE_IOC_CHAR,               \
-                                        (ENGINE_IOC_CLIENT_START + 9), \
-                                        SetAutomuteStream)
+                                       (ENGINE_IOC_CLIENT_START + 9), \
+                                       SetAutomuteStream)
+
+typedef struct {
+  uint32_t clockDomain;
+  uint32_t increment;
+} ClockDomainIncrement;
+#define IOC_SET_MCR_RTC_INCREMENT _IOW(ENGINE_IOC_CHAR,                \
+                                       (ENGINE_IOC_CLIENT_START + 10), \
+                                       ClockDomainIncrement)
 
 /* Type definitions and macros for depacketizer microcode */
 
