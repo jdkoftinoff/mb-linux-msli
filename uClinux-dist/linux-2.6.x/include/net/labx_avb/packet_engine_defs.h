@@ -481,6 +481,7 @@ typedef struct {
   uint32_t maxClockDomains;
   uint32_t maxStreams;
   uint32_t dynamicSampleRates;
+  uint32_t coastHostRtcIncrement;
 } DepacketizerCaps;
 
 #define IOC_GET_DEPACKETIZER_CAPS  _IOR(ENGINE_IOC_CHAR,               \

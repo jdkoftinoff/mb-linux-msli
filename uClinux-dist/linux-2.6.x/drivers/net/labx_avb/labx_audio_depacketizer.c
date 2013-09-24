@@ -1175,7 +1175,8 @@ static int audio_depacketizer_probe(const char *name,
                                     struct platform_device *pdev,
                                     struct resource *addressRange,
                                     struct resource *irq,
-                                    const char *interfaceType) {
+                                    const char *interfaceType,
+                                    int is_mcr_host) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -1304,6 +1305,14 @@ static int audio_depacketizer_probe(const char *name,
     depacketizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
   }
 
+  if (is_mcr_host) {
+    depacketizer->capabilities.coastHostRtcIncrement =
+      (XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, 0, MC_CONTROL_REG))
+       & MC_CONTROL_HAS_COAST_HOST_RTC) ? 1 : 0;
+  } else {
+    depacketizer->capabilities.coastHostRtcIncrement = 0;
+  }
+
   /* Announce the device */
   printk(KERN_INFO "%s: Found Lab X depacketizer %d.%d at 0x%08X, ",
          depacketizer->name, versionMajor, versionMinor, 
@@ -1419,6 +1428,16 @@ static int audio_depacketizer_probe(const char *name,
 #ifdef CONFIG_OF
 static int audio_depacketizer_platform_remove(struct platform_device *pdev);
 
+static u32 get_u32(struct of_device *ofdev, const char *s) {
+  u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+  if(p) {
+    return *p;
+  } else {
+    dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
+    return FALSE;
+  }
+}
+
 static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct;
@@ -1428,6 +1447,7 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
   const char *name = dev_name(&ofdev->dev);
   const char *interfaceType;
+  int is_mcr_host = 0;
   int rc;
 
   /* Obtain the resources for this instance */
@@ -1449,8 +1469,10 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
     return(-EFAULT);
   }
 
+  is_mcr_host = get_u32(ofdev, "xlnx,is-mcr-host");
+
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(name, pdev, addressRange, irq, interfaceType));
+  return(audio_depacketizer_probe(name, pdev, addressRange, irq, interfaceType, is_mcr_host));
 }
 
 static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
@@ -1493,6 +1515,7 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
   struct resource *addressRange;
   struct resource *irq;
   char *interfaceType;
+  int is_mcr_host;
 
   /* Obtain the resources for this instance */
   addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1515,8 +1538,10 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
     return(-EFAULT);
   }
 
+  is_mcr_host = 1; /* TODO */
+
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq, interfaceType));
+  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq, interfaceType, is_mcr_host));
 }
 
 static int audio_depacketizer_platform_remove(struct platform_device *pdev)

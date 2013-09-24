@@ -307,7 +307,7 @@
 			xlnx,has-suppress-inputs = <0x0>;
 			xlnx,include-dphase-timer = <0x0>;
 			xlnx,interface-type = "DMA_PLB";
-			xlnx,is-mcr-host = <0x1>;
+			xlnx,is-mcr-host = <0x0>;
 			xlnx,mcb-data-width = <0x20>;
 			xlnx,mplb-awidth = <0x20>;
 			xlnx,mplb-clk-period-ps = <0x1f40>;
