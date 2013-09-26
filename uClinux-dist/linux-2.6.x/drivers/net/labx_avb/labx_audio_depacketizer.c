@@ -670,7 +670,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
       (depacketizer->capabilities.versionMinor >= 6)) {
 
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_RTC_INCREMENT_REG),
-              0x40000000); /* TODO - Where should we get the nominal increment from? */
+              0x40000000 | MC_RTC_INCREMENT_FORCE); /* TODO - Where should we get the nominal increment from? */
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG),
               clockDomainSettings->remainder);
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG),
