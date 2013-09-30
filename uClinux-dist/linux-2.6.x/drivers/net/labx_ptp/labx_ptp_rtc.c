@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /* Uncomment to print debug messages for the slave offset */
 /* #define SLAVE_OFFSET_DEBUG */
@@ -82,7 +81,8 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
       /* See if the offset lies within our lock range and, if so, whether it has
        * been so for long enough.
        */
-      if((ptp->rtcLastOffset > -lockRangeSigned) & (ptp->rtcLastOffset < lockRangeSigned)) {
+      if((ptp->rtcLastOffset > -lockRangeSigned) & (ptp->rtcLastOffset < lockRangeSigned) &
+          (ptp->rtcLastIncrementDelta > -0x1000) & (ptp->rtcLastIncrementDelta < 0x1000)) {
         /* Within lock range, check counter */
         if(++ptp->rtcLockCounter >= ptp->rtcLockTicks) {
           /* Achieved lock! Change state and send a Netlink message. */
@@ -287,6 +287,11 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       // Get the cumulative rate ratio, including our neighbor
       tempRate = ((ptp->ports[port].neighborRateRatio * tempRate) >> 31);
 
+      if (!ptp->masterRateRatioValid) {
+        ptp->integral = 0;
+        ptp->zeroCrossingIntegral = 0;
+      }
+
       ptp->masterRateRatio = (uint32_t)tempRate;
       ptp->masterRateRatioValid = TRUE;
     }
@@ -306,12 +311,24 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
     /* Update the servo with the present value; begin with the master rate ratio
      * if it is available, otherwise start with the nominal increment */
     if (ptp->masterRateRatioValid) {
-      newRtcIncrement = ptp->masterRateRatio >> 1;
+      uint32_t scaledMasterRateRatio = ptp->masterRateRatio >> 1;
+      int32_t rateDiff = (int32_t)(scaledMasterRateRatio - ptp->prevBaseRtcIncrement);
+      if (rateDiff < 1000 && rateDiff > -1000) {
+        // Use the previous value as a base. Include a portion of the master rate ratio to speed up corrections.
+        newRtcIncrement = ptp->prevBaseRtcIncrement + (rateDiff>>4);
+      } else {
+        // Use the master rate ratio as a base
+        newRtcIncrement = scaledMasterRateRatio;
+      }
+      ptp->prevBaseRtcIncrement = newRtcIncrement;
 
-      /* If we crossed the midpoint, dump the integral */
+      /* If we crossed the midpoint, damp the integral */
       if (((slaveOffset < 0) && (ptp->previousOffset > 0)) ||
           ((slaveOffset > 0) && (ptp->previousOffset < 0))) {
-        ptp->integral = 0;
+        uint64_t prevIntegral = ptp->zeroCrossingIntegral;
+        ptp->zeroCrossingIntegral = ptp->integral;
+        ptp->integral += prevIntegral;
+        ptp->integral >>= 1;
       }
     } else {
       newRtcIncrement = (ptp->nominalIncrement.mantissa & RTC_MANTISSA_MASK);
@@ -346,6 +363,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
 
       /* Also dump the integrator for the integral term */
       ptp->integral = 0;
+      ptp->zeroCrossingIntegral = 0;
     }
 
     /* Now check for "acquired" mode */
@@ -407,6 +425,15 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      */
 
     if(ptp->rtcChangesAllowed) {
+      /* Smooth increments when the changes are small */
+      uint32_t tempRtcIncrement = newRtcIncrement;
+      if ((ptp->prevAppliedRtcIncrement - newRtcIncrement) < 0x200 ||
+          (newRtcIncrement - ptp->prevAppliedRtcIncrement) < 0x200) {
+        newRtcIncrement = (newRtcIncrement >> 1) + (ptp->prevAppliedRtcIncrement >> 1);
+      }
+      ptp->rtcLastIncrementDelta = newRtcIncrement - ptp->prevAppliedRtcIncrement;
+      ptp->prevAppliedRtcIncrement = tempRtcIncrement;
+
       RtcIncrement newIncrement;
       newIncrement.mantissa = (newRtcIncrement >> RTC_MANTISSA_SHIFT) & RTC_MANTISSA_MASK;
       newIncrement.fraction = (newRtcIncrement & RTC_FRACTION_MASK);

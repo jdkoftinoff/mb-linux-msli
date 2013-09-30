@@ -4,6 +4,7 @@
  *  Lab X Technologies AVB time domain multiplexer (TDM) driver
  *
  *  Written by Scott Wagner (scott.wagner@labxtechnologies.com)
+ *  Written by Albert M. Hajjar (albert.hajjar@labxtechnologies.com)
  *
  *  Copyright (C) 2011 Lab X Technologies LLC, All Rights Reserved.
  *
@@ -24,11 +25,12 @@
  */
 
 #include "linux/labx_tdm_audio_defs.h"
+#include "labx_tdm_audio.h"
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+#include "labx_tdm_analyzer.h"
+#endif
 #include <asm/io.h>
 #include <linux/fs.h>
-#include <linux/miscdevice.h>
-#include <linux/labx_local_audio.h>
-#include <linux/labx_local_audio_defs.h>
 #include <linux/highmem.h>
 #include <linux/platform_device.h>
 #include <xio.h>
@@ -38,103 +40,29 @@
 #include <linux/of_platform.h>
 #endif // CONFIG_OF
 
-typedef struct {
-  u32 TdmLaneCount;
-  u32 TdmSlotDensity;
-  u32 TdmNumStreams;
-} labx_tdm_Config;
-
-#define NO_IRQ_SUPPLIED   (-1)
-struct audio_tdm {
-  /* Misc device */
-  struct miscdevice miscdev;  
-
-  /* Pointer back to the platform device */
-  struct platform_device *pdev;
-  struct class tdmclass;
-
-  /* Mutex for the device instance */
-  spinlock_t mutex;
-  bool opened;
-  
-/* File operations and private data for a polymorphic
-   * driver to use
-   */
-  struct file_operations *derivedFops;
-  void *derivedData;
-    
-  /* Name for use in identification */
-  char name[NAME_MAX_SIZE];
-  /* Device version */
-  uint32_t version;
-  
-  /* Physical and virtual base address */
-  uintptr_t      physicalAddress;
-  uintptr_t      addressRangeSize;
-  void __iomem  *virtualAddress;
-
-  /* Interrupt request number */
-  int32_t irq;
-
-  uint32_t initialVal;
-
-  /* Hardware configuration */
-  labx_tdm_Config Config;
-};
-
-// There's a single register, at offset 0x00000008 (byte address, is actually register 0x02 in 32-bit offset-speak)
-//
-//           -- Bit [9]   - Bit alignment:
-//           --              '0' - Left-justified, or "normal" mode
-//           --              '1' - I2S-like mode, MSB of channel 0 lags the LRCK edge by one clock
-//           -- Bit [8]   - LRCK polarity:
-//           --              '0' - Rising edge signifies channel zero
-//           --              '1' - Falling edge signifies channel zero
-//           -- Bits[6:0] - Number of audio channels (8, 16, 32 or 64 are the only valid number of input channels)
-/* Global control registers */
-#define TDM_CONTROL_REG       (0x02)
-#  define TDM_NUM_AUDIO_CHANNELS_MASK        (0x7F)
-
-#define TDM_STREAM_MAP_REG     (0x03)
-#  define MAP_SWAP_BANK      (0x80000000)
-#  define MAP_CHANNEL_MASK   (0x003F0000)
-#  define MAP_CHANNEL_SHIFT  (16)
-#  define MAP_STREAM_MASK    (0x0000003F)
-
-#define STREAM_MAP_BANKS  (2)
-
-/* Number of audio channels emitted from memory by this peripheral;
- * 7 streams of 60 channels each.
- */
-#define LABX_TDM_NUM_CHANNELS  (64)
+ //#define _LABXDEBUG
 
 /* Driver name and the revision range of hardware expected.
  * This driver will work with revision 1.1 only.
- */
+  */
 #define DRIVER_NAME "labx_tdm_audio"
-#define DRIVER_VERSION_MIN  0x11
-#define DRIVER_VERSION_MAX  0x11
+#define DRIVER_VERSION_MIN  0x14
+#define DRIVER_VERSION_MAX  0x14
 #define REVISION_FIELD_BITS  4
 #define REVISION_FIELD_MASK  (0x0F)
 
-
-/* Maximum number of redundancy_switchs and instance count */
+/* Maximum number of tdm modules and instance count */
 #define MAX_INSTANCES 16
 static uint32_t instanceCount;
 
-#if 0
-#define DBG(f, x...) printk(DRIVER_NAME " [%s()]: " f, __func__,## x)
-#else
-#define DBG(f, x...)
-#endif
-
-#define REGISTER_ADDRESS(device, offset) \
-  ((uintptr_t)device->virtualAddress | (offset << 2))
-
 /* Buffer for storing stream map entries */
 static StreamMapEntry mapEntryBuffer[MAX_MAP_ENTRIES];
-static uint8_t MAP_MUTE_MODE_SHIFT = 0x00;
+static uint8_t  MAP_MUTE_MODE_SHIFT = 0;
+static uint8_t  INSTANCE_CHANNEL_MASK = 0x00;
+static uint32_t MAP_CHANNEL_MASK = 0x00;
+static uint32_t maxInstanceChannelBits = 0;
 static struct audio_tdm* devices[MAX_INSTANCES] = {};
+static bool debugOn = false;
 
 /*
  * Character device hook functions
@@ -183,6 +111,13 @@ static int tdm_open(struct inode *inode, struct file *filp)
 
   spin_unlock_irqrestore(&tdm->mutex, flags);
   preempt_enable();
+  
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  /* Open the analyzer, if we have one */
+  if(tdm->tdmCaps.hasAnalyzer) {
+    labx_tdm_analyzer_reset(&tdm->analyzer);
+  }
+#endif
 
   return(returnValue);
 }
@@ -207,49 +142,96 @@ static int tdm_release(struct inode *inode, struct file *filp)
   return(0);
 }
 
+static uint8_t min_bits(uint8_t value) {
+    uint32_t quotient = value;
+    uint32_t minBits = 0;
+
+  while(quotient > 0) { 
+    quotient = (quotient / 2);
+    minBits = (minBits + 1);
+  }
+    
+  if(minBits == 0) {
+    minBits = 1;
+  }
+  return(minBits);
+}
+
 static void configure_auto_mute(struct audio_tdm *tdm,
                                 AutoMuteConfig *autoMuteConfig) {
+  uint32_t idx;
   uint32_t entryIndex;
   uint32_t bankIndex;
   uint32_t entryWord;
   uint32_t numChannels;
+  uint32_t instanceChannel;
 
-  /* Grab the TDM mode */  
-  numChannels = (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG))) & TDM_NUM_AUDIO_CHANNELS_MASK;
-
-  /* Set the shift value for the muting on load */
-  if(MAP_MUTE_MODE_SHIFT == 0x00) {
-    if(tdm->Config.TdmNumStreams == 8) {
-      MAP_MUTE_MODE_SHIFT = 0x03;
-    } else if(tdm->Config.TdmNumStreams == 16) {
-      MAP_MUTE_MODE_SHIFT = 0x04;
-    } else if(tdm->Config.TdmNumStreams == 32) {
-      MAP_MUTE_MODE_SHIFT = 0x05;
+  /* Set the shift value for the muting on load and the channel 
+     mask used when constructing the mute map word */
+  if(MAP_MUTE_MODE_SHIFT == 0) {
+    if(tdm->tdmCaps.maxNumStreams == 8) {
+      MAP_MUTE_MODE_SHIFT = 3;
+    } else if(tdm->tdmCaps.maxNumStreams == 16) {
+      MAP_MUTE_MODE_SHIFT = 4;
+    } else if(tdm->tdmCaps.maxNumStreams == 32) {
+      MAP_MUTE_MODE_SHIFT = 5;
     } else {
-      MAP_MUTE_MODE_SHIFT = 0x06;
+      MAP_MUTE_MODE_SHIFT = 6;
+    }
+    
+    maxInstanceChannelBits = min_bits((tdm->tdmCaps.maxSlotDensity * tdm->tdmCaps.laneCount) - 1);
+    for(idx = 0; idx < maxInstanceChannelBits; idx++) {
+      MAP_CHANNEL_MASK |= (1 << (idx + MAP_CHANNEL_SHIFT));
     }
   }
+
+  /* Grab the TDM mode */  
+  numChannels = tdm->opConfig.TdmSlotDensity * tdm->tdmCaps.laneCount;
+
 
   /* Set any new stream map entries in both banks */
   for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
     for(entryIndex = 0; entryIndex < autoMuteConfig->numMapEntries; entryIndex++) {
       StreamMapEntry *entryPtr = &(autoMuteConfig->mapEntries[entryIndex]);
-
+      instanceChannel = entryPtr->tdmChannel & INSTANCE_CHANNEL_MASK;
+      
       /* Each entry consists of a map from a TDM channel to its stream */
-      entryWord = (((((entryPtr->tdmChannel/(numChannels/tdm->Config.TdmLaneCount)) 
-        * tdm->Config.TdmSlotDensity) + (entryPtr->tdmChannel % (numChannels/tdm->Config.TdmLaneCount)))
+      entryWord = (((((instanceChannel/(numChannels/tdm->tdmCaps.laneCount)) 
+        * tdm->tdmCaps.maxSlotDensity) + (instanceChannel % (numChannels/tdm->tdmCaps.laneCount)))
             << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK);
-
-
-      if(entryPtr->avbStream != AVB_STREAM_NONE) {
-        entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
-        entryWord |= (autoMuteConfig->enable << MAP_MUTE_MODE_SHIFT);
+       
+      /* uint32_t prev = 0;
+      entryWord = (instanceChannel/(numChannels/tdm->tdmCaps.laneCount));
+      prev = (instanceChannel/(numChannels/tdm->tdmCaps.laneCount));
+      if(bankIndex == 0) printk("(\n\n%d / (%d / % d)) = %d\n", instanceChannel, numChannels, tdm->tdmCaps.laneCount, entryWord);
+      entryWord *= tdm->tdmCaps.maxSlotDensity;
+      if(bankIndex == 0) printk("%d * %d = %d\n", prev, tdm->tdmCaps.maxSlotDensity, entryWord);
+      entryWord += (instanceChannel % (numChannels/tdm->tdmCaps.laneCount));
+      prev *= tdm->tdmCaps.maxSlotDensity;
+      if(bankIndex == 0) printk("%d + (%d % (%d / %d)) = %d\n", prev, instanceChannel, numChannels, tdm->tdmCaps.laneCount, entryWord);
+      entryWord = (entryWord << MAP_CHANNEL_SHIFT) & MAP_CHANNEL_MASK;*/
+       
+      entryWord |= ((entryPtr->tdmChannel >> tdm->opConfig.TdmChannelBits) << (MAP_CHANNEL_SHIFT + maxInstanceChannelBits));
+      
+      entryWord |= (entryPtr->avbStream & MAP_STREAM_MASK);
+      entryWord |= (entryPtr->enable << MAP_MUTE_MODE_SHIFT);
+      
+      if(debugOn && bankIndex == 0) {
+        printk("Channel: %d\n", entryPtr->tdmChannel);
+        printk("Channel bits: %d\n", tdm->opConfig.TdmChannelBits);
+        printk("Inst Channel: %d\n", instanceChannel);
+        printk("Global mute status: %d\n", autoMuteConfig->enable);
+        printk("Channel mute status: %d\n", entryPtr->enable);
+        printk("Mute slot: %d\n", (entryWord & MAP_CHANNEL_MASK) >> MAP_CHANNEL_SHIFT);
+        printk("Transmitter instance: %d\n", (entryPtr->tdmChannel >> tdm->opConfig.TdmChannelBits));
+        printk("Entry word: 0x%08X\n", entryWord);
+        printk("Instance channel mask: 0x%08X\n", INSTANCE_CHANNEL_MASK);
+        printk("Map channel mask: 0x%08X\n", MAP_CHANNEL_MASK);
+        printk("Mute enable shift: %d\n", (MAP_CHANNEL_SHIFT + maxInstanceChannelBits));
+        printk("Max instance channel bits: %d\n", maxInstanceChannelBits);
+        printk("\n ----------------------- \n");
       }
-      else {
-        entryWord |= AVB_STREAM_RESET;
-        entryWord |= (AUTO_MUTE_ALWAYS << MAP_MUTE_MODE_SHIFT);      
-      }
-
+      
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG), entryWord);
     }
 
@@ -260,43 +242,407 @@ static void configure_auto_mute(struct audio_tdm *tdm,
   }
 }
 
+static int set_audio_tdm_control(struct audio_tdm *tdm,
+                                  AudioTdmControl *tdmControl) {
+  int returnValue = 0;
+  uint32_t reg;
+  uint32_t idx;
+
+  /* The hardware can be configured with a varying number of instances of transmitters
+     and receivers.  At the moment the channel configuration between each can not vary */
+  uint32_t numChansPerInstance; 
+
+  switch (tdmControl->bitMask)
+  {
+    case SLOT_DENSITY: 
+      /* Evaluate the slot density to see if is one of the supported configurations */
+      if(tdmControl->slotDensity != 2 && tdmControl->slotDensity != 4 &&
+            tdmControl->slotDensity != 8 && tdmControl->slotDensity != 16 &&
+              tdmControl->slotDensity != 32 && tdmControl->slotDensity != 64) {
+        return -ESLTDSTYNOTSUPPORTED;
+      }
+      
+      /* Evaluate the current sample rate, the maximum number channels supported
+         scales based on the current TDM configuration. TdmSampleRate << 1 results
+         in the multiplier from 48K to the current sample rate. */
+      if(tdmControl->slotDensity >
+         (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+        return -ESLTDSTYEXCDSCONF;
+      }
+
+      tdm->opConfig.TdmSlotDensity = tdmControl->slotDensity;
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
+      reg |= tdm->opConfig.TdmSlotDensity;
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): slot density set to %u\n", tdmControl->slotDensity);
+  }
+      // Set the up the channel mask for each instance
+      tdm->opConfig.TdmChannelBits = min_bits((tdm->opConfig.TdmSlotDensity * tdm->tdmCaps.laneCount) - 1);
+      INSTANCE_CHANNEL_MASK = 0;
+      for(idx = 0; idx < tdm->opConfig.TdmChannelBits; idx++) {
+        INSTANCE_CHANNEL_MASK |= (1 << idx);
+      }
+      break;
+
+    case NUM_CHANNELS:
+      numChansPerInstance = tdmControl->numChannels / tdm->tdmCaps.numTransmitters;
+      /* Evaluate the number of channels to see if it is one of the supported configurations */
+      if(numChansPerInstance != 8 && numChansPerInstance != 16 &&
+            numChansPerInstance != 32 && numChansPerInstance != 64 &&
+              numChansPerInstance != 128 && tdmControl->numChannels != 256) {
+        return -ENUMCHNOTSUPPORTED;
+      }
+     
+      /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
+      if(numChansPerInstance > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+        return -ENUMCHNOTSUPPORTED;
+      }
+
+      /* Evaluate the number of channels to see if it is not less than the minimum supported */
+      if(numChansPerInstance < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+        return -ENUMCHNOTSUPPORTED;
+      }
+
+      /* Evaluate the current sample rate, the maximum number channels supported
+         scales based on the current TDM configuration. TdmSampleRate << 1 results
+         in the multiplier from 48K to the current sample rate. */
+      if(((numChansPerInstance / tdm->tdmCaps.laneCount) >
+          (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
+        return -ENUMCHEXCDSCONF;
+      }
+
+      tdm->opConfig.TdmSlotDensity = (numChansPerInstance / tdm->tdmCaps.laneCount);
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
+      reg |= tdm->opConfig.TdmSlotDensity;
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set num channels to %u\n", tdmControl->numChannels);
+  }
+      // Set the up the channel mask for each instance
+      tdm->opConfig.TdmChannelBits = min_bits((tdm->opConfig.TdmSlotDensity * tdm->tdmCaps.laneCount) - 1);
+      INSTANCE_CHANNEL_MASK = 0;
+      for(idx = 0; idx < tdm->opConfig.TdmChannelBits; idx++) {
+        INSTANCE_CHANNEL_MASK |= (1 << idx);
+      }
+      break;
+
+    case BURST_LENGTH_MULTIPLE:
+      if(tdmControl->burstLengthMultiple != 1 && tdmControl->burstLengthMultiple != 2 &&
+          tdmControl->burstLengthMultiple != 4) {
+         return -EBADBURSTLENMUL;
+      }
+      
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MUL_MASK;
+      reg |= (tdmControl-> burstLengthMultiple << TDM_BURST_LENGTH_MUL_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set burst length to %u\n", (tdm->tdmCaps.minBurstLength * tdmControl->burstLengthMultiple));
+  }
+      break;
+
+    case I2S_ALIGN:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->i2sAlign == BIT_ALIGNMENT_LEFT_JUSTIFIED) {
+        reg &= ~TDM_BIT_ALIGNMENT_I2S_DELAYED;
+      } else {
+        reg |= TDM_BIT_ALIGNMENT_I2S_DELAYED;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set alignment to %s\n",
+             (tdmControl->i2sAlign == BIT_ALIGNMENT_LEFT_JUSTIFIED ? "left justified" : "delayed"));
+  }
+      break;
+  
+    case LR_CLOCK_MODE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->lrClockMode == LRCLK_MODE_NORMAL) {
+        reg &= ~TDM_LRCLK_MODE_PULSE;
+      } else {
+        reg |= TDM_LRCLK_MODE_PULSE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set LR clock mode to %s\n",
+             (tdmControl->lrClockMode == LRCLK_MODE_NORMAL ? "normal" : "pulsed"));
+  }
+      break;
+
+    case SAMPLE_EDGE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->sampleEdge == LRCLK_RISING_EDGE_CH0) {
+        reg &= ~TDM_LRCLK_FALLING_EDGE_CH0;
+      } else {
+        reg |= TDM_LRCLK_FALLING_EDGE_CH0;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set LR clock edge to %s\n",
+             (tdmControl->sampleEdge == LRCLK_FALLING_EDGE_CH0 ? "falling" : "rising"));
+  }
+      break;
+    
+    case SAMPLE_RATE:
+      /* Set the sample rate for the clock domain */
+      switch(tdmControl->sampleRate) {
+      case SAMPLE_RATE_32_KHZ:
+      case SAMPLE_RATE_44_1_KHZ:
+      case SAMPLE_RATE_48_KHZ:
+        tdm->opConfig.TdmSampleRate = SINGLE_SAMPLE_RATE;
+  if(debugOn) {
+        printk("TDM (ioctl): set sample rate to 48K\n");
+  }
+        break;
+
+      case SAMPLE_RATE_88_2_KHZ:
+      case SAMPLE_RATE_96_KHZ:
+        tdm->opConfig.TdmSampleRate = DOUBLE_SAMPLE_RATE;
+  if(debugOn) {
+        printk("TDM (ioctl): set sample rate to 96K\n");
+  }
+        break;
+  
+      case SAMPLE_RATE_176_4_KHZ:
+      case SAMPLE_RATE_192_KHZ:
+        tdm->opConfig.TdmSampleRate = QUAD_SAMPLE_RATE;
+  if(debugOn) {
+        printk("TDM (ioctl): set sample rate to 192K\n");
+  }
+        break;
+
+      default:
+  if(debugOn) {
+        printk("TDM (ioctl): invalid sample rate provided\n");
+  }
+        return -ESMPLRATEINVALID;
+      }
+
+      /* Evaluate the current slot density, the maximum sample rate supported
+         scales based on the current slot density. tdm->opConfig.TdmSampleRate << 1
+         is the multiplier from 48KHz to the specified sample rate. */
+      if((tdm->opConfig.TdmSlotDensity > 
+         (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate)))) {
+        return -ESMPLRATENOTSUPPORTED;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SAMPLE_RATE_MASK;
+      reg |= (tdm->opConfig.TdmSampleRate << TDM_SAMPLE_RATE_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+      break;
+
+    case SAMPLE_DEPTH:    
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->sampleDepth == SAMPLE_DEPTH_24BIT) {
+        reg &= ~TDM_SAMPLE_DEPTH_16BIT;
+      } else {
+        reg |= TDM_SAMPLE_DEPTH_16BIT;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set sample depth to %u-bit\n",
+             (tdmControl->sampleDepth == SAMPLE_DEPTH_24BIT ? 24 : 16));
+  }
+      break;
+
+    case TDM_MODULE_OWNER:   
+      // Ensure the slave clock manager is built into the TDM
+      if(!tdm->tdmCaps.hasSlaveManager) {
+        return -ESCMNOTIMPL;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->tdmModuleOwner == MASTER_MODE) {
+        reg &= ~TDM_MODULE_SLAVE_MODE;
+      } else {
+        reg |= TDM_MODULE_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM (ioctl): set module owner to %s\n",
+             (tdmControl->tdmModuleOwner == MASTER_MODE ? "master" : "slave"));
+  }
+      break;
+
+    case TDM_TX_OWNER:    
+      // Ensure the slave clock manager is built into the TDM
+      if(!tdm->tdmCaps.hasSlaveManager) {
+        return -ESCMNOTIMPL;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->tdmTxOwner == MASTER_MODE) {
+        reg &= ~TDM_TX_SLAVE_MODE;
+      } else {
+        reg |= TDM_TX_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM (ioctl): tx owner set to %s\n",
+             (tdmControl->tdmTxOwner == MASTER_MODE ? "master" : "slave"));
+  }
+      break;
+
+    case TDM_RX_OWNER:    
+      // Ensure the slave clock manager is built into the TDM
+      if(!tdm->tdmCaps.hasSlaveManager) {
+        return -ESCMNOTIMPL;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->tdmRxOwner == MASTER_MODE) {
+        reg &= ~TDM_RX_SLAVE_MODE;
+      } else {
+        reg |= TDM_RX_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM (ioctl): set rx owner to %s\n",
+             (tdmControl->tdmRxOwner == MASTER_MODE ? "master" : "slave"));
+  }
+      break;
+
+    case MCLK_DIVIDER:    
+      // Evaluate the slot density to see if is one of the supported configurations
+      if(tdmControl->mclkDivider != 1 && tdmControl->mclkDivider != 2 &&
+            tdmControl->mclkDivider != 4 && tdmControl->mclkDivider != 8) {
+        return -EMCLKDNOTSUPPORTED;
+      }
+
+      /* Check the frequency of the master to clock, return an
+         invalid value if the divider will scale the master clock
+         output beyond the nominal frequency */
+      if((tdm->tdmCaps.mclkRatio / tdmControl->mclkDivider) < 256) {
+        return -EMCLKDTOOHIGH;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_MCLK_DIVIDER_MASK;
+      reg |= (tdmControl->mclkDivider << TDM_MCLK_DIVIDER_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM (ioctl): set mclk divider to %u\n", tdmControl->mclkDivider);
+  }
+      break;
+
+    default:
+      returnValue = -EINVAL;
+      break;
+  }
+
+  /* Return an error code appropriate to the command */
+  return(returnValue);
+}
+
+static int get_audio_tdm_control(struct audio_tdm *tdm,
+                                 AudioTdmControl *tdmControl) {
+  uint32_t reg;
+  int returnValue;
+
+  switch (tdmControl->bitMask)
+  {
+    case SLOT_DENSITY: 
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->slotDensity = reg & TDM_SLOT_DENSITY_MASK;
+      break;
+
+    case NUM_CHANNELS:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->numChannels = ((reg & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount * tdm->tdmCaps.numTransmitters);
+      break;
+
+    case BURST_LENGTH_MULTIPLE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->burstLengthMultiple = (reg & TDM_BURST_LENGTH_MUL_MASK) >> TDM_BURST_LENGTH_MUL_BITS;
+      break;
+
+    case I2S_ALIGN:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->i2sAlign = ((reg & TDM_BIT_ALIGNMENT_I2S_DELAYED) != 0);
+      break;
+  
+    case LR_CLOCK_MODE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->lrClockMode = ((reg & TDM_LRCLK_MODE_PULSE) != 0);
+      break;
+
+    case SAMPLE_EDGE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->sampleEdge = ((reg & TDM_LRCLK_RISING_EDGE_CH0) != 0);
+      break;
+
+    case SAMPLE_RATE:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->sampleRate = (reg & TDM_SAMPLE_RATE_MASK) >> TDM_SAMPLE_RATE_BITS;
+      break;
+
+    case SAMPLE_DEPTH:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->sampleDepth = ((reg & TDM_SAMPLE_DEPTH_16BIT) != 0);
+      break;
+
+    case TDM_MODULE_OWNER:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->tdmModuleOwner = ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+                                     & TDM_MODULE_OWNER_MASK) >> TDM_MODULE_OWNER_BITS) == 0x3;
+      break;
+
+    case TDM_TX_OWNER:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->tdmTxOwner = ((reg & TDM_TX_SLAVE_MODE) != 0);
+      break;
+
+    case TDM_RX_OWNER:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->tdmRxOwner = ((reg & TDM_RX_SLAVE_MODE) != 0);
+      break;
+
+    case MCLK_DIVIDER:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->mclkDivider = (reg & TDM_MCLK_DIVIDER_MASK) >> TDM_MCLK_DIVIDER_BITS;
+      break;
+
+    default:
+      returnValue = -EINVAL;
+      break;
+  }
+  /* Return an error code appropriate to the command */
+  return(returnValue);
+}
+
 /* I/O control operations for the driver */
 static int tdm_ioctl(struct inode *inode,
-                                   struct file *filp,
-                                   unsigned int command,
-                                   unsigned long arg) {
+                     struct file *filp,
+                     unsigned int command,
+                     unsigned long arg) {
   // Switch on the request
   AudioTdmControl tdmControl;
   int returnValue = 0;
   struct audio_tdm *tdm = (struct audio_tdm *)filp->private_data;
-  uint32_t reg;
 
   switch(command) {
   case IOC_GET_AUDIO_TDM_CONTROL:
-	  reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-	  tdmControl.versionMajor = ((tdm->version >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
-	  tdmControl.versionMinor = (tdm->version & REVISION_FIELD_MASK);
-	  tdmControl.maxChannels = reg & TDM_NUM_AUDIO_CHANNELS_MASK;
-	  tdmControl.lrPolarity = ((reg & TDM_LRCLK_FALLING_EDGE_CH0) != 0);
-	  tdmControl.i2sAlign = ((reg & TDM_BIT_ALIGNMENT_I2S_DELAYED) != 0);
-      if(copy_to_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
-        return(-EFAULT);
-      }
+    if(copy_from_user(&tdmControl, (void __user*)arg, sizeof(AudioTdmControl)) != 0) {
+      return(-EFAULT);
+    }
+    returnValue = get_audio_tdm_control(tdm, &tdmControl);
+    if(copy_to_user((void __user*)arg, &tdmControl, sizeof(AudioTdmControl)) != 0) {
+      return(-EFAULT);
+    }
     break;
 
   case IOC_SET_AUDIO_TDM_CONTROL:
-      if(copy_from_user(&tdmControl, (void __user*)arg, sizeof(AudioTdmControl)) != 0) {
+    if(copy_from_user(&tdmControl, (void __user*)arg, sizeof(AudioTdmControl)) != 0) {
+      return(-EFAULT);
+    }
+    returnValue = set_audio_tdm_control(tdm, &tdmControl);
+    break;
+
+  case IOC_GET_AUDIO_TDM_CAPS:
+    {
+      if(copy_to_user((void __user*)arg, &tdm->tdmCaps, sizeof(tdm->tdmCaps)) != 0) {
         return(-EFAULT);
       }
-      if (tdmControl.maxChannels != 0) {
-    	  if (tdmControl.maxChannels != 8 && tdmControl.maxChannels != 16 &&
-    			  tdmControl.maxChannels != 32 && tdmControl.maxChannels != 64) {
-    		  return -EINVAL;
-    	  }
-    	  reg = tdmControl.maxChannels | (tdmControl.lrPolarity ? TDM_LRCLK_FALLING_EDGE_CH0 : 0) |
-    			  (tdmControl.i2sAlign ? TDM_BIT_ALIGNMENT_I2S_DELAYED : 0);
-    	  XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
-      }
+    }
     break;
 
   case IOC_CONFIG_AUTO_MUTE:
@@ -322,19 +668,63 @@ static int tdm_ioctl(struct inode *inode,
     }
     break;
 
+  case IOC_ARM_ERROR_IRQS:
+    {
+      // Enable the DMA error interrupt as a "one-shot"
+      uint32_t irqMask = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG));
+      irqMask |= DMA_ERROR_IRQ;
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG), DMA_ERROR_IRQ);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
+    }
+    break;
 
   default:
-    /* We don't recognize this command; give our derived driver's ioctl()
-     * a crack at it, if one exists.
-     */
-    if((tdm->derivedFops != NULL) &&
-       (tdm->derivedFops->ioctl != NULL)) {
-      returnValue = tdm->derivedFops->ioctl(inode, filp, command, arg);
-    } else returnValue = -EINVAL;
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+    if(tdm->tdmCaps.hasAnalyzer) {
+      return labx_tdm_analyzer_ioctl(&tdm->analyzer, command, arg);
+    } else return(-EINVAL);
+#else
+  if(debugOn) {
+    printk("TDM (ioctl): bad ioctl call (command = %u)\n", command);
   }
+    returnValue = -EINVAL;
+    break;
+#endif
 
+  }
   /* Return an error code appropriate to the command */
   return(returnValue);
+}
+
+/* Interrupt service routine for the driver */
+static irqreturn_t labx_audio_tdm_interrupt(int irq, void *dev_id) {
+  struct audio_tdm *tdm = (struct audio_tdm*) dev_id;
+  uint32_t maskedFlags;
+  uint32_t irqMask;
+
+  // Read the interrupt flags and immediately clear them 
+  maskedFlags = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG));
+  irqMask = XIo_In32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG));
+  maskedFlags &= irqMask;
+  XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_FLAGS_REG), maskedFlags);
+
+  // Detect the DMA error IRQ 
+  if((maskedFlags & DMA_ERROR_IRQ) != 0) {
+    // TEMPORARY - Just announce this and treat it as a one-shot.
+    //             Ultimately this should be communicated via generic Netlink.
+    irqMask &= ~DMA_ERROR_IRQ;
+    //XIo_Out32(REGISTER_ADDRESS(tdm, TDM_IRQ_MASK_REG), irqMask);
+    //printk("%s: DMA error!\n", tdm->name);
+  }
+  
+  // Detect the pseudorandom analysis error IRQ 
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  if((maskedFlags & ANALYSIS_ERROR_IRQ) != 0) {
+    labx_tdm_analyzer_interrupt(&tdm->analyzer, maskedFlags);
+  }
+#endif
+
+  return(IRQ_HANDLED);
 }
 
 /* Character device file operations structure */
@@ -349,15 +739,22 @@ static struct file_operations tdm_fops = {
 static void reset_tdm(struct audio_tdm *tdm) {
   uint32_t bankIndex;
   uint32_t channelIndex;
+  uint32_t numChannels;
 
   /* Restore the instance registers to initial values */
   XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), tdm->initialVal);
 
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  /* Disable the pseudorandom analyzer */
+  labx_tdm_analyzer_reset(&tdm->analyzer);
+#endif
+
   /* Clear any old assignments from the auto-mute stream map; all channels
    * are presumed to have no valid stream assignment.
    */
+  numChannels = tdm->tdmCaps.maxSlotDensity * tdm->tdmCaps.laneCount;
   for(bankIndex = 0; bankIndex < STREAM_MAP_BANKS; bankIndex++) {
-    for(channelIndex = 0; channelIndex < LABX_TDM_NUM_CHANNELS; channelIndex++) {
+    for(channelIndex = 0; channelIndex < numChannels; channelIndex++) {
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_STREAM_MAP_REG),
                 (channelIndex << MAP_CHANNEL_SHIFT));
     }
@@ -368,82 +765,464 @@ static void reset_tdm(struct audio_tdm *tdm) {
 
 static ssize_t tdm_r_channels(struct class *c, char *buf)
 {
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
-	return (snprintf(buf, PAGE_SIZE, "%d\n",
-			XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_NUM_AUDIO_CHANNELS_MASK));
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK) * tdm->tdmCaps.laneCount * tdm->tdmCaps.numTransmitters));
+}
+
+static ssize_t tdm_w_channels(struct class *c, const char *buf, size_t count) 
+{
+  uint32_t reg;
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  uint32_t numChansPerInstance;
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    numChansPerInstance = val / tdm->tdmCaps.numTransmitters;
+    /* Evaluate the number of channels to see if is one of the supported configurations */
+    if(val != 8 && val != 16 && val != 32 && val != 64 && val != 128 && val != 256) {
+      return -ENUMCHNOTSUPPORTED;
+    }
+      
+    /* Evaluate the number of channels to ensure it doesn't exceed the maximum */
+    if(numChansPerInstance > (tdm->tdmCaps.laneCount * tdm->tdmCaps.maxSlotDensity)) {
+      return -ENUMCHNOTSUPPORTED;
+    }
+   
+    /* Evaluate the number of channels to see if it is not less than the minimum supported */
+    if(numChansPerInstance < (tdm->tdmCaps.laneCount * LABX_TDM_MIN_SLOT_DENSITY)) {
+      return -ENUMCHNOTSUPPORTED;
+    }
+
+    /* Evaluate the current sample rate, the maximum number channels supported
+       scales based on the current TDM configuration. TdmSampleRate << 1 results
+       in the multiplier from 48K to the current sample rate. */
+    if((numChansPerInstance / tdm->tdmCaps.laneCount) > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+      return -ENUMCHEXCDSCONF;
+    }
+
+    tdm->opConfig.TdmSlotDensity = (numChansPerInstance / tdm->tdmCaps.laneCount);
+    reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
+    reg |= tdm->opConfig.TdmSlotDensity;
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+    printk("TDM: set num channels to %u\n", (uint32_t)val);
+  }
+  }
+  return count;
+}
+
+static ssize_t tdm_r_slot_density(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SLOT_DENSITY_MASK));
 }
 
 
-static ssize_t tdm_w_channels(struct class *c, const char * buf, size_t count)
+static ssize_t tdm_w_slot_density(struct class *c, const char * buf, size_t count)
 {
-	unsigned long int val;
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  uint32_t reg;
+  int32_t err = 0;
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
-	if (strict_strtoul(buf, 0, &val) == 0) {
-		if (val == 8 || val == 16 || val == 32 || val == 64) {
-			uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_NUM_AUDIO_CHANNELS_MASK;
-			reg |= val;
-			XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
-		}
-	}
-	return count;
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    /* Evaluate the slot density to see if is one of the supported configurations */
+    if(val != 2 && val != 4 && val != 8 && val != 16 && val != 32 && val != 64) {
+      err = -ESLTDSTYNOTSUPPORTED;
+    }
+      
+    /* Evaluate the current sample rate, the maximum number channels supported
+       scales based on the current TDM configuration. TdmSampleRate << 1 results
+       in the multiplier from 48K to the current sample rate. */
+    if(val > (tdm->tdmCaps.maxSlotDensity / (tdm->opConfig.TdmSampleRate << 1 | !tdm->opConfig.TdmSampleRate))) {
+      err = -ESLTDSTYEXCDSCONF;
+    }
+
+    if(!(err < 0)) {
+      tdm->opConfig.TdmSlotDensity = val;
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SLOT_DENSITY_MASK;
+      reg |= val;
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM: slot density set to %u\n", (uint32_t)val);
+  }
+    }
+  }
+  return (err < 0 ? err : count);
 }
 
-static ssize_t tdm_r_lr_polarity(struct class *c, char *buf)
+static ssize_t tdm_r_burst_length_mul(struct class *c, char *buf)
 {
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
-	return (snprintf(buf, PAGE_SIZE, "%d\n",
-			((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_LRCLK_FALLING_EDGE_CH0) != 0)));
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           (XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+              & TDM_BURST_LENGTH_MUL_MASK) >> TDM_BURST_LENGTH_MUL_BITS));
 }
 
 
-static ssize_t tdm_w_lr_polarity(struct class *c, const char * buf, size_t count)
+static ssize_t tdm_w_burst_length_mul(struct class *c, const char * buf, size_t count)
 {
-	unsigned long int val;
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  uint32_t reg;
+  bool setVal = true;
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
-	if (strict_strtoul(buf, 0, &val) == 0) {
-		uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-		if (val == 0) {
-			reg &= ~TDM_LRCLK_FALLING_EDGE_CH0;
-		} else {
-			reg |= TDM_LRCLK_FALLING_EDGE_CH0;
-		}
-		XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
-	}
-	return count;
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    if(val != 1 && val != 2 && val != 4) {
+      setVal = false;
+    }
+      
+    if(setVal) {
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_BURST_LENGTH_MUL_MASK;
+      reg |= (val << TDM_BURST_LENGTH_MUL_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM: set burst length to %u\n", (tdm->tdmCaps.minBurstLength * (uint32_t)val));
+  }
+    }
+  }
+  return count;
+}
+
+static ssize_t tdm_r_sample_edge(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_LRCLK_FALLING_EDGE_CH0) != 0)));
+}
+
+
+static ssize_t tdm_w_sample_edge(struct class *c, const char * buf, size_t count)
+{
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+    if (val == LRCLK_FALLING_EDGE_CH0) {
+      reg &= ~TDM_LRCLK_FALLING_EDGE_CH0;
+    } else {
+      reg |= TDM_LRCLK_FALLING_EDGE_CH0;
+    }
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+    printk("TDM: set LR clock edge to %s\n",
+           (val == LRCLK_FALLING_EDGE_CH0 ? "falling" : "rising"));
+  }
+  }
+  return count;
 }
 
 static ssize_t tdm_r_i2s_align(struct class *c, char *buf)
 {
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
-	return (snprintf(buf, PAGE_SIZE, "%d\n",
-			((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_BIT_ALIGNMENT_I2S_DELAYED) != 0)));
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+          ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_BIT_ALIGNMENT_I2S_DELAYED) != 0)));
 }
 
 
 static ssize_t tdm_w_i2s_align(struct class *c, const char * buf, size_t count)
 {
-	unsigned long int val;
-	struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
 
-	if (strict_strtoul(buf, 0, &val) == 0) {
-		uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-		if (val == 0) {
-			reg &= ~TDM_BIT_ALIGNMENT_I2S_DELAYED;
-		} else {
-			reg |= TDM_BIT_ALIGNMENT_I2S_DELAYED;
-		}
-		XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
-	}
-	return count;
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+    if (val == BIT_ALIGNMENT_LEFT_JUSTIFIED) {
+      reg &= ~TDM_BIT_ALIGNMENT_I2S_DELAYED;
+    } else {
+      reg |= TDM_BIT_ALIGNMENT_I2S_DELAYED;
+    }
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+    printk("TDM: set alignment to %s\n",
+           (val == BIT_ALIGNMENT_LEFT_JUSTIFIED ? "left justified" : "delayed"));
+  }
+  }
+  return count;
 }
 
+
+static ssize_t tdm_r_lr_clock_mode(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_LRCLK_MODE_PULSE) != 0)));
+}
+
+
+static ssize_t tdm_w_lr_clock_mode(struct class *c, const char * buf, size_t count)
+{
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == LRCLK_MODE_NORMAL) {
+        reg &= ~TDM_LRCLK_MODE_PULSE;
+      } else {
+        reg |= TDM_LRCLK_MODE_PULSE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM: set LR clock mode to %s\n",
+             (val == LRCLK_MODE_NORMAL ? "normal" : "pulsed"));
+  }
+  }
+  return count;
+}
+
+static ssize_t tdm_r_sample_rate(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+               & TDM_SAMPLE_RATE_MASK) >> TDM_SAMPLE_RATE_BITS)));
+}
+
+static ssize_t tdm_w_sample_rate(struct class *c, const char * buf, size_t count)
+{
+  uint32_t reg;
+  int32_t err = 0;
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    /* Evaluate the current slot density, the maximum sample rate supported
+       scales based on the current slot density */
+    if((tdm->opConfig.TdmSlotDensity > (tdm->tdmCaps.maxSlotDensity / 2)) && 
+        (val == DOUBLE_SAMPLE_RATE)) {
+      err = -ESMPLRATENOTSUPPORTED;
+    } else if((tdm->opConfig.TdmSlotDensity > (tdm->tdmCaps.maxSlotDensity / 4)) &&
+               (val == QUAD_SAMPLE_RATE)) {
+      err = -ESMPLRATENOTSUPPORTED;
+    }
+
+    if(!(err < 0)) {
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_SAMPLE_RATE_MASK;
+      reg |= (val << TDM_SAMPLE_RATE_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+      tdm->opConfig.TdmSampleRate = val;
+      
+      if(debugOn) {
+        printk("TDM: sample rate set to %uK\n",
+               (val == QUAD_SAMPLE_RATE ? 192 : (val == DOUBLE_SAMPLE_RATE ? 96 : 48)));
+      }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_sample_depth(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_SAMPLE_DEPTH_16BIT) != 0)));
+}
+
+static ssize_t tdm_w_sample_depth(struct class *c, const char * buf, size_t count)
+{
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+    if (val == SAMPLE_DEPTH_24BIT) {
+      reg &= ~TDM_SAMPLE_DEPTH_16BIT;
+    } else {
+      reg |= TDM_SAMPLE_DEPTH_16BIT;
+    }
+    XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+    printk("TDM: set sample depth to %u-bit\n",
+           (val == SAMPLE_DEPTH_24BIT ? 24 : 16));
+  }
+  }
+  return count;
+}
+
+static ssize_t tdm_r_module_owner(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+              & TDM_MODULE_OWNER_MASK) >> TDM_MODULE_OWNER_BITS) == 0x3));
+}
+
+static ssize_t tdm_w_module_owner(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    // Ensure the slave clock manager is built into the TDM
+    if(!tdm->tdmCaps.hasSlaveManager) {
+      err = -ESCMNOTIMPL;
+    }
+
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == MASTER_MODE) {
+        reg &= ~TDM_MODULE_SLAVE_MODE;
+      } else {
+        reg |= TDM_MODULE_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+    printk("TDM: set module owner to %s\n",
+           (val == MASTER_MODE ? "master" : "slave"));
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_tx_owner(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_TX_SLAVE_MODE) != 0)));
+}
+
+static ssize_t tdm_w_tx_owner(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    // Ensure the slave clock manager is built into the TDM
+    if(!tdm->tdmCaps.hasSlaveManager) {
+      err = -ESCMNOTIMPL;
+    }
+
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == MASTER_MODE) {
+        reg &= ~TDM_TX_SLAVE_MODE;
+      } else {
+        reg |= TDM_TX_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM: tx owner set to %s\n",
+             (val == MASTER_MODE ? "master" : "slave"));
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_rx_owner(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_RX_SLAVE_MODE) != 0)));
+}
+
+static ssize_t tdm_w_rx_owner(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    // Ensure the slave clock manager is built into the TDM
+    if(!tdm->tdmCaps.hasSlaveManager) {
+      err = -ESCMNOTIMPL;
+    }
+  
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == MASTER_MODE) {
+        reg &= ~TDM_RX_SLAVE_MODE;
+      } else {
+        reg |= TDM_RX_SLAVE_MODE;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM: set rx owner to %s\n",
+             (val == MASTER_MODE ? "master" : "slave"));
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_mclk_divider(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) 
+               & TDM_MCLK_DIVIDER_MASK) >> TDM_MCLK_DIVIDER_BITS)));
+}
+
+static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  unsigned long int val;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+
+    // Evaluate the divider to see if is one of the supported configurations
+    if(val != 1 && val != 2 && val != 4 && val != 8) {
+      err = -EMCLKDNOTSUPPORTED;
+    }
+
+    /* Check the frequency of the master to clock, return an
+       invalid value if the divider will scale the master clock
+       output to below a supported frequency */
+    if((tdm->tdmCaps.mclkRatio / val) < 256) {
+      err = -EMCLKDTOOHIGH;
+    }
+
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & ~TDM_MCLK_DIVIDER_MASK;
+      reg |= (val << TDM_MCLK_DIVIDER_BITS);
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg);
+  if(debugOn) {
+      printk("TDM: set mclk divider to %u\n", (uint32_t)val);
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_debug(struct class *c, char *buf)
+{
+  return (snprintf(buf, PAGE_SIZE, "%d\n", (uint32_t)debugOn));
+}
+
+static ssize_t tdm_w_debug(struct class *c, const char * buf, size_t count)
+{
+  unsigned long int val;
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    debugOn = val;
+  }
+  return count;
+}
 static struct class_attribute audio_tdm_class_attrs[] = {
-	__ATTR(channels, S_IRUGO | S_IWUGO, tdm_r_channels, tdm_w_channels),
-	__ATTR(lr_polarity, S_IRUGO | S_IWUGO, tdm_r_lr_polarity, tdm_w_lr_polarity),
-	__ATTR(i2s_align, S_IRUGO | S_IWUGO, tdm_r_i2s_align, tdm_w_i2s_align),
-	__ATTR_NULL,
+  __ATTR(channels,          S_IRUGO | S_IWUGO, tdm_r_channels,         tdm_w_channels),
+  __ATTR(slot_density,      S_IRUGO | S_IWUGO, tdm_r_slot_density,     tdm_w_slot_density),
+  __ATTR(burst_length_mul,  S_IRUGO | S_IWUGO, tdm_r_burst_length_mul, tdm_w_burst_length_mul),
+  __ATTR(sample_edge,       S_IRUGO | S_IWUGO, tdm_r_sample_edge,      tdm_w_sample_edge),
+  __ATTR(i2s_align,         S_IRUGO | S_IWUGO, tdm_r_i2s_align,        tdm_w_i2s_align),
+  __ATTR(lr_clock_mode,     S_IRUGO | S_IWUGO, tdm_r_lr_clock_mode,    tdm_w_lr_clock_mode),
+  __ATTR(sample_rate,       S_IRUGO | S_IWUGO, tdm_r_sample_rate,      tdm_w_sample_rate),
+  __ATTR(sample_depth,      S_IRUGO | S_IWUGO, tdm_r_sample_depth,     tdm_w_sample_depth),
+  __ATTR(module_owner,      S_IRUGO | S_IWUGO, tdm_r_module_owner,     tdm_w_module_owner),
+  __ATTR(tx_owner,          S_IRUGO | S_IWUGO, tdm_r_tx_owner,         tdm_w_tx_owner),
+  __ATTR(rx_owner,          S_IRUGO | S_IWUGO, tdm_r_rx_owner,         tdm_w_rx_owner),
+  __ATTR(mclk_divider,      S_IRUGO | S_IWUGO, tdm_r_mclk_divider,     tdm_w_mclk_divider),
+  __ATTR(debug,             S_IRUGO | S_IWUGO, tdm_r_debug,            tdm_w_debug),
+  __ATTR_NULL,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by
@@ -474,7 +1253,6 @@ int audio_tdm_probe(const char *name,
   tdm = (struct audio_tdm*) kzalloc(sizeof(struct audio_tdm), GFP_KERNEL);
   if(!tdm) return(-ENOMEM);
 
-  /* Request and map the device's I/O memory region into uncacheable space */
   tdm->physicalAddress = addressRange->start;
   tdm->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
 
@@ -498,23 +1276,27 @@ int audio_tdm_probe(const char *name,
          (uint32_t) tdm->physicalAddress,
          (uint32_t) tdm->addressRangeSize);
 
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  strcpy(tdm->analyzer.tdmName, tdm->name);
+  tdm->analyzer.baseAddress = tdm->virtualAddress + TDM_ANALYZER_BASE_ADDRESS;
+  tdm->analyzer.errorIrq     = ANALYSIS_ERROR_IRQ;
+  tdm->analyzer.irqFlagsReg  = TDM_IRQ_FLAGS_REG;
+  tdm->analyzer.irqMaskReg   = TDM_IRQ_MASK_REG;
+#endif
+
   /* Retain the IRQ and register our handler, if an IRQ resource was supplied.
    * For now, there is no TDM IRQ, so this is unused.
    */
-#if 0
   if(irq != NULL) {
-	tdm->irq = irq->start;
+    tdm->irq = irq->start;
     returnValue = request_irq(tdm->irq, &labx_audio_tdm_interrupt, IRQF_DISABLED,
-    		tdm->name, tdm);
+    		              tdm->name, tdm);
     if (returnValue) {
       printk(KERN_ERR "%s : Could not allocate Lab X Audio TDM interrupt (%d).\n",
     		  tdm->name, tdm->irq);
       goto unmap;
     }
   } else tdm->irq = NO_IRQ_SUPPLIED;
-#else
-  tdm->irq = NO_IRQ_SUPPLIED;
-#endif
 
   /* Read the initial value of the TDM instance and save it. */
   tdm->initialVal = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
@@ -537,22 +1319,7 @@ int audio_tdm_probe(const char *name,
     returnValue = -ENXIO;
     goto unmap;
   }
-
-
-  /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X, ",
-		  tdm->name, versionMajor, versionMinor,
-         (uint32_t)tdm->physicalAddress);
-#if 0
-  if(tdm->irq == NO_IRQ_SUPPLIED) {
-    printk("polled operation\n");
-  } else {
-    printk("IRQ %d\n", tdm->irq);
-  }
-#else
-  printk("No interrupts supported\n");
-#endif
-
+ 
   /* Initialize other resources */
   spin_lock_init(&tdm->mutex);
   tdm->opened = false;
@@ -583,9 +1350,33 @@ int audio_tdm_probe(const char *name,
   returnValue = class_register(&tdm->tdmclass);
 
   /* Setup the Config structure */
-  tdm->Config.TdmLaneCount = pdata->lane_count;
-  tdm->Config.TdmSlotDensity = pdata->slot_density;
-  tdm->Config.TdmNumStreams = pdata->num_streams;
+  tdm->tdmCaps.versionMajor          = versionMajor;
+  tdm->tdmCaps.versionMinor          = versionMinor;
+  tdm->tdmCaps.numTransmitters       = (pdata->num_transmitters < 1) ? 1 : pdata->num_transmitters;
+  tdm->tdmCaps.numReceivers          = (pdata->num_receivers < 1) ? 1 : pdata->num_receivers;
+  tdm->tdmCaps.laneCount             = pdata->lane_count;
+  tdm->tdmCaps.mclkRatio             = pdata->mclk_ratio;
+  tdm->tdmCaps.maxSlotDensity        = pdata->slot_density;
+  tdm->tdmCaps.minBurstLength        = pdata->burst_length;
+  tdm->tdmCaps.maxBurstMultiple      = pdata->burst_length_multiple;
+  tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
+  tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
+  tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  tdm->tdmCaps.hasAnalyzer           = pdata->analyzer;
+#endif
+  tdm->tdmCaps.hasDynamicSampleRates = pdata->has_dynamic_sample_rates;
+
+  /* Announce the device */
+  printk(KERN_INFO "%s: Found Lab X Audio TDM v %u.%u at 0x%08X: %d transmitters, %d receviers, %d lanes, %d max slots, %d mclk ratio, min burst length %d, max burst multiple %d, %s",
+		  tdm->name, versionMajor, versionMinor, (uint32_t)tdm->physicalAddress, tdm->tdmCaps.numTransmitters, tdm->tdmCaps.numReceivers,
+                  tdm->tdmCaps.laneCount, tdm->tdmCaps.maxSlotDensity, tdm->tdmCaps.mclkRatio, tdm->tdmCaps.minBurstLength, tdm->tdmCaps.maxBurstMultiple,
+                  (tdm->tdmCaps.hasSlaveManager ? "has slave capabilities" : "no slave capabilities"));
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  printk(KERN_INFO "%s\n", (tdm->tdmCaps.hasAnalyzer ? "has analyzer" : "no analyzer"));
+#else
+  printk(KERN_INFO "\n");
+#endif
 
   /* Locate and occupy the first available device index for future navigation in
    * the call to tdm_open()
@@ -666,9 +1457,20 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
     irq = NULL;
   }
 
-  pdata_struct.lane_count   = get_u32(ofdev, "xlnx,tdm-lane-count");
-  pdata_struct.num_streams  = get_u32(ofdev, "xlnx,num-streams");
-  pdata_struct.slot_density = get_u32(ofdev, "xlnx,tdm-slot-density");
+  pdata_struct.num_transmitters         = get_u32(ofdev, "xlnx,tdm-num-transmitters");
+  pdata_struct.num_receivers            = get_u32(ofdev, "xlnx,tdm-num-receivers");
+  pdata_struct.lane_count               = get_u32(ofdev, "xlnx,tdm-lane-count");
+  pdata_struct.num_streams              = get_u32(ofdev, "xlnx,max-num-streams");
+  pdata_struct.slot_density             = get_u32(ofdev, "xlnx,tdm-max-slot-density");
+  pdata_struct.burst_length             = get_u32(ofdev, "xlnx,tdm-min-burst-length");
+  pdata_struct.burst_length_multiple    = get_u32(ofdev, "xlnx,tdm-max-burst-multiple");
+  pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
+  pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
+  pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
+#ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
+  pdata_struct.analyzer                 = get_u32(ofdev, "xlnx,has-tdm-analyzer");
+#endif
+  pdata_struct.has_dynamic_sample_rates = get_u32(ofdev, "xlnx,has-dynamic-sample-rates");
 
   /* Dispatch to the generic function */
   return(audio_tdm_probe(name, pdev, addressRange, irq, NULL, NULL, pdata));
@@ -686,7 +1488,12 @@ static int __devexit audio_tdm_of_remove(struct of_device *dev)
  *
  */
 static struct of_device_id tdm_of_match[] = {
+  { .compatible = "xlnx,labx-tdm-audio-1.00.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.01.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.04.a", },
+  { .compatible = "xlnx,lawo-audio-block-1.00.b", },
   { /* end of list */ },
 };
 
@@ -795,5 +1602,6 @@ module_init(audio_tdm_driver_init);
 module_exit(audio_tdm_driver_exit);
 
 MODULE_AUTHOR("Scott Wagner <scott.wagner@labxtechnologies.com>");
+MODULE_AUTHOR("Albert M. Hajjar <albert.hajjar@labxtechnologies.com");
 MODULE_DESCRIPTION("Lab X Technologies AVB Audio TDM driver");
 MODULE_LICENSE("GPL");

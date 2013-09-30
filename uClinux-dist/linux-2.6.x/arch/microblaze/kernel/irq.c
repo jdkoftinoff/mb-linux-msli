@@ -9,6 +9,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/ftrace.h>
 #include <linux/kernel.h>
 #include <linux/hardirq.h>
 #include <linux/interrupt.h>
@@ -45,6 +46,7 @@ void do_IRQ(struct pt_regs *regs)
 {
 	unsigned int irq;
 	struct pt_regs *old_regs = set_irq_regs(regs);
+	trace_hardirqs_off();
 
 	irq_enter();
 	irq = get_irq(regs);
@@ -61,6 +63,7 @@ next_irq:
 
 	irq_exit();
 	set_irq_regs(old_regs);
+	trace_hardirqs_on();
 }
 
 int show_interrupts(struct seq_file *p, void *v)

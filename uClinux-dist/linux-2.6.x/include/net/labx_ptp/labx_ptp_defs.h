@@ -112,11 +112,13 @@ typedef struct {
   /* Various PTP-defined properties */
   uint8_t          domainNumber;
   int16_t          currentUtcOffset;
-  uint8_t          grandmasterPriority1;
-  PtpClockQuality  grandmasterClockQuality;
-  uint8_t          grandmasterPriority2;
-  PtpClockIdentity grandmasterIdentity;
-  uint8_t          timeSource;
+  /* Note that this is our local systemIdentity, but is kept as separate
+     fields (instead of as a PtpSystemIdentity) for backwards compatability */
+  uint8_t          grandmasterPriority1;    /* 8.6.2.1 */
+  PtpClockQuality  grandmasterClockQuality; /* 8.6.2.2 - 8.6.2.4 */
+  uint8_t          grandmasterPriority2;    /* 8.6.2.5 */
+  PtpClockIdentity grandmasterIdentity;     /* 8.6.2.6 */
+  uint8_t          timeSource;              /* 8.6.2.7 */
   uint8_t          delayMechanism;
   uint32_t         lockRangeNsec;
   uint32_t         lockTimeMsec;
@@ -249,8 +251,17 @@ typedef struct {
   uint32_t ndown;                          /* 14.6.23 */
   uint32_t acceptableMasterTableEnabled;   /* 14.6.24 - Boolean */
 
+  uint32_t setMask; /* Mask of fields to set when setting */
+
 } PtpAsPortDataSet;
 #define IOC_PTP_GET_AS_PORT_DATA_SET _IOWR('p', 0x1a, PtpAsPortDataSet)
+#define IOC_PTP_SET_AS_PORT_DATA_SET _IOWR('p', 0x20, PtpAsPortDataSet)
+#define PTP_SET_PORT_ENABLED                    0x00000001
+#define PTP_SET_NEIGHBOR_PROP_DELAY_THRESH      0x00000002
+#define PTP_SET_CURRENT_LOG_ANNOUNCE_INTERVAL   0x00000004
+#define PTP_SET_CURRENT_LOG_SYNC_INTERVAL       0x00000008
+#define PTP_SET_CURRENT_LOG_PDELAY_REQ_INTERVAL 0x00000010
+#define PTP_SET_ALLOWED_LOST_RESPONSES          0x00000020
 
 /* Port statistics: ieee802AsPortStatistics Port Statistics Data Set Table 14-7 */
 typedef struct {
@@ -274,7 +285,8 @@ typedef struct {
   uint32_t txAnnounceCount;                         /* 14.7.17 */
 
 } PtpAsPortStatistics;
-#define IOC_PTP_GET_AS_PORT_STATISTICS _IOWR('p', 0x1b, PtpAsPortStatistics)
+#define IOC_PTP_GET_AS_PORT_STATISTICS   _IOWR('p', 0x1b, PtpAsPortStatistics)
+#define IOC_PTP_CLEAR_AS_PORT_STATISTICS _IOWR('p', 0x21, uint32_t)
 
 /* I/O control operation to acknowledge Grandmaster changes */
 #define IOC_PTP_ACK_GM_CHANGE _IO('p', 0x1c)
@@ -284,6 +296,20 @@ typedef struct {
 
 /* AS Grandmaster */
 #define IOC_PTP_GET_AS_GRANDMASTER  _IOR('p', 0x1e, PtpProperties)
+
+/* Path Trace */
+#define PTP_MAX_PATH_TRACE 18
+typedef struct
+{
+  uint32_t index;   /* Port index to get Path Trace Data from*/
+  uint32_t           pathTraceLength;
+  PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE];
+} PtpPathTrace;
+
+/* PTP Path Trace */
+#define IOC_PTP_GET_PATH_TRACE  _IOR('p', 0x1f, PtpProperties)
+
+/* NOTE: 0x20 an 0x21 are added above out-of-order */
 
 /* PTP events Generic Netlink family name, version, and multicast groups */
 #define PTP_EVENTS_FAMILY_NAME     "PTP_EVENTS"
@@ -295,6 +321,8 @@ enum {
   PTP_EVENTS_A_UNSPEC,
   PTP_EVENTS_A_DOMAIN,
   PTP_EVENTS_A_VALUEMAP,
+  PTP_EVENTS_A_INCREMENT_M,
+  PTP_EVENTS_A_INCREMENT_F,
   __PTP_EVENTS_A_MAX,
 };
 #define PTP_EVENTS_A_MAX (__PTP_EVENTS_A_MAX - 1)
@@ -306,6 +334,7 @@ enum {
   PTP_EVENTS_C_GM_CHANGE,
   PTP_EVENTS_C_RTC_LOCK,
   PTP_EVENTS_C_RTC_UNLOCK,
+  PTP_EVENTS_C_RTC_INCREMENT,
   __PTP_EVENTS_C_MAX,
 };
 #define PTP_EVENTS_C_MAX (__PTP_EVENTS_C_MAX - 1)

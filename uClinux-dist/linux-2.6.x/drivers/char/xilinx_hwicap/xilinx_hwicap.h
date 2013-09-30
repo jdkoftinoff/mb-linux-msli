@@ -55,19 +55,20 @@ struct hwicap_drvdata {
 
 	const struct hwicap_driver_config *config;
 	const struct config_registers *config_regs;
+        int width; /* width of the ICAP word (in bytes) */
 	void *private_data;
 	bool is_open;
 	struct mutex sem;
 };
 
 struct hwicap_driver_config {
-	/* Read configuration data given by size into the data buffer.
-	   Return 0 if successful. */
-	int (*get_configuration)(struct hwicap_drvdata *drvdata, u32 *data,
+	/* Read configuration data given by size (in ICAP words) into the
+	   data buffer. Return 0 if successful. */
+	int (*get_configuration)(struct hwicap_drvdata *drvdata, u8 *data,
 			u32 size);
-	/* Write configuration data given by size from the data buffer.
-	   Return 0 if successful. */
-	int (*set_configuration)(struct hwicap_drvdata *drvdata, u32 *data,
+	/* Write configuration data given by size (in ICAP words) from the
+	   data buffer. Return 0 if successful. */
+	int (*set_configuration)(struct hwicap_drvdata *drvdata, u8 *data,
 			u32 size);
 	/* Get the status register, bit pattern given by:
 	 * D8 - 0 = configuration error
@@ -101,6 +102,7 @@ struct hwicap_driver_config {
 
 #define XHI_TYPE_SHIFT              29
 #define XHI_REGISTER_SHIFT          13
+#define XHI_REGISTER_SHIFT_16       21
 #define XHI_OP_SHIFT                27
 
 #define XHI_TYPE_1                  1
@@ -161,6 +163,8 @@ struct config_registers {
 #define XHI_SYNC_PACKET             0xAA995566UL
 #define XHI_DUMMY_PACKET            0xFFFFFFFFUL
 #define XHI_NOOP_PACKET             (XHI_TYPE_1 << XHI_TYPE_SHIFT)
+#define XHI_NOOP_PACKET_16          ((XHI_TYPE_1 << XHI_TYPE_SHIFT) | \
+				     (XHI_TYPE_1 << (XHI_TYPE_SHIFT - 16)))
 #define XHI_TYPE_2_READ ((XHI_TYPE_2 << XHI_TYPE_SHIFT) | \
 			(XHI_OP_READ << XHI_OP_SHIFT))
 
@@ -198,6 +202,13 @@ static inline u32 hwicap_type_1_read(u32 reg)
 		(reg << XHI_REGISTER_SHIFT) |
 		(XHI_OP_READ << XHI_OP_SHIFT);
 }
+static inline u32 hwicap_type_1_read_16(u32 reg)
+{
+	return (XHI_TYPE_1 << XHI_TYPE_SHIFT) |
+		(reg << XHI_REGISTER_SHIFT_16) |
+		(XHI_OP_READ << XHI_OP_SHIFT) |
+	        (XHI_TYPE_1 << (XHI_TYPE_SHIFT - 16)) ;
+}
 
 /**
  * hwicap_type_1_write - Generates a Type 1 write packet header
@@ -207,6 +218,12 @@ static inline u32 hwicap_type_1_write(u32 reg)
 {
 	return (XHI_TYPE_1 << XHI_TYPE_SHIFT) |
 		(reg << XHI_REGISTER_SHIFT) |
+		(XHI_OP_WRITE << XHI_OP_SHIFT);
+}
+static inline u32 hwicap_type_1_write_16(u32 reg)
+{
+	return (XHI_TYPE_1 << XHI_TYPE_SHIFT) |
+		(reg << XHI_REGISTER_SHIFT_16) |
 		(XHI_OP_WRITE << XHI_OP_SHIFT);
 }
 

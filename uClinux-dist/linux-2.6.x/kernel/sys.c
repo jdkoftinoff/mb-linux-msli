@@ -45,6 +45,9 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
+#include <trace/user.h>
+DEFINE_TRACE(user);
+
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a,b)	(-EINVAL)
 #endif
@@ -1793,6 +1796,24 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		case PR_SET_TSC:
 			error = SET_TSC_CTL(arg2);
 			break;
+		/*
+		 * Inject a trace event into the current tracing context:
+		 */
+		case PR_TASK_PERF_USER_TRACE:
+		{
+			void __user *uevent_ptr = (void *)arg2;
+	       		char kstring[MAX_USER_TRACE_SIZE+1];
+	      		unsigned long uevent_len = arg3;
+
+	     		if (uevent_len > MAX_USER_TRACE_SIZE)
+	    			return -EINVAL;
+	   		if (copy_from_user(kstring, uevent_ptr, uevent_len))
+	  			return -EFAULT;
+	 		kstring[uevent_len] = 0;
+
+			trace_user(kstring);
+			return 0;
+		}
 		case PR_GET_TIMERSLACK:
 			error = current->timer_slack_ns;
 			break;

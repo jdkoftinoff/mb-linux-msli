@@ -30,6 +30,7 @@
  *
  *****************************************************************************/
 
+#include <linux/delay.h>
 #include "fifo_icap.h"
 
 /* Register offsets for the XHwIcap device. */
@@ -79,7 +80,7 @@
 #define XHI_WFO_MAX_VACANCY 1024 /* Max Write FIFO Vacancy, in words */
 #define XHI_RFO_MAX_OCCUPANCY 256 /* Max Read FIFO Occupancy, in words */
 /* The maximum amount we can request from fifo_icap_get_configuration
-   at once, in bytes. */
+   at once, in words. */
 #define XHI_MAX_READ_TRANSACTION_WORDS 0xFFF
 
 
@@ -113,12 +114,12 @@ static inline u32 fifo_icap_fifo_read(struct hwicap_drvdata *drvdata)
 /**
  * fifo_icap_set_read_size - Set the the size register.
  * @drvdata: a pointer to the drvdata.
- * @data: the size of the following read transaction, in words.
+ * @data: the size of the following read transaction, in bytes.
  **/
 static inline void fifo_icap_set_read_size(struct hwicap_drvdata *drvdata,
 		u32 data)
 {
-	out_be32(drvdata->base_address + XHI_SZ_OFFSET, data);
+	out_be32(drvdata->base_address + XHI_SZ_OFFSET, data / drvdata->width);
 }
 
 /**
@@ -178,24 +179,24 @@ static inline u32 fifo_icap_busy(struct hwicap_drvdata *drvdata)
  * fifo_icap_write_fifo_vacancy - Query the write fifo available space.
  * @drvdata: a pointer to the drvdata.
  *
- * Return the number of words that can be safely pushed into the write fifo.
+ * Return the number of bytes that can be safely pushed into the write fifo.
  **/
 static inline u32 fifo_icap_write_fifo_vacancy(
 		struct hwicap_drvdata *drvdata)
 {
-	return in_be32(drvdata->base_address + XHI_WFV_OFFSET);
+	return in_be32(drvdata->base_address + XHI_WFV_OFFSET) * drvdata->width;
 }
 
 /**
  * fifo_icap_read_fifo_occupancy - Query the read fifo available data.
  * @drvdata: a pointer to the drvdata.
  *
- * Return the number of words that can be safely read from the read fifo.
+ * Return the number of bytes that can be safely read from the read fifo.
  **/
 static inline u32 fifo_icap_read_fifo_occupancy(
 		struct hwicap_drvdata *drvdata)
 {
-	return in_be32(drvdata->base_address + XHI_RFO_OFFSET);
+  return in_be32(drvdata->base_address + XHI_RFO_OFFSET) * drvdata->width;
 }
 
 /**
@@ -203,7 +204,7 @@ static inline u32 fifo_icap_read_fifo_occupancy(
  * @drvdata: a pointer to the drvdata.
  * @frame_buffer: a pointer to the data to be written to the
  *		ICAP device.
- * @num_words: the number of words (32 bit) to write to the ICAP
+ * @num_words: the number of native ICAP words to write to the ICAP
  *		device.
 
  * This function writes the given user data to the Write FIFO in
@@ -211,59 +212,87 @@ static inline u32 fifo_icap_read_fifo_occupancy(
  * the ICAP device.
  **/
 int fifo_icap_set_configuration(struct hwicap_drvdata *drvdata,
-		u32 *frame_buffer, u32 num_words)
+		u8 *frame_buffer, u32 num_words)
 {
 
 	u32 write_fifo_vacancy = 0;
-	u32 retries = 0;
-	u32 remaining_words;
+	u32 retries;
+	u8 *data = frame_buffer;
+	u32 remaining_bytes;
 
 	dev_dbg(drvdata->dev, "fifo_set_configuration\n");
 
 	/*
 	 * Check if the ICAP device is Busy with the last Read/Write
 	 */
-	if (fifo_icap_busy(drvdata))
+	/* Wait until the write has finished. */
+	retries = 0;
+	while (fifo_icap_busy(drvdata) && (++retries <= XHI_MAX_RETRIES))
+	  msleep(2);
+
+	if (retries > XHI_MAX_RETRIES)
 		return -EBUSY;
 
 	/*
 	 * Set up the buffer pointer and the words to be transferred.
 	 */
-	remaining_words = num_words;
+	remaining_bytes = num_words * drvdata->width;
 
-	while (remaining_words > 0) {
+	while (remaining_bytes > 0) {
 		/*
 		 * Wait until we have some data in the fifo.
 		 */
+	        retries = 0;
 		while (write_fifo_vacancy == 0) {
 			write_fifo_vacancy =
 				fifo_icap_write_fifo_vacancy(drvdata);
+			if(write_fifo_vacancy == 0)
+			  {
+			    msleep(2);
 			retries++;
 			if (retries > XHI_MAX_RETRIES)
 				return -EIO;
+		}
 		}
 
 		/*
 		 * Write data into the Write FIFO.
 		 */
 		while ((write_fifo_vacancy != 0) &&
-				(remaining_words > 0)) {
-			fifo_icap_fifo_write(drvdata, *frame_buffer);
+				(remaining_bytes > 0)) {
+		        u32 value;
+			value=(u32)*data;
+			if(drvdata->width>1)
+			  {
+			    value<<=8;
+			    value|=(u32)data[1];
+			  }
+			if(drvdata->width>2)
+			  {
+			    value<<=8;
+			    value|=(u32)data[2];
+			  }
+			if(drvdata->width>3)
+			  {
+			    value<<=8;
+			    value|=(u32)data[3];
+			  }
+			fifo_icap_fifo_write(drvdata, value);
 
-			remaining_words--;
-			write_fifo_vacancy--;
-			frame_buffer++;
+			remaining_bytes-=drvdata->width;
+			write_fifo_vacancy-=drvdata->width;
+			data+=drvdata->width;
+
 		}
 		/* Start pushing whatever is in the FIFO into the ICAP. */
 		fifo_icap_start_config(drvdata);
 	}
 
 	/* Wait until the write has finished. */
-	while (fifo_icap_busy(drvdata)) {
-		retries++;
-		if (retries > XHI_MAX_RETRIES)
-			break;
-	}
+	retries = 0;
+
+	while (fifo_icap_busy(drvdata) && (++retries <= XHI_MAX_RETRIES))
+	  msleep(2);
 
 	dev_dbg(drvdata->dev, "done fifo_set_configuration\n");
 
@@ -271,7 +300,7 @@ int fifo_icap_set_configuration(struct hwicap_drvdata *drvdata,
 	 * If the requested number of words have not been read from
 	 * the device then indicate failure.
 	 */
-	if (remaining_words != 0)
+	if (remaining_bytes != 0)
 		return -EIO;
 
 	return 0;
@@ -281,20 +310,20 @@ int fifo_icap_set_configuration(struct hwicap_drvdata *drvdata,
  * fifo_icap_get_configuration - Read configuration data from the device.
  * @drvdata: a pointer to the drvdata.
  * @data: Address of the data representing the partial bitstream
- * @size: the size of the partial bitstream in 32 bit words.
+ * @size: the size of the partial bitstream in native ICAP words.
  *
  * This function reads the specified number of words from the ICAP device in
  * the polled mode.
  */
 int fifo_icap_get_configuration(struct hwicap_drvdata *drvdata,
-		u32 *frame_buffer, u32 num_words)
+		u8 *frame_buffer, u32 num_words)
 {
 
 	u32 read_fifo_occupancy = 0;
-	u32 retries = 0;
-	u32 *data = frame_buffer;
-	u32 remaining_words;
-	u32 words_to_read;
+	u32 retries;
+	u8 *data = frame_buffer;
+	u32 remaining_bytes;
+	u32 bytes_to_read;
 
 	dev_dbg(drvdata->dev, "fifo_get_configuration\n");
 
@@ -304,39 +333,54 @@ int fifo_icap_get_configuration(struct hwicap_drvdata *drvdata,
 	if (fifo_icap_busy(drvdata))
 		return -EBUSY;
 
-	remaining_words = num_words;
+	remaining_bytes = num_words * drvdata->width;
 
-	while (remaining_words > 0) {
-		words_to_read = remaining_words;
-		/* The hardware has a limit on the number of words
+	while (remaining_bytes > 0) {
+		bytes_to_read = remaining_bytes;
+		/* The hardware has a limit on the number of bytes
 		   that can be read at one time.  */
-		if (words_to_read > XHI_MAX_READ_TRANSACTION_WORDS)
-			words_to_read = XHI_MAX_READ_TRANSACTION_WORDS;
+		if (bytes_to_read > 
+		    (XHI_MAX_READ_TRANSACTION_WORDS * drvdata->width))
+		  bytes_to_read = XHI_MAX_READ_TRANSACTION_WORDS
+		    * drvdata->width;
 
-		remaining_words -= words_to_read;
+		remaining_bytes -= bytes_to_read;
 
-		fifo_icap_set_read_size(drvdata, words_to_read);
+		fifo_icap_set_read_size(drvdata, bytes_to_read);
 		fifo_icap_start_readback(drvdata);
 
-		while (words_to_read > 0) {
+		while (bytes_to_read > 0) {
 			/* Wait until we have some data in the fifo. */
+		        retries = 0;
 			while (read_fifo_occupancy == 0) {
 				read_fifo_occupancy =
 					fifo_icap_read_fifo_occupancy(drvdata);
+				if(read_fifo_occupancy == 0)
+				  {
+				    msleep(2);
 				retries++;
 				if (retries > XHI_MAX_RETRIES)
 					return -EIO;
 			}
+			}
 
-			if (read_fifo_occupancy > words_to_read)
-				read_fifo_occupancy = words_to_read;
+			if (read_fifo_occupancy > bytes_to_read)
+				read_fifo_occupancy = bytes_to_read;
 
-			words_to_read -= read_fifo_occupancy;
+			bytes_to_read -= read_fifo_occupancy;
 
 			/* Read the data from the Read FIFO. */
 			while (read_fifo_occupancy != 0) {
-				*data++ = fifo_icap_fifo_read(drvdata);
-				read_fifo_occupancy--;
+			        u32 value;
+			        value =  fifo_icap_fifo_read(drvdata);
+				if(drvdata->width>3)
+				  *data++ = (value>>24)&0xff;
+				if(drvdata->width>2)
+				  *data++ = (value>>16)&0xff;
+				if(drvdata->width>1)
+				  *data++ = (value>>8)&0xff;
+				*data++ = value&0xff;
+				read_fifo_occupancy-=drvdata->width;
 			}
 		}
 	}

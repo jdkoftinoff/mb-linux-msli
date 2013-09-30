@@ -532,14 +532,18 @@ int find_chain_start(int h)
   return nsizes?0:-1;
 }
 
-u32 expect_serial=0xffffffff,write_serial=0xffffffff,
-  last_record_readable=0xffffffff,curr_record_readable=0xffffffff,
-  read_ptr=0xffffffff,read_end=0xffffffff,
-  write_ptr=0xffffffff,erase_needed_flag=0;
-u32 curr_part=0;
-int start_part_flag=0;
-u32 offset_dont_overwrite=0xffffffff;
-
+u32 expect_serial=0xffffffff /* set and used by find_data_end() */,
+  write_serial=0xffffffff /* set by find_data_end() on success */,
+  last_record_readable=0xffffffff /* set and used by find_data_end() */,
+  curr_record_readable=0xffffffff /* set by find_data_end() */,
+  read_ptr=0xffffffff /* set by find_data_end() */,
+  read_end=0xffffffff /* set by find_data_end() */,
+  write_ptr=0xffffffff /* set by find_data_end() */,
+  erase_request_flag=0 /* set by find_data_end() */;
+u32 curr_part=0 /* set by record_data() on continue_flag==0 */;
+int start_part_flag=0 /* set by find_data_end() */;
+u32 offset_dont_overwrite=0xffffffff /* set by record_data()
+					on continue_flag==0 */;
 
 /* find the end of written data */
 
@@ -553,7 +557,19 @@ int find_data_end(int h)
   curr_offset=glob_chain_start;
   loopcount=0;
   found_valid=0;
-  erase_needed_flag=0;
+  erase_request_flag=0;
+
+  /* 
+     initialization of global variables that could be modified
+     by previous calls to this function
+  */
+  expect_serial=0xffffffff;
+  last_record_readable=0xffffffff;
+  curr_record_readable=0xffffffff;
+  read_ptr=0xffffffff;
+  read_end=0xffffffff;
+  write_ptr=0xffffffff;
+  start_part_flag=0;
 
   while(loopcount<2)
     {
@@ -603,53 +619,53 @@ int find_data_end(int h)
 		  if(last_record_readable!=0xffffffff)
 		    {
 #ifdef DEBUG
-		      printf("last record position known, %08x\n",last_record_readable);
+		      printf("last record position known, %08x\n",
+			     last_record_readable);
 #endif
 		      /* only exit if the start of the last record is found */
 		      
 		      /* block has to be erased before writing */
-		      erase_needed_flag=1;
+		      erase_request_flag=1;
 		      write_ptr=curr_offset+sizeof(header);
 		      read_end=write_ptr;
 		      write_serial=expect_serial;
 #ifdef DEBUG
-		      printf("1 write offset %08x, serial %08x (erase needed)\n",write_ptr,write_serial);
+		      printf("1 write offset %08x, serial %08x "
+			     "(erase needed)\n",write_ptr,write_serial);
 #endif
 		      return 0;
 		    }
 		  else
 		    {
 #ifdef DEBUG
-		      printf("** last record position not known, looping **\n");
+		      printf("** last record position not known, "
+			     "looping **\n");
 #endif
 		      /* switch to the new serial, look through the chain */
 		      expect_serial=htonl(data_header.serial);
 		    }
 		}
-	      else
+	      /* 
+		 if this is the beginning of the record,
+		 record it as "last start"
+	      */
+	      if(htonl(data_header.npart)==0)
 		{
-		  /* 
-		     if this is the beginning of the record,
-		     record it as "last start"
-		  */
-		  if(htonl(data_header.npart)==0)
-		    {
-		      last_record_readable=curr_offset+sizeof(header);
-		      curr_record_readable=last_record_readable;
-		      read_ptr=last_record_readable;
-		      start_part_flag=1;
+		  last_record_readable=curr_offset+sizeof(header);
+		  curr_record_readable=last_record_readable;
+		  read_ptr=last_record_readable;
+		  start_part_flag=1;
 #ifdef DEBUG
-		      printf("record start at %08x\n",last_record_readable);
+		  printf("record start at %08x\n",last_record_readable);
 #endif
-		    }
-		  
 		}
 
 	      /* read the rest of the records */
 	      data_offset=curr_offset+sizeof(header)+sizeof(data_header)
 		+htonl(data_header.size);
 #ifdef DEBUG
-	      printf("reading records after the first, offset %08x\n",data_offset);
+	      printf("reading records after the first, offset %08x\n",
+		     data_offset);
 #endif
 	      while(data_offset<(curr_offset+htonl(header.block_size)
 				 -sizeof(data_header)))
@@ -673,7 +689,8 @@ int find_data_end(int h)
 		      if((expect_serial==0)||(expect_serial==0xffffffff))
 			expect_serial=1;
 #ifdef DEBUG
-		      printf("expect_serial incremented to %08x\n",expect_serial);
+		      printf("expect_serial incremented to %08x\n",
+			     expect_serial);
 #endif
 		      /* 
 			 if this is the beginning of the record,
@@ -686,7 +703,8 @@ int find_data_end(int h)
 			  read_ptr=last_record_readable;
 			  start_part_flag=1;
 #ifdef DEBUG
-			  printf("record start at %08x\n",last_record_readable);
+			  printf("record start at %08x\n",
+				 last_record_readable);
 #endif
 			}
 
@@ -702,7 +720,8 @@ int find_data_end(int h)
 		      if(last_record_readable!=0xffffffff)
 			{
 #ifdef DEBUG
-			  printf("last record position known, %08x\n",last_record_readable);
+			  printf("last record position known, %08x\n",
+				 last_record_readable);
 #endif
 			  /* 
 			     only exit if the start of the last record
@@ -716,18 +735,22 @@ int find_data_end(int h)
 			    expect_serial=1;
 
 #ifdef DEBUG
-			  printf("expect_serial incremented to %08x\n",expect_serial);
+			  printf("expect_serial incremented to %08x\n",
+				 expect_serial);
 #endif
 			  write_serial=expect_serial;
 #ifdef DEBUG
-			  printf("write offset %08x, serial %08x\n",write_ptr,write_serial);
+			  printf("write offset %08x, serial %08x\n",
+				 write_ptr,write_serial);
 #endif
 			  return 0;
 			}
 		      else
 			{
 #ifdef DEBUG
-			  printf("** last record position not known, skipping to the end of the block and looping **\n");
+			  printf("** last record position not known, "
+				 "skipping to the end of the block "
+				 "and looping **\n");
 #endif
 			  /* skip to the end of erase block */
 			  data_offset=curr_offset+htonl(header.block_size);
@@ -759,7 +782,8 @@ int find_data_end(int h)
               write_serial=expect_serial;
 
 #ifdef DEBUG
-              printf("empty block -- write offset %08x, serial %08x\n",write_ptr,write_serial);
+              printf("empty block -- write offset %08x, serial %08x\n",
+		     write_ptr,write_serial);
 #endif
               return 0;
 	    }
@@ -958,41 +982,65 @@ size_t read_data(int h,unsigned char *buffer,size_t size)
 
 /* write data into a new record or continue writing the current one */
 
-size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
+int record_data(int h,unsigned char *buffer, size_t size,
+		   int continue_flag,int suppress_erase_flag)
 {
   u32 offset_in_block,space_left,write_size;
   erase_block_header header;
   data_block_header data_header;
-  erase_info_t erase;
+  erase_info_t erase,erase_last;
   size_t orig_size=size;
 
   if(write_ptr==0xffffffff)
     find_data_end(h);
   if(write_ptr==0xffffffff)
-    return -1;
+    {
+#ifdef DEBUG
+      printf("Could not find end of recorded data\n");
+#endif
+      /* format error */
+      return -1;
+    }
   if(eraseblock_by_offset(&erase,write_ptr)<0)
-    return -1;
+    {
+#ifdef DEBUG
+      printf("Could not find erase block\n");
+#endif
+      /* format error */
+      return -1;
+    }
 
   if(continue_flag)
     {
+#ifdef DEBUG
+      printf("Continuing, erase block from 0x%x to 0x%x, "
+	     "writing at global offset 0x%x, limit 0x%x\n",
+	     erase.start,erase.start+erase.length-1,
+	     write_ptr,offset_dont_overwrite);
+#endif
       /* if continuing, check if overwriting our own start offset */
-      if(((erase.start+erase.length)>offset_dont_overwrite)
+      if(((erase.start+erase.length)>
+	  (offset_dont_overwrite+glob_user_area_start))
 	 &&(write_ptr<=offset_dont_overwrite))
 	{
 #ifdef DEBUG
-	  printf("*** short write ***\n");
+	  printf("Device full\n");
 #endif
-	  return 0;
+	  /* device full */
+	  return -2;
 	}
     }
   else
     {
       /* record start offset and part 0 */
+#ifdef DEBUG
+      printf("Starting, writing at 0x%x\n",write_ptr);
+#endif
       offset_dont_overwrite=write_ptr;
       curr_part=0;
     }
 
-  data_header.npart=curr_part;
+  data_header.npart=htonl(curr_part);
 
   /* read current erase block header */
   if((lseek(h,erase.start,SEEK_SET)==erase.start)
@@ -1001,6 +1049,19 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
      &&(header.crc32==
 	htonl(crc32(0,(unsigned char *)&header,sizeof(u32)*4))))
     {
+      /*
+	check for a known corner case -- all flash area is filled
+	with one record
+      */
+      if(!continue_flag
+	 &&(last_record_readable!=0xffffffff)
+	 &&!eraseblock_by_offset(&erase_last,last_record_readable)
+	 &&((htonl(header.next_block)+glob_user_area_start)==erase_last.start))
+	{
+	  /* corner case, device is almost full, re-format flash */
+	  return -4;
+	}
+
       offset_in_block=write_ptr+glob_user_area_start-erase.start;
       space_left=erase.length-offset_in_block;
 
@@ -1008,7 +1069,7 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	 add data into a block if erase is not requested, and current
 	 block can hold more than a data header
       */
-      if(!erase_needed_flag
+      if(!erase_request_flag
 	 &&(space_left>sizeof(data_header)))
 	{
 	  space_left-=sizeof(data_header);
@@ -1017,7 +1078,11 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	  else
 	    write_size=size;
 #ifdef DEBUG
-	  printf("writing %d bytes into current block\n",write_size);
+	  printf("Writing %d bytes into current block "
+		 "from 0x%x to 0x%x, at global offset 0x%x, "
+		 "block offset 0x%x\n",
+		 write_size,erase.start,erase.start+erase.length-1,
+		 write_ptr,offset_in_block);
 #endif
 	  data_header.serial=htonl(write_serial);
 	  data_header.size=htonl(write_size);
@@ -1046,7 +1111,8 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	  else 
 	    {
 	      sync();
-	      return -1;
+	      /* write error */
+	      return -3;
 	    }
 	}
       while(size)
@@ -1055,7 +1121,7 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	    if erase is needed, it means that we are already at
 	    the start of the new block -- if not, move to the next block first
 	  */
-	  if(!erase_needed_flag)
+	  if(!erase_request_flag)
 	    {
 	      /* check if next block is valid */
 	      if((htonl(header.next_block)
@@ -1063,6 +1129,7 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 		 ||(htonl(header.next_block)<glob_chain_start))
 		{
 		  sync();
+		  /* format error */
 		  return -1;
 		}
 	      erase.start=htonl(header.next_block)+glob_user_area_start;
@@ -1081,19 +1148,29 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 		 if we are trying to overwrite our own start of the record,
 		 bail with short write
 
-		 if erase_needed_flag is in effect, we have already checked,
+		 if erase_request_flag is in effect, we have already checked,
 		 and possibly set the new value we are overwriting now
 	      */
 		 
-	      if(!erase_needed_flag)
+	      if(!erase_request_flag)
 		{
-		  if(((erase.start+erase.length)>offset_dont_overwrite)
-		     &&(erase.start<=offset_dont_overwrite))
+#ifdef DEBUG
+		  printf("Erase block from 0x%x to 0x%x, "
+			 "writing at global offset 0x%x, limit 0x%x\n",
+			 erase.start,erase.start+erase.length-1,
+			 write_ptr,offset_dont_overwrite);
+#endif
+		  if(((erase.start+erase.length)>
+		      (offset_dont_overwrite+glob_user_area_start))
+		     &&(erase.start<=
+			(offset_dont_overwrite+glob_user_area_start)))
 		    {
 #ifdef DEBUG
-		      printf("*** short write ***\n");
+		      printf("Device full\n");
 #endif
-		      return orig_size-size;
+		      //return orig_size-size;
+		      /* device full */
+		      return -2;
 		    }
 		}
 
@@ -1103,7 +1180,10 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	      else
 		write_size=size;
 #ifdef DEBUG
-	      printf("writing %d bytes into erased block\n",write_size);
+	      printf("Writing %d bytes into erased block "
+		     "from 0x%x to 0x%x, at global offset 0x%x\n",
+		     write_size,erase.start,erase.start+erase.length-1,
+		     write_ptr);
 #endif
 	      data_header.serial=htonl(write_serial);
 	      data_header.size=htonl(write_size);
@@ -1111,15 +1191,30 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	      data_header.crc32=htonl(crc32(0,(unsigned char *)&data_header,
 					    sizeof(u32)*4));
 	      ioctl(h,MEMUNLOCK,&erase);
-	      if((ioctl(h,MEMERASE,&erase)==0)
-		 &&(lseek(h,erase.start,SEEK_SET)==erase.start)
-		 &&(write(h,&header,sizeof(header))==sizeof(header))
-		 &&(write(h,&data_header,sizeof(data_header))
-		    ==sizeof(data_header))
-		 &&(write(h,buffer,write_size)==write_size))
+
+	      /*
+		perform different sets of actions depending
+		on erase being enabled or suppressed
+	      */
+	      int val;
+	      if(suppress_erase_flag)
+		val=(lseek(h,erase.start+sizeof(header),SEEK_SET)
+		     ==erase.start+sizeof(header))
+		  &&(write(h,&data_header,sizeof(data_header))
+		     ==sizeof(data_header))
+		  &&(write(h,buffer,write_size)==write_size);
+	      else
+		val=(ioctl(h,MEMERASE,&erase)==0)
+		  &&(lseek(h,erase.start,SEEK_SET)==erase.start)
+		  &&(write(h,&header,sizeof(header))==sizeof(header))
+		  &&(write(h,&data_header,sizeof(data_header))
+		     ==sizeof(data_header))
+		  &&(write(h,buffer,write_size)==write_size);
+	      
+	      if(val)
 		{
 		  /* block is now erased and contains data */
-		  erase_needed_flag=0;
+		  erase_request_flag=0;
 		  /* increment part, move write pointer */
 		  curr_part++;
 		  data_header.npart=htonl(curr_part);
@@ -1137,17 +1232,25 @@ size_t record_data(int h,unsigned char *buffer, size_t size,int continue_flag)
 	      else
 		{
 		  sync();
-		  return -1;
+		  /* write error */
+		  return -3;
 		}
 	    }
 	  else
-	    return -1;
+	    {
+	      /* format error */
+	      return -1;
+	    }
 	}
       /* success */
-      return orig_size;
+      //return orig_size;
+      return 0;
     }
   else
-    return -1;
+    {
+      /* format error */
+      return -1;
+    }
 }
 
 /* main */
@@ -1431,7 +1534,13 @@ int main(int argc,char **argv,char **env)
 	}
       curr_offset_new=curr_offset+sizeof(segment_header)
 	+htonl(segment_header.size_padded);
-      if(curr_offset_new<=curr_offset)
+
+      /*
+	verify that no wraparound or zero-offset happens
+	with or without the segment header size being added
+      */
+      if((curr_offset_new<=curr_offset)
+	 ||(curr_offset_new<=(curr_offset+sizeof(segment_header))))
 	{
 	  fprintf(stderr,"Invalid segment header at 0x%08x on device %s\n",
 		  curr_offset,dev_name);
@@ -1447,8 +1556,8 @@ int main(int argc,char **argv,char **env)
 	  return 1;
 	}
     }
-  while((segment_header.image_segment_type!=REC_TYPE_RDISK)
-	&&(segment_header.image_segment_type!=REC_TYPE_END));
+  while((htonl(segment_header.image_segment_type)!=REC_TYPE_RDISK)
+	&&(htonl(segment_header.image_segment_type)!=REC_TYPE_END));
 
 #ifdef DEBUG
   printf("Chain ends at 0x%08x\n",curr_offset);
@@ -1593,16 +1702,22 @@ int main(int argc,char **argv,char **env)
 	      printf("Format completed successfully\n");
 	    }
 	  else
-	    return 1;
-	  
-	  if(find_chain_start(h)!=0)
 	    {
 	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
 	      return 1;
 	    }
+	  
+	  if(find_chain_start(h)!=0)
+	    {
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
+	      return 1;
+	    }
 	}
       else 
-	return 1;
+	{
+	  fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
+	  return 1;
+	}
     }
   
   if(find_data_end(h))
@@ -1616,23 +1731,27 @@ int main(int argc,char **argv,char **env)
 	      printf("Format completed successfully\n");
 	    }
 	  else
-	    return 1;
+	    {
+	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      return 1;
+	    }
 	  
 	  if(find_chain_start(h)!=0)
 	    {
-	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
 	      return 1;
 	    }
 	  if(find_data_end(h)!=0)
 	    {
-	      fprintf(stderr,"FATAL ERROR: Can't format user area\n");
+	      fprintf(stderr,"FATAL ERROR: Still can't find user area\n");
 	      return 1;
 	    }
 	}
       else 
-	return 1;
-      fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
-      return 1;
+	{
+	  fprintf(stderr,"FATAL ERROR: Can't find format in user area\n");
+	  return 1;
+	}
     }
 
   /* if output is requested yet no arguments are supplied, exit */
@@ -1642,7 +1761,7 @@ int main(int argc,char **argv,char **env)
   char **tar_argv;
   static unsigned char buffer[4096];
   int tar_pipe[2];
-  int tar_argc,j,l,status;
+  int tar_argc,j,l,res,status;
   pid_t pid;
 
 
@@ -1709,6 +1828,10 @@ int main(int argc,char **argv,char **env)
     }
   else
     {
+      int tried_format=0,retry_record;
+      do
+    {
+      retry_record=0;
       tar_argv[1]="cvz";
       pid=vfork();
       if(pid<0)
@@ -1722,22 +1845,80 @@ int main(int argc,char **argv,char **env)
 	{
 	  int cont=0;
 	  close(tar_pipe[1]);
-	  while((l=read(tar_pipe[0],buffer,sizeof(buffer)))>0)
+	  while(!retry_record
+		&&(l=read(tar_pipe[0],buffer,sizeof(buffer)))>0)
 	    {
-	      if(record_data(h,buffer,l,cont)!=l)
+	      res=record_data(h,buffer,l,cont,tried_format);
+	      if(res==-4)
 		{
-		  cont=1;
-		  fprintf(stderr,"FATAL ERROR: flash write error\n");
-		  free(tar_argv);
+		  tried_format=1;
+		  printf(
+		    "Device was almost full, writing without wear leveling\n");
+		  if((format_user_area(h)==0)
+		     &&(find_chain_start(h)==0)
+		     &&(find_data_end(h)==0))
+		    res=record_data(h,buffer,l,cont,1);
+		  else
+		    res=-1;
+		}
+	      if(res!=0)
+		{
+		  switch(res)
+		    {
+		    case -1:
+		      fprintf(stderr,"FATAL ERROR: invalid flash format\n");
+		      break;
+		    case -2:
+		      fprintf(stderr,"FATAL ERROR: no space left on device\n");
+		      break;
+		    case -3:
+		      fprintf(stderr,"FATAL ERROR: flash write error\n");
+		      break;
+		    default:
+		      fprintf(stderr,"FATAL ERROR: unknown write error\n");
+		    }
 		  close(tar_pipe[0]);
 		  waitpid(pid,&status,0);
-		  close(h);
-		  return 1;
+		  if((res==-2)&&(tried_format==0))
+		    {
+		      tried_format=1;
+		      printf("Retrying with format\n");
+		      if((format_user_area(h)==0)
+			 &&(find_chain_start(h)==0)
+			 &&(find_data_end(h)==0))
+			{
+			  if(pipe(tar_pipe))
+			    {
+			      perror("pipe");
+			      free(tar_argv);
+			      close(h);
+			      return 1;
+			    }
+			  retry_record=1;
+			}
+		      else
+			{
+			  fprintf(stderr,"FATAL ERROR: flash format failed\n");
+			  free(tar_argv);
+			  close(h);
+			  return 1;
+			}
+		    }
+		  else
+		    {
+		      free(tar_argv);
+		      close(h);
+		      return 1;
+		    }
 		}
+	      cont=1;
 	    }
-	  close(tar_pipe[0]);
-	  waitpid(pid,&status,0);
-	  return 0;
+	  if(!retry_record)
+	    {
+	      close(tar_pipe[0]);
+	      waitpid(pid,&status,0);
+	      return 0;
+	    }
 	}
       else
 	{
@@ -1750,7 +1931,8 @@ int main(int argc,char **argv,char **env)
 	  _exit(1);
 	}
     }
-
+      while(retry_record);
+    }
   close(h);
   return 0;
 }

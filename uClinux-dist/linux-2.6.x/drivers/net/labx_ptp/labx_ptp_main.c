@@ -95,12 +95,7 @@ static int ptp_device_open(struct inode *inode, struct file *filp)
   /* Lock the mutex and ensure there is only one client */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  if(ptp->opened) {
-    returnValue = -1;
-  } else {
-    ptp->opened = true;
-  }
-
+  ptp->opened++;
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 
@@ -114,7 +109,7 @@ static int ptp_device_release(struct inode *inode, struct file *filp)
 
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
-  ptp->opened = false;
+  ptp->opened--;
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
   return(0);
@@ -162,11 +157,11 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
         /* Enable Rx/Tx when the link comes up */
 
         ptp_enable_port(ptp,i);
-        ptp->ports[i].portEnabled = 1;
+        ptp->ports[i].portEnabled = TRUE;
       } else {
         /* Disable Rx/Tx when the link goes down */
         ptp_disable_port(ptp,i);
-        ptp->ports[i].portEnabled = 0;
+        ptp->ports[i].portEnabled = FALSE;
       }
 
       break;
@@ -209,41 +204,64 @@ void ptp_start_service(struct ptp_device *ptp) {
 }
 
 static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
-  
+ 
+  struct ptp_port *pPort = &ptp->ports[port];
+
   memcpy(&dataSet->clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-  dataSet->portNumber              = port + 1;
-  
-  if (!ptp->ports[port].portEnabled) {
-    dataSet->portRole = PTP_DISABLED;
-  } else if (ptp->presentRole == PTP_MASTER) {
-    dataSet->portRole = PTP_MASTER;
-  } else if ((ptp->presentRole == PTP_SLAVE) &&
-           (ptp->presentMasterPort.portNumber == dataSet->portNumber)) {
-    dataSet->portRole = PTP_SLAVE;
-  } else {
-    dataSet->portRole = PTP_PASSIVE;
-  }
-  dataSet->pttPortEnabled                 = ptp->ports[port].pttPortEnabled;
-  dataSet->isMeasuringDelay               = ptp->ports[port].isMeasuringDelay;
-  dataSet->asCapable                      = ptp->ports[port].asCapable;
-  dataSet->neighborPropDelay              = ptp->ports[port].neighborPropDelay;
-  dataSet->neighborPropDelayThresh        = ptp->ports[port].neighborPropDelayThresh;
+  dataSet->portNumber                     = (port + 1);
+  dataSet->portRole                       = pPort->selectedRole;
+  dataSet->pttPortEnabled                 = pPort->pttPortEnabled;
+  dataSet->isMeasuringDelay               = pPort->isMeasuringDelay;
+  dataSet->asCapable                      = pPort->asCapable;
+  dataSet->neighborPropDelay              = pPort->neighborPropDelay;
+  dataSet->neighborPropDelayThresh        = pPort->neighborPropDelayThresh;
   dataSet->delayAsymmetry                 = 0;
-  dataSet->neighborRateRatio              = ptp->ports[port].neighborRateRatio;
-  dataSet->initialLogAnnounceInterval     = ptp->ports[port].initialLogAnnounceInterval;
-  dataSet->currentLogAnnounceInterval     = ptp->ports[port].currentLogAnnounceInterval;
-  dataSet->announceReceiptTimeout         = ptp->ports[port].announceReceiptTimeout;
-  dataSet->initialLogSyncInterval         = ptp->ports[port].initialLogSyncInterval;
-  dataSet->currentLogSyncInterval         = ptp->ports[port].currentLogSyncInterval;
-  dataSet->syncReceiptTimeout             = ptp->ports[port].syncReceiptTimeout;
+  dataSet->neighborRateRatio              = pPort->neighborRateRatio;
+  dataSet->initialLogAnnounceInterval     = pPort->initialLogAnnounceInterval;
+  dataSet->currentLogAnnounceInterval     = pPort->currentLogAnnounceInterval;
+  dataSet->announceReceiptTimeout         = pPort->announceReceiptTimeout;
+  dataSet->initialLogSyncInterval         = pPort->initialLogSyncInterval;
+  dataSet->currentLogSyncInterval         = pPort->currentLogSyncInterval;
+  dataSet->syncReceiptTimeout             = pPort->syncReceiptTimeout;
   dataSet->syncReceiptTimeoutTimeInterval = 0; /* TODO */
-  dataSet->initialLogPdelayReqInterval    = ptp->ports[port].initialLogPdelayReqInterval;
-  dataSet->currentLogPdelayReqInterval    = ptp->ports[port].currentLogPdelayReqInterval;
-  dataSet->allowedLostResponses           = ptp->ports[port].allowedLostResponses;
+  dataSet->initialLogPdelayReqInterval    = pPort->initialLogPdelayReqInterval;
+  dataSet->currentLogPdelayReqInterval    = pPort->currentLogPdelayReqInterval;
+  dataSet->allowedLostResponses           = pPort->allowedLostResponses;
   dataSet->versionNumber                  = 2;
   dataSet->nup                            = 0;
   dataSet->ndown                          = 0;
   dataSet->acceptableMasterTableEnabled   = 0;
+
+  dataSet->setMask                        = 0; /* Always zero on get */
+}
+
+static void SetFromDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
+ 
+  struct ptp_port *pPort = &ptp->ports[port];
+
+  if (dataSet->setMask & PTP_SET_PORT_ENABLED) {
+    pPort->pttPortEnabled = dataSet->pttPortEnabled;
+  }
+
+  if (dataSet->setMask & PTP_SET_NEIGHBOR_PROP_DELAY_THRESH) {
+    pPort->neighborPropDelayThresh = dataSet->neighborPropDelayThresh;
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_ANNOUNCE_INTERVAL) {
+    pPort->currentLogAnnounceInterval = dataSet->currentLogAnnounceInterval;
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_SYNC_INTERVAL) {
+    pPort->currentLogSyncInterval = dataSet->currentLogSyncInterval; 
+  }
+
+  if (dataSet->setMask & PTP_SET_CURRENT_LOG_PDELAY_REQ_INTERVAL) {
+    pPort->currentLogPdelayReqInterval = dataSet->currentLogPdelayReqInterval;
+  }
+
+  if (dataSet->setMask & PTP_SET_ALLOWED_LOST_RESPONSES) {
+    pPort->allowedLostResponses = dataSet->allowedLostResponses;
+  }
 }
 
 /* I/O control operations for the driver */
@@ -276,26 +294,31 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
   case IOC_PTP_SET_PROPERTIES:
     {
       uint32_t copyResult;
+      int i;
+      uint32_t currentDelayMechanism = ptp->properties.delayMechanism;
 
       /* Copy the userspace argument into the device */
       preempt_disable();
       spin_lock_irqsave(&ptp->mutex, flags);
       copyResult = copy_from_user(&ptp->properties, (void __user*)arg, sizeof(PtpProperties));
 
-      /* Having set the properties, load a set of default coefficients in depending
-       * upon the selected delay mechanism
-       */
-      if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
-        /* Apply coefficients for the peer-to-peer delay mechanism */
-        ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
-        ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
-        ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
-      } else {
-        /* Apply coefficients for the end-to-end delay mechanism */
-        printk("Using E2E coefficients\n");
-        ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
-        ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
-        ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+      if (ptp->properties.delayMechanism != currentDelayMechanism) {
+        /* Having set the properties, load a set of default coefficients in depending
+         * upon the selected delay mechanism if it has changed.
+         */
+        if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_P2P) {
+          /* Apply coefficients for the peer-to-peer delay mechanism */
+          printk("Using P2P coefficients\n");
+          ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+          ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+          ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+        } else {
+          /* Apply coefficients for the end-to-end delay mechanism */
+          printk("Using E2E coefficients\n");
+          ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+          ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+          ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+        }
       }
 
       /* Convert the millisecond values for RTC lock settings into timer ticks.
@@ -304,9 +327,25 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       ptp->rtcLockTicks   = (ptp->properties.lockTimeMsec / PTP_TIMER_TICK_MS);
       ptp->rtcUnlockTicks = (ptp->properties.unlockTimeMsec / PTP_TIMER_TICK_MS);
 
+      /* Update the system priority vector to match the new properties */
+      ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
+      ptp->systemPriority.rootSystemIdentity.clockClass    = ptp->properties.grandmasterClockQuality.clockClass;
+      ptp->systemPriority.rootSystemIdentity.clockAccuracy = ptp->properties.grandmasterClockQuality.clockAccuracy;
+      set_offset_scaled_log_variance(ptp->systemPriority.rootSystemIdentity.offsetScaledLogVariance,
+                                     ptp->properties.grandmasterClockQuality.offsetScaledLogVariance);
+      ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
+      memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+      set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
+      memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+      set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
+      set_port_number(ptp->systemPriority.portNumber, 0);
+
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
       if(copyResult != 0) return(-EFAULT);
+      for (i=0; i<ptp->numPorts; i++) {
+        ptp->ports[i].reselect = TRUE;
+      }
     }
     break;
 
@@ -428,6 +467,22 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_PTP_SET_AS_PORT_DATA_SET:
+    {
+      uint32_t copyResult;
+      PtpAsPortDataSet dataSet = {};
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&dataSet, (void __user*)arg, sizeof(PtpAsPortDataSet));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(dataSet.index >= ptp->numPorts) return (-EINVAL);
+
+      SetFromDataSet(ptp, dataSet.index, &dataSet);
+    }
+    break;
+
   case IOC_PTP_GET_AS_PORT_STATISTICS:
     {
       uint32_t copyResult;
@@ -446,6 +501,22 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     }
     break;
 
+  case IOC_PTP_CLEAR_AS_PORT_STATISTICS:
+    {
+      uint32_t copyResult;
+      uint32_t portIndex = 0;
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&portIndex, (void __user*)arg, sizeof(portIndex));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(portIndex >= ptp->numPorts) return (-EINVAL);
+
+      /* Clear stats for this port */
+      memset(&ptp->ports[portIndex].stats, 0, sizeof(ptp->ports[portIndex].stats));
+    }
+
   case IOC_PTP_ACK_GM_CHANGE:
     /* Simply acknowledge the Grandmaster change for the instance */
     ack_grandmaster_change(ptp);
@@ -459,8 +530,40 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
     break;
 
   case IOC_PTP_GET_AS_GRANDMASTER:
-    if (0 != copy_to_user((void __user*)arg, &ptp->presentMaster, sizeof(PtpProperties))) {
-      return (-EFAULT);
+    {
+      PtpProperties presentMaster;
+      memset(&presentMaster, 0, sizeof(PtpProperties));
+      presentMaster.grandmasterPriority1                  = ptp->gmPriority->rootSystemIdentity.priority1;
+      presentMaster.grandmasterClockQuality.clockClass    = ptp->gmPriority->rootSystemIdentity.clockClass;
+      presentMaster.grandmasterClockQuality.clockAccuracy = ptp->gmPriority->rootSystemIdentity.clockAccuracy;
+      presentMaster.grandmasterClockQuality.offsetScaledLogVariance =
+        get_offset_scaled_log_variance(ptp->gmPriority->rootSystemIdentity.offsetScaledLogVariance);
+      presentMaster.grandmasterPriority2    = ptp->gmPriority->rootSystemIdentity.priority2;
+      memcpy(presentMaster.grandmasterIdentity, ptp->gmPriority->rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
+      if (0 != copy_to_user((void __user*)arg, &presentMaster, sizeof(PtpProperties))) {
+        return (-EFAULT);
+      }
+    }
+    break;
+
+  case IOC_PTP_GET_PATH_TRACE:
+    {
+      
+      uint32_t copyResult;
+      PtpPathTrace pathTrace = {};
+
+      /* Copy the port properties from userspace to get the port number */
+      copyResult = copy_from_user(&pathTrace, (void __user*)arg, sizeof(PtpPathTrace));
+      if(copyResult != 0) return(-EFAULT);
+
+      /* Verify that it is a valid port number */
+      if(pathTrace.index >= ptp->numPorts) return (-EINVAL);
+
+      /* Copy the pathTrace into the userspace argument */
+      pathTrace.pathTraceLength = ptp->ports[pathTrace.index].pathTraceLength;
+      memcpy(&pathTrace.pathTrace,ptp->ports[pathTrace.index].pathTrace,sizeof(PtpClockIdentity)*pathTrace.pathTraceLength);
+      copyResult = copy_to_user((void __user*)arg,&pathTrace,sizeof(PtpPathTrace));
+      if(copyResult != 0) return(-EFAULT);
     }
     break;
 
@@ -596,6 +699,12 @@ static int ptp_probe(const char *name,
 
   ptp_setup_event_timer(ptp, 0, platformData);
 
+  /* Set up netlink workers */
+  INIT_WORK(&ptp->work_send_gm_change, ptp_work_send_gm_change);
+  INIT_WORK(&ptp->work_send_rtc_change, ptp_work_send_rtc_change);
+  INIT_WORK(&ptp->work_send_heartbeat, ptp_work_send_heartbeat);
+  INIT_WORK(&ptp->work_send_rtc_increment_change, ptp_work_send_rtc_increment_change);
+
   /* Configure defaults and initialize the transmit templates */
   quality = &ptp->properties.grandmasterClockQuality;
   for(i=0; i<ptp->numPorts; i++) {
@@ -625,7 +734,32 @@ static int ptp_probe(const char *name,
   ptp->properties.grandmasterIdentity[6] = DEFAULT_SOURCE_MAC[4];
   ptp->properties.grandmasterIdentity[7] = DEFAULT_SOURCE_MAC[5];
 
-  ptp->properties.delayMechanism       = DEFAULT_DELAY_MECHANISM;
+  ptp->properties.delayMechanism = DEFAULT_DELAY_MECHANISM;
+  if (DEFAULT_DELAY_MECHANISM == PTP_DELAY_MECHANISM_P2P) {
+    ptp->coefficients.P = DEFAULT_P2P_COEFF_P;
+    ptp->coefficients.I = DEFAULT_P2P_COEFF_I;
+    ptp->coefficients.D = DEFAULT_P2P_COEFF_D;
+  } else {
+    ptp->coefficients.P = DEFAULT_E2E_COEFF_P;
+    ptp->coefficients.I = DEFAULT_E2E_COEFF_I;
+    ptp->coefficients.D = DEFAULT_E2E_COEFF_D;
+  }
+
+  /* Update the system priority vector to match the new properties */
+  ptp->systemPriority.rootSystemIdentity.priority1     = ptp->properties.grandmasterPriority1;
+  ptp->systemPriority.rootSystemIdentity.clockClass    = ptp->properties.grandmasterClockQuality.clockClass;
+  ptp->systemPriority.rootSystemIdentity.clockAccuracy = ptp->properties.grandmasterClockQuality.clockAccuracy;
+  set_offset_scaled_log_variance(ptp->systemPriority.rootSystemIdentity.offsetScaledLogVariance,
+                                 ptp->properties.grandmasterClockQuality.offsetScaledLogVariance);
+  ptp->systemPriority.rootSystemIdentity.priority2     = ptp->properties.grandmasterPriority2;
+  memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+  set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
+  memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
+  set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
+  set_port_number(ptp->systemPriority.portNumber, 0);
+
+  ptp->pathTraceLength = 1;
+  memcpy(&ptp->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
 
   for(i=0; i<ptp->numPorts; i++) {
     init_tx_templates(ptp, i);
@@ -655,11 +789,6 @@ static int ptp_probe(const char *name,
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
 
-  /* Zero the coefficients initially; they will be inferred from the port mode */
-  ptp->coefficients.P = 0x00000000;
-  ptp->coefficients.I = 0x00000000;
-  ptp->coefficients.D = 0x00000000;
-
   /* Assign the MAC transmit and receive latency */
   for(i=0; i<ptp->numPorts; i++) {
     ptp->ports[i].rxPhyMacDelay = platformData->rxPhyMacDelay;
@@ -682,6 +811,8 @@ static int ptp_probe(const char *name,
 
   /* Register for network device events */
   ptp->notifier.notifier_call = ptp_device_event;
+
+  ptp->timerTicks = 0;
 
   if (register_netdevice_notifier(&ptp->notifier) != 0)
   {
@@ -714,6 +845,7 @@ static u32 get_u32(struct of_device *ofdev, const char *s) {
 		return 0;
 	}
 }
+
 static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct;

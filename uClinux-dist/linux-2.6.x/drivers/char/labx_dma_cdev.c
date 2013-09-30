@@ -212,6 +212,7 @@ static struct of_device_id labx_dma_of_match[] = {
 	{ .compatible = "xlnx,labx-dma-1.01.a", },
 	{ .compatible = "xlnx,labx-dma-1.02.a", },
 	{ .compatible = "xlnx,labx-dma-1.03.a", },
+	{ .compatible = "xlnx,labx-dma-1.04.a", },
 	{ /* end of list */ },
 };
 

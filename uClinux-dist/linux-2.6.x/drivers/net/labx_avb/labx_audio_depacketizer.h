@@ -86,12 +86,16 @@
 #define STREAM_STATUS_2_REG  (0x00E)
 #define STREAM_STATUS_3_REG  (0x00F)
 
+#define SAMPLE_RATE_REG      (0x010)
+
 #define CAPABILITIES_REG_A   (0x0FD)
 #  define MAX_STREAM_SLOTS_MASK  (0x7F)
 
 #define CAPABILITIES_REG_B   (0x0FE)
 #  define MATCH_ARCH_SHIFT          24
 #  define MATCH_ARCH_MASK           0x0FF
+#  define DYN_SAMPLE_RATES_SHIFT    24
+#  define DYN_SAMPLE_RATES_MASK     1
 #  define MAX_STREAMS_SHIFT         16
 #  define MAX_STREAMS_MASK          0x0FF
 #  define CLOCK_DOMAINS_SHIFT       8
@@ -117,6 +121,8 @@
 
 #define MC_SYT_INTERVAL_REG  0x001
 #define MC_CONTROL_REG       0x002
+#  define MC_CONTROL_HAS_COAST_HOST_RTC  0x80000000
+#  define MC_CONTROL_IS_COASTING         0x40000000
 #  define MC_CONTROL_SYNC_EXTERNAL       0x00000008
 #  define MC_CONTROL_SYNC_INTERNAL       0x00000000
 #  define MC_CONTROL_SAMPLE_EDGE_RISING  0x00000001
@@ -125,6 +131,7 @@
 #define MC_HALF_PERIOD_REG   0x003
 #define MC_REMAINDER_REG     0x004
 #define MC_RTC_INCREMENT_REG 0x005
+#  define MC_RTC_INCREMENT_FORCE 0x80000000
 
 #define DAC_OFFSET_REG       0x008
 #  define DAC_OFFSET_ZERO  0x00000000
@@ -134,9 +141,6 @@
 #  define DAC_COEFF_MANTISSA_BITS  5
 #  define DAC_COEFF_FRACTION_BITS  12
 #  define DAC_COEFF_BITS           (DAC_COEFF_MANTISSA_BITS + DAC_COEFF_FRACTION_BITS + 1)
-#  define DAC_COEFF_MIN            0x00020000
-#  define DAC_COEFF_ZERO           0x00000000
-#  define DAC_COEFF_MAX            0x0001FFFF
 #  define DAC_COEFF(floatCoeff)  ((uint32_t)(floatCoeff * (float)(0x01 << DAC_COEFF_FRACTION_BITS)))
 
 #define LOCK_COUNT_REG       0x00A
@@ -232,8 +236,8 @@ struct audio_depacketizer {
   DepacketizerCaps capabilities;
 
   /* DMA instance (if supported) */
-#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   uint32_t hasDma;
+#ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
   struct labx_dma dma;
 #endif
 

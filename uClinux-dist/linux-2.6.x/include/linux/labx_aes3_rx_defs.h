@@ -50,7 +50,8 @@ typedef struct {
 /* Constant enumeration for Netlink event commands from the Lab X AES driver */
 enum {
   LABX_AES_EVENTS_C_UNSPEC,
-  LABX_AES_EVENTS_C_STATUS_PACKETS,
+  LABX_AES_EVENTS_C_AES_STATUS_PACKETS,
+  LABX_AES_EVENTS_C_METER_STATUS_PACKETS,
   __LABX_AES_EVENTS_C_MAX,
 };
 #define LABX_AES_EVENTS_C_MAX (__LABX_AES_EVENTS_C_MAX - 1)
@@ -59,18 +60,28 @@ enum {
 enum {
   LABX_AES_EVENTS_A_UNSPEC,
   LABX_AES_EVENTS_A_AES_DEVICE,
-  LABX_AES_EVENTS_A_AES_STATUS,
+  LABX_AES_EVENTS_A_AES_RX_STATUS = 2,
+  LABX_AES_EVENTS_A_AES_TX_STATUS,
+  LABX_AES_EVENTS_A_METER_RX_STATUS = 2,
+  LABX_AES_EVENTS_A_METER_TX_STATUS,
   __LABX_AES_EVENTS_A_MAX,
 };
 #define LABX_AES_EVENTS_A_MAX (__LABX_AES_EVENTS_A_MAX - 1)
 
 
 
-#define IOC_CHAR                ('d')
-#define IOC_READ_STREAM_STATUS  _IOR(IOC_CHAR, 0x01, uint32_t)
-#define IOC_CONFIG_AES          _IOW(IOC_CHAR, 0x02, uint32_t)
-#define IOC_READ_AES_MASK       _IOR(IOC_CHAR, 0x03, uint32_t)
-#define IOC_SET_AES_MASK        _IOW(IOC_CHAR, 0x04, uint32_t)
+#define IOC_CHAR                  ('d')
+#define IOC_READ_RX_STREAM_STATUS _IOR(IOC_CHAR, 0x01, uint32_t)
+#define IOC_READ_TX_STREAM_STATUS _IOR(IOC_CHAR, 0x02, uint32_t)
+#define IOC_CONFIG_AES            _IOW(IOC_CHAR, 0x03, uint32_t)
+#define IOC_CONFIG_RX_PCM_MODE    _IOW(IOC_CHAR, 0x04, uint32_t)
+#define IOC_CONFIG_TX_PCM_MODE    _IOW(IOC_CHAR, 0x05, uint32_t)
+#define IOC_CONFIG_2CHAN_MODE     _IOW(IOC_CHAR, 0x06, uint32_t)
+#define IOC_READ_AES_MASK         _IOR(IOC_CHAR, 0x07, uint32_t)
+#define IOC_SET_AES_MASK          _IOW(IOC_CHAR, 0x08, uint32_t)
+#define IOC_READ_RX_METER_STATUS  _IOR(IOC_CHAR, 0x09, uint32_t)
+#define IOC_READ_TX_METER_STATUS  _IOR(IOC_CHAR, 0x0A, uint32_t)
 
 
 #endif /* _LABX_AES3_RX_DEFS_H_ */
+

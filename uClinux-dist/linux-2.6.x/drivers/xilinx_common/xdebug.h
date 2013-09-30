@@ -34,7 +34,7 @@ int printf(const char *format, ...);
 #define xdbg_current_types (XDBG_DEBUG_ERROR | XDBG_DEBUG_GENERAL | XDBG_DEBUG_FIFO_REG | XDBG_DEBUG_TEMAC_REG)
 
 #define xdbg_stmnt(x)  x
-#define xdbg_printf(type, ...) (if ((type) & xdbg_current_types) printf (__VA_ARGS__) : 0)
+#define xdbg_printf(type, ...) { if ((type) & xdbg_current_types) { printf (__VA_ARGS__); } }
 
 #else
 #define xdbg_stmnt(x)

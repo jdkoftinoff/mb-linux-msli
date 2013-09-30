@@ -1,5 +1,5 @@
 /*
- * LEDs driver for Avid Garcia Snake board
+ * LEDs driver for Garcia Snake board
  *
  * Copyright (C) 2011 Lab X Technologies LLC
  * Written by Scott Wagner <scott.wagner@labxtechnologies.com>
@@ -205,6 +205,6 @@ module_init(garcia_led_init);
 module_exit(garcia_led_exit);
 
 MODULE_AUTHOR("Scott Wagner <scott.wagner@labxtechnologies.com>");
-MODULE_DESCRIPTION("Avid Garcia LED driver");
+MODULE_DESCRIPTION("Garcia LED driver");
 MODULE_LICENSE("GPL");
 

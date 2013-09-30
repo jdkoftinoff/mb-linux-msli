@@ -1,0 +1,72 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+echo "Setting up interface lo: "
+ifconfig lo up 127.0.0.1
+ifconfig eth0 multicast up
+ifconfig eth1 multicast up
+
+mkdir /var/lib
+/bin/inetd &
+
+# Call a script located on the read-write Flash filesystem to
+# permit users to easily modify the persistent network settings
+
+echo "Calling platform-specific network script"
+
+if [ -x /etc/persist/config/network_config ]
+  then
+  /etc/persist/config/network_config
+  else
+  if [ ! -f /etc/persist/config/CAL_ICSPlatform.xml ]
+    then
+    mkdir /etc/persist/config 2>/dev/null
+    cp /etc/config.orig/CAL_ICSPlatform.xml /etc/persist/config/CAL_ICSPlatform.xml
+  fi
+  if [ ! -f /etc/persist/config/CAL_ICSPlatformStatic.xml ]
+    then
+    mkdir /etc/persist/config 2>/dev/null
+    cp /etc/config.orig/CAL_ICSPlatformStatic.xml /etc/persist/config/CAL_ICSPlatformStatic.xml
+  fi
+
+  # If a static configuration exists, use it. Otherwise use 1722.1
+  STATIC_AVB_XML=/etc/persist/config/StaticAVBStreams.xml
+
+  if [ -f $STATIC_AVB_XML ]
+    then
+    XMLFILE=/etc/persist/config/CAL_ICSPlatformStatic.xml
+    else
+    XMLFILE=/etc/persist/config/CAL_ICSPlatform.xml
+  fi
+  
+  if grep -q "BUTTONS=0x00" /proc/cmdline; then
+      if [ -f /etc/persist/bin/avbd ]
+        then
+        AVBDFILE=/etc/persist/bin/avbd
+        else
+        AVBDFILE=/usr/bin/avbd
+      fi
+      $AVBDFILE platformFile=$XMLFILE &
+  fi
+
+  if [ -f $STATIC_AVB_XML ]
+    then
+    if [ -f /etc/persist/bin/static_avb_config ]
+      then
+      STATIC_AVB_CONFIG_FILE=/etc/persist/bin/static_avb_config
+      else
+      STATIC_AVB_CONFIG_FILE=/usr/bin/static_avb_config
+    fi
+    $STATIC_AVB_CONFIG_FILE $STATIC_AVB_XML &
+    else
+    if [ -f /etc/persist/bin/p17221d ]
+      then
+      P17221DFILE=/etc/persist/bin/p17221d
+      else
+      P17221DFILE=/usr/bin/p17221d
+    fi
+    $P17221DFILE 127.0.0.1 8080 &
+  fi
+
+fi

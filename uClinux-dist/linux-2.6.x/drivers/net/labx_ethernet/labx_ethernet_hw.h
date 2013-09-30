@@ -91,7 +91,11 @@ extern "C" {
 #  define NO_IRQS             (0x00000000)
 #  define MDIO_IRQ_MASK       (0x00000001)
 #  define PHY_IRQ_MASK        (0x00000002)
-#define VLAN_MASK_REG         (0x00000010)
+#define VLAN_LTF_MASK_REG     (0x00000010)
+#  define VLAN_PRIORITY_MASK  (0x000000FF)
+#  define LTF_VALUE_MASK      (0x00FFFF00)
+#  define LTF_VALUE_SHIFT     (8)
+#  define LTF_FILTER_ACTIVE   (0x01000000)
 #define MAC_SELECT_REG        (0x00000014)
 #define MAC_CONTROL_REG       (0x00000018)
 #define   MAC_ADDRESS_LOAD_ACTIVE 0x00000100
@@ -135,6 +139,12 @@ extern "C" {
 #define FIFO_RDFO_OFFSET 0x0000001c  /**< Receive Occupancy */
 #define FIFO_RDFD_OFFSET 0x00000020  /**< Receive Data */
 #define FIFO_RLF_OFFSET  0x00000024  /**< Receive Length */
+
+#define FIFO_TX_CTRL_OFFSET (LABX_FIFO_REGS_BASE + 0x00000028)  /** TX FIFO control */
+#define FIFO_RX_CTRL_OFFSET (LABX_FIFO_REGS_BASE + 0x0000002C)  /** RX FIFO control */
+#  define FIFO_ALIGN32      0x00000000
+#  define FIFO_ALIGN16      0x00000001
+#  define RX_FIFO_SUPPRESS  0x00000002
 
 #define FIFO_RESET_MAGIC 0x000000A5  /* Pattern to reset FIFOs */
 
@@ -497,7 +507,7 @@ xdbg_stmnt(extern int indent_on);
  *    u32 labx_eth_mReadReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_ReadReg(BaseAddress, RegOffset) \
 ({ \
 	u32 value; \
@@ -527,7 +537,7 @@ xdbg_stmnt(extern int indent_on);
  *    void labx_eth_mWriteReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_WriteReg(BaseAddress, RegOffset, Data) \
 ({ \
 	labx_eth_print_reg_o((BaseAddress), (RegOffset), (Data)); \
@@ -554,7 +564,7 @@ xdbg_stmnt(extern int indent_on);
  *    u32 labx_eth_mReadIndirectReg(u32 BaseAddress, u32 RegOffset)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 extern u32 _xlltemac_rir_value;
 
 #define labx_eth_ReadIndirectReg(BaseAddress, RegOffset) \
@@ -589,7 +599,7 @@ extern u32 _xlltemac_rir_value;
  *    void labx_eth_WriteIndirectReg(u32 BaseAddress, u32 RegOffset, u32 Data)
  *
  *****************************************************************************/
-#ifdef DEBUG
+#ifdef XILINX_DEBUG
 #define labx_eth_WriteIndirectReg(BaseAddress, RegOffset, Data) \
 ( \
 	indent_on = 1, \

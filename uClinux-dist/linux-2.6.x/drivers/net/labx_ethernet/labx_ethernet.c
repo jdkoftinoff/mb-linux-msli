@@ -46,6 +46,12 @@
 
 /************************** Constant Definitions *****************************/
 
+/* "Blacklisted" LTF (Ethertype) for the driver.
+ * Ideally, this should be configurable via ethtool; for the moment, it is
+ * set to block 802.1AS traffic, as it uses link-local multicast and is not
+ * processed by this peripheral in Lab X AVB applications.
+ */
+#define FILTER_LTF_PTP_V2  (0x88F7)
 
 /**************************** Type Definitions *******************************/
 
@@ -310,6 +316,7 @@ void labx_eth_Reset(XLlTemac *InstancePtr, int HardCoreAction)
 {
 	u32 Reg;
 
+        printk("Resetting\n");
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
 #if 0
@@ -606,6 +613,15 @@ static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[
 void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 {
 	int i;
+
+        /* Set up the VLAN filter register; by default, this will disable reception
+         * of any VLAN-tagged packets (any QoS priority), and will also "blacklist"
+         * 802.1AS packets.
+         *
+         * In the future, this capability should be exposed via ethtool.
+         */
+        labx_eth_WriteReg(InstancePtr->Config.BaseAddress, VLAN_LTF_MASK_REG,
+                          ((FILTER_LTF_PTP_V2 << LTF_VALUE_SHIFT) | LTF_FILTER_ACTIVE));
 
 	/* Always allow our unicast mac */
 	ConfigureMacFilter(InstancePtr, 0, InstancePtr->Config.MacAddress, MAC_MATCH_ALL);
@@ -1129,6 +1145,7 @@ u16 labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
 void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 {
 	u32 EmmcReg;
+	u32 Reg;
 
 	XASSERT_VOID(InstancePtr != NULL);
 	XASSERT_VOID(InstancePtr->IsReady == XCOMPONENT_IS_READY);
@@ -1175,9 +1192,18 @@ void labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
 
 	xdbg_printf(XDBG_DEBUG_GENERAL,
 		    "labx_eth_SetOperatingSpeed: new speed: 0x%0x\n", EmmcReg);
+
 	/* Set register and return */
 	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
 				  XTE_EMMC_OFFSET, EmmcReg);
+
+	/* Reset Rx since the speed changed to allow the shim to recalibrate if necessary */
+	Reg = labx_eth_ReadIndirectReg(InstancePtr->Config.BaseAddress,
+				       XTE_RCW1_OFFSET);
+	Reg |= XTE_RCW1_RST_MASK;
+	labx_eth_WriteIndirectReg(InstancePtr->Config.BaseAddress,
+				  XTE_RCW1_OFFSET, Reg);
+
 	xdbg_printf(XDBG_DEBUG_GENERAL, "labx_eth_SetOperatingSpeed: done\n");
 }
 

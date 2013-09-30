@@ -111,11 +111,17 @@ obj-$(CONFIG_LABX_DMA_CDEV)     += labx_dma_cdev.o
 obj-$(CONFIG_LABX_LOCAL_AUDIO)  += labx_local_audio.o
 EXTRA_CFLAGS	+= -I$(TOPDIR)/drivers/xilinx_common
 
+obj-$(CONFIG_LABX_AUDIO_METERS) += labx_audio_meters.o
+
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
 obj-$(CONFIG_I2S_SWITCH)	+= i2s_switch.o
 
 obj-$(CONFIG_I2S_GNET)		+= i2s_gnet.o
+
+obj-$(CONFIG_I2C_SERIAL)	+= i2c_serial_all.o
+
+i2c_serial_all-objs := i2c_serial.o
 
 obj-$(CONFIG_XILINX_MAILBOX)	+= xilinx_mailbox.o
 

@@ -1,0 +1,57 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+TZ=UTC
+
+echo "Mounting proc, sys, /dev/pts: "
+mount -t proc proc /proc
+mount -t sysfs none /sys
+mount -t devpts none /dev/pts
+
+BUTTONS=`tr ' ' '\\n' < /proc/cmdline | grep BUTTONS | cut -d'=' -f2`
+export BUTTONS
+
+#FIXME -- does not work
+#echo "Locking flash:"
+#/bin/mtd-lock -l -d /dev/mtd0
+
+#echo "Configuring devices: "
+#echo -e "234\n249\n250\n251\n245\n255\n254" > /sys/class/gpio/export
+#echo out > /sys/class/gpio/gpio234/direction
+#echo in > /sys/class/gpio/gpio249/direction
+#echo out > /sys/class/gpio/gpio250/direction
+#echo out > /sys/class/gpio/gpio251/direction
+#echo out > /sys/class/gpio/gpio245/direction
+#echo 1 > /sys/class/gpio/gpio245/value
+#echo out > /sys/class/gpio/gpio255/direction
+#echo out > /sys/class/gpio/gpio254/direction
+
+
+#echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
+#echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
+#echo -en "\x27\x5e\x00\x0c\x00\x00\x2f" > /dev/spidev0
+
+echo "Mounting var: "
+mount -t ramfs none /var
+
+echo "Populating /var: "
+mkdir /var/run
+mkdir /var/tmp
+chmod 1777 /var/tmp
+
+if tr ' ' '\\n' < /proc/cmdline |grep "root=/dev/ram0" > /dev/null 2>&1 ; then
+    echo "Restoring persistent settings:"
+    mkdir /var/tmp/persist
+    touch /var/tmp/persist/environment
+    /bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
+  if [ "$BUTTONS" = "0x00" ]; then
+    . /var/tmp/persist/environment
+  fi
+fi
+echo "Running system startup scripts:"
+for i in /etc/rc.d/S*
+do
+  if [ -x $i ]; then
+    /bin/sh $i
+  fi
+done

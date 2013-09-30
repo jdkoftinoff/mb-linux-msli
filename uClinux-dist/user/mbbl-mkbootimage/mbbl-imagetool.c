@@ -474,6 +474,9 @@ int write_block(int h_out,u32 block_start,u32 block_size,int outputtype)
 	      skip=current_write_offset-(segments[i].offset
 					 +segments[i].size_padded);
 	      count=sizeof(image_segment_header)-skip;
+	      if(current_write_offset+count>block_start+block_size)
+		count=block_start+block_size-current_write_offset;
+
 	      segmentheader.image_segment_type=
 		htonl(segments[i+1].image_segment_type);
 	      segmentheader.size_padded=
@@ -696,7 +699,7 @@ static unsigned char fieldbuffer[256];
 static char *msg_invalid_format="Invalid Xilinx bitstream file format: %s\n";
 
 /* add a bitstream file, as a segment */
-int add_bit_file_segment(char *name)
+int add_bit_file_segment(char *name,int invert_bitstream)
 {
   int h,data_found;
   size_t l,datalen;
@@ -915,10 +918,14 @@ int add_bit_file_segment(char *name)
     }
   close(h);
 
-  /* invert bits in bitstream */
-  for(i=BITSTREAM_IMAGE_HEADER_SIZE;i<datalen+BITSTREAM_IMAGE_HEADER_SIZE;i++)
+  if(invert_bitstream)
     {
-      data[i]=invertbits(data[i]);
+      /* invert bits in bitstream */
+      for(i=BITSTREAM_IMAGE_HEADER_SIZE;
+	  i<datalen+BITSTREAM_IMAGE_HEADER_SIZE;i++)
+	{
+	  data[i]=invertbits(data[i]);
+	}
     }
 
   /*
@@ -959,7 +966,7 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
   unsigned char *identity_data_copy,*identity_ptr,
     *identity_key,*identity_key_end,
     *identity_value,identity_fdt_value[6],identity_new_value[6];
-  unsigned identity_new_value_u[6];
+  unsigned identity_new_value_u[6],val;
   const char *identity_fdt_path,*identity_fdt_ptr;
   char *identity_fdt_full_path;
 
@@ -1135,6 +1142,83 @@ int add_identity_segment(unsigned char *identity_data,unsigned char *fdt_buf)
 				  free(identity_fdt_full_path);
 				}
 			    }
+			}
+		    }
+		  else
+		    {
+		      if(!strcmp(identity_key,"serial"))
+			{
+			  n=sscanf((const char*)identity_value,"%i",&val);
+			  if(n==1)
+			    {
+			      identity_offset=fdt_path_offset(fdt_buf,
+							      "/chosen");
+			      if(identity_offset>=0)
+				{
+				  identity_property=
+				    fdt_get_property(fdt_buf,
+						     identity_offset,
+						     "serial-number",
+						     &identity_fdt_value_len);
+				  if(identity_property
+				     &&identity_fdt_value_len==4)
+				    /* 
+				       serial number is always
+				       4 bytes long
+				    */
+				    {
+				      identity_new_value[0]=(val>>24)&0xff;
+				      identity_new_value[1]=(val>>16)&0xff;
+				      identity_new_value[2]=(val>>8)&0xff;
+				      identity_new_value[3]=val&0xff;
+				      fdt_setprop_inplace(fdt_buf,
+							  identity_offset,
+							  "serial-number",
+							  &identity_new_value,
+							  4);
+				    }
+				}
+			    }
+			}
+		      else
+			{
+		      if(!strcmp(identity_key,"model"))
+			{
+			  n=sscanf((const char*)identity_value,"%i",&val);
+			  if(n==1)
+			    {
+			      identity_offset=fdt_path_offset(fdt_buf,
+							      "/chosen");
+			      if(identity_offset>=0)
+				{
+				  identity_property=
+				    fdt_get_property(fdt_buf,
+						     identity_offset,
+						     "entity-model-id",
+						     &identity_fdt_value_len);
+				  if(identity_property
+				     &&identity_fdt_value_len==4)
+				    /* 
+				       entity model ID is always
+				       4 bytes long
+				    */
+				    {
+				      identity_new_value[0]=(val>>24)&0xff;
+				      identity_new_value[1]=(val>>16)&0xff;
+				      identity_new_value[2]=(val>>8)&0xff;
+				      identity_new_value[3]=val&0xff;
+				      fdt_setprop_inplace(fdt_buf,
+							  identity_offset,
+							  "entity-model-id",
+							  &identity_new_value,
+							  4);
+				    }
+				}
+			    }
+
+			}
+
+
 			}
 		    }
 		}
@@ -1372,22 +1456,22 @@ void usage(void)
 "mbbl-imagetool -- boot image maker for MBBL\n"
 "Usage:\n"
 "Write image from files:\n"
-"mbbl-imagetool [-s <address>] \\\n"
+"mbbl-imagetool [-N] [-s <address>] \\\n"
 "               [-b <bitstream>] [-e <bootloader>] -d <fdt> \\\n"
 "               [-i <identity>] -k <kernel> -r <ramdisk> \\\n"
 "               [-l <logo>] [-f <font>] -o <image> [options]\n"
 "or\n"
-"mbbl-imagetool [--start=<address>] \\\n"
+"mbbl-imagetool [--noinvert] [--start=<address>] \\\n"
 "               [--bit=<bitstream>] [--exec=<bootloader>] --dtb=<fdt> \\\n"
 "               [--id=<identity>] --kernel=<kernel> --ramdisk=<ramdisk> \\\n"
 "               [--logo=<logo>] [--font=<font>] --out=<image>\n\n"
 "Read image, extract files:\n"
-"mbbl-imagetool [-s <address>] \\\n"
+"mbbl-imagetool [-N] [-s <address>] \\\n"
 "               [-b <bitstream>] [-e <bootloader>] [-d <fdt>] \\\n"
 "               [-i <identity>] [-k <kernel>] [-r <ramdisk>] \\\n"
 "               [-l <logo>] [-f <font>] -I <image> [options]\n"
 "or\n"
-"mbbl-imagetool [--start=<address>] \\\n"
+"mbbl-imagetool [--noinvert] [--start=<address>] \\\n"
 "               [--bit=<bitstream>] [--exec=<bootloader>] [--dtb=<fdt>] \\\n"
 "               [--id=<identity>] [--kernel=<kernel>] [--ramdisk=<ramdisk>] "
 "\\\n"
@@ -1511,7 +1595,7 @@ int main(int argc,char **argv)
   int segment_index;
   int h,opt,optindex,n,i,j,k,h_fdt,h_out,err,
     chosen_offset,bootargslen,restart,found_index,retval,
-    outputtype=OUTPUT_TYPE_FILE;
+    outputtype=OUTPUT_TYPE_FILE,invert_bitstream=1;
   long fdt_len,fdt_old_size,identity_len;
   u32 bad_start,bad_end,ramdisk_new_offset,ramdisk_new_offset_kb,
     bootargsstring_new_len;
@@ -1535,10 +1619,11 @@ int main(int argc,char **argv)
     {"font",1,NULL,'f'},
     {"input",1,NULL,'I'},
     {"out",1,NULL,'o'},
+    {"noinvert",0,NULL,'N'},
     {NULL,0,NULL,'\0'}
   };
 
-  char *optstring="s:B:b:d:e:i:k:r:l:f:o:I:";
+  char *optstring="s:B:b:d:e:i:k:r:l:f:o:I:N";
 
   enum{
     OPER_OUTPUT,
@@ -1679,6 +1764,9 @@ int main(int argc,char **argv)
 	  image_oper=(opt=='o')?OPER_OUTPUT:OPER_INPUT;
 	  bootimage_name=strdup(optarg);
 	  break;
+	case 'N':
+	  invert_bitstream=0;
+	  break;
 	default:
 	  usage();
 	  cleanup_mem();
@@ -1704,7 +1792,7 @@ int main(int argc,char **argv)
     {
       int use_header_offset,fonts_counter,file_finished;
       u32 initial_offset,initial_offset_bootloader,initial_offset_chain,
-	curr_offset,bitstream_size,bootloader_size;
+	curr_offset,curr_offset_new,bitstream_size,bootloader_size;
       unsigned char imageheaderbuffer[BOOT_IMAGE_HEADER_SIZE];
       unsigned char bitstream_fixed_header[]=
 	"\x00\x09\x0f\xf0\x0f\xf0\x0f\xf0\x0f\xf0\x00\x00"
@@ -1864,7 +1952,8 @@ int main(int argc,char **argv)
 		      h_out=-1;
 		    }
 		  if(h_out>=0
-		     &&(copydata(h_out,h,bitstream_size,1,0)!=bitstream_size))
+		     &&(copydata(h_out,h,bitstream_size,invert_bitstream,0)
+			!=bitstream_size))
 		    {
 		      fprintf(stderr,"Can't write bitstream file\n");
 		      close(h_out);
@@ -1970,11 +2059,25 @@ int main(int argc,char **argv)
 	    case REC_TYPE_USER:
 	      break;
 	    }
-	  curr_offset+=sizeof(image_segment_header)
+	  curr_offset_new=curr_offset+sizeof(image_segment_header)
 	    +htonl(segmentheader.size_padded);
-	  if(lseek(h,curr_offset,SEEK_SET)!=curr_offset)
+
+	  /*
+	    verify that no wraparound or zero-offset happens
+	    with or without the segment header size being added
+	  */
+	  if((curr_offset_new<=curr_offset)
+	     ||(curr_offset_new<=(curr_offset+sizeof(image_segment_header))))
 	    {
 	      file_finished=1;
+	    }
+	  else
+	    {
+	      curr_offset=lseek(h,curr_offset_new,SEEK_SET);
+	      if(curr_offset!=curr_offset_new)
+		{
+		  file_finished=1;
+		}
 	    }
 	}
       cleanup_mem();
@@ -2159,7 +2262,8 @@ int main(int argc,char **argv)
 	  /* bitstream (optional) */
 	  if(bitstream_name)
 	    {
-	      segment_index=add_bit_file_segment(bitstream_name);
+	      segment_index=add_bit_file_segment(bitstream_name,
+						 invert_bitstream);
 	      /* add_bit_file_segment() reports its errors by itself */
 	      if(segment_index<0)
 		{
@@ -2404,13 +2508,13 @@ int main(int argc,char **argv)
 	      /* reassemble the string */
 	      bootargsstring_new_len=ramdisk_start_ptr-bootargsstring
 		+strlen(ramdisk_offset_text_string)
-		+strlen(ramdisk_start_continuation_ptr);
+		+strlen(ramdisk_start_continuation_ptr)+1;
 	    }
 	  else
 	    {
 	      /* append the new ramdisk_start parameter */
 	      bootargsstring_new_len=strlen(bootargsstring)
-		+1+strlen(ramdisk_offset_text_string);
+		+1+strlen(ramdisk_offset_text_string)+1;
 	      
 	    }
 	  

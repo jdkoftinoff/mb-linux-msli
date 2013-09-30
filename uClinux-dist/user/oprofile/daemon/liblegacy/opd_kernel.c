@@ -278,7 +278,7 @@ static void opd_drop_module_sample(unsigned long eip)
 	uint mod = 0;
 
 	opd_24_stats[OPD_LOST_MODULE]++;
-
+#if 0 // CRW - We don't seem to have support for this...
 	module_names = xmalloc(size);
 	while (query_module(NULL, QM_MODULES, module_names, size, &ret)) {
 		if (errno != ENOSPC) {
@@ -307,6 +307,7 @@ static void opd_drop_module_sample(unsigned long eip)
 
 	if (module_names)
 		free(module_names);
+#endif
 }
 
 

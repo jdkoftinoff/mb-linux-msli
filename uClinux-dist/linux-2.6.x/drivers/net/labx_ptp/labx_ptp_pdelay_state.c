@@ -25,7 +25,6 @@
  */
 
 #include "labx_ptp.h"
-#include <xio.h>
 
 /* Define this to get some extra debug on path delay messages */
 /* #define PATH_DELAY_DEBUG */
@@ -134,6 +133,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
   {
     default:
     case MDPdelayReq_NOT_ENABLED:
+      ptp->ports[port].asCapable = FALSE;
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      ptp->ports[port].multiplePdelayResponses = 0;
       break;
 
     case MDPdelayReq_INITIAL_SEND_PDELAY_REQ:
@@ -149,6 +152,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].isMeasuringDelay = FALSE;
       ptp->ports[port].asCapable = FALSE;
       ptp->ports[port].neighborRateRatioValid = FALSE;
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      ptp->ports[port].pdelayResponses = 0;
+      ptp->ports[port].multiplePdelayResponses = 0;
       break;
 
     case MDPdelayReq_RESET:
@@ -170,6 +177,19 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].pdelayReqSequenceId++;
       transmit_pdelay_request(ptp, port);
       ptp->ports[port].pdelayIntervalTimer = 0; // currentTime ("now" is zero ticks)
+
+      /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
+      if (ptp->ports[port].pdelayResponses == 1) {
+        ptp->ports[port].multiplePdelayResponses = 0;
+      } else if (ptp->ports[port].pdelayResponses > 1) {
+        ptp->ports[port].multiplePdelayResponses++;
+        if (ptp->ports[port].multiplePdelayResponses >= 3) {
+          printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
+            port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+          ptp->ports[port].portEnabled = FALSE;
+        }
+      }
+      ptp->ports[port].pdelayResponses = 0;
       break;
 
     case MDPdelayReq_WAITING_FOR_PDELAY_RESP:
@@ -236,6 +256,10 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       }
       else
       {
+        if (ptp->ports[port].asCapable && (ptp->ports[port].neighborPropDelay > ptp->ports[port].neighborPropDelayThresh)) {
+          printk("Disabling port %d. Delay over threshold (%d ns > %d ns)\n", port + 1,
+            ptp->ports[port].neighborPropDelay, ptp->ports[port].neighborPropDelayThresh);
+        }
         ptp->ports[port].asCapable = FALSE;
       }
       break;
@@ -436,7 +460,7 @@ static void LinkDelaySyncIntervalSetting_StateMachine_SetState(struct ptp_device
       uint32_t packetWord = read_packet(ptp->ports[port].rcvdSignalingPtr, &offset);
       int8_t linkDelayInterval = (int8_t)((packetWord >> 24) & 0xFF);
       int8_t timeSyncInterval = (int8_t)((packetWord >> 16) & 0xFF);
-      int8_t announceInterval = (int8_t)((packetWord >> 8) & 0xFF);
+      //int8_t announceInterval = (int8_t)((packetWord >> 8) & 0xFF);
       uint8_t flags = (uint8_t)(packetWord & 0xFF);
 
       switch (linkDelayInterval)
@@ -445,6 +469,7 @@ static void LinkDelaySyncIntervalSetting_StateMachine_SetState(struct ptp_device
           break;
         case 126: /* set interval to initial value */
           ptp->ports[port].currentLogPdelayReqInterval = ptp->ports[port].initialLogPdelayReqInterval;
+          break;
         default: /* use the indicated value */
           ptp->ports[port].currentLogPdelayReqInterval = linkDelayInterval;
           break;

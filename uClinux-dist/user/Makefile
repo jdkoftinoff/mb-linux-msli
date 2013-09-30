@@ -13,6 +13,7 @@ ifndef ROOTDIR
 ROOTDIR=$(PWD)/..
 endif
 
+HOST_NCPU?=1
 UCLINUX_BUILD_USER=1
 -include $(LINUX_CONFIG)
 -include $(CONFIG_CONFIG)
@@ -183,6 +184,7 @@ dir_$(CONFIG_USER_IPERF_IPERF)              += iperf
 dir_$(CONFIG_USER_INETD_INETD)              += inetd
 dir_$(CONFIG_USER_INIT_EXPAND)              += init
 dir_$(CONFIG_USER_INIT_INIT)                += init
+dir_$(CONFIG_USER_INOTIFYTOOLS)             += inotify-tools
 dir_$(CONFIG_USER_IPCHAINS_IPCHAINS)        += ipchains
 dir_$(CONFIG_USER_IPFWADM_IPFWADM)          += ipfwadm
 dir_$(CONFIG_USER_IPMASQADM_IPMASQADM)      += ipmasqadm
@@ -448,7 +450,7 @@ dir_$(CONFIG_USER_MIDILOOPBACK_MIDILOOPBACK) += midiloopback
 dir_$(CONFIG_USER_MBBL_MKBOOTIMAGE)         += mbbl-mkbootimage
 dir_$(CONFIG_USER_MTD_STORAGE)              += mtd-storage
 dir_$(CONFIG_USER_AVAHI_AVAHI)              += avahi 
-
+ 
 dir_y += games
 
 -include Makefile.local

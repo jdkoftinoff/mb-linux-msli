@@ -129,7 +129,11 @@ ENTRY(_interrupt)
 
 ret_from_intr:
 	lwi	r11, r1, PT_MODE
+#ifdef CONFIG_PREEMPT
+	bneid	r11, check_preempt
+#else
 	bneid	r11, no_intr_resched
+#endif
 	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS                /* get flags in thread info */
 	andi	r11, r11, _TIF_NEED_RESCHED
@@ -145,7 +149,31 @@ ret_from_intr:
 	bralid	r15, do_signal
 	addk	r6, r0, r0
 
+#ifdef CONFIG_PREEMPT
+	brid    no_intr_resched
+
+check_preempt:
+	lwi     r11, CURRENT_TASK, TS_THREAD_INFO;
+	/* Get preempt_count from thread info */
+	lwi     r5, r11, TI_PREEMPT_COUNT;
+	bgti    r5, restore_context;
+
+	lwi     r5, r11, TI_FLAGS;              /* get flags in thread info */
+	andi    r5, r5, _TIF_NEED_RESCHED;
+	beqi    r5, no_intr_resched /* if zero jump over */
+
+preempt:
+	/* interrupts are off that's why I am calling preempt_chedule_irq */
+	bralid  r15, preempt_schedule_irq
+	nop
+	lwi     r11, CURRENT_TASK, TS_THREAD_INFO;      /* get thread info */
+	lwi     r5, r11, TI_FLAGS;              /* get flags in thread info */
+	andi    r5, r5, _TIF_NEED_RESCHED;
+	bnei    r5, preempt /* if non zero jump to resched */
+#endif
+
 no_intr_resched:
+
 	/* Disable interrupts, we are now committed to the state restore */
 	disable_irq
 
@@ -155,6 +183,7 @@ no_intr_resched:
 
 	/* save r31 */
 	swi	r31, r0, PER_CPU(CURRENT_SAVE)
+
 restore_context:
 	/* special purpose registers */
 	lwi	r11, r1, PT_FSR
@@ -281,9 +310,29 @@ ENTRY(_user_exception)
 	/* re-enable interrupts now we are in kernel mode */
 	enable_irq
 
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS	 /* get flags in thread info */
+	andi	r11, r11, _TIF_WORK_SYSCALL_MASK
+	beqi	r11, 3f
+
+	addik	r3, r0, -ENOSYS
+	swi	r3, r1, PT_R3
+	brlid	r15, do_syscall_trace_enter
+	addik	r5, r1, PT_R0
+
+	# do_syscall_trace_enter returns the new syscall nr.
+	addk	r12, r0, r3
+	lwi	r5, r1, PT_R5;
+	lwi	r6, r1, PT_R6;
+	lwi	r7, r1, PT_R7;
+	lwi	r8, r1, PT_R8;
+	lwi	r9, r1, PT_R9;
+	lwi	r10, r1, PT_R10;
+3:
 	/* See if the system call number is valid. */
 	addi	r11, r12, -__NR_syscalls
 	bgei	r11, 1f			/* return to user if not valid */
+
 	/* Figure out which function to use for this system call. */
 	/* Note Microblaze barrel shift is optional, so don't rely on it */
 	add	r12, r12, r12			/* convert num -> ptr */
@@ -474,22 +523,33 @@ ENTRY(ret_from_fork)
 	brlid	r15, schedule_tail
 	nop
 	swi	r31, r1, PT_R31		/* save r31 in user context. */
-			/* will soon be restored to r31 in ret_to_user */
-	addk	r3, r0, r0
+			                /* will soon be restored to r31 in ret_to_user */
 	brid	ret_to_user
-	nop
+	addk	r3, r0, r0              /* Set errno in branch delay slot */
 
 work_pending:
 	enable_irq
 
 	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+	lwi	r11, r11, TI_FLAGS;		/* get flags in thread info */
+	andi	r11, r11, _TIF_WORK_SYSCALL_MASK
+	beqi	r11, 1f
+
+	swi	r3, r1, PT_R3
+	swi	r4, r1, PT_R4
+	brlid	r15, do_syscall_trace_leave
+	addik	r5, r1, PT_R0
+	lwi	r3, r1, PT_R3
+	lwi	r4, r1, PT_R4
+1:
+	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
 	andi	r11, r11, _TIF_NEED_RESCHED
-	beqi	r11, 1f
+	beqi	r11, 2f
 	bralid	r15, schedule
 	nop
 
-1:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
+2:	lwi	r11, CURRENT_TASK, TS_THREAD_INFO /* get thread info */
 	lwi	r11, r11, TI_FLAGS /* get flags in thread info */
 	andi	r11, r11, _TIF_SIGPENDING
 	beqi	r11, no_work_pending
@@ -607,3 +667,31 @@ sys_rt_sigsuspend_wrapper:
 #include "syscall_table.S"
 
 syscall_table_size=(.-sys_call_table)
+
+type_SYSCALL:
+	.ascii "SYSCALL\0"
+type_IRQ:
+	.ascii "IRQ\0"
+type_IRQ_PREEMPT:
+	.ascii "IRQ (PREEMPTED)\0"
+type_SYSCALL_PREEMPT:
+	.ascii " SYSCALL (PREEMPTED)\0"
+
+	/*
+	 * Trap decoding for stack unwinder
+	 * Tuples are (start addr, end addr, string)
+	 * If return address lies on [start addr, end addr],
+	 * unwinder displays 'string'
+	 */
+
+	.align 4
+.global microblaze_trap_handlers
+microblaze_trap_handlers:
+	/* Exact matches come first */
+	.word ret_to_user  ; .word ret_to_user    ; .word type_SYSCALL
+	.word ret_from_intr; .word ret_from_intr  ; .word type_IRQ
+	/* Fuzzy matches go here */
+	.word ret_from_intr; .word no_intr_resched; .word type_IRQ_PREEMPT
+	.word work_pending ; .word no_work_pending; .word type_SYSCALL_PREEMPT
+	/* End of table */
+	.word 0             ; .word 0               ; .word 0

@@ -40,6 +40,12 @@
 #include <linux/ethtool.h>
 #include <linux/vmalloc.h>
 #include <linux/kthread.h>
+#include <linux/err.h>
+
+#ifdef CONFIG_MTD
+#include <linux/mtd/mtd.h>
+#undef DEBUG // Nice result of mtd.h...
+#endif
 
 #ifdef CONFIG_MTD_CFI_OTP_USER
 //for boards with OTP reg
@@ -355,59 +361,6 @@ static inline int _labx_eth_ClearOptions(XLlTemac *InstancePtr, u32 Options)
   return status;
 }
 
-static inline u16 _labx_eth_GetOperatingSpeed(XLlTemac *InstancePtr)
-{
-  u16 speed;
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  speed = labx_eth_GetOperatingSpeed(InstancePtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  return speed;
-}
-
-static inline void _labx_eth_SetOperatingSpeed(XLlTemac *InstancePtr, u16 Speed)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_SetOperatingSpeed(InstancePtr, Speed);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-
-  /* We need a delay after we set the speed. Otherwise the PHY will not be ready. */
-  udelay(10000);
-}
-
-static inline void _labx_eth_PhySetMdioDivisor(XLlTemac *InstancePtr, u8 Divisor)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhySetMdioDivisor(InstancePtr, Divisor);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyRead(XLlTemac *InstancePtr, u32 PhyAddress,
-			      u32 RegisterNum, u16 *PhyDataPtr)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyRead(InstancePtr, PhyAddress, RegisterNum, PhyDataPtr);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
-inline void _labx_eth_PhyWrite(XLlTemac *InstancePtr, u32 PhyAddress,
-			       u32 RegisterNum, u16 PhyData)
-{
-  unsigned long flags;
-
-  spin_lock_irqsave(&XTE_spinlock, flags);
-  labx_eth_PhyWrite(InstancePtr, PhyAddress, RegisterNum, PhyData);
-  spin_unlock_irqrestore(&XTE_spinlock, flags);
-}
-
 static inline int _labx_eth_SetMacPauseAddress(XLlTemac *InstancePtr, void *AddressPtr)
 {
   int status;
@@ -538,7 +491,7 @@ static void labx_ethernet_reset(struct net_device *dev, u32 line_num)
   if (lp->deferred_skb) {
     dev_kfree_skb_any(lp->deferred_skb);
     lp->deferred_skb = NULL;
-    lp->ndev->stats.tx_errors++;
+    lp->ndev->stats.tx_dropped++;
   }
 
   /*
@@ -613,6 +566,7 @@ static irqreturn_t xenet_fifo_interrupt(int irq, void *dev_id)
       /* debug
        * if (irq_status == 0) printk("Temac: spurious fifo int\n");
        */
+      break;
     }
   }
 
@@ -653,44 +607,129 @@ static int xenet_set_mac_address(struct net_device *dev, void *p)
   return err;
 }
 
+/* Assigns MAC addresses to interfaces, from flash */
+#ifdef CONFIG_MTD
+/* 
+ * Retrieved from boot args, holds partition index
+ * that contains parameters for our platform, if
+ * applicable. We can store the MAC address in there.
+ */
+static int flash_config_partition = -1;
+static int getFlashConfigPart(char *str)
+{
+  if(sscanf(str, "%d", &flash_config_partition) != 1) {
+    printk("labx_ethernet_main: warning: unable to parse bootarg flash_config_part\n");
+    return 0;
+  }
+  return 0;
+}
+early_param("flash_config_part", getFlashConfigPart);
+
+/*
+ * Module parameter, location of MAC addresses
+ * in config flash partition. There should be one
+ * MAC address per interface, 6 bytes each, starting
+ * at this offset within flash.
+ */
+static int flash_config_mac_offset = -1;
+module_param(flash_config_mac_offset, int, 0);
+MODULE_PARM_DESC(base_otp_reg, "Offset within config flash partition, where the MAC address lives");
+
+/*
+ * If OTP support is enabled, OTP register
+ * for getting MAC address.
+ */
 #if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
 static int base_otp_reg = REGISTER1;
 module_param(base_otp_reg, int, 0);
 MODULE_PARM_DESC(base_otp_reg, "OTP base register (register containing address for eth0)");
-static int otp_assign_mac_address(void *private_data)
-{
-    struct net_device *ndev = (struct net_device *)private_data;
-    securityword_t otp_mac;
-    struct sockaddr addr;
-    int otpIndex;
-
-    if (sscanf(ndev->name, "eth%d", &otpIndex) == 1) {
-    	read_otp_reg(base_otp_reg + otpIndex, &otp_mac);
-	} else {
-	    otp_mac[0] = 0xff;
-	}
-	if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
-			((otp_mac[2] != 0 && otp_mac[2] != 0xFF) ||
-			(otp_mac[3] != 0 && otp_mac[3] != 0xFF) ||
-			(otp_mac[4] != 0 && otp_mac[4] != 0xFF) ||
-			(otp_mac[5] != 0 && otp_mac[5] != 0xFF) ||
-			(otp_mac[6] != 0 && otp_mac[6] != 0xFF) ||
-			(otp_mac[7] != 0 && otp_mac[7] != 0xFF) )) {
-		addr.sa_data[0] = otp_mac[2];
-		addr.sa_data[1] = otp_mac[3];
-		addr.sa_data[2] = otp_mac[4];
-		addr.sa_data[3] = otp_mac[5];
-		addr.sa_data[4] = otp_mac[6];
-		addr.sa_data[5] = otp_mac[7];
-        printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from OTP flash\n",
-            ndev->name, (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
-            (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
-            (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
-    	xenet_set_mac_address(ndev, &addr);
-    }
-	return 0;
-}
 #endif
+
+/*
+ * Retrieve MAC address from flash, if we have
+ * the settings for it, from bootargs. If that
+ * fails, try OTP flash.
+ */
+static int flash_assign_mac_address(void *private_data)
+{
+  struct net_device *ndev = (struct net_device *)private_data;
+  struct sockaddr addr;
+  struct mtd_info *mtd;
+  int i;
+  size_t retlen;
+  int ifIndex;
+#if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
+  securityword_t otp_mac;
+#endif
+  /* Ignored MAC address values */
+  const unsigned char zeroes[6] = { 0, 0, 0, 0, 0, 0 };
+  const unsigned char ffs[6] = { -1, -1, -1, -1, -1, -1 };
+
+  /* Interface index, used to grab multiple addresses */
+  if (sscanf(ndev->name, "eth%d", &ifIndex) != 1) {
+    printk("labx_ethernet_main: error: could not retreive interface index\n");
+    return 0;
+  }
+
+  /*
+   * If we have been told to look for a MAC
+   * address in config flash.
+   */
+  if (flash_config_partition >= 0 && flash_config_mac_offset >= 0) {
+    mtd = get_mtd_device(NULL, flash_config_partition);
+    if (!IS_ERR(mtd)) {
+      if (mtd->type != MTD_ABSENT) {
+        mtd->read(mtd, flash_config_mac_offset + (ifIndex * 6), 6, &retlen, (u_char*)addr.sa_data);
+        if (retlen == 6) {
+          if (memcmp(addr.sa_data, zeroes, 6) != 0 && memcmp(addr.sa_data, ffs, 6) != 0) {
+            printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from settings flash\n",
+                   ndev->name,
+                   (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
+                   (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
+                   (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
+            xenet_set_mac_address(ndev, &addr);
+            put_mtd_device(mtd);
+            return 0;
+          }
+        } else {
+          printk("Warning: failed to read MAC from settings flash.\n");
+        }
+      }
+      put_mtd_device(mtd);
+    }
+  }
+
+#if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
+  /*
+   * If we get here, there is no success assigning
+   * a MAC address from settings flash. Try OTP flash.
+   * (Try settings flash first, because that MAC
+   * address can be erased, but a MAC address in OTP
+   * can't be.)
+   */
+  if(base_otp_reg == 0 && getOtpRegionOffset() == 0x20){
+      base_otp_reg = 1;
+  }
+  read_otp_reg(base_otp_reg + ifIndex, &otp_mac);
+  if (otp_mac[0] == 0 && otp_mac[1] == 0 &&
+      memcmp(otp_mac, zeroes, 6) != 0 && memcmp(otp_mac, ffs, 6) != 0) {
+    addr.sa_data[0] = otp_mac[2];
+    addr.sa_data[1] = otp_mac[3];
+    addr.sa_data[2] = otp_mac[4];
+    addr.sa_data[3] = otp_mac[5];
+    addr.sa_data[4] = otp_mac[6];
+    addr.sa_data[5] = otp_mac[7];
+    printk("%s MAC address %02X:%02X:%02X:%02X:%02X:%02X retrieved from OTP flash\n",
+        ndev->name,
+        (uint8_t)(addr.sa_data[0]), (uint8_t)(addr.sa_data[1]),
+        (uint8_t)(addr.sa_data[2]), (uint8_t)(addr.sa_data[3]),
+        (uint8_t)(addr.sa_data[4]), (uint8_t)(addr.sa_data[5]));
+    xenet_set_mac_address(ndev, &addr);
+  }
+#endif
+  return 0;
+}
+#endif /* CONFIG_MTD */
 
 /*
  * Q:
@@ -758,17 +797,17 @@ static int xenet_open(struct net_device *dev)
   INIT_LIST_HEAD(&(lp->rcv));
   INIT_LIST_HEAD(&(lp->xmit));
 
-#if defined(CONFIG_MTD_CFI_OTP_USER) || defined(CONFIG_MTD_SPI_OTP)
-  /* Run otp_assign_mac_address() as a thread, because we may not have the OTP
-   * Flash initialized by the time we get here, and the thread can just wait for it.
+#ifdef CONFIG_MTD
+  /* Run flash_assign_mac_address() as a thread, because we may not have Flash
+   * initialized by the time we get here, and the thread can just wait for it.
    */
-  kthread_run(otp_assign_mac_address, dev, "otp_assign_mac_address thread");
+  kthread_run(flash_assign_mac_address, dev, "flash_assign_mac_address thread");
 #endif
 
   /* Set the MAC address each time opened. */
   if (_labx_eth_SetMacAddress(&lp->Emac, dev->dev_addr) != XST_SUCCESS) {
     printk(KERN_ERR "%s: labx_ethernet: could not set MAC address.\n",
-	   dev->name);
+           dev->name);
     return -EIO;
   }
 
@@ -795,6 +834,14 @@ static int xenet_open(struct net_device *dev)
   printk(KERN_INFO
 	 "%s: labx_ethernet: allocating interrupt %d for fifo mode.\n",
 	 dev->name, lp->fifo_irq);
+
+  /* Reset the FIFO core */
+  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
+  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
+
+  /* Clear any pending interrupts and disable all interrupts for the moment */
+  Write_Fifo32(lp->Emac, FIFO_ISR_OFFSET, Read_Fifo32(lp->Emac, FIFO_ISR_OFFSET));
+  Write_Fifo32(lp->Emac, FIFO_IER_OFFSET, 0);
 
   /* With the way interrupts are issued on the fifo core, this needs to be
    * fast interrupt handler.
@@ -836,10 +883,6 @@ static int xenet_open(struct net_device *dev)
     }
   }
 
-  /* Reset the FIFO core */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
-
   /* Enable FIFO interrupts  - no polled mode */
   fifo_int_enable(lp, (FIFO_INT_TC_MASK | FIFO_INT_RC_MASK | 
                        FIFO_INT_RXERROR_MASK | FIFO_INT_TXERROR_MASK));
@@ -848,7 +891,7 @@ static int xenet_open(struct net_device *dev)
   _labx_eth_Start(&lp->Emac);
 
   /* We're ready to go. */
-  netif_start_queue(dev);
+  netif_wake_queue(dev);
 
   return 0;
 }
@@ -955,7 +998,7 @@ static int xenet_change_mtu(struct net_device *dev, int new_mtu)
 
 static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
 {
-  struct net_local *lp;
+  struct net_local *lp = netdev_priv(dev);
   unsigned long flags, fifo_free_bytes;
   int total_frags = skb_shinfo(skb)->nr_frags + 1;
   unsigned int total_len;
@@ -977,7 +1020,6 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
    * or other processor in SMP case.
    */
   spin_lock_irqsave(&XTE_tx_spinlock, flags);
-  lp = netdev_priv(dev);
 
   fifo_free_bytes = (Read_Fifo32(lp->Emac, FIFO_TDFV_OFFSET) << 2);
   if (fifo_free_bytes < total_len) {
@@ -991,6 +1033,9 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Write frame data to FIFO, starting with the header and following
    * up with each of the fragments
    */
+
+  /* Place the transmit path into full-word alignment mode */
+  Write_Fifo32(lp->Emac, FIFO_TX_CTRL_OFFSET, FIFO_ALIGN32);
 
   word_len = ((skb_headlen(skb) + 3) >> 2);
 
@@ -1012,10 +1057,10 @@ static int xenet_FifoSend(struct sk_buff *skb, struct net_device *dev)
   /* Initiate transmit */
   Write_Fifo32(lp->Emac, FIFO_TLF_OFFSET, total_len);
   lp->ndev->stats.tx_bytes += total_len;
+  dev->trans_start = jiffies;
   spin_unlock_irqrestore(&XTE_tx_spinlock, flags);
 
   dev_kfree_skb(skb);	/* free skb */
-  dev->trans_start = jiffies;
   return 0;
 }
 
@@ -1339,8 +1384,12 @@ labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
  * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
  */
 #define RX_CRC_ERRS_INDEX  (0)
+#define TX_FRAMES_INDEX    (1)
+#define RX_FRAMES_INDEX    (2)
 static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
   "RxCrcErrors",
+  "TxFrames",
+  "RxFrames"
 };
 
 #define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
@@ -1439,6 +1488,9 @@ static void labx_ethtool_get_stats(struct net_device *dev,
   if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
     data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
   } else data[RX_CRC_ERRS_INDEX] = 0ULL;
+
+  data[TX_FRAMES_INDEX] = dev->stats.tx_packets;
+  data[RX_FRAMES_INDEX] = dev->stats.rx_packets;
 }
 
 /* ethtool operations structure */
@@ -1678,10 +1730,7 @@ static int xtenet_setup(struct device *dev,
   if (ndev->mtu > XTE_JUMBO_MTU)
     ndev->mtu = XTE_JUMBO_MTU;
 
-
   /* Assign the FIFO transmit callback */
-  Write_Fifo32(lp->Emac, FIFO_TDFR_OFFSET, FIFO_RESET_MAGIC);
-  Write_Fifo32(lp->Emac, FIFO_RDFR_OFFSET, FIFO_RESET_MAGIC);
   ndev->hard_start_xmit = xenet_FifoSend;
 
   /* initialize the netdev structure */
@@ -1879,8 +1928,16 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
   pdata->phy_name[0] = '\0';
   mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-controller", NULL);
   if(!mdio_controller_handle) {
-    dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    mdio_controller_handle = of_get_property(ofdev->node, "phy-mdio-bus-name", NULL);
+    if (!mdio_controller_handle) {
+      dev_warn(&ofdev->dev, "no MDIO connection specified.\n");
+    } else {
+      /* PHY's MDIO bus specified by name */
+      snprintf(pdata->phy_name, BUS_ID_SIZE, "%s:%02x", (const char*)mdio_controller_handle, phy_addr);
+      printk("%s:phy_name: %s\n",__func__, pdata->phy_name);
+    }
   } else {
+    /* PHY's MDIO bus specified by the connected ethernet device */
     mdio_controller_node = of_find_node_by_phandle(*mdio_controller_handle);
     if (!mdio_controller_node) {
       dev_warn(&ofdev->dev, "no MDIO connection found.\n");
@@ -1933,6 +1990,8 @@ static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,labx-ethernet-1.00.a", },
   { .compatible = "xlnx,labx-ethernet-1.01.a", },
   { .compatible = "xlnx,labx-ethernet-1.02.a", },
+  { .compatible = "xlnx,labx-ethernet-1.03.a", },
+  { .compatible = "xlnx,labx-ethernet-1.03.b", },
   { /* end of list */ },
 };
 

@@ -190,6 +190,30 @@ static const struct config_registers v5_config_registers = {
 	.BOOTSTS = 18,
 	.CTL_1 = 19,
 };
+static const struct config_registers s6_config_registers = {
+	.CRC = 0,
+	.FAR = 1,
+	.FDRI = 3,
+	.FDRO = 4,
+	.CMD = 5,
+	.CTL = 6,
+	.MASK = 7,
+	.STAT = 8,
+	.LOUT = 9,
+	.COR = 10,
+	.MFWR = UNIMPLEMENTED,
+	.FLR = 13,
+	.KEY = UNIMPLEMENTED,
+	.CBC = UNIMPLEMENTED,
+	.IDCODE = 14,
+	.AXSS = UNIMPLEMENTED,
+	.C0R_1 = UNIMPLEMENTED,
+	.CSOB = UNIMPLEMENTED,
+	.WBSTAR = UNIMPLEMENTED,
+	.TIMER = UNIMPLEMENTED,
+	.BOOTSTS = UNIMPLEMENTED,
+	.CTL_1 = UNIMPLEMENTED,
+};
 
 /**
  * hwicap_command_desync - Send a DESYNC command to the ICAP port.
@@ -207,17 +231,29 @@ static int hwicap_command_desync(struct hwicap_drvdata *drvdata)
 	/*
 	 * Create the data to be written to the ICAP.
 	 */
-	buffer[index++] = hwicap_type_1_write(drvdata->config_regs->CMD) | 1;
-	buffer[index++] = XHI_CMD_DESYNCH;
+	if(drvdata->width==4)
+	  {
+	    buffer[index++] = hwicap_type_1_write(drvdata->config_regs->CMD)
+	      | 1;
+	    buffer[index++] = XHI_CMD_DESYNCH ;
 	buffer[index++] = XHI_NOOP_PACKET;
 	buffer[index++] = XHI_NOOP_PACKET;
+	  }
+	else
+	  {
+	    buffer[index++] = hwicap_type_1_write_16(drvdata->config_regs->CMD)
+	      | (1 << 16) | XHI_CMD_DESYNCH ;
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	  }
 
 	/*
 	 * Write the data to the FIFO and intiate the transfer of data present
 	 * in the FIFO to the ICAP device.
 	 */
-	return drvdata->config->set_configuration(drvdata,
-			&buffer[0], index);
+	return drvdata->config->
+	  set_configuration(drvdata,(u8*)&buffer[0],
+			    index * sizeof(u32) / drvdata->width);
 }
 
 /**
@@ -241,44 +277,79 @@ static int hwicap_get_configuration_register(struct hwicap_drvdata *drvdata,
 	/*
 	 * Create the data to be written to the ICAP.
 	 */
+	if(drvdata->width==4)
+	  {
 	buffer[index++] = XHI_DUMMY_PACKET;
 	buffer[index++] = XHI_NOOP_PACKET;
 	buffer[index++] = XHI_SYNC_PACKET;
 	buffer[index++] = XHI_NOOP_PACKET;
 	buffer[index++] = XHI_NOOP_PACKET;
+	  }
+	else
+	  {
+	    buffer[index++] = XHI_DUMMY_PACKET;
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	    buffer[index++] = XHI_SYNC_PACKET;
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	  }
 
 	/*
 	 * Write the data to the FIFO and initiate the transfer of data present
 	 * in the FIFO to the ICAP device.
 	 */
-	status = drvdata->config->set_configuration(drvdata,
-						    &buffer[0], index);
+	status = drvdata->config->
+	  set_configuration(drvdata,(u8*)&buffer[0],
+			    index * sizeof(u32) / drvdata->width);
 	if (status)
 		return status;
 
+	/*
+	 * FIXME -- the following error check does not work even though
+	 * operation succeeds.
+	 * At least this is what was observed on Spartan-6
+	 */
+# if 0
 	/* If the syncword was not found, then we need to start over. */
 	status = drvdata->config->get_status(drvdata);
+	
 	if ((status & XHI_SR_DALIGN_MASK) != XHI_SR_DALIGN_MASK)
 		return -EIO;
-
+#endif
 	index = 0;
+
+	if(drvdata->width==4)
+	  {
 	buffer[index++] = hwicap_type_1_read(reg) | 1;
 	buffer[index++] = XHI_NOOP_PACKET;
 	buffer[index++] = XHI_NOOP_PACKET;
+	  }
+	else
+	  {
+	    buffer[index++] = hwicap_type_1_read_16(reg) | (2 << 16);
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	    buffer[index++] = XHI_NOOP_PACKET_16;
+	  }
 
 	/*
 	 * Write the data to the FIFO and intiate the transfer of data present
 	 * in the FIFO to the ICAP device.
 	 */
-	status = drvdata->config->set_configuration(drvdata,
-			&buffer[0], index);
+	status = drvdata->config->
+	  set_configuration(drvdata,(u8*)&buffer[0],
+			    index * sizeof(u32) / drvdata->width);
 	if (status)
 		return status;
 
 	/*
 	 * Read the configuration register
 	 */
-	status = drvdata->config->get_configuration(drvdata, reg_data, 1);
+	if(drvdata->width==4)
+	  status = drvdata->config->get_configuration(drvdata,
+						      (u8*)reg_data, 1);
+	else
+	  status = drvdata->config->get_configuration(drvdata,
+						      (u8*)reg_data, 2);
+
 	if (status)
 		return status;
 
@@ -326,7 +397,7 @@ hwicap_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	struct hwicap_drvdata *drvdata = file->private_data;
 	ssize_t bytes_to_read = 0;
-	u32 *kbuf;
+	u8 *kbuf;
 	u32 words;
 	u32 bytes_remaining;
 	int status;
@@ -354,7 +425,7 @@ hwicap_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 		       4 - bytes_to_read);
 	} else {
 		/* Get new data from the ICAP, and return was was requested. */
-		kbuf = (u32 *) get_zeroed_page(GFP_KERNEL);
+		kbuf = (u8 *) get_zeroed_page(GFP_KERNEL);
 		if (!kbuf) {
 			status = -ENOMEM;
 			goto error;
@@ -368,16 +439,16 @@ hwicap_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 
 		/* Determine the number of words to read, rounding up */
 		/* if necessary. */
-		words = ((count + 3) >> 2);
-		bytes_to_read = words << 2;
+		words = ((count + drvdata->width - 1) / drvdata->width);
+		bytes_to_read = words * drvdata->width;
 
 		if (bytes_to_read > PAGE_SIZE)
 			bytes_to_read = PAGE_SIZE;
 
 		/* Ensure we only read a complete number of words. */
-		bytes_remaining = bytes_to_read & 3;
-		bytes_to_read &= ~3;
-		words = bytes_to_read >> 2;
+		bytes_remaining = bytes_to_read % drvdata->width;
+		bytes_to_read -= bytes_remaining;
+		words = bytes_to_read / drvdata->width;
 
 		status = drvdata->config->get_configuration(drvdata,
 				kbuf, words);
@@ -413,7 +484,7 @@ hwicap_write(struct file *file, const char __user *buf,
 	struct hwicap_drvdata *drvdata = file->private_data;
 	ssize_t written = 0;
 	ssize_t left = count;
-	u32 *kbuf;
+	u8 *kbuf;
 	ssize_t len;
 	ssize_t status;
 
@@ -423,26 +494,26 @@ hwicap_write(struct file *file, const char __user *buf,
 
 	left += drvdata->write_buffer_in_use;
 
-	/* Only write multiples of 4 bytes. */
-	if (left < 4) {
+	/* Only write multiples of ICAP words. */
+	if (left < drvdata->width) {
 		status = 0;
 		goto error;
 	}
 
-	kbuf = (u32 *) __get_free_page(GFP_KERNEL);
+	kbuf = (u8 *) __get_free_page(GFP_KERNEL);
 	if (!kbuf) {
 		status = -ENOMEM;
 		goto error;
 	}
 
-	while (left > 3) {
-		/* only write multiples of 4 bytes, so there might */
-		/* be as many as 3 bytes left (at the end). */
+	while (left > (drvdata->width - 1)) {
+	  /* only write multiples of drvdata->width bytes, so there */
+	  /* might be as many as drvdata->width-1 bytes left (at the end). */
 		len = left;
 
 		if (len > PAGE_SIZE)
 			len = PAGE_SIZE;
-		len &= ~3;
+		len = (len / drvdata->width) * drvdata->width;
 
 		if (drvdata->write_buffer_in_use) {
 			memcpy(kbuf, drvdata->write_buffer,
@@ -464,7 +535,7 @@ hwicap_write(struct file *file, const char __user *buf,
 		}
 
 		status = drvdata->config->set_configuration(drvdata,
-				kbuf, len >> 2);
+				kbuf, len / drvdata->width);
 
 		if (status) {
 			free_page((unsigned long)kbuf);
@@ -479,7 +550,7 @@ hwicap_write(struct file *file, const char __user *buf,
 		written += len;
 		left -= len;
 	}
-	if ((left > 0) && (left < 4)) {
+	if ((left > 0) && (left < drvdata->width)) {
 		if (!copy_from_user(drvdata->write_buffer,
 						buf + written, left)) {
 			drvdata->write_buffer_in_use = left;
@@ -544,7 +615,7 @@ static int hwicap_release(struct inode *inode, struct file *file)
 			drvdata->write_buffer[i] = 0;
 
 		status = drvdata->config->set_configuration(drvdata,
-				(u32 *) drvdata->write_buffer, 1);
+						  drvdata->write_buffer, 1);
 		if (status)
 			goto error;
 	}
@@ -570,7 +641,8 @@ static struct file_operations hwicap_fops = {
 static int __devinit hwicap_setup(struct device *dev, int id,
 		const struct resource *regs_res,
 		const struct hwicap_driver_config *config,
-		const struct config_registers *config_regs)
+		const struct config_registers *config_regs,
+		int width)
 {
 	dev_t devt;
 	struct hwicap_drvdata *drvdata = NULL;
@@ -638,6 +710,7 @@ static int __devinit hwicap_setup(struct device *dev, int id,
 
 	drvdata->config = config;
 	drvdata->config_regs = config_regs;
+	drvdata->width = width;
 
 	mutex_init(&drvdata->sem);
 	drvdata->is_open = 0;
@@ -716,6 +789,7 @@ static int __devinit hwicap_drv_probe(struct platform_device *pdev)
 	struct resource *res;
 	const struct config_registers *regs;
 	const char *family;
+	unsigned int width;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -724,20 +798,27 @@ static int __devinit hwicap_drv_probe(struct platform_device *pdev)
 	/* It's most likely that we're using V4, if the family is not
 	   specified */
 	regs = &v4_config_registers;
+	width = 4;
 	family = pdev->dev.platform_data;
 
 	if (family) {
 		if (!strcmp(family, "virtex2p")) {
 			regs = &v2_config_registers;
+			width = 4;
 		} else if (!strcmp(family, "virtex4")) {
 			regs = &v4_config_registers;
+			width = 4;
 		} else if (!strcmp(family, "virtex5")) {
 			regs = &v5_config_registers;
+			width = 4;
+		} else if (!strcmp(family, "spartan6")) {
+			regs = &s6_config_registers;
+			width = 2;
 		}
 	}
 
 	return hwicap_setup(&pdev->dev, pdev->id, res,
-			&buffer_icap_config, regs);
+			    &buffer_icap_config, regs, width);
 }
 
 static int __devexit hwicap_drv_remove(struct platform_device *pdev)
@@ -766,6 +847,7 @@ hwicap_of_probe(struct of_device *op, const struct of_device_id *match)
 	const unsigned int *id;
 	const char *family;
 	int rc;
+	int width;
 	const struct hwicap_driver_config *config = match->data;
 	const struct config_registers *regs;
 
@@ -782,19 +864,26 @@ hwicap_of_probe(struct of_device *op, const struct of_device_id *match)
 	/* It's most likely that we're using V4, if the family is not
 	   specified */
 	regs = &v4_config_registers;
+	width = 4;
 	family = of_get_property(op->node, "xlnx,family", NULL);
 
 	if (family) {
 		if (!strcmp(family, "virtex2p")) {
 			regs = &v2_config_registers;
+			width = 4;
 		} else if (!strcmp(family, "virtex4")) {
 			regs = &v4_config_registers;
+			width = 4;
 		} else if (!strcmp(family, "virtex5")) {
 			regs = &v5_config_registers;
+			width = 4;
+		} else if (!strcmp(family, "spartan6")) {
+			regs = &s6_config_registers;
+			width = 2;
 		}
 	}
 	return hwicap_setup(&op->dev, id ? *id : -1, &res, config,
-			regs);
+			    regs, width);
 }
 
 static int __devexit hwicap_of_remove(struct of_device *op)

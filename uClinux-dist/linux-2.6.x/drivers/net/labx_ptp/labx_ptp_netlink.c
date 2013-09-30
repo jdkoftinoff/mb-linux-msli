@@ -50,6 +50,8 @@ static struct genl_multicast_group rtc_mcast = {
   .name = PTP_EVENTS_RTC_GROUP,
 };
 
+static struct workqueue_struct *labx_ptp_netlink_wq = NULL;
+
 /* "Heartbeat" command - this is only sent by the driver; I have this in here
  * along with its policy to serve as a temporary example
  */
@@ -58,12 +60,18 @@ static int ptp_events_rx_heartbeat(struct sk_buff *skb, struct genl_info *info) 
 }
 
 int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_heartbeat);
+  return 0;
+}
+
+void ptp_work_send_heartbeat(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_heartbeat);
   struct sk_buff *skb;
   void *msgHead;
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Create the message headers */
   msgHead = genlmsg_put(skb, 
@@ -84,6 +92,8 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
   case -ESRCH:
@@ -98,7 +108,10 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
   }
 
  heartbeat_fail: 
-  return(returnValue);
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
 }
 
 /* Size of a character string buffer, in bytes; this allocates enough
@@ -110,6 +123,12 @@ int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
 #define NEW_GM_BUF_SIZE      (strlen(NEW_GM_KEY_STRING) + CLOCK_ID_STRING_SIZE + 1)
 
 int ptp_events_tx_gm_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_gm_change);
+  return 0;
+}
+
+void ptp_work_send_gm_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_gm_change);
   struct sk_buff *skb;
   struct nlattr *valueMap;
   int32_t pairIndex;
@@ -119,7 +138,7 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Create the message headers */
   msgHead = genlmsg_put(skb, 
@@ -146,11 +165,12 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   pairIndex = PTP_VALUEMAP_A_PAIRS;
 
   /* Capture the Grandmaster identity as a string value */
-  gmIdentity = ptp->presentMaster.grandmasterIdentity;
-  sprintf(gmIdentityString, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+  gmIdentity = ptp->gmPriority->rootSystemIdentity.clockIdentity;
+  snprintf(gmIdentityString, NEW_GM_BUF_SIZE, "%s:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
           NEW_GM_KEY_STRING,
           gmIdentity[0], gmIdentity[1], gmIdentity[2], gmIdentity[3], 
           gmIdentity[4], gmIdentity[5], gmIdentity[6], gmIdentity[7]);
+  gmIdentityString[NEW_GM_BUF_SIZE-1] = 0;
   nla_put_string(skb, pairIndex++, gmIdentityString);
 
   /* End the value map nesting */
@@ -159,6 +179,8 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
 	    // Success, simply break
@@ -178,18 +200,32 @@ int ptp_events_tx_gm_change(struct ptp_device *ptp) {
   }
 
  gm_change_fail: 
-  return(returnValue);
+  if (returnValue != 0) {
+    printk(KERN_INFO DRIVER_NAME ": GM change event failure %d; auto-acknowledging ...\n", returnValue);
+    ack_grandmaster_change(ptp);
+  }
+
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
 }
 
 /* Transmits a Netlink packet indicating a change in the RTC status */
 int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_rtc_change);
+  return 0;
+}
+
+void ptp_work_send_rtc_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_rtc_change);
   struct sk_buff *skb;
   uint8_t commandByte;
   void *msgHead;
   int returnValue = 0;
 
   skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-  if(skb == NULL) return(-ENOMEM);
+  if(skb == NULL) return;
 
   /* Decide which command byte to send with the message based upon the lock state */
   if(ptp->rtcLockState == PTP_RTC_LOCKED) {
@@ -217,6 +253,8 @@ int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
   /* Finalize the message and multicast it */
   genlmsg_end(skb, msgHead);
   returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
   switch(returnValue) {
   case 0:
   case -ESRCH:
@@ -231,9 +269,76 @@ int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
   }
 
  rtc_change_fail: 
-  return(returnValue);
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
 }
 
+/* Transmits a Netlink packet indicating a change in the RTC increment */
+int ptp_events_tx_rtc_increment_change(struct ptp_device *ptp) {
+  queue_work(labx_ptp_netlink_wq, &ptp->work_send_rtc_increment_change);
+  return 0;
+}
+
+void ptp_work_send_rtc_increment_change(struct work_struct *work) {
+  struct ptp_device *ptp = container_of(work, struct ptp_device, work_send_rtc_increment_change);
+  struct sk_buff *skb;
+  uint8_t commandByte;
+  void *msgHead;
+  int returnValue = 0;
+
+  skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+  if(skb == NULL) return;
+
+  commandByte = PTP_EVENTS_C_RTC_INCREMENT;
+
+  /* Create the message headers */
+  msgHead = genlmsg_put(skb, 
+                        0, 
+                        ptp->netlinkSequence++, 
+                        &ptp_events_genl_family, 
+                        0, 
+                        commandByte);
+  if (msgHead == NULL) {
+    returnValue = -ENOMEM;
+    goto fail;
+  }
+
+  /* Write the PTP domain identifier to the message */
+  returnValue = nla_put_u8(skb, PTP_EVENTS_A_DOMAIN, ptp->properties.domainNumber);
+  if (returnValue != 0) goto fail;
+
+  returnValue = nla_put_u32(skb, PTP_EVENTS_A_INCREMENT_M, ptp->currentIncrement.mantissa);
+  if (returnValue != 0) goto fail;
+
+  returnValue = nla_put_u32(skb, PTP_EVENTS_A_INCREMENT_F, ptp->currentIncrement.fraction);
+  if (returnValue != 0) goto fail;
+
+  /* Finalize the message and multicast it */
+  genlmsg_end(skb, msgHead);
+  returnValue = genlmsg_multicast(skb, 0, rtc_mcast.id, GFP_ATOMIC);
+  skb = NULL;
+
+  switch(returnValue) {
+  case 0:
+  case -ESRCH:
+    // Success or no process was listening, simply break
+    break;
+
+  default:
+    // This is an actual error, print the return code
+    printk(KERN_INFO DRIVER_NAME ": Failure delivering multicast Netlink message: %d\n",
+           returnValue);
+    goto fail;
+  }
+
+ fail: 
+  if (NULL != skb) {
+    nlmsg_free(skb);
+    skb = NULL;
+  }
+}
 /* foo */
 
 static struct genl_ops ptp_events_gnl_ops_heartbeat = {
@@ -273,11 +378,19 @@ int register_ptp_netlink(void) {
     goto register_failure;
   }
 
+  labx_ptp_netlink_wq = create_workqueue("labx_ptp_netlink");
+
  register_failure:
   return(returnValue);
 }
 
 void unregister_ptp_netlink(void) {
+
+  if (NULL != labx_ptp_netlink_wq) {
+    destroy_workqueue(labx_ptp_netlink_wq);
+    labx_ptp_netlink_wq = NULL;
+  }
+  
   /* Unregister operations and the family */
   genl_unregister_ops(&ptp_events_genl_family, &ptp_events_gnl_ops_heartbeat);
   genl_unregister_family(&ptp_events_genl_family);

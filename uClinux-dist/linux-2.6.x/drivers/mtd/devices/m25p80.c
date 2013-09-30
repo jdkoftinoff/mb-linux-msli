@@ -68,7 +68,8 @@
 
 #ifdef CONFIG_MTD_SPI_OTP
 static struct mtd_info *aMtd;
-#define OTP_REGION_OFFSET 0x010
+static uint16_t OTP_REGION_OFFSET = 0x00;
+//#define OTP_REGION_OFFSET 0x010
 #define N_OTP_ADDRESSES 30
 #endif
 
@@ -298,7 +299,9 @@ static int m25p80_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct spi_transfer t[2];
 	struct spi_message m;
 
+#ifdef CONFIG_MTD_SPI_OTP
 	aMtd = mtd;
+#endif
 	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%08x, len %zd\n",
 			dev_name(&flash->spi->dev), __func__, "from",
 			(u32)from, len);
@@ -530,21 +533,27 @@ int read_otp_reg(otp_register addr, securityword_t *otp)
 	uint32_t otpbase = 0x00;
 	uint32_t readbytes = 0;
 
-        if (addr >= N_OTP_ADDRESSES) {
+    if (addr >= N_OTP_ADDRESSES) {
                 return 0;
 	}
 
-	if (addr == REGISTER31) {
-		readbytes = 10;
-	} else { 
-		readbytes = 16;
-	}
+    // for S25L128S
+    if(OTP_REGION_OFFSET == 0x10){
+        if (addr == REGISTER31) {
+            readbytes = 10;
+        } else { 
+            readbytes = 16;
+        }
 
-	if (addr < 16) {
-		otpbase = 0x114;
-	} else {
-		otpbase = 0x216;
-	}
+	    if (addr < 16) {
+		    otpbase = 0x114;
+	    } else {
+		    otpbase = 0x216;
+	    }
+    }else{
+        readbytes = 32;
+        // S25FL128S has OTP base address of 0
+    }
 	
 	m25p80_otp_read(aMtd, (otpbase+(addr*OTP_REGION_OFFSET)), readbytes, &retlen, ((u_char *)otp));
        
@@ -626,7 +635,7 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "m25p16",  0x202015,  0, 64 * 1024, 32, },
 	{ "m25p32",  0x202016,  0, 64 * 1024, 64, },
 	{ "m25p64",  0x202017,  0, 64 * 1024, 128, },
-	{ "m25p128", 0x202018, 0, 256 * 1024, 64, },
+	{ "m25p128", 0x202018,  0, 256 * 1024, 64, },
 
 	{ "m45pe80", 0x204014,  0, 64 * 1024, 16, },
 	{ "m45pe16", 0x204015,  0, 64 * 1024, 32, },
@@ -642,13 +651,22 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x16", 0xef3015, 0, 64 * 1024, 32, SECT_4K, },
 	{ "w25x32", 0xef3016, 0, 64 * 1024, 64, SECT_4K, },
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
+
+	/* Numonyx */
+	{ "n25q128",  0x20ba18, 0, 64 * 1024, 256, },
+    { "n25q128a", 0x20bb18, 0, 64 * 1024, 256, },
+    
+
 };
+#define STM_ID_N25Q128			0xba18
+#define STM_ID_N25Q128A			0xbb18
+#define STM_ID_N25Q256			0xba19
 
 static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 {
 	int			tmp;
 	u8			code = OPCODE_RDID;
-	u8			id[5];
+	u8			id[6];
 	u32			jedec;
 	u16                     ext_jedec;
 	struct flash_info	*info;
@@ -657,7 +675,7 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	 * string for after vendor-specific data, after the three bytes
 	 * we use here.  Supporting some chips might require using it.
 	 */
-	tmp = spi_write_then_read(spi, &code, 1, id, 5);
+	tmp = spi_write_then_read(spi, &code, 1, id, 6);
 	if (tmp < 0) {
 		DEBUG(MTD_DEBUG_LEVEL0, "%s: error %d reading JEDEC ID\n",
 			dev_name(&spi->dev), tmp);
@@ -671,6 +689,13 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 
 	ext_jedec = id[3] << 8 | id[4];
 
+    // Setup for spansion S25FL128S
+    if(id[5] == 0x80){ // FL-S family
+        OTP_REGION_OFFSET = 0x20;
+    }else{ // S25FL128S
+        OTP_REGION_OFFSET = 0x10;
+    }
+
 	for (tmp = 0, info = m25p_data;
 			tmp < ARRAY_SIZE(m25p_data);
 			tmp++, info++) {
@@ -682,6 +707,11 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	}
 	dev_err(&spi->dev, "unrecognized JEDEC id %06x\n", jedec);
 	return NULL;
+}
+
+uint16_t getOtpRegionOffset(void)
+{
+    return OTP_REGION_OFFSET;
 }
 
 
@@ -764,6 +794,9 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	flash->mtd.erase = m25p80_erase;
 	flash->mtd.read = m25p80_read;
 	flash->mtd.write = m25p80_write;
+#ifdef CONFIG_HAVE_MTD_OTP
+	flash->mtd.read_fact_prot_reg = m25p80_otp_read;
+#endif
 
 	/* prefer "small sector" erase if possible */
 	if (info->flags & SECT_4K) {

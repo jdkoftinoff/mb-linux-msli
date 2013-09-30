@@ -17,8 +17,14 @@
 #include <asm/checksum.h>
 #include <linux/io.h>
 #include <asm/page.h>
+#include <linux/ftrace.h>
 #include <asm/system.h>
 #include <linux/uaccess.h>
+
+#ifdef CONFIG_FUNCTION_TRACER
+extern void _mcount(void);
+EXPORT_SYMBOL(_mcount);
+#endif
 
 /*
  * libgcc functions - functions that are used internally by the

@@ -3062,6 +3062,27 @@ config USER_HD_HD
 	help
 	  Flexible hex dump program.
 
+config USER_INOTIFYTOOLS
+	bool "inotifytools"
+	default n
+	help
+	  Tools for interfacing with the inotify kernel interface.
+	  Requires kernel inotify interface to be enabled.
+
+config USER_INOTIFYTOOLS_WAIT
+	bool "inotifywait"
+	depends on USER_INOTIFYTOOLS
+	default n
+	help
+	  Command to wait for events in the filesystem. (~135K)
+
+config USER_INOTIFYTOOLS_WATCH
+	bool "inotifywatch"
+	depends on USER_INOTIFYTOOLS
+	default n
+	help
+	  Command to gather statistics in the filesystem. (~131K)
+
 config USER_LOAD_LOAD
 	bool "load"
 	help

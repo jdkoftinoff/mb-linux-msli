@@ -30,6 +30,7 @@ SECTIONS {
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
+		IRQENTRY_TEXT
 		. = ALIGN (4) ;
 		_etext = . ;
 	}

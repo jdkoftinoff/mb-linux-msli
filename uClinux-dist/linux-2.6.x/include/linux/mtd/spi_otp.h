@@ -37,3 +37,5 @@ typedef enum otp_addr {
 typedef uint8_t securityword_t[16];
 
 int read_otp_reg(otp_register addr, securityword_t *otp);
+
+uint16_t getOtpRegionOffset(void);

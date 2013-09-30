@@ -28,9 +28,14 @@
 
 #define COEFF_TABLE_MAX_NUM 3
 
-#define IOC_RESET_ROUTING_MATRIX  0
-#define IOC_READ_ROUTING_MATRIX  1
-#define IOC_SET_ROUTING_MATRIX  2
+#define IOC_RESET_ROUTING_MATRIX         0
+#define IOC_READ_ROUTING_MATRIX          1
+#define IOC_SET_ROUTING_MATRIX           2
 #define IOC_UPDATE_SOFT_MUTE_COEFF_TABLE 3
+#define IOC_CAL_SET_AVB_MUTE             4
+#define   CAL_AVB_MUTE_FORCE 0x8
+#define   CAL_AVB_MUTE       0x4
+#define IOC_CAL_SET_SRC                  5
+#define IOC_CAL_SET_RECOVERY_RATE        6
 
 #endif

@@ -19,6 +19,8 @@
 #include <linux/broadcom_leds.h>
 #include <linux/err.h>
 
+#define DUMP_PHY_REGISTERS 1
+
 #define PHY_ID_BCM50610			0x0143bd60
 #define PHY_ID_BCM54610			0x0143bd63
 
@@ -68,8 +70,8 @@
 /*
  * AUXILIARY CONTROL SHADOW ACCESS REGISTERS.  (PHY REG 0x18)
  */
-#define MII_BCM54XX_AUX_VAL(x)	(((x & 0x07) << 12) | (x & 0x07))
-#define MII_BCM54XX_AUX_DATA(x)	(x & 0x0ff8)
+#define MII_BCM54XX_AUXCTL_SHADOW_MASK 7
+#define MII_BCM54XX_AUXCTL_SHADOW_READSHIFT 12
 
 #define MII_BCM54XX_AUXCTL_ACTL_TX_6DB		0x0400
 #define MII_BCM54XX_AUXCTL_ACTL_SMDSP_ENA	0x0800
@@ -111,7 +113,7 @@
  */
 #define BCM5481_SHD_CLKALIGN 0x03	/* 00011: Clock Alignment Control register */
 #define BCM5481_SHD_DELAY_ENA (1 << 9)	/* RGMII Transmit Clock Delay enable */
-#define BCM5481_AUX_SKEW_ENA (1 << 8)	/* RGMII RXD to RXC Skew enable */
+#define BCM5481_AUX_SKEW_ENA  (1 << 8)	/* RGMII RXD to RXC Skew enable */
 
 /*
  * BCM54XX: Shadow registers
@@ -128,6 +130,7 @@
  * Shadow values go into bits [14:10] of register 0x1c to select a shadow
  * register to access.
  */
+#define BCM5482_SPARE_CTRL3     0x05    /* 00101: Spare Control 3 */
 #define BCM5482_SHD_LEDS1	0x0d	/* 01101: LED Selector 1 */
 					/* LED3 / ~LINKSPD[2] selector */
 #define BCM5482_SHD_LEDS1_LED3(src)	((src & 0xf) << 4)
@@ -138,6 +141,10 @@
 #define BCM5482_SHD_SSD_EN	0x0001	/* SSD enable */
 #define BCM5482_SHD_MODE	0x1f	/* 11111: Mode Control Register */
 #define BCM5482_SHD_MODE_1000BX	0x0001	/* Enable 1000BASE-X registers */
+#define BCM5482_PRIM_SERD_CTRL  0x16
+#define BCM5482_MISC_1000_CTRL2 0x17
+#define BCM5482_SIGDETECT_EN    0x20  
+#define BCM5482_CLK125_OUTPUT   0x01    /* Bit 0: Enable CLK125 output */ 
 
 /*
  * EXPANSION SHADOW ACCESS REGISTERS.  (PHY REG 0x15, 0x16, and 0x17)
@@ -156,6 +163,7 @@
 #define  MII_BCM54XX_EXP_EXP96_MYST		0x0010
 #define MII_BCM54XX_EXP_EXP97			0x0f97
 #define  MII_BCM54XX_EXP_EXP97_MYST		0x0c0c
+#define MII_BCM54XX_MULTICOLOR_LED              0x0004
 
 /*
  * BCM5482: Secondary SerDes registers
@@ -238,16 +246,13 @@ static int bcm54xx_exp_write(struct phy_device *phydev, u16 regnum, u16 val)
 
 static int bcm54xx_auxctl_read(struct phy_device *phydev, u16 shadow)
 {
-	phy_write(phydev, MII_BCM54XX_AUX_CTL, MII_BCM54XX_AUX_VAL(shadow));
-	return MII_BCM54XX_AUX_DATA(phy_read(phydev, MII_BCM54XX_AUX_CTL));
+        phy_write(phydev, MII_BCM54XX_AUX_CTL, ((shadow << MII_BCM54XX_AUXCTL_SHADOW_READSHIFT) | MII_BCM54XX_AUXCTL_SHDWSEL_MISC));
+	return phy_read(phydev, MII_BCM54XX_AUX_CTL);
 }
 
 static int bcm54xx_auxctl_write(struct phy_device *phydev, u16 shadow, u16 val)
 {
-	return phy_write(phydev, MII_BCM54XX_AUX_CTL,
-			 MII_BCM54XX_SHD_WRITE |
-			 MII_BCM54XX_AUX_VAL(shadow) |
-			 MII_BCM54XX_AUX_DATA(val));
+	return phy_write(phydev, MII_BCM54XX_AUX_CTL, ((val & ~MII_BCM54XX_AUXCTL_SHADOW_MASK) | shadow));
 }
 
 static int bcm50610_a0_workaround(struct phy_device *phydev)
@@ -368,6 +373,125 @@ static int bc5481_high_performance_enable;
 module_param(bc5481_high_performance_enable, int, 0);
 MODULE_PARM_DESC(bc5481_high_performance_enable, "Enable Broadcom 5481 high-performance behaviour");
 
+static int bc5482_clk125_output_enable;
+module_param(bc5482_clk125_output_enable, int, 0);
+MODULE_PARM_DESC(bc5482_clk125_output_enable, "Enable Broadcom 5482 125Mhz output clock");
+
+#ifdef DUMP_PHY_REGISTERS
+static void dump_phy_reg(struct phy_device *phydev)
+{
+  unsigned long int val;
+  val = (unsigned long int)phy_read(phydev, MII_PHYSID1) << 16 | phy_read(phydev, MII_PHYSID2);
+  printk("Ethernet PHY registers for phy %d, ID 0x%08lx:\n"
+      "==============================================\n", phydev->addr, val);
+  val = phy_read(phydev, MII_BMCR);
+  printk("0x00 - MII Control register:                           0x%04lx\n", val);
+  val = phy_read(phydev, MII_BMSR);
+  printk("0x01 - MII Status  register:                           0x%04lx\n", val);
+  val = phy_read(phydev, MII_ADVERTISE);
+  printk("0x04 - Auto-negotiation Advertisement register:        0x%04lx\n", val);
+  val = phy_read(phydev, MII_LPA);
+  printk("0x05 - Auto-negotiation Link Partner Ability register: 0x%04lx\n", val);
+  val = phy_read(phydev, MII_EXPANSION);
+  printk("0x06 - Auto-negotiation Expansion register:            0x%04lx\n", val);
+  val = phy_read(phydev, 0x07);
+  printk("0x07 - Next page Transmit register:                    0x%04lx\n", val);
+  val = phy_read(phydev, 0x08);
+  printk("0x08 - Link Partner Received Next Page register:       0x%04lx\n", val);
+  val = phy_read(phydev, MII_CTRL1000);
+  printk("0x09 - 1000Base-T Control register:                    0x%04lx\n", val);
+  val = phy_read(phydev, MII_STAT1000);
+  printk("0x0A - 1000Base-T Status register:                     0x%04lx\n", val);
+  val = phy_read(phydev, MII_ESTATUS);
+  printk("0x0F - IEEE Extended Status register:                  0x%04lx\n", val);
+  val = phy_read(phydev, 0x10);
+  printk("0x10 - IEEE Extended Control register:                 0x%04lx\n", val);
+  val = phy_read(phydev, 0x11);
+  printk("0x11 - PHY Extended Status register:                   0x%04lx\n", val);
+  val = phy_read(phydev, MII_DCOUNTER);
+  printk("0x12 - Receive Error Counter register:                 0x%04lx\n", val);
+  val = phy_read(phydev, MII_FCSCOUNTER);
+  printk("0x13 - False Carrier Sense Counter register:           0x%04lx\n", val);
+  val = phy_read(phydev, MII_NWAYTEST);
+  printk("0x14 - Receiver NOT_OK Counter register:               0x%04lx\n", val);
+  val = bcm54xx_exp_read(phydev, 0);
+  printk("0x17:0 - Receive/Transmit Packet Counter register:     0x%04lx\n", val);
+  val = bcm54xx_exp_read(phydev, 1);
+  printk("0x17:1 - Expansion Interrupt Status register:          0x%04lx\n", val);
+  val = bcm54xx_exp_read(phydev, 4);
+  printk("0x17:4 - Multicolor LED Selector register:             0x%04lx\n", val);
+  val = bcm54xx_exp_read(phydev, 5);
+  printk("0x17:5 - Multicolor LED Flash Rate Controls register:  0x%04lx\n", val);
+  val = bcm54xx_exp_read(phydev, 6);
+  printk("0x17:6 - Multicolor LED Programmable Blink Contrl reg: 0x%04lx\n", val);
+  val = bcm54xx_auxctl_read(phydev, 0);
+  printk("0x18:0 - Auxilary Control register:                    0x%04lx\n", val);
+  val = bcm54xx_auxctl_read(phydev, 1);
+  printk("0x18:1 - 10BaseT register:                             0x%04lx\n", val);
+  val = bcm54xx_auxctl_read(phydev, 2);
+  printk("0x18:2 - Power MII Control register:                   0x%04lx\n", val);
+  val = bcm54xx_auxctl_read(phydev, 4);
+  printk("0x18:4 - Misc Test register:                           0x%04lx\n", val);
+  val = bcm54xx_auxctl_read(phydev, 7);
+  printk("0x18:7 - Misc Control register:                        0x%04lx\n", val);
+  val = phy_read(phydev, 0x19);
+  printk("0x19 - Auxilary Status Summary register:               0x%04lx\n", val);
+  val = phy_read(phydev, MII_RESV2);
+  printk("0x1A - Interrupt Status register:                      0x%04lx\n", val);
+  val = phy_read(phydev, MII_TPISTATUS);
+  printk("0x1B - Interrupt Mask register:                        0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x02);
+  printk("0x1C:2 - Spare Control 1 register:                     0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x03);
+  printk("0x1C:3 - Clock Alignment Control register:             0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x04);
+  printk("0x1C:4 - Spare Control 2 register:                     0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, BCM5482_SPARE_CTRL3);
+  printk("0x1C:5 - Spare Control 3 register:                     0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x08);
+  printk("0x1C:8 - LED Status register:                          0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x09);
+  printk("0x1C:9 - LED Control register:                         0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x0A);
+  printk("0x1C:A - Auto Power-down register:                     0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x0D);
+  printk("0x1C:D - LED Selector 1 register:                      0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x0E);
+  printk("0x1C:E - LED Selector 2 register:                      0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x0F);
+  printk("0x1C:F - LED GPIO Control/Status register:             0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x13);
+  printk("0x1C:13 - SerDES 100BASE-FX Control register:          0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x14);
+  printk("0x1C:14 - Secondary SerDES Control register:           0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x15);
+  printk("0x1C:15 - SGMII Slave register:                        0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x16);
+  printk("0x1C:16 - Primary SerDes Control:                      0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x17);
+  printk("0x1C:17 - Misc 1000BASE-X Control 2:                   0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x18);
+  printk("0x1C:18 - SGMII/Media Converter register:              0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1A);
+  printk("0x1C:1A - Auto-negotiation Debug register:             0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1B);
+  printk("0x1C:1B - Auxilary 1000BASE-X Control register:        0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1C);
+  printk("0x1C:1C - Auxilary 1000BASE-X Status register:         0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1D);
+  printk("0x1C:1D - Misc 1000BASE-X Status register:             0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1E);
+  printk("0x1C:1E - Copper/Fiber Auto-detect Medium register:    0x%04lx\n", val);
+  val = bcm54xx_shadow_read(phydev, 0x1F);
+  printk("0x1C:1F - Mode Control register:                       0x%04lx\n", val);
+  val = phy_read(phydev, 0x1D);
+  printk("0x1D - PHY Extended Status register:                   0x%04lx\n", val);
+  val = phy_read(phydev, 0x1E);
+  printk("0x1E - HCD Sumary register:                            0x%04lx\n", val);
+  return;
+}
+#endif
+
 static ssize_t crc_error_counter_show(struct class *c, char *buf)
 {
 	int i;
@@ -392,9 +516,19 @@ static ssize_t rcv_error_counter_show(struct class *c, char *buf)
         return (length);
 }
 
+static void dump_phy_regs_show(struct class *c, char *buf)
+{
+	int i;
+
+	for(i = 0; i < phy_instances; i++)
+	{
+                dump_phy_reg(aPhys[i]);
+	}	
+}
 static struct class_attribute broadcom_class_attrs[] = {
         __ATTR_RO(crc_error_counter),
         __ATTR_RO(rcv_error_counter),
+        __ATTR_RO(dump_phy_regs),
         __ATTR_NULL,
 };
 
@@ -434,7 +568,7 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 	}
 
 	// Enable auto-negotiation and high-performance modes
-	if (bc5481_auto_negotiate_enable != 0) {
+	if (bc5481_auto_negotiate_enable == 0) {
 	        reg = phy_read(phydev, 0x00);
 		reg = reg | BCM5481_AUTO_NEGOTIATE_ENABLE;
 		phy_write(phydev, 0x00, reg);
@@ -443,14 +577,22 @@ static int bcm54xx_config_init(struct phy_device *phydev)
 	                ((phy_read(phydev, 0x00) & BCM5481_AUTO_NEGOTIATE_ENABLE) != 0));
 	}
 
-	if (bc5481_high_performance_enable != 0) {
-	        reg = phy_read(phydev, 0x18);
-		reg = reg | MII_BCM54XX_AUXCTL_SHDWSEL_PMII | MII_BCM54XX_SHD_WRITE;
-		reg = reg & ~MII_BCM54XX_AUXCTL_PMII_HPE;
-		phy_write(phydev, 0x18, reg);
+	if (bc5481_high_performance_enable == 0) {
+	        reg = bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII);
+                reg |= MII_BCM54XX_AUXCTL_PMII_HPE;
+                bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII, reg);
 		printk("High-Performance Enable: %d (0x%04X) => %d\n",
 		       ((reg & MII_BCM54XX_AUXCTL_PMII_HPE) != 0), reg,
-		       ((phy_read(phydev, 0x18) & MII_BCM54XX_AUXCTL_PMII_HPE) != 0));
+		       ((bcm54xx_auxctl_read(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_PMII) & MII_BCM54XX_AUXCTL_PMII_HPE) == 0));
+	}
+
+	if (bc5482_clk125_output_enable == 0) {
+	        reg = bcm54xx_shadow_read(phydev, BCM5482_SPARE_CTRL3);
+		reg = reg & ~BCM5482_CLK125_OUTPUT;
+		bcm54xx_shadow_write(phydev, BCM5482_SPARE_CTRL3, reg);
+		printk("Clock 125Mhz Enable: %d (0x%04X) => %d\n",
+		       ((reg & ~BCM5482_CLK125_OUTPUT) != 0), reg,
+		       ((bcm54xx_shadow_read(phydev, BCM5482_SPARE_CTRL3) & BCM5482_CLK125_OUTPUT) != 0));
 	}
 
 	for (phyaddr = phydev->addr, i = -1; phyaddr != 0; phyaddr >>= 1)
@@ -558,8 +700,37 @@ static int bcm5482_config_init(struct phy_device *phydev)
 static int bcm5482_read_status(struct phy_device *phydev)
 {
 	int err;
+        enum BC_PHY_LEDVAL val;
+	u16 reg;
 
 	err = genphy_read_status(phydev);
+	
+        /* Update multicolor LEDs based on link status, the inverse logic
+           of the LINKACTIVITY1 and LINKACTIVITY2 signals on the BCM5482
+           cause this to be used. */
+
+        if (phydev->link) 
+        {
+                val = BCM_LED_SRC_OFF;
+                reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12);
+                reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
+                bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS12, reg);
+	        val = BCM_LED_SRC_OFF;
+        	reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34);
+        	reg = (reg & 0xf0) | BCM54XX_SHD_LEDS_LEDL(val);
+        	bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS34, reg);
+	} 
+        else 
+        {
+                val = BCM_LED_SRC_ON;
+                reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS12);
+                reg = (reg & 0xf) | BCM54XX_SHD_LEDS_LEDH(val);
+	        bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS12, reg);
+	        val = BCM_LED_SRC_ON;
+                reg = bcm54xx_shadow_read(phydev, BCM54XX_SHD_LEDS34);
+                reg = (reg & 0xf0) | BCM54XX_SHD_LEDS_LEDL(val);
+		bcm54xx_shadow_write(phydev, BCM54XX_SHD_LEDS34, reg);
+        }
 
 	if (phydev->dev_flags & PHY_BCM_FLAGS_MODE_1000BX) {
 		/*
@@ -569,8 +740,8 @@ static int bcm5482_read_status(struct phy_device *phydev)
 		if (phydev->link) {
 			phydev->speed = SPEED_1000;
 			phydev->duplex = DUPLEX_FULL;
-		}
-	}
+	        }
+        }
 
 	return err;
 }
@@ -659,114 +830,6 @@ static int bcm5481_config_aneg(struct phy_device *phydev)
 	return ret;
 }
 
-#ifdef DUMP_PHY_REGISTERS
-static void dump_phy_reg(struct phy_device *phydev)
-{
-  unsigned long int val;
-  val = (unsigned long int)phy_read(phydev, MII_PHYSID1) << 16 | phy_read(phydev, MII_PHYSID2);
-  printk("Ethernet PHY registers for phy %d, ID 0x%08lx:\n"
-      "==============================================\n", phydev->addr, val);
-  val = phy_read(phydev, MII_BMCR);
-  printk("0x00 - MII Control register:                           0x%04lx\n", val);
-  val = phy_read(phydev, MII_BMSR);
-  printk("0x01 - MII Status  register:                           0x%04lx\n", val);
-  val = phy_read(phydev, MII_ADVERTISE);
-  printk("0x04 - Auto-negotiation Advertisement register:        0x%04lx\n", val);
-  val = phy_read(phydev, MII_LPA);
-  printk("0x05 - Auto-negotiation Link Partner Ability register: 0x%04lx\n", val);
-  val = phy_read(phydev, MII_EXPANSION);
-  printk("0x06 - Auto-negotiation Expansion register:            0x%04lx\n", val);
-  val = phy_read(phydev, 0x07);
-  printk("0x07 - Next page Transmit register:                    0x%04lx\n", val);
-  val = phy_read(phydev, 0x08);
-  printk("0x08 - Link Partner Received Next Page register:       0x%04lx\n", val);
-  val = phy_read(phydev, MII_CTRL1000);
-  printk("0x09 - 1000Base-T Control register:                    0x%04lx\n", val);
-  val = phy_read(phydev, MII_STAT1000);
-  printk("0x0A - 1000Base-T Status register:                     0x%04lx\n", val);
-  val = phy_read(phydev, MII_ESTATUS);
-  printk("0x0F - IEEE Extended Status register:                  0x%04lx\n", val);
-  val = phy_read(phydev, 0x10);
-  printk("0x10 - IEEE Extended Control register:                 0x%04lx\n", val);
-  val = phy_read(phydev, 0x11);
-  printk("0x11 - PHY Extended Status register:                   0x%04lx\n", val);
-  val = phy_read(phydev, MII_DCOUNTER);
-  printk("0x12 - Receive Error Counter register:                 0x%04lx\n", val);
-  val = phy_read(phydev, MII_FCSCOUNTER);
-  printk("0x13 - False Carrier Sense Counter register:           0x%04lx\n", val);
-  val = phy_read(phydev, MII_NWAYTEST);
-  printk("0x14 - Receiver NOT_OK Counter register:               0x%04lx\n", val);
-  val = bcm54xx_exp_read(phydev, 0);
-  printk("0x17:0 - Receive/Transmit Packet Counter register:     0x%04lx\n", val);
-  val = bcm54xx_exp_read(phydev, 1);
-  printk("0x17:1 - Expansion Interrupt Status register:          0x%04lx\n", val);
-  val = bcm54xx_exp_read(phydev, 4);
-  printk("0x17:4 - Multicolor LED Selector register:             0x%04lx\n", val);
-  val = bcm54xx_exp_read(phydev, 5);
-  printk("0x17:5 - Multicolor LED Flash Rate Controls register:  0x%04lx\n", val);
-  val = bcm54xx_exp_read(phydev, 6);
-  printk("0x17:6 - Multicolor LED Programmable Blink Contrl reg: 0x%04lx\n", val);
-  val = bcm54xx_auxctl_read(phydev, 0);
-  printk("0x18:0 - Auxilary Control register:                    0x%04lx\n", val);
-  val = bcm54xx_auxctl_read(phydev, 1);
-  printk("0x18:1 - 10BaseT register:                             0x%04lx\n", val);
-  val = bcm54xx_auxctl_read(phydev, 2);
-  printk("0x18:2 - Power MII Control register:                   0x%04lx\n", val);
-  val = bcm54xx_auxctl_read(phydev, 4);
-  printk("0x18:4 - Misc Test register:                           0x%04lx\n", val);
-  val = bcm54xx_auxctl_read(phydev, 7);
-  printk("0x18:7 - Misc Control register:                        0x%04lx\n", val);
-  val = phy_read(phydev, 0x19);
-  printk("0x19 - Auxilary Status Summary register:               0x%04lx\n", val);
-  val = phy_read(phydev, MII_RESV2);
-  printk("0x1A - Interrupt Status register:                      0x%04lx\n", val);
-  val = phy_read(phydev, MII_TPISTATUS);
-  printk("0x1B - Interrupt Mask register:                        0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x02);
-  printk("0x1C:2 - Spare Control 1 register:                     0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x03);
-  printk("0x1C:3 - Clock Alignment Control register:             0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x04);
-  printk("0x1C:4 - Spare Control 2 register:                     0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x05);
-  printk("0x1C:5 - Spare Control 3 register:                     0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x08);
-  printk("0x1C:8 - LED Status register:                          0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x09);
-  printk("0x1C:9 - LED Control register:                         0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x0A);
-  printk("0x1C:A - Auto Power-down register:                     0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x0D);
-  printk("0x1C:D - LED Selector 1 register:                      0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x0E);
-  printk("0x1C:E - LED Selector 2 register:                      0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x0F);
-  printk("0x1C:F - LED GPIO Control/Status register:             0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x13);
-  printk("0x1C:13 - SerDES 100BASE-FX Control register:          0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x15);
-  printk("0x1C:15 - SGMII Slave register:                        0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x18);
-  printk("0x1C:18 - SGMII/Media Converter register:              0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1A);
-  printk("0x1C:1A - Auto-negotiation Debug register:             0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1B);
-  printk("0x1C:1B - Auxilary 1000BASE-X Control register:        0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1C);
-  printk("0x1C:1C - Auxilary 1000BASE-X Status register:         0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1D);
-  printk("0x1C:1D - Misc 1000BASE-X Status register:             0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1E);
-  printk("0x1C:1E - Copper/Fiber Auto-detect Medium register:    0x%04lx\n", val);
-  val = bcm54xx_shadow_read(phydev, 0x1F);
-  printk("0x1C:1F - Mode Control register:                       0x%04lx\n", val);
-  val = phy_read(phydev, 0x1D);
-  printk("0x1D - PHY Extended Status register:                   0x%04lx\n", val);
-  val = phy_read(phydev, 0x1E);
-  printk("0x1E - HCD Sumary register:                            0x%04lx\n", val);
-  return;
-}
-#endif
 
 /* MII_CTRL1000 register bits */
 #define BCM54610_NORMAL_MASK     (0x1FFF)

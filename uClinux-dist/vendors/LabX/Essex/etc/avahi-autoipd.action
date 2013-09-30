@@ -1,0 +1,47 @@
+#!/bin/sh
+
+# $Id$
+#
+# This file is part of avahi.
+#
+# avahi is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2 of the
+# License, or (at your option) any later version.
+#
+# avahi is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
+# License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with avahi; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
+
+set -e
+
+# Command line arguments:
+#   $1 event that happened:
+#          BIND:     Successfully claimed address
+#          CONFLICT: An IP address conflict happened
+#          UNBIND:   The IP address is no longer needed
+#          STOP:     The daemon is terminating
+#   $2 interface name
+#   $3 IP adddress
+
+if [ "$1" = "BIND" ]
+    then
+    ifconfig "$2" up multicast
+    ifconfig "$2:3" inet "$3" netmask 255.255.0.0 broadcast 169.254.255.255 up multicast
+    route add default "$2"
+else
+    if [ "$1" = "CONFLICT" -o "$1" = "STOP" -o "$1" = "UNBIND" ]
+        then
+	ifconfig "$2:3" down
+    else
+	echo "Unknown command" >&2
+	exit 1
+    fi
+fi
+exit 0

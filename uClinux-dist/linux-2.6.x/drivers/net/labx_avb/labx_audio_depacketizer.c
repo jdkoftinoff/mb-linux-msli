@@ -88,7 +88,7 @@ DMA_CALLBACKS_EXTERN
 /* Disables the passed instance */
 static void disable_depacketizer(struct audio_depacketizer *depacketizer) {
   uint32_t ctrlStatusReg;
-  DBG("Disbling the depacketizer\n");
+  DBG("Disabling the depacketizer\n");
 
   /* Disable the micro-engine */
   ctrlStatusReg = XIo_In32(REGISTER_ADDRESS(depacketizer, CONTROL_STATUS_REG));
@@ -606,6 +606,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   uint32_t clockDomain;
   uint32_t recoveryIndex;
   uint32_t controlValue = 0;
+  uint32_t sampleRate = SINGLE_SAMPLE_RATE;
 
   /* Configure the timestamp interval for the domain first.  This informs the basic
    * reference clock recovery hardware of how many samples are being averaged each
@@ -627,6 +628,29 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
   XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG),
             controlValue);
 
+  /* Set the sample rate for the clock domain */
+  switch(clockDomainSettings->sampleRate) {
+  case ENGINE_SAMPLE_RATE_32_KHZ:
+  case ENGINE_SAMPLE_RATE_44_1_KHZ:
+  case ENGINE_SAMPLE_RATE_48_KHZ:
+    sampleRate = SINGLE_SAMPLE_RATE;
+    break;
+
+  case ENGINE_SAMPLE_RATE_88_2_KHZ:
+  case ENGINE_SAMPLE_RATE_96_KHZ:
+    sampleRate = DOUBLE_SAMPLE_RATE;
+    break;
+  
+  case ENGINE_SAMPLE_RATE_176_4_KHZ:
+  case ENGINE_SAMPLE_RATE_192_KHZ:
+    sampleRate = QUAD_SAMPLE_RATE;
+    break;
+
+  default:
+    ;
+  }
+  XIo_Out32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG), sampleRate);
+
   /* Configure the clock domain with which match unit it gets its temporal 
    * information from.  The match units, in turn, link a stream index to its AVBTP
    * stream ID, so a descriptor must be configured to receive a stream on this
@@ -646,7 +670,7 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
       (depacketizer->capabilities.versionMinor >= 6)) {
 
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_RTC_INCREMENT_REG),
-              0x40000000); /* TODO - Where should we get the nominal increment from? */
+              0x40000000 | MC_RTC_INCREMENT_FORCE); /* TODO - Where should we get the nominal increment from? */
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG),
               clockDomainSettings->remainder);
     XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG),
@@ -781,7 +805,7 @@ static int netlink_thread(void *data)
     __set_current_state(TASK_RUNNING);
 
     streamStatusGeneration = depacketizer->streamStatusGeneration;
-
+#ifdef SOFTWARE_MUTE_ENABLED
     // Software based muting: If a stream's status has changed from Active to Inactive, then
     // zero the channel sample buffers associated with the stream.  For each of the 128 possible
     // streams, check for an Active to Inactive transition and clear the buffer if it has occurred.
@@ -814,7 +838,7 @@ static int netlink_thread(void *data)
         channelIndex += 32;
       }
     }
-
+#endif
     audio_depacketizer_stream_event(depacketizer);
 
     /* Before returning to waiting, optionally sleep a little bit and then
@@ -1055,6 +1079,18 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
     set_rtc_unstable(depacketizer);
     break;
 
+  case IOC_SET_MCR_RTC_INCREMENT:
+    {
+      ClockDomainIncrement cdi;
+
+      if(copy_from_user(&cdi, (void __user*)arg, sizeof(cdi)) != 0) {
+        return(-EFAULT);
+      }
+
+      XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, cdi.clockDomain, MC_RTC_INCREMENT_REG), cdi.increment);
+    }
+    break;
+
   case IOC_SET_AUTOMUTE_STREAM:
     {
       struct depacketizer_presentation_channels *channels;
@@ -1096,7 +1132,7 @@ static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
       }
     }
     break;
-
+  
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
@@ -1125,7 +1161,8 @@ static int audio_depacketizer_probe(const char *name,
                                     struct platform_device *pdev,
                                     struct resource *addressRange,
                                     struct resource *irq,
-                                    const char *interfaceType) {
+                                    const char *interfaceType,
+                                    int is_mcr_host) {
   struct audio_depacketizer *depacketizer;
   uint32_t capsWord;
   uint32_t versionWord;
@@ -1218,7 +1255,10 @@ static int audio_depacketizer_probe(const char *name,
       returnValue = -ENXIO;
       goto unmap;
     }
-  } else depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+  } else {
+    depacketizer->matchArchitecture = STREAM_MATCH_UNIFIED;
+    depacketizer->capabilities.dynamicSampleRates = ((capsWord >> DYN_SAMPLE_RATES_SHIFT) & 0x1);
+  }
 
   /* Capture more capabilities information */
   depacketizer->capabilities.maxInstructions = (0x01 << (capsWord & CODE_ADDRESS_BITS_MASK));
@@ -1249,6 +1289,14 @@ static int audio_depacketizer_probe(const char *name,
     /* Fetch this capability from the 'A' capabilities register */
     capsWord = XIo_In32(REGISTER_ADDRESS(depacketizer, CAPABILITIES_REG_A));
     depacketizer->capabilities.maxStreamSlots = (capsWord & MAX_STREAM_SLOTS_MASK);
+  }
+
+  if (is_mcr_host) {
+    depacketizer->capabilities.coastHostRtcIncrement =
+      (XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, 0, MC_CONTROL_REG))
+       & MC_CONTROL_HAS_COAST_HOST_RTC) ? 1 : 0;
+  } else {
+    depacketizer->capabilities.coastHostRtcIncrement = 0;
   }
 
   /* Announce the device */
@@ -1366,6 +1414,16 @@ static int audio_depacketizer_probe(const char *name,
 #ifdef CONFIG_OF
 static int audio_depacketizer_platform_remove(struct platform_device *pdev);
 
+static u32 get_u32(struct of_device *ofdev, const char *s) {
+  u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+  if(p) {
+    return *p;
+  } else {
+    dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to false.\n", s);
+    return FALSE;
+  }
+}
+
 static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
   struct resource r_mem_struct;
@@ -1375,6 +1433,7 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
   struct platform_device *pdev = to_platform_device(&ofdev->dev);
   const char *name = dev_name(&ofdev->dev);
   const char *interfaceType;
+  int is_mcr_host = 0;
   int rc;
 
   /* Obtain the resources for this instance */
@@ -1396,8 +1455,10 @@ static int __devinit audio_depacketizer_of_probe(struct of_device *ofdev, const 
     return(-EFAULT);
   }
 
+  is_mcr_host = get_u32(ofdev, "xlnx,is-mcr-host");
+
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(name, pdev, addressRange, irq, interfaceType));
+  return(audio_depacketizer_probe(name, pdev, addressRange, irq, interfaceType, is_mcr_host));
 }
 
 static int __devexit audio_depacketizer_of_remove(struct of_device *dev)
@@ -1440,6 +1501,7 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
   struct resource *addressRange;
   struct resource *irq;
   char *interfaceType;
+  int is_mcr_host;
 
   /* Obtain the resources for this instance */
   addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1462,8 +1524,10 @@ static int audio_depacketizer_platform_probe(struct platform_device *pdev)
     return(-EFAULT);
   }
 
+  is_mcr_host = 1; /* TODO */
+
   /* Dispatch to the generic function */
-  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq, interfaceType));
+  return(audio_depacketizer_probe(pdev->name, pdev, addressRange, irq, interfaceType, is_mcr_host));
 }
 
 static int audio_depacketizer_platform_remove(struct platform_device *pdev)

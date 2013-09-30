@@ -908,6 +908,12 @@ config SPARTAN6_RESET
 	  This option enables use of the ICAP peripheral's ability only
 	  to reset the system for a Spartan-6 processor. 
 
+config SPARTAN6_RESET_SPI
+		tristate "Spartan-6 SPI ICAP Reset"
+	depends on SPARTAN6_RESET
+	help
+    	Reset out of SPI flash
+
 config R3964
 	tristate "Siemens R3964 line discipline"
 	---help---
@@ -1117,6 +1123,11 @@ config LABX_LOCAL_AUDIO
 	help
 	  Select this to enable a misc device node to use for talking to Local Audio hardware.
 
+config LABX_AUDIO_METERS
+	bool "Lab X Audio Meters character device"
+	help
+	  Select this to enable a misc device node to use for talking to Audio Meter hardware.
+
 config DEVPORT
 	bool
 	depends on !M68K
@@ -1148,6 +1159,13 @@ config MEYER_SMPTE
 	depends on OF && (PPC_OF || MICROBLAZE)
 	help
 	  Meyer Sound SMPTE interface"
+
+config I2C_SERIAL
+	tristate "Meyer Sound I2C serial interface"
+	depends on OF && (PPC_OF || MICROBLAZE)
+	help
+	  Meyer Sound I2C serial interface
+
 
 endmenu
 
