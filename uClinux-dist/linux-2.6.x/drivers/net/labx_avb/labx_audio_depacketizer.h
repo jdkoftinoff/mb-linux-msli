@@ -65,10 +65,12 @@
 #define ERROR_REG            (0x007)
 #define IRQ_MASK_REG         (0x008)
 #define IRQ_FLAGS_REG        (0x009)
-#  define NO_IRQS       (0x00000000)
-#  define SYNC_IRQ      (0x00000001)
-#  define STREAM_IRQ    (0x00000002)
-#  define SEQ_ERROR_IRQ (0x00000004)
+#  define NO_IRQS         (0x00000000)
+#  define SYNC_IRQ        (0x00000001)
+#  define STREAM_IRQ      (0x00000002)
+#  define SEQ_ERROR_IRQ   (0x00000004)
+#  define MATCH_ERROR_IRQ (0x00000008)
+#  define DBS_ERROR_IRQ   (0x00000010)
 
 #define SYNC_REG             (0x00A)
 #  define CANCEL_SYNC      (0x00000000)
@@ -253,6 +255,8 @@ struct audio_depacketizer {
   uint32_t streamStatusGeneration;
   uint32_t streamSeqError;
   uint32_t errorIndex;
+  uint32_t streamDBSError;
+  uint32_t dbsErrorIndex;
   uint32_t netlinkSequence;
   struct task_struct *netlinkTask;
   struct depacketizer_presentation_channels *presentationChannels[MAX_CONCURRENT_STREAMS];

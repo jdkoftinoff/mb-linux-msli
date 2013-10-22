@@ -88,21 +88,43 @@ int audio_depacketizer_stream_event(struct audio_depacketizer *depacketizer) {
    * if there was one.
    */
   if(depacketizer->streamSeqError) {
-    /* Write the identity of the stream 
-     * NOTE - No register returns this yet!!!
+    /* Write the identity of the stream
      */
 
    if((depacketizer->capabilities.versionMajor > 1) ||
              (depacketizer->capabilities.versionMinor >= 8)) {
       returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_SEQ_ERROR, depacketizer->errorIndex);
    }
-    
+
     /* Clear the "stream sequence error" flag.  There is a race condition inherent here
      * with the ISR; however, the delivery of any one sequence error event is already
      * unreliable due to the way the depacketizer hardware operates.
      */
     depacketizer->streamSeqError = 0;
     depacketizer->errorIndex     = 0;
+
+    /* Make sure the clear occurs even if there was a write failure */
+    if(returnValue != 0) goto fail;
+  }
+
+  /* Write an attribute identifying the stream which encountered a DBS error,
+   * if there was one.
+   */
+  if(depacketizer->streamDBSError) {
+    /* Write the identity of the stream
+     */
+
+   if((depacketizer->capabilities.versionMajor > 1) ||
+             (depacketizer->capabilities.versionMinor >= 8)) {
+      returnValue = nla_put_u32(skb, AUDIO_DEPACKETIZER_EVENTS_A_STREAM_DBS_ERROR, depacketizer->dbsErrorIndex);
+   }
+
+    /* Clear the "stream DBS error" flag.  There is a race condition inherent here
+     * with the ISR; however, the delivery of any one DBS error event is already
+     * unreliable due to the way the depacketizer hardware operates.
+     */
+    depacketizer->streamDBSError = 0;
+    depacketizer->dbsErrorIndex  = 0;
 
     /* Make sure the clear occurs even if there was a write failure */
     if(returnValue != 0) goto fail;

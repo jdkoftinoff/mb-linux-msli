@@ -749,21 +749,27 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   /* Detect the stream change and stream reset IRQs; either one should
    * simply trigger the netlink thread.
    */
-  if((maskedFlags & (STREAM_IRQ | SEQ_ERROR_IRQ)) != 0) {
+  if((maskedFlags & (STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ)) != 0) {
     /* Increment the status count */
     depacketizer->streamStatusGeneration++;
 
     /* If this was a sequence error IRQ, leave a flag in place */
     if((maskedFlags & SEQ_ERROR_IRQ) != 0) {
       depacketizer->streamSeqError = 1;
-      depacketizer->errorIndex = seqError;
+      depacketizer->errorIndex = seqError & 0xFFFF;
     }
 
-    /* Disarm both event interrupts while the status thread handles the present
+    /* If this was a DBS error IRQ, leave a flag in place */
+    if((maskedFlags & DBS_ERROR_IRQ) != 0) {
+      depacketizer->streamDBSError = 1;
+      depacketizer->dbsErrorIndex = (seqError >> 16) & 0xFFFF;
+    }
+
+    /* Disarm event interrupts while the status thread handles the present
      * event(s).  This permits the status thread to limit the rate at which events
      * are accepted and propagated up to userspace.
      */
-    irqMask &= ~(STREAM_IRQ | SEQ_ERROR_IRQ);
+    irqMask &= ~(STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
 
     /* Wake up all threads waiting for a stream status event */
@@ -854,7 +860,7 @@ static int netlink_thread(void *data)
      */
     msleep(EVENT_THROTTLE_MSECS);
     irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
-    irqMask |= (STREAM_IRQ | SEQ_ERROR_IRQ);
+    irqMask |= (STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
   } while (!kthread_should_stop());
 
@@ -1393,8 +1399,10 @@ static int audio_depacketizer_probe(const char *name,
   depacketizer->streamStatusGeneration = 0;
   depacketizer->streamSeqError         = 0;
   depacketizer->errorIndex             = 0;
+  depacketizer->streamDBSError         = 0;
+  depacketizer->dbsErrorIndex          = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ));
   }
 
   /* Return success */
