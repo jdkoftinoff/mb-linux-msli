@@ -111,6 +111,10 @@
 #  define TDM_TX_SLAVE_MODE                  (0x800)
 #  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
 #  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
+#  define TDM_PIN_LOOPBACK_DISABLED          (0x0)
+#  define TDM_PIN_LOOPBACK_ENABLED           (0x80000000)
+#  define TDM_LOOPBACK_DISABLED              (0x0)
+#  define TDM_LOOPBACK_ENABLED               (0x40000000)
 
 /* Sample rate constants */
 #  define SINGLE_SAMPLE_RATE (0x00)
@@ -137,7 +141,8 @@ struct labx_tdm_platform_data {
   uint8_t burst_length;
   uint8_t burst_length_multiple;
   uint32_t mclk_ratio;
-  uint8_t has_loopback;
+  uint8_t has_pin_loopback;
+  uint8_t has_tdm_loopback;
   uint8_t slave_manager;
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   uint8_t analyzer;

@@ -113,6 +113,7 @@ int mailbox_event_send_request(struct labx_mailbox *mailbox) {
   /* Read the mailbox message length */ 
   msgLengthBytes = XIo_In32(REGISTER_ADDRESS(mailbox, SUPRV_MSG_LEN_REG));
   msgLengthWords = (msgLengthBytes+3)/4;
+  DBG("Received message of length: %d (bytes), %d (words)\n", msgLengthBytes, msgLengthWords);
 
   /* Each packet is itself a nested table of words; begin the nesting */
   packetNesting = nla_nest_start(skb, LABX_MAILBOX_MESSAGE_A_PACKET);

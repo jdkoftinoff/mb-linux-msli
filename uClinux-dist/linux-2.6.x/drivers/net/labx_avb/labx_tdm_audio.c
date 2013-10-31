@@ -523,6 +523,44 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       printk("TDM (ioctl): set mclk divider to %u\n", tdmControl->mclkDivider);
   }
       break;
+    
+    case PIN_LOOPBACK:    
+      // Ensure pin loopback is built into the TDM
+      if(!tdm->tdmCaps.hasPinLoopback) {
+        return -EPINLOOPNOTIMPL;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->pinLoopback == LOOPBACK_ENABLED) {
+        reg &= ~TDM_PIN_LOOPBACK_ENABLED;
+      } else {
+        reg |= TDM_PIN_LOOPBACK_ENABLED;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM (ioctl): pin loopback set to %s\n",
+             (tdmControl->pinLoopback == MASTER_MODE ? "on" : "off"));
+  }
+      break;
+    
+    case TDM_LOOPBACK:    
+      // Ensure tdm loopback is built into the TDM
+      if(!tdm->tdmCaps.hasTdmLoopback) {
+        return -ETDMLOOPNOTIMPL;
+      }
+
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (tdmControl->tdmLoopback == LOOPBACK_ENABLED) {
+        reg &= ~TDM_LOOPBACK_ENABLED;
+      } else {
+        reg |= TDM_LOOPBACK_ENABLED;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM (ioctl): TDM loopback set to %s\n",
+             (tdmControl->tdmLoopback == MASTER_MODE ? "on" : "off"));
+  }
+      break;
 
     default:
       returnValue = -EINVAL;
@@ -599,6 +637,16 @@ static int get_audio_tdm_control(struct audio_tdm *tdm,
     case MCLK_DIVIDER:
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
       tdmControl->mclkDivider = (reg & TDM_MCLK_DIVIDER_MASK) >> TDM_MCLK_DIVIDER_BITS;
+      break;
+    
+    case PIN_LOOPBACK:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->pinLoopback = ((reg & TDM_PIN_LOOPBACK_ENABLED) != 0);
+      break;
+    
+    case TDM_LOOPBACK:
+      reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      tdmControl->tdmLoopback = ((reg & TDM_LOOPBACK_ENABLED) != 0);
       break;
 
     default:
@@ -1194,6 +1242,78 @@ static ssize_t tdm_w_mclk_divider(struct class *c, const char * buf, size_t coun
   return (err < 0 ? err : count);
 }
 
+static ssize_t tdm_r_pin_loopback(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_PIN_LOOPBACK_ENABLED) != 0)));
+}
+
+static ssize_t tdm_w_pin_loopback(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    // Ensure pin loopback is built into the TDM
+    if(!tdm->tdmCaps.hasPinLoopback) {
+      err = -EPINLOOPNOTIMPL;
+    }
+  
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == LOOPBACK_ENABLED) {
+        reg &= ~TDM_PIN_LOOPBACK_ENABLED;
+      } else {
+        reg |= TDM_PIN_LOOPBACK_ENABLED;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM: set pin loopback to %s\n",
+             (val == LOOPBACK_ENABLED ? "on" : "off"));
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
+static ssize_t tdm_r_tdm_loopback(struct class *c, char *buf)
+{
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  return (snprintf(buf, PAGE_SIZE, "%d\n",
+           ((XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG)) & TDM_LOOPBACK_ENABLED) != 0)));
+}
+
+static ssize_t tdm_w_tdm_loopback(struct class *c, const char * buf, size_t count)
+{
+  int32_t err = 0;
+  struct audio_tdm *tdm = container_of(c, struct audio_tdm, tdmclass);
+  unsigned long int val;
+
+  if (strict_strtoul(buf, 0, &val) == 0) {
+    // Ensure tdm loopback is built into the TDM
+    if(!tdm->tdmCaps.hasPinLoopback) {
+      err = -ETDMLOOPNOTIMPL;
+    }
+  
+    if(!(err < 0)) {
+      uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
+      if (val == LOOPBACK_ENABLED) {
+        reg &= ~TDM_LOOPBACK_ENABLED;
+      } else {
+        reg |= TDM_LOOPBACK_ENABLED;
+      }
+      XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
+  if(debugOn) {
+      printk("TDM: set tdm loopback to %s\n",
+             (val == LOOPBACK_ENABLED ? "on" : "off"));
+  }
+    }
+  }
+  return (err < 0 ? err : count);
+}
+
 static ssize_t tdm_r_debug(struct class *c, char *buf)
 {
   return (snprintf(buf, PAGE_SIZE, "%d\n", (uint32_t)debugOn));
@@ -1221,6 +1341,8 @@ static struct class_attribute audio_tdm_class_attrs[] = {
   __ATTR(tx_owner,          S_IRUGO | S_IWUGO, tdm_r_tx_owner,         tdm_w_tx_owner),
   __ATTR(rx_owner,          S_IRUGO | S_IWUGO, tdm_r_rx_owner,         tdm_w_rx_owner),
   __ATTR(mclk_divider,      S_IRUGO | S_IWUGO, tdm_r_mclk_divider,     tdm_w_mclk_divider),
+  __ATTR(pin_loopback,      S_IRUGO | S_IWUGO, tdm_r_pin_loopback,     tdm_w_pin_loopback),
+  __ATTR(tdm_loopback,      S_IRUGO | S_IWUGO, tdm_r_tdm_loopback,     tdm_w_tdm_loopback),
   __ATTR(debug,             S_IRUGO | S_IWUGO, tdm_r_debug,            tdm_w_debug),
   __ATTR_NULL,
 };
@@ -1360,7 +1482,8 @@ int audio_tdm_probe(const char *name,
   tdm->tdmCaps.minBurstLength        = pdata->burst_length;
   tdm->tdmCaps.maxBurstMultiple      = pdata->burst_length_multiple;
   tdm->tdmCaps.maxNumStreams         = pdata->num_streams;
-  tdm->tdmCaps.hasLoopback           = pdata->has_loopback;
+  tdm->tdmCaps.hasPinLoopback        = pdata->has_pin_loopback;
+  tdm->tdmCaps.hasTdmLoopback        = pdata->has_tdm_loopback;
   tdm->tdmCaps.hasSlaveManager       = pdata->slave_manager;
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   tdm->tdmCaps.hasAnalyzer           = pdata->analyzer;
@@ -1465,7 +1588,8 @@ static int __devinit audio_tdm_of_probe(struct of_device *ofdev, const struct of
   pdata_struct.burst_length             = get_u32(ofdev, "xlnx,tdm-min-burst-length");
   pdata_struct.burst_length_multiple    = get_u32(ofdev, "xlnx,tdm-max-burst-multiple");
   pdata_struct.mclk_ratio               = get_u32(ofdev, "xlnx,mclk-ratio");
-  pdata_struct.has_loopback             = get_u32(ofdev, "xlnx,has-loopback");
+  pdata_struct.has_pin_loopback         = get_u32(ofdev, "xlnx,has-pin-loopback");
+  pdata_struct.has_tdm_loopback         = get_u32(ofdev, "xlnx,has-tdm-loopback");
   pdata_struct.slave_manager            = get_u32(ofdev, "xlnx,has-tdm-slave-manager");
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   pdata_struct.analyzer                 = get_u32(ofdev, "xlnx,has-tdm-analyzer");
@@ -1493,6 +1617,7 @@ static struct of_device_id tdm_of_match[] = {
   { .compatible = "xlnx,labx-tdm-audio-1.02.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.03.a", },
   { .compatible = "xlnx,labx-tdm-audio-1.04.a", },
+  { .compatible = "xlnx,labx-tdm-audio-1.04.b", },
   { .compatible = "xlnx,lawo-audio-block-1.00.b", },
   { /* end of list */ },
 };
