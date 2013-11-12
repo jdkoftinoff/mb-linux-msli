@@ -411,6 +411,7 @@ struct ptp_port {
   /* 802.1AS timeouts (10.6.3) */
   uint8_t syncReceiptTimeout;
   uint8_t announceReceiptTimeout;
+  uint32_t syncReceiptTimeoutTime;
 
   /* 802.1AS MD entity variables (11.2.12) */
   int8_t currentLogPdelayReqInterval;

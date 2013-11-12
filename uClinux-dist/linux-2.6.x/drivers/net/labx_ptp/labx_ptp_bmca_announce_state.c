@@ -207,6 +207,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
       pPort->infoIs                 = InfoIs_Disabled;
       pPort->reselect               = TRUE;
       pPort->selected               = FALSE;
+      pPort->syncReceiptTimeoutTime = 0xffffffff;
       memset(&pPort->portPriority, 0xFF, sizeof(PtpPriorityVector));
       break;
 
@@ -222,6 +223,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
       pPort->updtInfo         = FALSE;
       pPort->infoIs           = InfoIs_Mine;
       pPort->newInfo          = TRUE;
+      pPort->syncReceiptTimeoutTime = 0xffffffff;
       break;
 
     case PortAnnounceInformation_SUPERIOR_MASTER_PORT:
@@ -307,8 +309,7 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
           } else if (pPort->rcvdMsg && !pPort->updtInfo) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
           } else {
-            // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-            int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+            int syncTimeout = (pPort->syncTimeoutCounter >= pPort->syncReceiptTimeoutTime);
             int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
             if ((pPort->infoIs == InfoIs_Received) &&
                 (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
@@ -316,7 +317,7 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
 
               BMCA_DBG("Announce AGED: (announce %d >= %d || sync %d >= %d)\n",
                 pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
-                pPort->syncTimeoutCounter, SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+                pPort->syncTimeoutCounter, pPort->syncReceiptTimeoutTime);
 
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
 
