@@ -1128,6 +1128,11 @@ config LABX_AUDIO_METERS
 	help
 	  Select this to enable a misc device node to use for talking to Audio Meter hardware.
 
+config LABX_TCP_ACCEL
+	bool "Lab X TCP Accelerator support"
+	help
+	  Select this to enable support for TCP Accelerator hardware.
+
 config DEVPORT
 	bool
 	depends on !M68K

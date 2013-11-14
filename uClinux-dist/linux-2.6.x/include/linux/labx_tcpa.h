@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef _LABX_TCP_H_
-#define _LABX_TCP_H_
+#ifndef _LABX_TCPA_H_
+#define _LABX_TCPA_H_
 
 #include <linux/ioport.h>
 #include <linux/miscdevice.h>
@@ -34,51 +34,10 @@
 /* Constant allowing an encapsulating driver to tell us that it has
  * no IRQ resources for us to use
  */
-#define TCP_NO_IRQ_SUPPLIED  (-1)
+#define TCPA_NO_IRQ_SUPPLIED  (-1)
 
-/* Similar constant to indicate that the encapsulating driver has no
- * idea how much microcode RAM an instance being probed has.  If probed
- * with this parameter, the driver will assume that the entire address
- * space mapped for microcode (as reported by the TCP capabilities register)
- * is backed with RAM.
- */
-#define TCP_UCODE_SIZE_UNKNOWN  (-1)
-
-/* Flag values for ISR -> Netlink thread handshaking */
-#define TCP_STATUS_IDLE      (0)
-#define TCP_NEW_STATUS_READY (1)
-
-struct labx_tcp_accel_callbacks;
-
-/* TCPA structure (for use inside other drivers that include TCPA) */
-struct labx_tcpa {
-  /* Virtual address pointer for the memory-mapped hardware */
-  void __iomem  *virtualAddress;
-
-  /* Pointer to the enclosing device's name */
-  const char *name;
-
-  /* Device node of the enclosing device */
-  dev_t deviceNode;
-
-  /* Bit shift for the address sub-range */
-  uint32_t regionShift;
-
-  /* Capabilites from the CAPS registers */
-  tcpa_capabilities capabilities;
-
-  /* Wait queue for putting userspace threads to sleep for synced writes */
-  wait_queue_head_t syncedWriteQueue;
-
-  /* Interrupt request number */
-  int32_t irq;
-
-  /* Callbacks used for overriding some functionality */
-  struct labx_tcpa_callbacks *callbacks;
-};
-
-/* TCP Platform device structure */
-struct labx_tcp_pdev {
+/* TCP Accelerator Platform device structure */
+struct labx_tcpa_pdev {
   /* Misc device */
   struct miscdevice miscdev;
 
@@ -91,68 +50,48 @@ struct labx_tcp_pdev {
   uint32_t      physicalAddress;
   uint32_t      addressRangeSize;
 
-  /* TCP structure */
-  struct labx_tcpa tcpa;
+  /* Virtual address pointer for the memory-mapped hardware */
+  void __iomem  *virtualAddress;
+
+  /* Device node of the enclosing device */
+  dev_t deviceNode;
+
+  /* Interrupt request number */
+  int32_t irq;
 };
 
-/* Callback functions for a TCP instance */
-struct labx_tcpa_callbacks {
-  void (*irqSetup)(struct labx_dma *dma);
-  void (*irqTeardown)(struct labx_dma *dma);
-};
+#define TCPA_REGISTER_RANGE 0
+#define TCPA_TEMPLATE_RANGE 1
 
-/**
- * TCP device probe function
- *
- * @param tcpa           - TCP device structure to probe with
- * @param deviceMajor    - Major number of the enclosing device
- * @param deviceMinor    - Minor number of the enclosing device
- * @param name           - Pointer to the name of the enclosing device.  The memory this
- *                         points to must not be destroyed, e.g. the actual name buffer in
- *                         the enclosing driver's own device structure.
- * @param irq            - Interrupt request index to use; pass TCP_NO_IRQ_SUPPLIED if
- *                         a hardware interrupt is unavailable to the instance.  Some
- *                         capabilities may not be functional without an IRQ
- * @param tcpaCallbacks  - Callback functions for the instance being probed.
- */
-extern int32_t labx_tcpa_probe(struct labx_tcpa *tcpa, 
-                               uint32_t deviceMajor,
-                               uint32_t deviceMinor,
-                               const char *name, 
-                               int32_t irq,
-                               struct labx_tcpa_callbacks *tcpaCallbacks);
-
-/* TCP open and release operations */
-extern int32_t labx_tcpa_open(struct labx_tcpa *tcpa);
-extern int32_t labx_tcpa_release(struct labx_tcpa *tcpa);
-
-/* TCP ioctl processing */
-extern int labx_tcpa_ioctl(struct labx_tcpa *tcpa, unsigned int command, unsigned long arg);
-
-/* TCP Remove */
-extern int32_t labx_tcpa_remove(struct labx_tcpa *tcpa);
-
-#define TCP_REGISTER_RANGE 0
-#define TCP_MICROCODE_RANGE 1
-
-#define TCP_REGISTER_ADDRESS(tcpa, offset)                    \
+#define TCPA_REGISTER_ADDRESS(tcpa, offset)                      \
   ((uintptr_t)(tcpa)->virtualAddress |                          \
-   (TCP_REGISTER_RANGE << (tcpa)->regionShift) | ((offset) << 2))
+   (TCPA_REGISTER_RANGE << 7) | ((offset) << 2))
 
-#define TCP_MICROCODE_BASE(dma)                 \
-  ((uintptr_t)(dma)->virtualAddress |           \
-   (TCP_MICROCODE_RANGE << (dma)->regionShift))
+#define TCPA_TEMPLATE_ADDRESS(tcpa, offset) \
+  ((uintptr_t)(tcpa)->virtualAddress |     \
+   (TCPA_TEMPLATE_RANGE << 7))
+
+#define TCPA_TEMPLATE_WORDS 14
 
 /* Register address and control field #defines */
-#define TCP_CONTROL_REG                 0x00
-#  define TCP_DISABLE  0x00000000
-#  define TCP_ENABLE   0x00000001
-#define TCP_STREAM_WORDS_REG            0x01
-#define TCP_INITIAL_CHECKSUM_REG        0x02
-#define TCP_INITIAL_SEQUENCE_REG        0x03
-#define TCP_INITIAL_IP_ID_REG           0x04
-#define TCP_TEMPLATE_SIZE_REG           0x05
-#define TCP_RETRANSMIT_TICKS_REG        0x06
+#define TCPA_CONTROL_REG                 0x00
+#  define TCPA_DISABLE  0x00000000
+#  define TCPA_ENABLE   0x00000001
+#define TCPA_STREAM_WORDS_REG            0x01
+#define TCPA_INITIAL_CHECKSUM_REG        0x02
+#define TCPA_INITIAL_SEQUENCE_REG        0x03
+#define TCPA_INITIAL_IP_ID_REG           0x04
+#define TCPA_TEMPLATE_SIZE_REG           0x05
+#define TCPA_RETRANSMIT_TICKS_REG        0x06
 
-#endif /* _LABX_TCP_H_ */
+/* ioctl definitions */
+#define TCPA_IOC_CHAR             ('T')
+
+typedef struct {
+  int      fd;
+  uint32_t size;
+} TcpaTransferRequest;
+#define TCPA_IOC_START_TRANSFER  _IOW(TCPA_IOC_CHAR, 0x01, TcpaTransferRequest)
+
+#endif /* _LABX_TCPA_H_ */
 

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/char/labx_tcp_cdev.c
+ *  linux/drivers/char/labx_tcpa_cdev.c
  *
  *  Lab X Technologies TCP Accelerator
  *
@@ -34,6 +34,11 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
+#include <linux/labx_tcpa.h>
+#include <linux/if_ether.h>
+#include <linux/tcp.h>
+#include <linux/file.h>
+#include <net/route.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -44,63 +49,160 @@
 
 #define DRIVER_NAME "labx_tcp"
 
-#define MAX_TCP_DEVICES 16
+#define MAX_TCPA_DEVICES 16
 static uint32_t instanceCount;
-static struct labx_tcp_pdev* devices[MAX_TCP_DEVICES] = {};
+static struct labx_tcpa_pdev* devices[MAX_TCPA_DEVICES] = {};
 
-static int labx_tcp_open_cdev(struct inode *inode, struct file *filp) {
+static int labx_tcpa_open_cdev(struct inode *inode, struct file *filp) {
   int i;
-  struct labx_tcp_pdev *tcp_pdev = NULL;
+  struct labx_tcpa_pdev *tcpa_pdev = NULL;
 
-  for (i = 0; i<MAX_TCP_DEVICES; i++) {
+  for (i = 0; i<MAX_TCPA_DEVICES; i++) {
     /* printk("lookup %d = %p, %d (looking for %d)\n", i, devices[i], (devices[i]) ? devices[i]->miscdev.minor : -1, iminor(inode));*/
     if ((devices[i] != NULL) && (devices[i]->miscdev.minor == iminor(inode)))
       {
-        /* printk("labx_tcp_open: found %p\n", devices[i]);*/
-        tcp_pdev = devices[i];
-        filp->private_data = tcp_pdev;
+        /* printk("labx_tcpa_open: found %p\n", devices[i]);*/
+        tcpa_pdev = devices[i];
+        filp->private_data = tcpa_pdev;
         break;
       }
   }
 
-  if(tcp_pdev == NULL) return(-1);
+  if(tcpa_pdev == NULL) return(-1);
 
-  /* Inform the encapsulated tcp driver that it is being opened */
-  return(labx_tcp_open(&tcp_pdev->tcp));
+  return 0;
 }
 
-static int labx_tcp_release_cdev(struct inode *inode, struct file *filp) {
-	struct labx_tcp_pdev *tcp_pdev = (struct labx_tcp_pdev*)filp->private_data;
+static int labx_tcpa_release_cdev(struct inode *inode, struct file *filp) {
+	//struct labx_tcpa_pdev *tcpa_pdev = (struct labx_tcpa_pdev*)filp->private_data;
 
-	/* Simply let our tcp know it's closing */
-	return(labx_tcp_release(&tcp_pdev->tcp));
+	return 0;
 }
 
-static int labx_tcp_ioctl_cdev(struct inode *inode,
+static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
+	int               err = -EINVAL;
+	u8               *src_mac = NULL;
+	u8                dst_mac[ETH_ALEN];
+	u32               headers[TCPA_TEMPLATE_WORDS]; /* Headers are in little-endian format when written to regs */
+	u32               ip_csum = 0;
+	u32               tcpa_csum = 0;
+	struct socket    *sock = NULL;
+	struct sock      *sk = NULL;
+	struct tcp_sock  *tp = NULL;
+	struct rtable    *rt = NULL;
+	struct neighbour *neigh = NULL;
+        int i;
+
+	/* Get the socket from the file descriptor */
+	sock = sockfd_lookup(fd, &err);
+	if (!sock) goto out;
+	sk = sock->sk;
+	tp = tcp_sk(sk);
+
+	if (NULL == tp) goto out;
+
+	/* Get the route info for the socket */
+	rt = (struct rtable*)sk_dst_get(sk);
+	if (NULL == rt) goto out;
+	if (NULL == rt->u.dst.dev) goto out;
+
+	neigh = rt->u.dst.neighbour;
+	if (NULL == neigh) goto out;
+
+	src_mac = rt->u.dst.dev->dev_addr;
+        memcpy(dst_mac, neigh->ha, ETH_ALEN);
+
+	if (NULL == src_mac) goto out;
+
+	/* Ethernet header */
+	headers[0] = (dst_mac[1] << 24) | (dst_mac[0] << 16); /* Lower two bytes reserved for internal size */
+	headers[1] = (dst_mac[5] << 24) | (dst_mac[4] << 16) | (dst_mac[3] << 8) | dst_mac[2];
+	headers[2] = (src_mac[3] << 24) | (src_mac[2] << 16) | (src_mac[1] << 8) | src_mac[0];
+	headers[3] = (0x0008 << 16) | (src_mac[5] << 8) | src_mac[4]; /* Ethertype 0x0800 */
+
+	/* IP Header */
+	headers[4] = 0x00000045; /* Total length will be filled by gateware */
+	headers[5] = 0x00000000; /* ID will be filled by gateware and no fragments/flags */
+	headers[6] = (0x06 << 8) | tp->inet_conn.icsk_inet.uc_ttl; /* Header CSUM to be done by gateware */
+	headers[7] = rt->rt_src;
+	headers[8] = rt->rt_dst;
+
+	/* TCP Header */
+	headers[9] = (tp->inet_conn.icsk_inet.dport << 16) | tp->inet_conn.icsk_inet.sport;
+	headers[10] = 0x00000000; /* Sequence number filled in by gateware */
+	headers[11] = __swab32(tp->rcv_nxt);
+	headers[12] = 0xFFFF1050; /* TODO: Receive window size */
+	headers[13] = 0x00000000; /* Checksum filled in by gateware */
+
+	/* Program registers */
+	for (i=0; i<TCPA_TEMPLATE_WORDS; i++) {
+		XIo_Out32(TCPA_TEMPLATE_ADDRESS(tcpa_pdev, i), headers[i]);
+		if (i>=4 && i<=8) ip_csum += (headers[i] & 0xffff) + (headers[i] >> 16);
+		if (i>=9 && i<=13) tcpa_csum += (headers[i] & 0xffff) + (headers[i] >> 16);
+	}
+	ip_csum = (ip_csum + (ip_csum >> 16)) & 0xFFFF;
+	tcpa_csum = (tcpa_csum + (tcpa_csum >> 16)) & 0xFFFF;
+
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_STREAM_WORDS_REG),     size);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_CHECKSUM_REG), (ip_csum << 16) | tcpa_csum);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_SEQUENCE_REG), tp->snd_nxt);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_IP_ID_REG),    tp->inet_conn.icsk_inet.id);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_TEMPLATE_SIZE_REG),    TCPA_TEMPLATE_WORDS);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_RETRANSMIT_TICKS_REG), 0x0000F424); // TODO - Get the timeout from somewhere
+
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_CONTROL_REG), TCPA_ENABLE);
+
+        err = 0;
+
+out:
+        if (rt) dst_release(&rt->u.dst);
+
+	if (sock) sockfd_put(sock);
+
+	return err;
+}
+
+static int labx_tcpa_ioctl_cdev(struct inode *inode,
                                struct file *filp,
                                unsigned int command, unsigned long arg) {
-	struct labx_tcp_pdev *tcp_pdev = (struct labx_tcp_pdev*)filp->private_data;
+	struct labx_tcpa_pdev *tcpa_pdev = (struct labx_tcpa_pdev*)filp->private_data;
 
-	return labx_tcp_ioctl(&tcp_pdev->tcp, command, arg);
+	/* Switch on the request */
+	switch(command) {
+		case TCPA_IOC_START_TRANSFER:
+		{
+			TcpaTransferRequest transferRequest;
+
+			if(copy_from_user(&transferRequest, (void __user*)arg, sizeof(transferRequest)) != 0) {
+				return -EFAULT;
+			}
+
+			start_transfer(tcpa_pdev, transferRequest.fd, transferRequest.size);
+		}
+		break;
+
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
 }
 
-static const struct file_operations labx_tcp_fops = {
-	.open    = labx_tcp_open_cdev,
-	.release = labx_tcp_release_cdev,
-	.ioctl   = labx_tcp_ioctl_cdev,
+static const struct file_operations labx_tcpa_fops = {
+	.open    = labx_tcpa_open_cdev,
+	.release = labx_tcpa_release_cdev,
+	.ioctl   = labx_tcpa_ioctl_cdev,
 };
 
 #ifdef CONFIG_OF
-static int labx_tcp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
+static int labx_tcpa_of_probe(struct of_device *ofdev, const struct of_device_id *match)
 {
 	struct resource r_mem_struct = {};
 	struct resource r_irq_struct = {};
 	struct resource *addressRange = &r_mem_struct;
 	struct resource *irq          = &r_irq_struct;
-	struct labx_tcp_pdev *tcp_pdev;
+	struct labx_tcpa_pdev *tcpa_pdev;
 	int32_t irqParam;
-	int32_t *int32Ptr;
-	int32_t microcodeWords;
 	int ret;
 	int i;
   	struct platform_device *pdev = to_platform_device(&ofdev->dev);
@@ -114,98 +216,79 @@ static int labx_tcp_of_probe(struct of_device *ofdev, const struct of_device_id 
 	}
 
 	/* Create and populate a device structure */
-	tcp_pdev = (struct labx_tcp_pdev*) kzalloc(sizeof(struct labx_tcp_pdev), GFP_KERNEL);
-	if(!tcp_pdev) return(-ENOMEM);
+	tcpa_pdev = (struct labx_tcpa_pdev*) kzalloc(sizeof(struct labx_tcpa_pdev), GFP_KERNEL);
+	if(!tcpa_pdev) return(-ENOMEM);
 
 	/* Request and map the device's I/O memory region into uncacheable space */
-	tcp_pdev->physicalAddress = addressRange->start;
-	tcp_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(tcp_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, instanceCount++);
-	tcp_pdev->name[NAME_MAX_SIZE - 1] = '\0';
-	if(request_mem_region(tcp_pdev->physicalAddress, tcp_pdev->addressRangeSize,
-                          tcp_pdev->name) == NULL) {
+	tcpa_pdev->physicalAddress = addressRange->start;
+	tcpa_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+	snprintf(tcpa_pdev->name, NAME_MAX_SIZE, "%s%d", ofdev->node->name, instanceCount++);
+	tcpa_pdev->name[NAME_MAX_SIZE - 1] = '\0';
+	if(request_mem_region(tcpa_pdev->physicalAddress, tcpa_pdev->addressRangeSize,
+                          tcpa_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
-	//printk("tcp Physical %08X\n", tcp_pdev->physicalAddress);
+	//printk("tcp Physical %08X\n", tcpa_pdev->physicalAddress);
 
-	tcp_pdev->tcp.virtualAddress = 
-		(void*) ioremap_nocache(tcp_pdev->physicalAddress, tcp_pdev->addressRangeSize);
-	if(!tcp_pdev->tcp.virtualAddress) {
+	tcpa_pdev->virtualAddress =
+		(void*) ioremap_nocache(tcpa_pdev->physicalAddress, tcpa_pdev->addressRangeSize);
+	if(!tcpa_pdev->virtualAddress) {
 		ret = -ENOMEM;
 		goto release;
 	}
-	//printk("tcp Virtual %p\n", tcp_pdev->tcp.virtualAddress);
+	//printk("tcp Virtual %p\n", tcpa_pdev->virtualAddress);
 
     /* Obtain the interrupt request number for the instance */
     ret = of_irq_to_resource(ofdev->node, 0, irq);
     if(ret == NO_IRQ) {
       /* No IRQ was defined; indicate as much */
-      irqParam = TCP_NO_IRQ_SUPPLIED;
+      irqParam = TCPA_NO_IRQ_SUPPLIED;
     } else {
       irqParam = irq->start;
     }
 
-	tcp_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
-	tcp_pdev->miscdev.name = tcp_pdev->name;
-	tcp_pdev->miscdev.fops = &labx_tcp_fops;
-	ret = misc_register(&tcp_pdev->miscdev);
+	tcpa_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
+	tcpa_pdev->miscdev.name = tcpa_pdev->name;
+	tcpa_pdev->miscdev.fops = &labx_tcpa_fops;
+	ret = misc_register(&tcpa_pdev->miscdev);
 	if (ret) {
 		printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
 		goto unmap;
 	}
-	platform_set_drvdata(pdev, tcp_pdev);
-	tcp_pdev->pdev = pdev;
-	dev_set_drvdata(tcp_pdev->miscdev.this_device, tcp_pdev);
+	platform_set_drvdata(pdev, tcpa_pdev);
+	tcpa_pdev->pdev = pdev;
+	dev_set_drvdata(tcpa_pdev->miscdev.this_device, tcpa_pdev);
 
-    /* See if the device tree has a valid parameter to tell us our microcode size */
-    int32Ptr = (int32_t *) of_get_property(ofdev->node, "xlnx,microcode-words", NULL);
-    if(int32Ptr == NULL) {
-      /* Allow the tcp driver to infer its microcode size */
-      microcodeWords = tcp_UCODE_SIZE_UNKNOWN;
-    } else {
-      /* Specify the known size */
-      microcodeWords = *int32Ptr;
-    }
-    
-    /* Invoke the base device driver's probe function */
-	labx_tcp_probe(&tcp_pdev->tcp, 
-                   MISC_MAJOR,
-                   tcp_pdev->miscdev.minor,
-                   tcp_pdev->name, 
-                   microcodeWords, 
-                   irqParam,
-                   NULL);
-
-	for (i=0; i<MAX_TCP_DEVICES; i++) {
+	for (i=0; i<MAX_TCPA_DEVICES; i++) {
       if (NULL == devices[i]) {
-        /* printk(DRIVER_NAME ": Device %d = %p\n", i, tcp_pdev);*/
-        /* printk(DRIVER_NAME ": Misc minor is %d\n", tcp_pdev->miscdev.minor);*/
-        devices[i] = tcp_pdev;
+        /* printk(DRIVER_NAME ": Device %d = %p\n", i, tcpa_pdev);*/
+        /* printk(DRIVER_NAME ": Misc minor is %d\n", tcpa_pdev->miscdev.minor);*/
+        devices[i] = tcpa_pdev;
         break;
       }
 	}
 	return(0);
 
 unmap:
-	iounmap(tcp_pdev->tcp.virtualAddress);
+	iounmap(tcpa_pdev->virtualAddress);
 release:
-	release_mem_region(tcp_pdev->physicalAddress, tcp_pdev->addressRangeSize);
+	release_mem_region(tcpa_pdev->physicalAddress, tcpa_pdev->addressRangeSize);
 free:
-	kfree(tcp_pdev);
+	kfree(tcpa_pdev);
 	return ret;
 }
 
-static int __devexit labx_tcp_pdev_remove(struct platform_device *pdev);
+static int __devexit labx_tcpa_pdev_remove(struct platform_device *pdev);
 
-static int __devexit labx_tcp_of_remove(struct of_device *dev)
+static int __devexit labx_tcpa_of_remove(struct of_device *dev)
 {
 	struct platform_device *pdev = to_platform_device(&dev->dev);
-	labx_tcp_pdev_remove(pdev);
+	labx_tcpa_pdev_remove(pdev);
 	return(0);
 }
 
-static struct of_device_id labx_tcp_of_match[] = {
+static struct of_device_id labx_tcpa_of_match[] = {
 	{ .compatible = "xlnx,labx-tcp-1.00.a", },
 	{ .compatible = "xlnx,labx-tcp-1.01.a", },
 	{ .compatible = "xlnx,labx-tcp-1.02.a", },
@@ -214,123 +297,108 @@ static struct of_device_id labx_tcp_of_match[] = {
 	{ /* end of list */ },
 };
 
-static struct of_platform_driver labx_tcp_of_driver = {
+static struct of_platform_driver labx_tcpa_of_driver = {
 	.name		= DRIVER_NAME,
-	.match_table	= labx_tcp_of_match,
-	.probe		= labx_tcp_of_probe,
-	.remove		= __devexit_p(labx_tcp_of_remove),
+	.match_table	= labx_tcpa_of_match,
+	.probe		= labx_tcpa_of_probe,
+	.remove		= __devexit_p(labx_tcpa_of_remove),
 };
 #endif /* CONFIG_OF */
 
-static int labx_tcp_pdev_probe(struct platform_device *pdev)
+static int labx_tcpa_pdev_probe(struct platform_device *pdev)
 {
 	struct resource *addressRange;
     struct resource *irq;
-	struct labx_tcp_pdev *tcp_pdev;
+	struct labx_tcpa_pdev *tcpa_pdev;
     int32_t irqParam;
 	int ret;
 	int i;
 
 	/* Obtain the resources for this instance */
-	addressRange = platform_get_resource(pdev, IORESOURCE_MEM, LABX_TCP_ADDRESS_RANGE_RESOURCE);
+	addressRange = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!addressRange) return(-ENXIO);
 
 	/* Create and populate a device structure */
-	tcp_pdev = (struct labx_tcp_pdev*) kzalloc(sizeof(struct labx_tcp_pdev), GFP_KERNEL);
-	if(!tcp_pdev) return(-ENOMEM);
+	tcpa_pdev = (struct labx_tcpa_pdev*) kzalloc(sizeof(struct labx_tcpa_pdev), GFP_KERNEL);
+	if(!tcpa_pdev) return(-ENOMEM);
 
     /* Attempt to obtain the IRQ; if none is specified, the resource pointer is
      * NULL, and polling will be used.
      */
     irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
     if(irq == NULL) {
-      irqParam = TCP_NO_IRQ_SUPPLIED;
+      irqParam = TCPA_NO_IRQ_SUPPLIED;
     } else {
       irqParam = irq->start;
     }
 
 	/* Request and map the device's I/O memory region into uncacheable space */
-	tcp_pdev->physicalAddress = addressRange->start;
-	tcp_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
-	snprintf(tcp_pdev->name, NAME_MAX_SIZE, "%s.%d", pdev->name, pdev->id);
-	tcp_pdev->name[NAME_MAX_SIZE - 1] = '\0';
-	if(request_mem_region(tcp_pdev->physicalAddress, 
-                          tcp_pdev->addressRangeSize,
-                          tcp_pdev->name) == NULL) {
+	tcpa_pdev->physicalAddress = addressRange->start;
+	tcpa_pdev->addressRangeSize = ((addressRange->end - addressRange->start) + 1);
+	snprintf(tcpa_pdev->name, NAME_MAX_SIZE, "%s.%d", pdev->name, pdev->id);
+	tcpa_pdev->name[NAME_MAX_SIZE - 1] = '\0';
+	if(request_mem_region(tcpa_pdev->physicalAddress,
+                          tcpa_pdev->addressRangeSize,
+                          tcpa_pdev->name) == NULL) {
 		ret = -ENOMEM;
 		goto free;
 	}
-	//printk("tcp Physical %08X\n", tcp_pdev->physicalAddress);
+	//printk("tcp Physical %08X\n", tcpa_pdev->physicalAddress);
 	instanceCount++;
 
-	tcp_pdev->tcp.virtualAddress = 
-		(void*) ioremap_nocache(tcp_pdev->physicalAddress, tcp_pdev->addressRangeSize);
-	if(!tcp_pdev->tcp.virtualAddress) {
+	tcpa_pdev->virtualAddress =
+		(void*) ioremap_nocache(tcpa_pdev->physicalAddress, tcpa_pdev->addressRangeSize);
+	if(!tcpa_pdev->virtualAddress) {
 		ret = -ENOMEM;
 		goto release;
 	}
-	//printk("tcp Virtual %p\n", tcp_pdev->tcp.virtualAddress);
+	//printk("tcp Virtual %p\n", tcpa_pdev->virtualAddress);
 
-	tcp_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
-	tcp_pdev->miscdev.name = tcp_pdev->name;
-	tcp_pdev->miscdev.fops = &labx_tcp_fops;
-	ret = misc_register(&tcp_pdev->miscdev);
+	tcpa_pdev->miscdev.minor = MISC_DYNAMIC_MINOR;
+	tcpa_pdev->miscdev.name = tcpa_pdev->name;
+	tcpa_pdev->miscdev.fops = &labx_tcpa_fops;
+	ret = misc_register(&tcpa_pdev->miscdev);
 	if (ret) {
 		printk(KERN_WARNING DRIVER_NAME ": Unable to register misc device.\n");
 		goto unmap;
 	}
-	platform_set_drvdata(pdev, tcp_pdev);
-	tcp_pdev->pdev = pdev;
-	dev_set_drvdata(tcp_pdev->miscdev.this_device, tcp_pdev);
+	platform_set_drvdata(pdev, tcpa_pdev);
+	tcpa_pdev->pdev = pdev;
+	dev_set_drvdata(tcpa_pdev->miscdev.this_device, tcpa_pdev);
 
-    /* Call the base driver probe function, passing our name and IRQ selection.
-     * Since we have no "platform data" structure defined, there is no mechanism
-     * for allowing the platform to specify the exact amount of microcode RAM; the
-     * tcp driver will assume the entire microcode address space is backed with RAM.
-     */
-	labx_tcp_probe(&tcp_pdev->tcp, 
-                   MISC_MAJOR,
-                   tcp_pdev->miscdev.minor,
-                   tcp_pdev->name, 
-                   TCP_UCODE_SIZE_UNKNOWN, 
-                   irqParam,
-                   NULL);
-
-	for (i=0; i<MAX_TCP_DEVICES; i++)
+	for (i=0; i<MAX_TCPA_DEVICES; i++)
 	{
 		if (NULL == devices[i])
 		{
-			//printk(DRIVER_NAME ": Device %d = %p\n", i, tcp_pdev);
-			devices[i] = tcp_pdev;
+			//printk(DRIVER_NAME ": Device %d = %p\n", i, tcpa_pdev);
+			devices[i] = tcpa_pdev;
 			break;
 		}
 	}
 	return 0;
 
 unmap:
-	iounmap(tcp_pdev->tcp.virtualAddress);
+	iounmap(tcpa_pdev->virtualAddress);
 release:
-	release_mem_region(tcp_pdev->physicalAddress, tcp_pdev->addressRangeSize);
+	release_mem_region(tcpa_pdev->physicalAddress, tcpa_pdev->addressRangeSize);
 free:
-	kfree(tcp_pdev);
+	kfree(tcpa_pdev);
 	return ret;
 }
 
-static int __devexit labx_tcp_pdev_remove(struct platform_device *pdev)
+static int __devexit labx_tcpa_pdev_remove(struct platform_device *pdev)
 {
 	int i;
-	struct labx_tcp_pdev *tcp_pdev = (struct labx_tcp_pdev*)platform_get_drvdata(pdev);
+	struct labx_tcpa_pdev *tcpa_pdev = (struct labx_tcpa_pdev*)platform_get_drvdata(pdev);
 
 	/* Make sure the tcp unit is no longer running */
-	XIo_Out32(TCP_REGISTER_ADDRESS(&tcp_pdev->tcp, TCP_CONTROL_REG), TCP_DISABLE);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_CONTROL_REG), TCPA_DISABLE);
 
-	labx_tcp_remove(&tcp_pdev->tcp);
+	misc_deregister(&tcpa_pdev->miscdev);
 
-	misc_deregister(&tcp_pdev->miscdev);
-
-	for (i=0; i<MAX_TCP_DEVICES; i++)
+	for (i=0; i<MAX_TCPA_DEVICES; i++)
 	{
-		if (tcp_pdev == devices[i])
+		if (tcpa_pdev == devices[i])
 		{
 			devices[i] = NULL;
 			break;
@@ -340,26 +408,26 @@ static int __devexit labx_tcp_pdev_remove(struct platform_device *pdev)
 }
 
 /* Platform device driver structure */
-static struct platform_driver labx_tcp_platform_driver = {
-  .probe  = labx_tcp_pdev_probe,
-  .remove = labx_tcp_pdev_remove,
+static struct platform_driver labx_tcpa_platform_driver = {
+  .probe  = labx_tcpa_pdev_probe,
+  .remove = labx_tcpa_pdev_remove,
   .driver = {
     .name = DRIVER_NAME,
   }
 };
 
 /* Driver initialization and exit */
-static int __init labx_tcp_cdev_driver_init(void)
+static int __init labx_tcpa_cdev_driver_init(void)
 {
   int returnValue;
 
 #ifdef CONFIG_OF
-  returnValue = of_register_platform_driver(&labx_tcp_of_driver);
+  returnValue = of_register_platform_driver(&labx_tcpa_of_driver);
 #endif
- 
+
   instanceCount = 0;
   /* Register as a platform device driver */
-  if((returnValue = platform_driver_register(&labx_tcp_platform_driver)) < 0) {
+  if((returnValue = platform_driver_register(&labx_tcpa_platform_driver)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to register platform driver\n");
     return(returnValue);
   }
@@ -367,14 +435,14 @@ static int __init labx_tcp_cdev_driver_init(void)
   return(0);
 }
 
-static void __exit labx_tcp_cdev_driver_exit(void)
+static void __exit labx_tcpa_cdev_driver_exit(void)
 {
   /* Unregister as a platform device driver */
-  platform_driver_unregister(&labx_tcp_platform_driver);
+  platform_driver_unregister(&labx_tcpa_platform_driver);
 }
 
-module_init(labx_tcp_cdev_driver_init);
-module_exit(labx_tcp_cdev_driver_exit);
+module_init(labx_tcpa_cdev_driver_init);
+module_exit(labx_tcpa_cdev_driver_exit);
 
 MODULE_AUTHOR("Chris Wulff");
 MODULE_LICENSE("GPL");
