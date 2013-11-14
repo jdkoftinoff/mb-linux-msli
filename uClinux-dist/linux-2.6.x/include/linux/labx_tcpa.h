@@ -147,53 +147,12 @@ extern int32_t labx_tcpa_remove(struct labx_tcpa *tcpa);
 #define TCP_CONTROL_REG                 0x00
 #  define TCP_DISABLE  0x00000000
 #  define TCP_ENABLE   0x00000001
-
-#define TCP_CHANNEL_ENABLE_REG          0x01
-#  define TCP_CHANNELS_NONE  (0x00000000)
-
-#define TCP_CHANNEL_START_REG           0x02
-
-#define TCP_IRQ_ENABLE_REG              0x03
-#define TCP_IRQ_FLAGS_REG               0x04
-#  define TCP_NO_IRQS                (0x00000000)
-#  define TCP_SYNC_IRQ               (0x80000000)
-#  define TCP_STAT_OVRFLW_IRQ        (0x40000000)
-#  define TCP_STAT_READY_IRQ         (0x20000000)
-#  define TCP_CHAN_IRQ(whichChannel) (0x00000001 << whichChannel)
-#  define TCP_ALL_IRQS               (0xFFFFFFFF)
-
-#define TCP_SYNC_REG                    0x05
-#  define TCP_CANCEL_SYNC      (0x00000000)
-#  define TCP_SYNC_NEXT_WRITE  (0x00000001)
-#  define TCP_SYNC_PENDING     (0x80000000)
-
-#define TCP_STATUS_FIFO_FLAGS_REG       0x06
-#  define TCP_STATUS_FIFO_FULL    (0x00000010)
-#  define TCP_STATUS_FIFO_EMPTY   (0x00000008)
-#  define TCP_STATUS_READ_POPPED  (0x00000004)
-#  define TCP_STATUS_FIFO_BEGIN   (0x00000002)
-#  define TCP_STATUS_FIFO_END     (0x00000001)
-
-#define TCP_STATUS_FIFO_DATA_REG        0x07
-
-#define TCP_CAPABILITIES_REG            0x7E
-#  define TCP_CAPS_STATUS_FIFO_BIT           0x010000
-#  define TCP_CAPS_INDEX_SHIFT               12
-#  define TCP_CAPS_INDEX_MASK                0x0F
-#  define TCP_CAPS_CHANNELS_SHIFT            10
-#  define TCP_CAPS_CHANNELS_MASK             0x03
-#  define TCP_CAPS_ALU_SHIFT                 8
-#  define TCP_CAPS_ALU_MASK                  0x03
-#  define TCP_CAPS_PARAM_ADDRESS_BITS_SHIFT  4
-#  define TCP_CAPS_PARAM_ADDRESS_BITS_MASK   0x0F
-#  define TCP_CAPS_CODE_ADDRESS_BITS_SHIFT   0
-#  define TCP_CAPS_CODE_ADDRESS_BITS_MASK    0x0F
-
-#define TCP_REVISION_REG                0x7F
-#  define TCP_REVISION_FIELD_BITS  4
-#  define TCP_REVISION_FIELD_MASK  0x0F
-
-#define TCP_VECTORS_BASE_ADDRESS        0x80
+#define TCP_STREAM_WORDS_REG            0x01
+#define TCP_INITIAL_CHECKSUM_REG        0x02
+#define TCP_INITIAL_SEQUENCE_REG        0x03
+#define TCP_INITIAL_IP_ID_REG           0x04
+#define TCP_TEMPLATE_SIZE_REG           0x05
+#define TCP_RETRANSMIT_TICKS_REG        0x06
 
 #endif /* _LABX_TCP_H_ */
 
