@@ -115,6 +115,11 @@
    (RX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & PTP_RX_BUFFER_MASK) << PTP_PACKET_BUFFER_SHIFT))
 
+/* PTP message transport enumeration */
+#define MSG_TRANSPORT_MASK   (0xF0)
+#  define TRANSPORT_PTP        (0x01)
+#  define TRANSPORT_NOT_PTP    (0xFF)
+
 /* PTP message type enumeration */
 #define MSG_TYPE_MASK        (0x0F)
 #  define MSG_SYNC             (0x00)
@@ -192,6 +197,7 @@
 #  define FLAG_UTC_OFF_VALID  (0x0004)
 #  define FLAG_LEAP_59        (0x0002)
 #  define FLAG_LEAP_61        (0x0001)
+#  define NO_FLAGS            (0x0000)
 
 /* Number of words comprising a hardware timestamp (transmit or receive) */
 #define HW_TIMESTAMP_WORDS  (3)
