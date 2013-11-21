@@ -1,5 +1,5 @@
 /*
- *  include/linux/labx_tcp.h
+ *  drivers/char/labx_tcpa.h
  *
  *  Lab X Technologies TCP Accelerator
  *
@@ -63,13 +63,13 @@ struct labx_tcpa_pdev {
 #define TCPA_REGISTER_RANGE 0
 #define TCPA_TEMPLATE_RANGE 1
 
-#define TCPA_REGISTER_ADDRESS(tcpa, offset)                      \
-  ((uintptr_t)(tcpa)->virtualAddress |                          \
+#define TCPA_REGISTER_ADDRESS(tcpa, offset)      \
+  ((uintptr_t)(tcpa)->virtualAddress |           \
    (TCPA_REGISTER_RANGE << 7) | ((offset) << 2))
 
-#define TCPA_TEMPLATE_ADDRESS(tcpa, offset) \
-  ((uintptr_t)(tcpa)->virtualAddress |     \
-   (TCPA_TEMPLATE_RANGE << 7))
+#define TCPA_TEMPLATE_ADDRESS(tcpa, offset)      \
+  ((uintptr_t)(tcpa)->virtualAddress |           \
+   (TCPA_TEMPLATE_RANGE << 7) | ((offset) << 2))
 
 #define TCPA_TEMPLATE_WORDS 14
 
@@ -83,15 +83,6 @@ struct labx_tcpa_pdev {
 #define TCPA_INITIAL_IP_ID_REG           0x04
 #define TCPA_TEMPLATE_SIZE_REG           0x05
 #define TCPA_RETRANSMIT_TICKS_REG        0x06
-
-/* ioctl definitions */
-#define TCPA_IOC_CHAR             ('T')
-
-typedef struct {
-  int      fd;
-  uint32_t size;
-} TcpaTransferRequest;
-#define TCPA_IOC_START_TRANSFER  _IOW(TCPA_IOC_CHAR, 0x01, TcpaTransferRequest)
 
 #endif /* _LABX_TCPA_H_ */
 

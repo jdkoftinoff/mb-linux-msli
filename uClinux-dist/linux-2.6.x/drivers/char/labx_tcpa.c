@@ -34,7 +34,8 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
-#include <linux/labx_tcpa.h>
+#include <linux/labx_tcpa_defs.h>
+#include "labx_tcpa.h"
 #include <linux/if_ether.h>
 #include <linux/tcp.h>
 #include <linux/file.h>
@@ -85,13 +86,15 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 	u8                dst_mac[ETH_ALEN];
 	u32               headers[TCPA_TEMPLATE_WORDS]; /* Headers are in little-endian format when written to regs */
 	u32               ip_csum = 0;
-	u32               tcpa_csum = 0;
+	u32               tcp_csum = 0x0600; /* Protocol portion of the pseudoheader */
 	struct socket    *sock = NULL;
 	struct sock      *sk = NULL;
 	struct tcp_sock  *tp = NULL;
 	struct rtable    *rt = NULL;
 	struct neighbour *neigh = NULL;
         int i;
+
+        printk("TCPA: Start Transfer on fd %d, size %08X\n", fd, size);
 
 	/* Get the socket from the file descriptor */
 	sock = sockfd_lookup(fd, &err);
@@ -101,18 +104,27 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 
 	if (NULL == tp) goto out;
 
+        printk("TCPA: Got TCP socket: snd_nxt %08X\n", tp->snd_nxt);
+
 	/* Get the route info for the socket */
 	rt = (struct rtable*)sk_dst_get(sk);
 	if (NULL == rt) goto out;
+        printk("TCPA: Got rtable\n");
 	if (NULL == rt->u.dst.dev) goto out;
+
+        printk("TCPA: Got Route\n");
 
 	neigh = rt->u.dst.neighbour;
 	if (NULL == neigh) goto out;
+
+        printk("TCPA: Got Neighbour\n");
 
 	src_mac = rt->u.dst.dev->dev_addr;
         memcpy(dst_mac, neigh->ha, ETH_ALEN);
 
 	if (NULL == src_mac) goto out;
+
+        printk("TCPA: Got MACS\n");
 
 	/* Ethernet header */
 	headers[0] = (dst_mac[1] << 24) | (dst_mac[0] << 16); /* Lower two bytes reserved for internal size */
@@ -123,12 +135,12 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 	/* IP Header */
 	headers[4] = 0x00000045; /* Total length will be filled by gateware */
 	headers[5] = 0x00000000; /* ID will be filled by gateware and no fragments/flags */
-	headers[6] = (0x06 << 8) | tp->inet_conn.icsk_inet.uc_ttl; /* Header CSUM to be done by gateware */
-	headers[7] = rt->rt_src;
-	headers[8] = rt->rt_dst;
+	headers[6] = (0x06 << 8) | (tp->inet_conn.icsk_inet.uc_ttl & 0xFF); /* Header CSUM to be done by gateware */
+	headers[7] = __swab32(rt->rt_src);
+	headers[8] = __swab32(rt->rt_dst);
 
 	/* TCP Header */
-	headers[9] = (tp->inet_conn.icsk_inet.dport << 16) | tp->inet_conn.icsk_inet.sport;
+	headers[9] = (__swab16(tp->inet_conn.icsk_inet.dport) << 16) | __swab16(tp->inet_conn.icsk_inet.sport);
 	headers[10] = 0x00000000; /* Sequence number filled in by gateware */
 	headers[11] = __swab32(tp->rcv_nxt);
 	headers[12] = 0xFFFF1050; /* TODO: Receive window size */
@@ -136,21 +148,29 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 
 	/* Program registers */
 	for (i=0; i<TCPA_TEMPLATE_WORDS; i++) {
+                printk("TCPA: Header %d = %08X\n", i, headers[i]);
 		XIo_Out32(TCPA_TEMPLATE_ADDRESS(tcpa_pdev, i), headers[i]);
 		if (i>=4 && i<=8) ip_csum += (headers[i] & 0xffff) + (headers[i] >> 16);
-		if (i>=9 && i<=13) tcpa_csum += (headers[i] & 0xffff) + (headers[i] >> 16);
+		if (i>=7 && i<=13) tcp_csum += (headers[i] & 0xffff) + (headers[i] >> 16); /* Includes pseudo header IPs */
 	}
 	ip_csum = (ip_csum + (ip_csum >> 16)) & 0xFFFF;
-	tcpa_csum = (tcpa_csum + (tcpa_csum >> 16)) & 0xFFFF;
+	tcp_csum = (tcp_csum + (tcp_csum >> 16)) & 0xFFFF;
 
-	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_STREAM_WORDS_REG),     size);
-	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_CHECKSUM_REG), (ip_csum << 16) | tcpa_csum);
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_STREAM_WORDS_REG),     (size>>2));
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_CHECKSUM_REG), (ip_csum << 16) | tcp_csum);
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_SEQUENCE_REG), tp->snd_nxt);
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_IP_ID_REG),    tp->inet_conn.icsk_inet.id);
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_TEMPLATE_SIZE_REG),    TCPA_TEMPLATE_WORDS);
-	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_RETRANSMIT_TICKS_REG), 0x0000F424); // TODO - Get the timeout from somewhere
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_RETRANSMIT_TICKS_REG), 0x00BEBC20); // TODO - Get the timeout from somewhere
 
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_CONTROL_REG), TCPA_ENABLE);
+
+	while (TCPA_ENABLE & XIo_In32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_CONTROL_REG))) {
+          schedule();
+        }
+
+        /* Move the stack along to the next sequence number */
+        tp->snd_nxt += size;
 
         err = 0;
 
@@ -289,11 +309,7 @@ static int __devexit labx_tcpa_of_remove(struct of_device *dev)
 }
 
 static struct of_device_id labx_tcpa_of_match[] = {
-	{ .compatible = "xlnx,labx-tcp-1.00.a", },
-	{ .compatible = "xlnx,labx-tcp-1.01.a", },
-	{ .compatible = "xlnx,labx-tcp-1.02.a", },
-	{ .compatible = "xlnx,labx-tcp-1.03.a", },
-	{ .compatible = "xlnx,labx-tcp-1.04.a", },
+	{ .compatible = "xlnx,tcp-accelerator-1.00.a", },
 	{ /* end of list */ },
 };
 
