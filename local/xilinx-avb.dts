@@ -465,8 +465,8 @@
 			compatible = "xlnx,xps-intc-2.01.a", "xlnx,xps-intc-1.00.a";
 			interrupt-controller ;
 			reg = < 0x81800000 0x10000 >;
-			xlnx,kind-of-intr = <0x10181>;
-			xlnx,num-intr-inputs = <0x11>;
+			xlnx,kind-of-intr = <0x00181>;
+			xlnx,num-intr-inputs = <0x10>;
 		} ;
 		xps_spi_0: xps-spi@83400000 {
 			compatible = "xlnx,xps-spi-2.02.a", "xlnx,xps-spi-2.00.a";
@@ -534,9 +534,6 @@
 
 		dgpio_0: smpte-decoder@84060000 {
 			compatible = "xlnx,smpte-generator-1.00.a";
-			xlnx,audio-format = "I2S";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 16 0 >;
 			reg = < 0x84060000 0x10000 >;
 			xlnx,family = "virtex5";
 			xlnx,include-dphase-timer = <0x1>;
