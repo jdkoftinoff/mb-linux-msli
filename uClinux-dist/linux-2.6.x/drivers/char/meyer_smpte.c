@@ -78,7 +78,6 @@ static DEFINE_SPINLOCK(static_dev_lock);
 struct smpte_dev
 {
   void __iomem *base;
-  unsigned int irq;
   spinlock_t lock;
   //struct semaphore sem;
   struct cdev cdev;
@@ -159,11 +158,11 @@ static int smpte_dev_release(struct inode *inode, struct file *filp)
       spin_lock_irqsave(client->dev->lock,flags);
       client_prev_ptr=&client->dev->clients;
       while(*client_prev_ptr&&*client_prev_ptr!=client)
-	client_prev_ptr=&(*client_prev_ptr)->next;
+        client_prev_ptr=&(*client_prev_ptr)->next;
       if(*client_prev_ptr==client)
-	*client_prev_ptr=client->next;
+        *client_prev_ptr=client->next;
       else
-	printk(KERN_ERR "meyer-smpte: inconsistent list of clients\n");
+        printk(KERN_ERR "meyer-smpte: inconsistent list of clients\n");
       client->dev->inuse--;
       spin_unlock_irqrestore(client->dev->lock,flags);
       up(&client->sem);
@@ -173,7 +172,7 @@ static int smpte_dev_release(struct inode *inode, struct file *filp)
 }
 
 static unsigned smpte_dev_poll(struct file *filp, 
-				 struct poll_table_struct *wait)
+                                 struct poll_table_struct *wait)
 {
   struct smpte_client *client;
   unsigned long flags;
@@ -198,7 +197,7 @@ static unsigned smpte_dev_poll(struct file *filp,
 }
 
 static ssize_t smpte_dev_read(struct file *filp, char __user *buf,
-			      size_t count,loff_t *offset)
+                              size_t count,loff_t *offset)
 {
   unsigned long flags;
   struct smpte_client *client;
@@ -226,33 +225,33 @@ static ssize_t smpte_dev_read(struct file *filp, char __user *buf,
     {
       data_left=sizeof(struct smpte_data)-client->read_offset;
       if(count<data_left)
-	{
-	  if(copy_to_user(buf,
-			  ((char*)&client->databuffer[client->read_index])
-			  +client->read_offset,count))
-	    {
-	      up(&client->sem);
-	      return -EFAULT;
-	    }
-	  client->read_offset+=count;
-	  up(&client->sem);
-	  return count;
-	}
+        {
+          if(copy_to_user(buf,
+                          ((char*)&client->databuffer[client->read_index])
+                          +client->read_offset,count))
+            {
+              up(&client->sem);
+              return -EFAULT;
+            }
+          client->read_offset+=count;
+          up(&client->sem);
+          return count;
+        }
       else
-	{
-	  if(copy_to_user(buf,
-			  ((char*)&client->databuffer[client->read_index])
-			  +client->read_offset,data_left))
-	    {
-	      up(&client->sem);
-	      return -EFAULT;
-	    }
-	  count-=data_left;
-	  buf+=data_left;
-	  client->read_offset=0;
-	  client->read_index=(client->read_index+1)
-	    %SMPTE_DATA_BUF_SIZE;
-	}
+        {
+          if(copy_to_user(buf,
+                          ((char*)&client->databuffer[client->read_index])
+                          +client->read_offset,data_left))
+            {
+              up(&client->sem);
+              return -EFAULT;
+            }
+          count-=data_left;
+          buf+=data_left;
+          client->read_offset=0;
+          client->read_index=(client->read_index+1)
+            %SMPTE_DATA_BUF_SIZE;
+        }
     }
   
   while(count>0)
@@ -270,90 +269,90 @@ static ssize_t smpte_dev_read(struct file *filp, char __user *buf,
       
       /* truncate if necessary */
       if(records_available<=records_count)
-	{
-	  data_left=0;
-	  records_count=records_available;
-	}
+        {
+          data_left=0;
+          records_count=records_available;
+        }
       
       copy_start=client->read_index*sizeof(struct smpte_data);
       copy_end=copy_start+records_count*sizeof(struct smpte_data)+data_left;
       
       if(copy_end>sizeof(struct smpte_data)*SMPTE_DATA_BUF_SIZE)
-	{
-	  copy_count_1=sizeof(struct smpte_data)*SMPTE_DATA_BUF_SIZE
-	    -copy_start;
-	  copy_count_2=copy_end-sizeof(struct smpte_data)*SMPTE_DATA_BUF_SIZE;
-	}
+        {
+          copy_count_1=sizeof(struct smpte_data)*SMPTE_DATA_BUF_SIZE
+            -copy_start;
+          copy_count_2=copy_end-sizeof(struct smpte_data)*SMPTE_DATA_BUF_SIZE;
+        }
       else
-	{
-	  copy_count_1=copy_end-copy_start;
-	  copy_count_2=0;
-	}
+        {
+          copy_count_1=copy_end-copy_start;
+          copy_count_2=0;
+        }
       
       if(copy_to_user(buf,
-		      ((char*)&client->databuffer[client->read_index]),
-		      copy_count_1))
-	{
-	  spin_unlock_irqrestore(client->dev->lock,flags);
-	  up(&client->sem);
-	  return -EFAULT;
-	}
+                      ((char*)&client->databuffer[client->read_index]),
+                      copy_count_1))
+        {
+          spin_unlock_irqrestore(client->dev->lock,flags);
+          up(&client->sem);
+          return -EFAULT;
+        }
       count-=copy_count_1;
       buf+=copy_count_1;
       
       if(copy_count_2)
-	{
-	  if(copy_to_user(buf,
-			  ((char*)&client->databuffer[0]),copy_count_2))
-	    {
-	      spin_unlock_irqrestore(client->dev->lock,flags);
-	      up(&client->sem);
-	      return -EFAULT;
-	    }
-	  count-=copy_count_2;
-	  buf+=copy_count_2;
-	  
-	  client->read_index=copy_count_2/sizeof(struct smpte_data);
-	  client->read_offset=copy_count_2%sizeof(struct smpte_data);
-	}
+        {
+          if(copy_to_user(buf,
+                          ((char*)&client->databuffer[0]),copy_count_2))
+            {
+              spin_unlock_irqrestore(client->dev->lock,flags);
+              up(&client->sem);
+              return -EFAULT;
+            }
+          count-=copy_count_2;
+          buf+=copy_count_2;
+          
+          client->read_index=copy_count_2/sizeof(struct smpte_data);
+          client->read_offset=copy_count_2%sizeof(struct smpte_data);
+        }
       else
-	{
-	  client->read_index+=copy_count_1/sizeof(struct smpte_data);
-	  client->read_offset=copy_count_1%sizeof(struct smpte_data);
-	  if(client->read_index>=SMPTE_DATA_BUF_SIZE)
-	    client->read_index=0;
-	}
+        {
+          client->read_index+=copy_count_1/sizeof(struct smpte_data);
+          client->read_offset=copy_count_1%sizeof(struct smpte_data);
+          if(client->read_index>=SMPTE_DATA_BUF_SIZE)
+            client->read_index=0;
+        }
       /* available and requested data is received, unlock everything */
       spin_unlock_irqrestore(client->dev->lock,flags);
       
       /* 
-	 if at this point there is still space in user's buffer, return from
-	 nonblocking read operation or wait in blocking one
+         if at this point there is still space in user's buffer, return from
+         nonblocking read operation or wait in blocking one
       */
       if(count)
-	{
-	  up(&client->sem);
-	  if(filp->f_flags & O_NONBLOCK)
-	    return orig_count-count;
-	  else
-	    {
-	      /* wait for pointers to move */
-	      if(wait_event_interruptible(client->wait_read_queue,
-					  (client->read_index!=
-					   client->write_index)))
-		return -EINTR;
-	      
-	      if(down_interruptible(&client->sem))
-		return -EINTR;
-	    }
-	}
+        {
+          up(&client->sem);
+          if(filp->f_flags & O_NONBLOCK)
+            return orig_count-count;
+          else
+            {
+              /* wait for pointers to move */
+              if(wait_event_interruptible(client->wait_read_queue,
+                                          (client->read_index!=
+                                           client->write_index)))
+                return -EINTR;
+              
+              if(down_interruptible(&client->sem))
+                return -EINTR;
+            }
+        }
     }
   up(&client->sem);
   return orig_count-count;
 }
 
 static ssize_t smpte_dev_write(struct file *filp, const char __user *buf,
-			      size_t count,loff_t *offset)
+                              size_t count,loff_t *offset)
 {
   unsigned long flags;
   struct smpte_client *client;
@@ -381,124 +380,124 @@ static ssize_t smpte_dev_write(struct file *filp, const char __user *buf,
   while(count>0)
     {
       curr_count=(count<(SMPTE_WRITE_AREA_SIZE-curr_offset))?
-	count:(SMPTE_WRITE_AREA_SIZE-curr_offset);
+        count:(SMPTE_WRITE_AREA_SIZE-curr_offset);
 
       if(client->wr_offset_start!=curr_offset)
-	client->wr_offset_start=curr_offset;
+        client->wr_offset_start=curr_offset;
 
       if(copy_from_user(&client->wr_buffer[curr_offset],buf,curr_count))
-	{
-	  client->wr_offset_start=0;
-	  up(&client->sem);
-	  return -EFAULT;
-	}
+        {
+          client->wr_offset_start=0;
+          up(&client->sem);
+          return -EFAULT;
+        }
 
       curr_offset+=curr_count;
 
       if(client->wr_offset_start==0&&curr_offset>=1)
-	{
-	  
-	  /* options written */
-	  client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_RATE|SMPTE_REG_GEN_OPTS_DROP);
-	  switch(client->wr_buffer[0])
-	    {
-	    case 8:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
-	    case 0:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_24_00;
-	      break;
-	    case 9:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
-	    case 1:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_25_00;
-	      break;
-	    case 10:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
-	    case 2:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_30_00;
-	      break;
-	    case 11:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
-	    case 3:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_23_97;
-	      break;
-	    case 12:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
-	    case 4:
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_29_97;
-	      break;
-	    default:
-	      break;
-	    }
-	}
-      if(client->wr_offset_start<=1&&curr_offset>=2)
-	{
-	  /* command written */
-	  switch(client->wr_buffer[1])
-	    {
-	    case 1:
-	      /* start */
-	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
-	      client->cmd_gen|=(SMPTE_REG_GEN_OPTS_TIME_RUN
-				|SMPTE_REG_GEN_OPTS_GEN_RUN);
-	      break;
-	    case 2:
-	      /* pause */
-	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
-	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_TIME_RUN;
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_RUN;
-	      break;
-            case 3:
-	      client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
-			 |SMPTE_REG_GEN_OPTS_GEN_RUN);
-	      client->cmd_gen|=SMPTE_REG_GEN_OPTS_DECODE;
+        {
+          
+          /* options written */
+          client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_RATE|SMPTE_REG_GEN_OPTS_DROP);
+          switch(client->wr_buffer[0])
+            {
+            case 8:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+            case 0:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_24_00;
               break;
-	    default:
-	      /* stop */
-	      client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
-	      client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
-			 |SMPTE_REG_GEN_OPTS_GEN_RUN);
-	      break;
-	    }
-	}
+            case 9:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+            case 1:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_25_00;
+              break;
+            case 10:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+            case 2:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_30_00;
+              break;
+            case 11:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+            case 3:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_23_97;
+              break;
+            case 12:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DROP;
+            case 4:
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_29_97;
+              break;
+            default:
+              break;
+            }
+        }
+      if(client->wr_offset_start<=1&&curr_offset>=2)
+        {
+          /* command written */
+          switch(client->wr_buffer[1])
+            {
+            case 1:
+              /* start */
+              client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
+              client->cmd_gen|=(SMPTE_REG_GEN_OPTS_TIME_RUN
+                                |SMPTE_REG_GEN_OPTS_GEN_RUN);
+              break;
+            case 2:
+              /* pause */
+              client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
+              client->cmd_gen&=~SMPTE_REG_GEN_OPTS_TIME_RUN;
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_RUN;
+              break;
+            case 3:
+              client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
+                         |SMPTE_REG_GEN_OPTS_GEN_RUN);
+              client->cmd_gen|=SMPTE_REG_GEN_OPTS_DECODE;
+              break;
+            default:
+              /* stop */
+              client->cmd_gen&=~SMPTE_REG_GEN_OPTS_DECODE;
+              client->cmd_gen&=~(SMPTE_REG_GEN_OPTS_TIME_RUN
+                         |SMPTE_REG_GEN_OPTS_GEN_RUN);
+              break;
+            }
+        }
       if(client->wr_offset_start<=2&&curr_offset>=6)
-	{
-	  /* level written */
-	  memcpy(&level,&client->wr_buffer[2],sizeof(level));
-	  client->cmd_gen&=~SMPTE_REG_GEN_OPTS_GEN_LEVEL;
-	  client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_LEVEL&(level>>16);
-	}
+        {
+          /* level written */
+          memcpy(&level,&client->wr_buffer[2],sizeof(level));
+          client->cmd_gen&=~SMPTE_REG_GEN_OPTS_GEN_LEVEL;
+          client->cmd_gen|=SMPTE_REG_GEN_OPTS_GEN_LEVEL&(level>>16);
+        }
       client->cmd_gen&=~SMPTE_REG_GEN_OPTS_LOAD;
       if(client->wr_offset_start<=6&&curr_offset>=14)
-	{
-	  /* data written */
-	  memcpy(&client->wr_data_hi,&client->wr_buffer[6],
-		 sizeof(client->wr_data_hi));
-	  memcpy(&client->wr_data_lo,&client->wr_buffer[10],
-		 sizeof(client->wr_data_lo));
-	  client->cmd_gen|=SMPTE_REG_GEN_OPTS_LOAD;
-	}
+        {
+          /* data written */
+          memcpy(&client->wr_data_hi,&client->wr_buffer[6],
+                 sizeof(client->wr_data_hi));
+          memcpy(&client->wr_data_lo,&client->wr_buffer[10],
+                 sizeof(client->wr_data_lo));
+          client->cmd_gen|=SMPTE_REG_GEN_OPTS_LOAD;
+        }
 
       /* lock here, to handle I/O */
       spin_lock_irqsave(client->dev->lock,flags);
 
       if(client->cmd_gen&SMPTE_REG_GEN_OPTS_LOAD)
-	{
-	  XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_HI,
-		    client->wr_data_hi);
-	  XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_LO,
-		    client->wr_data_lo);
-	}
+        {
+          XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_HI,
+                    client->wr_data_hi);
+          XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_LOAD_LO,
+                    client->wr_data_lo);
+        }
       XIo_Out32((unsigned int)client->dev->base+SMPTE_REG_GEN_OPTS,
-		client->cmd_gen);
+                client->cmd_gen);
 
       spin_unlock_irqrestore(client->dev->lock,flags);
 
       if(curr_offset>=SMPTE_WRITE_AREA_SIZE)
-	{
-	  curr_offset=0;
-	  client->wr_offset_start=0;
-	}
+        {
+          curr_offset=0;
+          client->wr_offset_start=0;
+        }
       count-=curr_count;
       buf+=curr_count;
     }
@@ -518,61 +517,12 @@ static struct file_operations smpte_dev_fops =
     .release = smpte_dev_release,
   };
 
-static irqreturn_t smpte_dev_irqhandler(int irq, void *p)
-{
-  unsigned long flags;
-  struct smpte_dev *dev;
-  struct smpte_client *client;
-  int new_write_index;
-  struct smpte_data data;
-  u32 ctrlflags;
-
-  dev=(struct smpte_dev*)p;
-
-  spin_lock_irqsave(dev->lock,flags);
-
-  /* read control register */
-  ctrlflags=
-    XIo_In32(((unsigned int)dev->base+SMPTE_REG_CTRL));
-  if(ctrlflags&SMPTE_BIT_CTRL_RX)
-    {
-      /* read everything */
-      data.smpte_data_hi=
-	XIo_In32(((unsigned int)dev->base+SMPTE_REG_DATA_HI));
-      data.smpte_data_lo=
-	XIo_In32(((unsigned int)dev->base+SMPTE_REG_DATA_LO));
-      data.gptp_sec=
-	((u64)XIo_In32(((unsigned int)dev->base+SMPTE_REG_T_SEC)))
-	|(((u64)(ctrlflags&0x0000ffff))<<32);
-      data.gptp_nsec=
-	XIo_In32(((unsigned int)dev->base+SMPTE_REG_T_NSEC));
-
-      /* copy received data to the clients' buffers */
-      for(client=dev->clients;client;client=client->next)
-	{
-	  new_write_index=(client->write_index+1)%SMPTE_DATA_BUF_SIZE;
-	  if(new_write_index!=client->read_index)
-	    {
-	      memcpy(&client->databuffer[client->write_index],
-		     &data,sizeof(data));
-	      client->write_index=new_write_index;
-	      wake_up_interruptible(&client->wait_read_queue);
-	    }
-	}
-    }
-
-  /* acknowledge interrupt */
-  XIo_Out32(((unsigned int)dev->base+SMPTE_REG_CTRL),ctrlflags);
-  spin_unlock_irqrestore(dev->lock,flags);
-  return IRQ_HANDLED;
-}
-
 /* device initialization and exit */
 static int __devinit smpte_dev_probe(struct of_device *ofdev,
-				      const struct of_device_id *match)
+                                      const struct of_device_id *match)
 {
   struct smpte_dev *dev;
-  struct resource res_mem,res_irq;
+  struct resource res_mem;
   int retval;
   unsigned int minor;
   unsigned long flags;
@@ -581,22 +531,15 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
   if(retval)
     {
       printk(KERN_ERR "%s: I/O memory resource is missing\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       return retval;
-    }
-
-  if(of_irq_to_resource(ofdev->node,0,&res_irq)==NO_IRQ)
-    {
-      printk(KERN_ERR "%s: interrupt resource is missing\n",
-	     dev_name(&ofdev->dev));
-      return -ENODEV;
     }
 
   dev = kzalloc(sizeof(*dev), GFP_KERNEL);
   if(!dev)
     {
       printk(KERN_ERR "%s: Failed to allocate device data\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       return -ENOMEM;
     }
   spin_lock_init(&dev->lock);
@@ -607,7 +550,7 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
     {
       spin_unlock_irqrestore(&static_dev_lock,flags);
       printk(KERN_ERR "%s: %d devices already allocated\n",
-	     dev_name(&ofdev->dev),DEVICES_COUNT);
+             dev_name(&ofdev->dev),DEVICES_COUNT);
       kfree(dev);
       return -ENODEV;
     }
@@ -624,10 +567,10 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
   dev_set_drvdata(&ofdev->dev,dev);
 
   if(!request_mem_region(res_mem.start,resource_size(&res_mem),
-			 dev_name(&ofdev->dev)))
+                         dev_name(&ofdev->dev)))
     {
       printk(KERN_ERR "%s: I/O memory region busy\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       kfree(dev);
       return -EBUSY;
     }
@@ -636,47 +579,34 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
   if(!dev->base)
     {
       printk(KERN_ERR "%s: Unable to map I/O memory region\n",
-	     dev_name(&ofdev->dev));
+             dev_name(&ofdev->dev));
       release_mem_region(res_mem.start,resource_size(&res_mem));
       kfree(dev);
       return -EIO;
     }
-
-  dev->irq=res_irq.start;
 
   //  init_MUTEX(&dev->sem);
 
   //init_waitqueue_head(&dev->wait_read_queue);
   //init_waitqueue_head(&dev->wait_write_queue);
 
-  if(request_irq(dev->irq,smpte_dev_irqhandler,IRQF_DISABLED,
-		 dev_name(&ofdev->dev),dev))
-    {
-      printk(KERN_ERR "%s: Unable to request interrupt\n",
-	     dev_name(&ofdev->dev));
-      iounmap(dev->base);
-      release_mem_region(res_mem.start,resource_size(&res_mem));
-      kfree(dev);
-      return -EIO;
-    }
 
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,0);
 
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_HI,0);
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_LO,0);
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_OPTS,
-	    SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
+            SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
 
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,
-	    /*SMPTE_BIT_CTRL_RX|*/SMPTE_BIT_CTRL_IE);
+            /*SMPTE_BIT_CTRL_RX|*/SMPTE_BIT_CTRL_IE);
 
   retval=cdev_add(&dev->cdev,
-		  MKDEV(major,dev->minor),1);
+                  MKDEV(major,dev->minor),1);
   if(retval)
     {
       printk(KERN_ERR "%s: Unable to register device\n",
-	     dev_name(&ofdev->dev));
-      free_irq(dev->irq,dev);
+             dev_name(&ofdev->dev));
       XIo_Out32((unsigned int)dev->base+SMPTE_REG_CTRL,0);
       iounmap(dev->base);
       release_mem_region(res_mem.start,resource_size(&res_mem));
@@ -685,8 +615,8 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
     }
 
   printk(KERN_INFO
-	 "%s: Meyer Sound SMPTE interface initialized, device (%d,%d)\n",
-	 dev_name(&ofdev->dev),major,dev->minor);
+         "%s: Meyer Sound SMPTE interface initialized, device (%d,%d)\n",
+         dev_name(&ofdev->dev),major,dev->minor);
 
 
 #if 0
@@ -694,22 +624,22 @@ static int __devinit smpte_dev_probe(struct of_device *ofdev,
   u32 data_hi,data_lo,tstamp;
 
   ctrlflags=XIo_In32(((unsigned int)dev->base
-		      +SMPTE_REG_CTRL));
+                      +SMPTE_REG_CTRL));
   statflags=XIo_In32(((unsigned int)dev->base
-		      +SMPTE_REG_STAT));
+                      +SMPTE_REG_STAT));
   data_hi=XIo_In32(((unsigned int)dev->base
-		    +SMPTE_REG_DATA_HI));
+                    +SMPTE_REG_DATA_HI));
   data_lo=XIo_In32(((unsigned int)dev->base
-		    +SMPTE_REG_DATA_LO));
+                    +SMPTE_REG_DATA_LO));
   tstamp=XIo_In32(((unsigned int)dev->base
-		      +SMPTE_REG_T_NSEC));
+                      +SMPTE_REG_T_NSEC));
   //#ifdef DEBUG
   printk(KERN_ALERT "Initial SMPTE time code 0x%08x%08x timestamp 0x%08x, ctrl 0x%08x stat 0x%08x\n",data_hi,data_lo,tstamp,ctrlflags,statflags);
   //#endif
   /* acknowledge interrupts */
   ctrlflags|=SMPTE_BIT_CTRL_RX/*|SMPTE_BIT_CTRL_IE*/;
   XIo_Out32(((unsigned int)dev->base
-	     +SMPTE_REG_CTRL),ctrlflags);
+             +SMPTE_REG_CTRL),ctrlflags);
 #endif
   return 0;
 }
@@ -728,11 +658,10 @@ static int __devexit smpte_dev_remove(struct of_device *ofdev)
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_HI,0);
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_LOAD_LO,0);
   XIo_Out32((unsigned int)dev->base+SMPTE_REG_GEN_OPTS,
-	    SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
+            SMPTE_REG_GEN_OPTS_LOAD|SMPTE_REG_GEN_OPTS_24_00);
 
   spin_unlock_irqrestore(&static_dev_lock,flags);
   cdev_del(&dev->cdev);
-  free_irq(dev->irq,dev);
   iounmap(dev->base);
 
   if(!of_address_to_resource(ofdev->node,0,&res_mem))
@@ -769,7 +698,7 @@ static int __init smpte_dev_init(void)
   if(retval)
     {
       printk(KERN_ERR "%s: Can't allocate major/minor device numbers\n",
-	     DRIVER_NAME);
+             DRIVER_NAME);
       return retval;
     }
 
@@ -778,7 +707,7 @@ static int __init smpte_dev_init(void)
   if(retval)
     {
       printk(KERN_ERR "%s: Can't register driver\n",
-	     DRIVER_NAME);
+             DRIVER_NAME);
       return retval;
     }
   return 0;
