@@ -119,7 +119,7 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
 
   BMCA_DBG_2("QA: SR %d\n", stepsRemoved);
 
-  if (stepsRemoved > 255) {
+  if (stepsRemoved >= 255) {
     return FALSE;
   }
 

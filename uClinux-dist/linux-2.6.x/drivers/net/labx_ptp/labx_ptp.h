@@ -117,7 +117,7 @@
 
 /* PTP message transport enumeration */
 #define MSG_TRANSPORT_MASK   (0xF0)
-#  define TRANSPORT_PTP        (0x01)
+#  define TRANSPORT_PTP        (0x10)
 #  define TRANSPORT_NOT_PTP    (0xFF)
 
 /* PTP message type enumeration */
@@ -197,7 +197,7 @@
 #  define FLAG_UTC_OFF_VALID  (0x0004)
 #  define FLAG_LEAP_59        (0x0002)
 #  define FLAG_LEAP_61        (0x0001)
-#  define NO_FLAGS            (0x0000)
+#  define FLAG_NONE           (0x0000)
 
 /* Number of words comprising a hardware timestamp (transmit or receive) */
 #define HW_TIMESTAMP_WORDS  (3)
@@ -616,6 +616,7 @@ typedef enum {
 /* From labx_ptp_messages.c */
 void init_tx_templates(struct ptp_device *ptp, uint32_t port);
 uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
+uint32_t get_transport_specific(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
 void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress);
 void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
 void set_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
