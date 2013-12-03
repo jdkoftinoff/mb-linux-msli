@@ -29,6 +29,8 @@ ifdef CONFIG_PROP_CONFIG_LIBCONFIG
 else
 	$(ROMFSINST) -e CONFIG_USER_TELNETD_TELNETD \
 		-a "telnet  stream tcp nowait root /bin/telnetd" /etc/inetd.conf
+	$(ROMFSINST) -e CONFIG_USER_TELNETD_TELNETD \
+		-a "telnet  stream tcp6 nowait root /bin/telnetd" /etc/inetd.conf
 endif
 
 clean:
