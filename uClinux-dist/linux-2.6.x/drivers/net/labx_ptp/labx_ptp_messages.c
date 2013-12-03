@@ -84,6 +84,7 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
   /* PTP EtherType and the first two PTP header bytes */
   packetWord = (PTP_ETHERTYPE << 16);
   packetWord |= (TS_SPEC_ETH_AVB << 12);
+  //packetWord |= (0x02 << 12);
   packetWord |= ((messageType & MSG_TYPE_MASK) << 8);
   packetWord |= PTP_VERSION_2_0;
   write_packet(txBuffer, wordOffset, packetWord);
@@ -118,8 +119,7 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
   packetWord |= port + 1;
   write_packet(txBuffer, wordOffset, packetWord);
 
-  /* Clear the sequence ID and log message interval to zero unless sending a
-     pdelay_req or pdelay_req fup which is reserved as 0x7F, and set the
+  /* Clear the sequence ID and log message interval to zero and set the
    * control field appropriately for the message type.
    */
   switch(messageType) {
@@ -132,17 +132,22 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
     break;
 
   case MSG_FUP:
-    write_packet(txBuffer, wordOffset, 0x0000027F);
+    write_packet(txBuffer, wordOffset, 0x00000200);
     break;
 
   case MSG_DELAY_RESP:
-    write_packet(txBuffer, wordOffset, 0x0000037F);
+    write_packet(txBuffer, wordOffset, 0x00000300);
     break;
 
   case MSG_MANAGEMENT:
     write_packet(txBuffer, wordOffset, 0x00000400);
     break;
 
+  case MSG_PDELAY_RESP:
+  case MSG_PDELAY_RESP_FUP:
+    write_packet(txBuffer, wordOffset, 0x0000057F);
+    break;
+  
   default:
     write_packet(txBuffer, wordOffset, 0x00000500);
   }
@@ -315,7 +320,7 @@ static void init_pdelay_request_template(struct ptp_device *ptp, uint32_t port) 
 
 /* Initializes the PDELAY_RESP message transmit template */
 static void init_pdelay_response_template(struct ptp_device *ptp, uint32_t port) {
-  uint8_t * txBuffer ;
+  uint8_t *txBuffer;
   uint32_t wordOffset;
 
   /* Initialize the header, and clear the requestReceiptTimestamp and
@@ -404,6 +409,25 @@ uint16_t get_sequence_id(struct ptp_device *ptp, uint32_t port, PacketDirection 
   /* Locate the sequence ID in the packet */
   wordOffset = SEQUENCE_ID_OFFSET;
   return((uint16_t) (read_packet(bufferBase, &wordOffset) >> 16));
+}
+
+/* Sets the logMessageInterval within the passed packet buffer */
+static void set_log_message_interval(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer,
+                            uint8_t logMsgInterval) {
+  uint8_t * bufferBase;
+  uint32_t wordOffset;
+  uint32_t packetWord;
+
+  /* Read, modify, and write back the log message interval */
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
+
+  /* Locate the sequence ID in the packet */
+  wordOffset = LOG_MSG_INTERVAL_OFFSET;
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0xFFFFFF00;
+  packetWord |= logMsgInterval;
+  wordOffset = LOG_MSG_INTERVAL_OFFSET;
+  write_packet(bufferBase, &wordOffset, packetWord);
 }
 
 /* Gets the message timestamp (e.g. originTimestamp) within the passed packet buffer */
@@ -600,6 +624,7 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   /* Update the sequence ID */
   txBuffer = get_output_buffer(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].announceSequenceId++);
+  set_log_message_interval(ptp, port, txBuffer, ptp->ports[port].currentLogAnnounceInterval);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
@@ -615,6 +640,7 @@ void transmit_sync(struct ptp_device *ptp, uint32_t port) {
   /* Update the sequence ID */
   txBuffer = get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].syncSequenceId++);
+  set_log_message_interval(ptp, port, txBuffer, ptp->ports[port].currentLogSyncInterval);
 
   if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
     /* Update the origin timestamp with the present state of the RTC */
@@ -644,6 +670,7 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
   /* Copy the sequence ID from the last SYNC message we sent */
   set_sequence_id(ptp, port, txFupBuffer,
                   get_sequence_id(ptp, port, TRANSMITTED_PACKET, txSyncBuffer));
+  set_log_message_interval(ptp, port, txFupBuffer, ptp->ports[port].currentLogSyncInterval);
 
   if (ptp->ports[port].syncTxLocalTimestampValid) {
     PtpTime residency;
@@ -742,6 +769,7 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
   /* Update the sequence ID (incremented in the pdelay state machine) */
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId);
+  set_log_message_interval(ptp, port, txBuffer, ptp->ports[port].currentLogPdelayReqInterval);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);

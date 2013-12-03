@@ -182,11 +182,23 @@ void labx_ptp_timer_state_task(unsigned long data) {
     /* Regardless of whether we are a master or slave, increment the peer delay request
      * counter and see if it's time to send one to our link peer.
      */
-    ptp->ports[i].pdelayIntervalTimer++;
+    ptp->ports[i].pdelayIntervalTimer += timerTicks;
     MDPdelayReq_StateMachine(ptp, i);
 
     /* Update the PortAnnounceInformation state machine */
     PortAnnounceInformation_StateMachine(ptp, i);
+
+    /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
+       re-enable the port after five minutes */
+    if(ptp->ports[i].multiplePdelayTimer > 0) {
+      if(ptp->ports[i].multiplePdelayTimer >= timerTicks) {
+        ptp->ports[i].multiplePdelayTimer -= timerTicks;
+      }
+      else {
+        ptp->ports[i].multiplePdelayTimer = 0;
+      }
+      ptp->ports[i].portEnabled = TRUE;
+    }
   }
 
   /* Test to see if the master is new from the last time we checked; if so,
@@ -508,26 +520,23 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t
 
   PtpPortIdentity rxIdentity;
 
-  if(TRANSPORT_PTP == get_transport_specific(ptp, port, rxBuffer)) {
+  ptp->ports[port].stats.rxPDelayRequestCount++;
 
-    ptp->ports[port].stats.rxPDelayRequestCount++;
-
-    /* React to peer delay requests no matter what, even if we're not using the
-     * peer-to-peer delay mechanism or if we're a slave or master.  Transmit
-     * a peer delay response back - we will also transmit a peer delay response
-     * followup once this message is on the wire. The only exception is if the
-     * request came from any port on this system we should discard it.
-     */
-    get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
-    if (0 != compare_clock_identity(rxIdentity.clockIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity)) {
-      transmit_pdelay_response(ptp, port, rxBuffer);
-    } else {
-      uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
-      printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
-      ptp->ports[port].portEnabled = FALSE;
-      if ((rxPortNumber >= 1) && (rxPortNumber <= ptp->numPorts)) {
-      ptp->ports[rxPortNumber-1].portEnabled = FALSE;
-      }
+  /* React to peer delay requests no matter what, even if we're not using the
+   * peer-to-peer delay mechanism or if we're a slave or master.  Transmit
+   * a peer delay response back - we will also transmit a peer delay response
+   * followup once this message is on the wire. The only exception is if the
+   * request came from any port on this system we should discard it.
+   */
+  get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
+  if (0 != compare_clock_identity(rxIdentity.clockIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity)) {
+    transmit_pdelay_response(ptp, port, rxBuffer);
+  } else {
+    uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
+    printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
+    ptp->ports[port].portEnabled = FALSE;
+    if ((rxPortNumber >= 1) && (rxPortNumber <= ptp->numPorts)) {
+    ptp->ports[rxPortNumber-1].portEnabled = FALSE;
     }
   }
 };
@@ -535,33 +544,29 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t
 /* Processes a newly-received PDELAY_RESP packet for the passed instance */
 static void process_rx_pdelay_resp(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
-  if(TRANSPORT_PTP == get_transport_specific(ptp, port, rxBuffer)) {
-    ptp->ports[port].stats.rxPDelayResponseCount++;
+  ptp->ports[port].stats.rxPDelayResponseCount++;
 
-    ptp->ports[port].rcvdPdelayResp = TRUE;
-    ptp->ports[port].rcvdPdelayRespPtr = rxBuffer;
+  ptp->ports[port].rcvdPdelayResp = TRUE;
+  ptp->ports[port].rcvdPdelayRespPtr = rxBuffer;
 
-    /* AVnu_PTP-5 from AVnu Combined Endpoint PICS D.0.0.1
-       Cease pDelay_Req transmissions if more than one
-       pDelay_Resp messages have been received for each of
-       three successive pDelay_Req messages. */
-    ptp->ports[port].pdelayResponses++;
+  /* AVnu_PTP-5 from AVnu Combined Endpoint PICS D.0.0.1
+     Cease pDelay_Req transmissions if more than one
+     pDelay_Resp messages have been received for each of
+     three successive pDelay_Req messages. */
+  ptp->ports[port].pdelayResponses++;
 
-    MDPdelayReq_StateMachine(ptp, port);
-  }
+  MDPdelayReq_StateMachine(ptp, port);
 }
 
 /* Processes a newly-received PDELAY_RESP_FUP packet for the passed instance */
 static void process_rx_pdelay_resp_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer) {
 
-  if(TRANSPORT_PTP == get_transport_specific(ptp, port, rxBuffer)) {
-    ptp->ports[port].stats.rxPDelayResponseFollowupCount++;
+  ptp->ports[port].stats.rxPDelayResponseFollowupCount++;
 
-    ptp->ports[port].rcvdPdelayRespFollowUp = TRUE;
-    ptp->ports[port].rcvdPdelayRespFollowUpPtr = rxBuffer;
+  ptp->ports[port].rcvdPdelayRespFollowUp = TRUE;
+  ptp->ports[port].rcvdPdelayRespFollowUpPtr = rxBuffer;
 
-    MDPdelayReq_StateMachine(ptp, port);
-  }
+  MDPdelayReq_StateMachine(ptp, port);
 }
 
 /* Tasklet function for PTP Rx packets */
@@ -581,6 +586,7 @@ void labx_ptp_rx_state_task(unsigned long data) {
 
 void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
 {
+  if(TRANSPORT_PTP == get_transport_specific(ptp, port, buffer)) {
        /* Determine which message to process */
       switch(get_message_type(ptp, port, buffer)) {
       case MSG_ANNOUNCE:
@@ -621,6 +627,7 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
       default:
         break;
       } /* switch(messageType) */
+  } else printk("WARNING: Unrecognized transportSpecific rejected\n");
 }
 
 /* Tasklet function for PTP Tx packets */

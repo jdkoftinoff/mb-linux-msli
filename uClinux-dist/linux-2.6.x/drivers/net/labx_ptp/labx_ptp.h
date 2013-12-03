@@ -212,6 +212,7 @@
 #define CORRECTION_FIELD_OFFSET              ( 5 * BYTES_PER_WORD)
 #define SOURCE_PORT_ID_OFFSET                ( 8 * BYTES_PER_WORD)
 #define SEQUENCE_ID_OFFSET                   (11 * BYTES_PER_WORD)
+#define LOG_MSG_INTERVAL_OFFSET              (11 * BYTES_PER_WORD)
 #define TIMESTAMP_OFFSET                     (12 * BYTES_PER_WORD)
 #define UTC_OFFSET_OFFSET                    (14 * BYTES_PER_WORD)
 #define REQ_PORT_ID_OFFSET                   (14 * BYTES_PER_WORD)
@@ -443,6 +444,7 @@ struct ptp_port {
   /* AVnu_PTP-5 PICS */
   uint32_t pdelayResponses;
   uint32_t multiplePdelayResponses;
+  uint32_t multiplePdelayTimer;
 
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
