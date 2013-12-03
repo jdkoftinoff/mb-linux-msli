@@ -94,7 +94,7 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 	struct neighbour *neigh = NULL;
         int i;
 
-        printk("TCPA: Start Transfer on fd %d, size %08X\n", fd, size);
+        //printk("TCPA: Start Transfer on fd %d, size %08X, ticks %08X\n", fd, size, jiffies);
 
 	/* Get the socket from the file descriptor */
 	sock = sockfd_lookup(fd, &err);
@@ -104,27 +104,27 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 
 	if (NULL == tp) goto out;
 
-        printk("TCPA: Got TCP socket: snd_nxt %08X\n", tp->snd_nxt);
+        //printk("TCPA: Got TCP socket: snd_nxt %08X\n", tp->snd_nxt);
 
 	/* Get the route info for the socket */
 	rt = (struct rtable*)sk_dst_get(sk);
 	if (NULL == rt) goto out;
-        printk("TCPA: Got rtable\n");
+        //printk("TCPA: Got rtable\n");
 	if (NULL == rt->u.dst.dev) goto out;
 
-        printk("TCPA: Got Route\n");
+        //printk("TCPA: Got Route\n");
 
 	neigh = rt->u.dst.neighbour;
 	if (NULL == neigh) goto out;
 
-        printk("TCPA: Got Neighbour\n");
+        //printk("TCPA: Got Neighbour\n");
 
 	src_mac = rt->u.dst.dev->dev_addr;
         memcpy(dst_mac, neigh->ha, ETH_ALEN);
 
 	if (NULL == src_mac) goto out;
 
-        printk("TCPA: Got MACS\n");
+        //printk("TCPA: Got MACS\n");
 
 	/* Ethernet header */
 	headers[0] = (dst_mac[1] << 24) | (dst_mac[0] << 16); /* Lower two bytes reserved for internal size */
@@ -148,7 +148,7 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 
 	/* Program registers */
 	for (i=0; i<TCPA_TEMPLATE_WORDS; i++) {
-                printk("TCPA: Header %d = %08X\n", i, headers[i]);
+                //printk("TCPA: Header %d = %08X\n", i, headers[i]);
 		XIo_Out32(TCPA_TEMPLATE_ADDRESS(tcpa_pdev, i), headers[i]);
 		if (i>=4 && i<=8) ip_csum += (headers[i] & 0xffff) + (headers[i] >> 16);
 		if (i>=7 && i<=13) tcp_csum += (headers[i] & 0xffff) + (headers[i] >> 16); /* Includes pseudo header IPs */
@@ -161,7 +161,7 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_SEQUENCE_REG), tp->snd_nxt);
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_INITIAL_IP_ID_REG),    tp->inet_conn.icsk_inet.id);
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_TEMPLATE_SIZE_REG),    TCPA_TEMPLATE_WORDS);
-	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_RETRANSMIT_TICKS_REG), 0x00BEBC20); // TODO - Get the timeout from somewhere
+	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_RETRANSMIT_TICKS_REG), 0x001312d0); // TODO - Get the timeout from somewhere
 
 	XIo_Out32(TCPA_REGISTER_ADDRESS(tcpa_pdev, TCPA_CONTROL_REG), TCPA_ENABLE);
 
@@ -169,9 +169,19 @@ static int start_transfer(struct labx_tcpa_pdev* tcpa_pdev, int fd, u32 size) {
           schedule();
         }
 
-        /* Move the stack along to the next sequence number */
-        tp->snd_nxt += size;
+        /* Clear headers to stop intercepting Rx packets */
+	for (i=0; i<TCPA_TEMPLATE_WORDS; i++) {
+		XIo_Out32(TCPA_TEMPLATE_ADDRESS(tcpa_pdev, i), 0x00000000);
+        }
 
+        /* Move the stack along to the next sequence number */
+        tp->write_seq += size;
+	tp->snd_una = tp->write_seq;
+	tp->snd_sml = tp->write_seq;
+	tp->snd_up = tp->write_seq;
+        tp->snd_nxt = tp->write_seq;
+
+        //printk("TCPA: End Transfer ticks %08X\n", jiffies);
         err = 0;
 
 out:
