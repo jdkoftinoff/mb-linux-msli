@@ -449,6 +449,10 @@ static char ttytype_sbbuf[] = { IAC, SB, TELOPT_TTYPE, TELQUAL_SEND, IAC, SE };
 
 static void _gettermname(void);
 
+static void bcopy(const void *src, void *dest, size_t n) {
+  memmove(dest,src,n);
+}
+
 static
 int
 getterminaltype(char *name)
