@@ -112,9 +112,9 @@
 #  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
 #  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
 #  define TDM_PIN_LOOPBACK_DISABLED          (0x0)
-#  define TDM_PIN_LOOPBACK_ENABLED           (0x80000000)
+#  define TDM_PIN_LOOPBACK_ENABLED           (0x40000000)
 #  define TDM_LOOPBACK_DISABLED              (0x0)
-#  define TDM_LOOPBACK_ENABLED               (0x40000000)
+#  define TDM_LOOPBACK_ENABLED               (0x80000000)
 
 /* Sample rate constants */
 #  define SINGLE_SAMPLE_RATE (0x00)

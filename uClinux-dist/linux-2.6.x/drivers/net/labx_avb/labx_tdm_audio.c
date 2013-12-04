@@ -531,7 +531,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       }
 
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      if (tdmControl->pinLoopback == LOOPBACK_ENABLED) {
+      if (tdmControl->pinLoopback == LOOPBACK_DISABLED) {
         reg &= ~TDM_PIN_LOOPBACK_ENABLED;
       } else {
         reg |= TDM_PIN_LOOPBACK_ENABLED;
@@ -539,7 +539,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
   if(debugOn) {
       printk("TDM (ioctl): pin loopback set to %s\n",
-             (tdmControl->pinLoopback == MASTER_MODE ? "on" : "off"));
+             (tdmControl->pinLoopback == LOOPBACK_ENABLED ? "on" : "off"));
   }
       break;
     
@@ -550,7 +550,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       }
 
       reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      if (tdmControl->tdmLoopback == LOOPBACK_ENABLED) {
+      if (tdmControl->tdmLoopback == LOOPBACK_DISABLED) {
         reg &= ~TDM_LOOPBACK_ENABLED;
       } else {
         reg |= TDM_LOOPBACK_ENABLED;
@@ -558,7 +558,7 @@ static int set_audio_tdm_control(struct audio_tdm *tdm,
       XIo_Out32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG), reg); 
   if(debugOn) {
       printk("TDM (ioctl): TDM loopback set to %s\n",
-             (tdmControl->tdmLoopback == MASTER_MODE ? "on" : "off"));
+             (tdmControl->tdmLoopback == LOOPBACK_ENABLED ? "on" : "off"));
   }
       break;
 
@@ -1263,7 +1263,7 @@ static ssize_t tdm_w_pin_loopback(struct class *c, const char * buf, size_t coun
   
     if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      if (val == LOOPBACK_ENABLED) {
+      if (val == LOOPBACK_DISABLED) {
         reg &= ~TDM_PIN_LOOPBACK_ENABLED;
       } else {
         reg |= TDM_PIN_LOOPBACK_ENABLED;
@@ -1293,13 +1293,13 @@ static ssize_t tdm_w_tdm_loopback(struct class *c, const char * buf, size_t coun
 
   if (strict_strtoul(buf, 0, &val) == 0) {
     // Ensure tdm loopback is built into the TDM
-    if(!tdm->tdmCaps.hasPinLoopback) {
+    if(!tdm->tdmCaps.hasTdmLoopback) {
       err = -ETDMLOOPNOTIMPL;
     }
   
     if(!(err < 0)) {
       uint32_t reg = XIo_In32(REGISTER_ADDRESS(tdm, TDM_CONTROL_REG));
-      if (val == LOOPBACK_ENABLED) {
+      if (val == LOOPBACK_DISABLED) {
         reg &= ~TDM_LOOPBACK_ENABLED;
       } else {
         reg |= TDM_LOOPBACK_ENABLED;
