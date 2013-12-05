@@ -143,7 +143,7 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
 			
       mapping.streams = XIo_In32(LOCAL_AUDIO_REGISTER_BASE(local_audio_pdev, LOCAL_AUDIO_CHANNEL_REG + mapping.channel));
 
-      if(copy_to_user(&mapping, (void __user*)arg, sizeof(mapping)) != 0) {
+      if(copy_to_user((void __user*)arg, &mapping, sizeof(mapping)) != 0) {
         return(-EFAULT);
       }
     }
@@ -190,6 +190,58 @@ static int labx_local_audio_ioctl_cdev(struct inode *inode, struct file *filp,
                 value);
     }
     break;
+  case IOC_LA_SET_TESTER_MODE:
+    {
+      struct LocalAudioTesterConfig config;
+      uint32_t value = 0;
+
+      if(copy_from_user(&config, (void __user*)arg, sizeof(config)) != 0) {
+        return(-EFAULT);
+      }
+
+      switch(config.mode)
+        {
+        default:
+          return(-EINVAL);
+
+        case LA_TESTER_MODE_OFF:
+          break;
+
+        case LA_TESTER_MODE_RAMP:
+          value = LOCAL_AUDIO_TESTER_ENABLE | LOCAL_AUDIO_TESTER_RAMP;
+          break;
+
+        case LA_TESTER_MODE_LFSR:
+          value = LOCAL_AUDIO_TESTER_ENABLE;
+          break;
+
+        }
+
+      value |= (config.stream << LOCAL_AUDIO_TESTER_STREAM_SHIFT) & LOCAL_AUDIO_TESTER_STREAM_MASK;
+      value |= (config.slot << LOCAL_AUDIO_TESTER_SLOT_SHIFT) & LOCAL_AUDIO_TESTER_SLOT_MASK;
+      
+      XIo_Out32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_TDM_CTRL_REG),
+                value);
+    }
+    break;
+  case IOC_LA_GET_TESTER_RESULTS:
+    {
+      struct LocalAudioTesterResults results;
+
+      results.ctrl = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_TDM_CTRL_REG));
+      results.error = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_ANALYSIS_ERROR_REG));
+      results.predict = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_ANALYSIS_PREDICT_REG));
+      results.actual = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_ANALYSIS_ACTUAL_REG));
+      results.irq_mask = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_TDM_IRQ_MASK_REG));
+      results.irq_flags = XIo_In32(LOCAL_AUDIO_TESTER_BASE(local_audio_pdev, LOCAL_AUDIO_TESTER_TDM_IRQ_FLAGS_REG));
+
+      if(copy_to_user((void __user*)arg, &results, sizeof(results)) != 0) {
+        return(-EFAULT);
+      }
+
+    }
+    break;
+
 
   default:
     /* We don't recognize this command; first give an encapsulated DMA controller

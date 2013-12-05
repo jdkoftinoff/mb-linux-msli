@@ -56,5 +56,24 @@ struct LocalAudioInsertConfig {
 };
 #define IOC_LA_SET_INSERT_MODE _IOW('L', 0x03, struct LocalAudioInsertConfig)
 
+#define LA_TESTER_MODE_OFF  0
+#define LA_TESTER_MODE_RAMP 1
+#define LA_TESTER_MODE_LFSR 2
+struct LocalAudioTesterConfig {
+	uint32_t mode;
+	uint32_t stream;
+	uint32_t slot;
+};
+struct LocalAudioTesterResults {
+	uint32_t ctrl;
+	uint32_t error;
+	uint32_t predict;
+	uint32_t actual;
+	uint32_t irq_mask;
+	uint32_t irq_flags;
+};
+#define IOC_LA_SET_TESTER_MODE _IOW('L', 0x04, struct LocalAudioTesterConfig)
+#define IOC_LA_GET_TESTER_RESULTS _IOR('L', 0x05, struct LocalAudioTesterResults)
+
 #endif /* _LOCAL_AUDIO_DEFS_H_ */
 
