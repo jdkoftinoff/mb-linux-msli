@@ -53,6 +53,7 @@
 #define MAX_LA_DEVICES 16
 static uint32_t instanceCount;
 static struct labx_local_audio_pdev* devices[MAX_LA_DEVICES] = {};
+static int open_count=0;
 
 static int labx_local_audio_open(struct inode *inode, struct file *filp) {
   int deviceIndex;
@@ -77,8 +78,11 @@ static int labx_local_audio_open(struct inode *inode, struct file *filp) {
   /* TODO - Ensure the local audio hardware is reset */
   local_audio_pdev = (struct labx_local_audio_pdev*)filp->private_data;
 
-  /* Also open the DMA instance, if there is one */
-  if(local_audio_pdev->dma != NULL) labx_dma_open(local_audio_pdev->dma);
+  if(open_count==0) {
+    /* Also open the DMA instance, if there is one */
+    if(local_audio_pdev->dma != NULL) labx_dma_open(local_audio_pdev->dma);
+  }
+  open_count++;
 
   /* Invoke the open() operation on the derived driver, if there is one */
   if((local_audio_pdev->derivedFops != NULL) && 
@@ -98,8 +102,11 @@ static int labx_local_audio_release(struct inode *inode, struct file *filp) {
     local_audio_pdev->derivedFops->release(inode, filp);
   }
 
-  /* Also release the DMA instance, if there is one */
-  if(local_audio_pdev->dma != NULL) labx_dma_release(local_audio_pdev->dma);
+  open_count--;
+  if(open_count==0) {
+    /* Also release the DMA instance, if there is one */
+    if(local_audio_pdev->dma != NULL) labx_dma_release(local_audio_pdev->dma);
+  }
 
   return(0);
 }
