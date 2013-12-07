@@ -706,6 +706,97 @@ static void configure_clock_recovery(struct audio_depacketizer *depacketizer,
    */
 }
 
+static void get_clock_recovery_info(struct audio_depacketizer *depacketizer, 
+                                     ClockRecoveryInfo *clockRecoveryInfo) {
+  ClockDomainSettings *clockDomainSettings;
+  uint32_t clockDomain;
+  uint32_t recoveryIndex;
+  uint32_t controlValue;
+  uint32_t sampleRate;
+
+  /* Configure the timestamp interval for the domain first.  This informs the basic
+   * reference clock recovery hardware of how many samples are being averaged each
+   * time it receives a valid timestamp from the depacketizer.
+   */
+  clockDomainSettings = &clockRecoveryInfo->clockDomainSettings;
+  clockDomain = clockDomainSettings->clockDomain;
+  clockDomainSettings->sytInterval=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_SYT_INTERVAL_REG));
+
+  controlValue = XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_CONTROL_REG));
+  /* Configure the generated clock edge for the clock domain that corresponds to a
+   * sample. This should match the gateware that is providing the "current" time
+   * reference to the depacketizer.
+   */
+  if(controlValue&MC_CONTROL_SAMPLE_EDGE_RISING) {
+    clockDomainSettings->sampleEdge=DOMAIN_SAMPLE_EDGE_RISING;
+  } else {
+    clockDomainSettings->sampleEdge=DOMAIN_SAMPLE_EDGE_FALLING;
+  }
+  if(controlValue&MC_CONTROL_SELECTED_CLIENT) {
+    clockRecoveryInfo->selected_client=true;
+  } else {
+    clockRecoveryInfo->selected_client=false;
+  }
+  if(controlValue&MC_CONTROL_SYNC_EXTERNAL) {
+    clockDomainSettings->enabled=DOMAIN_SYNC;
+    clockRecoveryInfo->external_sync=true;
+  } else {
+    clockDomainSettings->enabled=DOMAIN_DISABLED;
+    clockRecoveryInfo->external_sync=false;
+  }
+  if(controlValue&MC_CONTROL_HAS_COAST_HOST_RTC) {
+    clockRecoveryInfo->has_coast_host_rtc=true;
+  } else {
+    clockRecoveryInfo->has_coast_host_rtc=false;
+  }
+  if(controlValue&MC_CONTROL_IS_COASTING) {
+    clockRecoveryInfo->coasting=true;
+  } else {
+    clockRecoveryInfo->coasting=false;
+  }
+  sampleRate=XIo_In32(REGISTER_ADDRESS(depacketizer, SAMPLE_RATE_REG));
+  if(sampleRate==SINGLE_SAMPLE_RATE) {
+    clockDomainSettings->sampleRate=ENGINE_SAMPLE_RATE_48_KHZ;
+  } else if(sampleRate==DOUBLE_SAMPLE_RATE) {
+    clockDomainSettings->sampleRate=ENGINE_SAMPLE_RATE_96_KHZ;
+  } else {
+    clockDomainSettings->sampleRate=ENGINE_SAMPLE_RATE_192_KHZ;
+  }
+  recoveryIndex=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, RECOVERY_INDEX_REG));
+  clockRecoveryInfo->matchUnit=recoveryIndex & STREAM_INDEX_MASK(depacketizer);
+  if(recoveryIndex&RECOVERY_ENABLED(depacketizer)) {
+    clockDomainSettings->enabled=DOMAIN_ENABLED;
+  }
+  if(recoveryIndex&PHASE_NUDGE_ENABLED(depacketizer)) {
+    clockRecoveryInfo->nudge_enabled=true;
+  } else {
+    clockRecoveryInfo->nudge_enabled=false;
+  }
+  clockRecoveryInfo->increment= XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_RTC_INCREMENT_REG));
+  if(clockRecoveryInfo->increment&MC_RTC_INCREMENT_FORCE) {
+    clockRecoveryInfo->rtc_increment_force=true;
+    clockRecoveryInfo->increment&=~MC_RTC_INCREMENT_FORCE;
+  } else {
+    clockRecoveryInfo->rtc_increment_force=false;
+  }
+  clockDomainSettings->remainder=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_REMAINDER_REG));
+  clockDomainSettings->halfPeriod=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, MC_HALF_PERIOD_REG));
+
+  clockRecoveryInfo->dac_offset=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_OFFSET_REG));
+  clockRecoveryInfo->dac_p_coeff=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_P_COEFF_REG));
+  clockRecoveryInfo->dac_lock_count=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG));
+  clockRecoveryInfo->dac_control=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_CONTROL_REG));
+
+  if(clockRecoveryInfo->dac_lock_count & 0x80000000) {
+    clockRecoveryInfo->dac_locked=true;
+  } else {
+    clockRecoveryInfo->dac_locked=false;
+  }
+  clockRecoveryInfo->dac_unlock_count=(clockRecoveryInfo->dac_lock_count>>VCO_UNLOCK_COUNT_SHIFT)&VCO_UNLOCK_COUNT_MASK;
+  clockRecoveryInfo->dac_lock_count=(clockRecoveryInfo->dac_lock_count>>VCO_LOCK_COUNT_SHIFT)&VCO_LOCK_COUNT_MASK;
+}
+
+
 /* Collects the stream status from the hardware */
 static void get_stream_status(struct audio_depacketizer *depacketizer,
 			      uint32_t *statusWords) {
@@ -866,6 +957,7 @@ static int netlink_thread(void *data)
 /*
  * Character device hook functions
  */
+static int open_count=0;
 
 static int audio_depacketizer_open(struct inode *inode, struct file *filp)
 {
@@ -876,24 +968,28 @@ static int audio_depacketizer_open(struct inode *inode, struct file *filp)
   depacketizer = container_of(inode->i_cdev, struct audio_depacketizer, cdev);
   filp->private_data = depacketizer;
 
-  /* Lock the mutex and ensure there is only one owner */
-  preempt_disable();
-  spin_lock_irqsave(&depacketizer->mutex, flags);
-  if(depacketizer->opened) {
-    returnValue = -1;
-  } else {
-    depacketizer->opened = true;
-  }
-  spin_unlock_irqrestore(&depacketizer->mutex, flags);
-  preempt_enable();
+  if(open_count==0) {
+    /* Lock the mutex and ensure there is only one owner */
+      preempt_disable();
+      spin_lock_irqsave(&depacketizer->mutex, flags);
+      if(depacketizer->opened) {
+        returnValue = -1;
+      } else {
+        depacketizer->opened = true;
+      }
+    spin_unlock_irqrestore(&depacketizer->mutex, flags);
+    preempt_enable();
 
-  /* Ensure the packet engine is reset */
-  reset_depacketizer(depacketizer);
-
-  /* Open the DMA, if we have one */
-  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
-    labx_dma_open(&depacketizer->dma);
+    /* Ensure the packet engine is reset */
+    reset_depacketizer(depacketizer);
+  
+    /* Open the DMA, if we have one */
+    if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+      labx_dma_open(&depacketizer->dma);
+    }
   }
+  open_count++;
+//  printk("depacketizer open %d\n", open_count);
   
   return(returnValue);
 }
@@ -903,19 +999,23 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
   unsigned long flags;
 
-  /* Release the DMA, if we have one */
-  if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
-    labx_dma_release(&depacketizer->dma);
+//  printk("depacketizer close %d\n", open_count);
+  open_count--;
+  if(open_count==0) {
+    /* Release the DMA, if we have one */
+    if(depacketizer->hasDma == INSTANCE_HAS_DMA) {
+      labx_dma_release(&depacketizer->dma);
+    }
+
+    /* Ensure the packet engine is reset */
+    reset_depacketizer(depacketizer);
+
+    preempt_disable();
+    spin_lock_irqsave(&depacketizer->mutex, flags);
+    depacketizer->opened = false;
+    spin_unlock_irqrestore(&depacketizer->mutex, flags);
+    preempt_enable();
   }
-
-  /* Ensure the packet engine is reset */
-  reset_depacketizer(depacketizer);
-
-  preempt_disable();
-  spin_lock_irqsave(&depacketizer->mutex, flags);
-  depacketizer->opened = false;
-  spin_unlock_irqrestore(&depacketizer->mutex, flags);
-  preempt_enable();
 
   return(0);
 }
@@ -1142,7 +1242,22 @@ static int audio_depacketizer_ioctl(struct inode *inode,
       }
     }
     break;
-  
+
+    case IOC_GET_CLOCK_RECOVERY:
+    {
+      ClockRecoveryInfo clockRecoveryInfo;
+      /* user specifies clockDomain to query */
+      if(copy_from_user(&clockRecoveryInfo, (void __user*)arg, sizeof(clockRecoveryInfo)) != 0) {
+        return(-EFAULT);
+      }
+      get_clock_recovery_info(depacketizer, &clockRecoveryInfo);
+      if(copy_to_user((void __user*)arg,&clockRecoveryInfo, sizeof(clockRecoveryInfo)) != 0) {
+        return(-EFAULT);
+      }
+    }
+    break;
+
+
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA
     if(depacketizer->hasDma == INSTANCE_HAS_DMA) {

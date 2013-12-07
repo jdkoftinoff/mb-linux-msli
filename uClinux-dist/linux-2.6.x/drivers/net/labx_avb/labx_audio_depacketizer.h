@@ -125,6 +125,7 @@
 #  define MC_CONTROL_IS_COASTING         0x40000000
 #  define MC_CONTROL_SYNC_EXTERNAL       0x00000008
 #  define MC_CONTROL_SYNC_INTERNAL       0x00000000
+#  define MC_CONTROL_SELECTED_CLIENT     0x00000002
 #  define MC_CONTROL_SAMPLE_EDGE_RISING  0x00000001
 #  define MC_CONTROL_SAMPLE_EDGE_FALLING 0x00000000
 
@@ -148,6 +149,8 @@
 #  define VCO_UNLOCK_COUNT_SHIFT  12
 #  define VCO_LOCK_COUNT_MASK     0x0FFF
 #  define VCO_LOCK_COUNT_SHIFT    0
+
+#define DAC_CONTROL_REG      0x00B
 
 #define REGISTER_ADDRESS(device, offset) \
   ((uintptr_t)device->virtualAddress |                       \
