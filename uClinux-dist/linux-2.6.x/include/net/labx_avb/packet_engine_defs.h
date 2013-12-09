@@ -521,6 +521,29 @@ typedef struct {
                                        (ENGINE_IOC_CLIENT_START + 10), \
                                        ClockDomainIncrement)
 
+typedef struct {
+  ClockDomainSettings clockDomainSettings;
+  uint32_t clockDomain;
+  uint32_t increment;
+  uint32_t matchUnit;
+  bool has_coast_host_rtc;
+  bool coasting;
+  bool external_sync;
+  bool nudge_enabled;
+  bool rtc_increment_force;
+  bool selected_client;
+  bool dac_locked;
+  uint32_t dac_offset;
+  uint32_t dac_p_coeff;
+  uint32_t dac_lock_count;
+  uint32_t dac_unlock_count;
+  uint32_t dac_control;
+} ClockRecoveryInfo;
+#define IOC_GET_CLOCK_RECOVERY    _IOW(ENGINE_IOC_CHAR,                \
+                                       (ENGINE_IOC_CLIENT_START + 11), \
+                                       ClockDomainIncrement)
+
+
 /* Type definitions and macros for depacketizer microcode */
 
 /* Parameter maxima */
