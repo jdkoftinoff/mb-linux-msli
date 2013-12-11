@@ -253,11 +253,11 @@ static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
   write_packet(txBuffer, &wordOffset, packetWord);
   write_packet(txBuffer, &wordOffset, 0xC2000001);
   write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: rate ratio is 1.0 unless we can forward */
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
   write_packet(txBuffer, &wordOffset, 0x00000000);
   write_packet(txBuffer, &wordOffset, 0x00000000);
-  write_packet(txBuffer, &wordOffset, 0x00000000);
-  write_packet(txBuffer, &wordOffset, 0x00000000);
-  write_packet(txBuffer, &wordOffset, 0x00000000);
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
 }
 
 /* Initializes the DELAY_REQ message transmit template */
@@ -527,14 +527,15 @@ static void set_gm_phase_change(struct ptp_device *ptp, uint8_t * txBuffer) {
   packetWord |= (ptp->lastGmPhaseChange.upper >> 16);
   wordOffset -= BYTES_PER_WORD;
   write_packet(bufferBase, &wordOffset, packetWord);
-
+  
   packetWord = (((ptp->lastGmPhaseChange.upper) << 16) |
                 (ptp->lastGmPhaseChange.middle >> 16));
   write_packet(bufferBase, &wordOffset, packetWord);
+  
   packetWord = (((ptp->lastGmPhaseChange.middle) << 16) |
                 (ptp->lastGmPhaseChange.lower >> 16));
   write_packet(bufferBase, &wordOffset, packetWord);
-
+  
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0x0000FFFF;
   packetWord |= (ptp->lastGmPhaseChange.lower << 16);

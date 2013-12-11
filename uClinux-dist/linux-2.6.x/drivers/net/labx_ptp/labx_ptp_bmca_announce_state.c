@@ -414,9 +414,7 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute masterPriority vectors and assign port roles*/
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-#if BMCA_DEBUG
     uint32_t prevRole = pPort->selectedRole;
-#endif
 
     /* masterPriority */
     memcpy(&pPort->masterPriority, ptp->gmPriority, sizeof(PtpPriorityVector));
@@ -466,7 +464,8 @@ static void updtRolesTree(struct ptp_device *ptp)
 
     /* Update GM fields when transitioning to PTP_MASTER */
     if(prevRole != PTP_MASTER && pPort->selectedRole == PTP_MASTER) {
-      ptp->lastGmTimeBaseIndicator++;
+      ptp->lastGmTimeBaseIndicator++; 
+
       ptp->lastGmPhaseChange.upper = 0;
       ptp->lastGmPhaseChange.middle = 0;
       ptp->lastGmPhaseChange.lower = 0;
@@ -480,7 +479,6 @@ static void updtRolesTree(struct ptp_device *ptp)
         ptp->lastGmFreqChange = 0;
       }
     }
-
 #if BMCA_DEBUG
     if (pPort->selectedRole != prevRole) {
       printk("Port %d Role changed %s => %s\n", i, roleString(prevRole), roleString(pPort->selectedRole));
