@@ -260,8 +260,8 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     PtpTime correctionField;
     PtpTime correctedTimestamp;
 
-    // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-    ptp->ports[port].syncReceiptTimeoutTime = SYNC_INTERVAL_TICKS(ptp, port) * ptp->ports[port].syncReceiptTimeout * 2;
+    // [REMOVED for certifcation] TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
+    ptp->ports[port].syncReceiptTimeoutTime = SYNC_INTERVAL_TICKS(ptp, port) * ptp->ports[port].syncReceiptTimeout;
 
     /* This is indeed a SYNC from the present master.  Capture the hardware timestamp
      * at which we received it, and hang on to its sequence ID for matching to the
@@ -381,6 +381,8 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
       labx_ptp_signal_gm_change(ptp);
 
       ptp->lastGmTimeBaseIndicator = get_gm_time_base_indicator_field(rxBuffer);
+      get_gm_phase_change_field(rxBuffer, &ptp->lastGmPhaseChange);
+      ptp->lastGmFreqChange = get_gm_freq_change_field(rxBuffer);
     }
 
     /* Compare the timestamps; if the one-way offset plus delay is greater than

@@ -253,11 +253,11 @@ static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
   write_packet(txBuffer, &wordOffset, packetWord);
   write_packet(txBuffer, &wordOffset, 0xC2000001);
   write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: rate ratio is 1.0 unless we can forward */
-  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: gmTimeBaseIndicator goes in 0xFFFF0000 */
-  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: lastGmPhaseChange*/
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
   write_packet(txBuffer, &wordOffset, 0x00000000);
   write_packet(txBuffer, &wordOffset, 0x00000000);
-  write_packet(txBuffer, &wordOffset, 0x00000000); /* TODO: scaledLastGmFreqChange */
+  write_packet(txBuffer, &wordOffset, 0x00000000); 
 }
 
 /* Initializes the DELAY_REQ message transmit template */
@@ -474,6 +474,106 @@ uint16_t get_gm_time_base_indicator_field(uint8_t *rxBuffer) {
   uint32_t wordOffset = GM_TIME_BASE_INDICATOR_OFFSET;
   return read_packet(rxBuffer, &wordOffset) >> 16;
 }
+
+/* Sets the message GM time base indicator within the passed packet buffer */
+static void set_gm_time_base_indicator(struct ptp_device *ptp, uint8_t * txBuffer) {
+  uint8_t * bufferBase;
+  uint32_t wordOffset;
+  uint32_t packetWord;
+
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
+
+  /* Locate the time base in the packet */
+  wordOffset = GM_TIME_BASE_INDICATOR_OFFSET;
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0x0000FFFF;
+  packetWord |= ((uint32_t) ptp->lastGmTimeBaseIndicator << 16);
+  wordOffset -= BYTES_PER_WORD;
+  write_packet(bufferBase, &wordOffset, packetWord);
+}
+
+/* Get the lastGmPhaseChange from the follow-up TLV */
+void get_gm_phase_change_field(uint8_t *rxBuffer, Integer96 *lastGmPhaseChange) {
+  uint32_t packetWord;
+  uint32_t wordOffset = GM_PHASE_CHANGE_OFFSET;
+   
+  lastGmPhaseChange->upper = ((read_packet(rxBuffer, &wordOffset) & 0x0000FFFF) << 16);
+  packetWord = read_packet(rxBuffer, &wordOffset);
+  lastGmPhaseChange->upper |= ((packetWord & 0xFFFF0000) >> 16);
+
+  lastGmPhaseChange->middle = ((packetWord & 0x0000FFFF) << 16);
+  packetWord = read_packet(rxBuffer, &wordOffset);
+  lastGmPhaseChange->middle |= ((packetWord & 0xFFFF0000) >> 16);
+
+  lastGmPhaseChange->lower = ((packetWord & 0x0000FFFF) << 16);
+  lastGmPhaseChange->lower |= ((read_packet(rxBuffer, &wordOffset) & 0xFFFF0000) >> 16);
+}
+
+/* Sets the message GM phase change within the passed packet buffer */
+static void set_gm_phase_change(struct ptp_device *ptp, uint8_t * txBuffer) {
+  uint8_t * bufferBase;
+  uint32_t wordOffset;
+  uint32_t packetWord;
+
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
+
+  /* Locate the phase change in the packet */
+  wordOffset = GM_PHASE_CHANGE_OFFSET;
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0xFFFF0000;
+  packetWord |= (ptp->lastGmPhaseChange.upper >> 16);
+  wordOffset -= BYTES_PER_WORD;
+  write_packet(bufferBase, &wordOffset, packetWord);
+  
+  packetWord = (((ptp->lastGmPhaseChange.upper) << 16) |
+                (ptp->lastGmPhaseChange.middle >> 16));
+  write_packet(bufferBase, &wordOffset, packetWord);
+  
+  packetWord = (((ptp->lastGmPhaseChange.middle) << 16) |
+                (ptp->lastGmPhaseChange.lower >> 16));
+  write_packet(bufferBase, &wordOffset, packetWord);
+  
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0x0000FFFF;
+  packetWord |= (ptp->lastGmPhaseChange.lower << 16);
+  wordOffset -= BYTES_PER_WORD;
+  write_packet(bufferBase, &wordOffset, packetWord);
+}
+
+/* Get the scaledLastGmFreqChange from the follow-up TLV */
+uint16_t get_gm_freq_change_field(uint8_t *rxBuffer) {
+  uint32_t packetWord;
+  uint32_t wordOffset = GM_FREQ_CHANGE_OFFSET;
+  
+  packetWord = ((read_packet(rxBuffer, &wordOffset) & 0x0000FFFF) << 16);
+  packetWord |= ((read_packet(rxBuffer, &wordOffset) & 0xFFFF0000) >> 16);
+
+  return packetWord;
+}
+
+/* Sets the message GM frequency change within the passed packet buffer */
+static void set_gm_freq_change(struct ptp_device *ptp, uint8_t * txBuffer) {
+  uint8_t * bufferBase;
+  uint32_t wordOffset;
+  uint32_t packetWord;
+
+  bufferBase = txBuffer + TX_DATA_OFFSET(ptp);
+
+  /* Locate the time base in the packet */
+  wordOffset = GM_FREQ_CHANGE_OFFSET;
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0xFFFF0000;
+  packetWord |= (ptp->lastGmFreqChange >> 16);
+  wordOffset -= BYTES_PER_WORD;
+  write_packet(bufferBase, &wordOffset, packetWord);
+
+  packetWord = read_packet(bufferBase, &wordOffset);
+  packetWord &= 0x0000FFFF;
+  packetWord |= (ptp->lastGmFreqChange << 16);
+  wordOffset -= BYTES_PER_WORD;
+  write_packet(bufferBase, &wordOffset, packetWord);
+}
+
 
 /* Get the cumulative scaled rate offset from the follow-up TLV */
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer) {
@@ -704,6 +804,10 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
 
   /* Set the scaled rate offset */
   set_cumulative_scaled_rate_offset_field(ptp, txFupBuffer, rateRatio);
+
+  set_gm_time_base_indicator(ptp, txFupBuffer);
+  set_gm_phase_change(ptp, txFupBuffer);
+  set_gm_freq_change(ptp, txFupBuffer);
 
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txFupBuffer);

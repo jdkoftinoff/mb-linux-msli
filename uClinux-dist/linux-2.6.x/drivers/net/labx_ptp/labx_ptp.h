@@ -221,7 +221,9 @@
 #define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
 #define STEPS_REMOVED_OFFSET                 (18 * BYTES_PER_WORD)
 #define GM_TIME_BASE_INDICATOR_OFFSET        (18 * BYTES_PER_WORD)
+#define GM_PHASE_CHANGE_OFFSET               (18 * BYTES_PER_WORD)
 #define PATH_TRACE_OFFSET                    (20 * BYTES_PER_WORD)
+#define GM_FREQ_CHANGE_OFFSET                (21 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
  * the data alignment from the network side to the host interface
@@ -491,6 +493,12 @@ struct ptp_port {
   PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; 
 };
 
+typedef struct {
+  int32_t  upper;
+  uint32_t middle;
+  uint32_t lower;
+} Integer96;
+
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
 struct ptp_device {
@@ -534,6 +542,8 @@ struct ptp_device {
   PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; /* 10.3.8.21 */
 
   uint16_t lastGmTimeBaseIndicator;
+  Integer96 lastGmPhaseChange;
+  uint32_t lastGmFreqChange;
 
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
@@ -651,6 +661,8 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
                    uint8_t * packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
 uint16_t get_gm_time_base_indicator_field(uint8_t *rxBuffer);
+void get_gm_phase_change_field(uint8_t *rxBuffer, Integer96 *lastGmPhaseChange);
+uint16_t get_gm_freq_change_field(uint8_t *rxBuffer);
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer);
 uint16_t get_port_number(const uint8_t *portNumber);
 void set_port_number(uint8_t *portNumber, uint16_t setValue);
