@@ -328,7 +328,11 @@ free:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
 static int __devexit labx_dma_pdev_remove(struct platform_device *pdev)
+#else
+static int labx_dma_pdev_remove(struct platform_device *pdev)
+#endif
 {
 	int i;
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)platform_get_drvdata(pdev);
