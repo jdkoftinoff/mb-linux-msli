@@ -18,9 +18,9 @@ struct netpoll {
 	const char *name;
 	void (*rx_hook)(struct netpoll *, int, char *, int);
 
-	__be32 local_ip, remote_ip;
-	u16 local_port, remote_port;
-	u8 remote_mac[ETH_ALEN];
+	uint16_t descriptor_index;
+	uint8_t entity_id[8];
+	uint16_t sequence_id;
 };
 
 struct netpoll_info {
@@ -28,7 +28,6 @@ struct netpoll_info {
 	int rx_flags;
 	spinlock_t rx_lock;
 	struct netpoll *rx_np; /* netpoll that registered an rx_hook */
-	struct sk_buff_head arp_tx; /* list of arp requests to reply to */
 	struct sk_buff_head txq;
 	struct delayed_work tx_work;
 };
