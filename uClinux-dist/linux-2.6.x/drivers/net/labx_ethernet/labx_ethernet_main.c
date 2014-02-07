@@ -688,6 +688,22 @@ static int otp_assign_mac_address(void *private_data)
  *        cases, should be faster.
  */
 
+
+#ifdef CONFIG_NET_POLL_CONTROLLER
+/*
+ * Polling receive - used by netconsole and other diagnostic tools
+ * to allow network i/o with interrupts disabled.
+ */
+static void xenet_poll_controller(struct net_device *dev)
+{
+    struct net_local *lp;
+    lp = netdev_priv(dev);
+	disable_irq(lp->fifo_irq);
+	xenet_fifo_interrupt(lp->fifo_irq, dev);
+	enable_irq(lp->fifo_irq);
+}
+#endif
+
 static int xenet_open(struct net_device *dev)
 {
   struct net_local *lp;
@@ -1528,6 +1544,8 @@ static irqreturn_t mdio_interrupt(int irq, void *dev_id)
   return(IRQ_HANDLED);
 }
 
+static struct net_device_ops xenet_netdev_ops;
+
 /** Shared device initialization code */
 static int xtenet_setup(struct device *dev,
                         struct resource *r_mem,
@@ -1647,6 +1665,7 @@ static int xtenet_setup(struct device *dev,
   ndev->tx_timeout = xenet_tx_timeout;
   ndev->watchdog_timeo = TX_TIMEOUT;
   ndev->ethtool_ops = &labx_ethtool_ops;
+  ndev->netdev_ops = &xenet_netdev_ops;
 
   /* init the stats */
   lp->max_frags_in_a_packet = 0;
@@ -1887,6 +1906,21 @@ static int __devexit xtenet_of_remove(struct of_device *dev)
 {
   return xtenet_remove(&dev->dev);
 }
+
+static struct net_device_ops xenet_netdev_ops = {
+	.ndo_open		= xenet_open,
+	.ndo_stop		= xenet_close,
+	.ndo_start_xmit		= xenet_FifoSend,
+	.ndo_do_ioctl		= xenet_ioctl,
+	.ndo_tx_timeout		= xenet_tx_timeout,
+	.ndo_get_stats		= xenet_get_stats,
+	.ndo_set_multicast_list = xenet_set_multicast_list,
+	.ndo_set_mac_address 	= xenet_set_mac_address,
+	.ndo_change_mtu		= xenet_change_mtu,
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	.ndo_poll_controller = xenet_poll_controller,
+#endif
+};
 
 static struct of_device_id xtenet_of_match[] = {
   { .compatible = "xlnx,labx-ethernet-1.00.a", },
