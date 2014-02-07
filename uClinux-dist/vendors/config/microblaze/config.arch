@@ -225,7 +225,7 @@ ifdef UCLINUX_BUILD_USER
   ifdef CONFIG_USER_DEBUG
 	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-Os) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif
 
 	CFLAGS  += -pipe
