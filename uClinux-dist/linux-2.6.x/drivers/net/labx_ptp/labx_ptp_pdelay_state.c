@@ -26,6 +26,8 @@
 
 #include "labx_ptp.h"
 
+
+
 /* Define this to get some extra debug on path delay messages */
 /* #define PATH_DELAY_DEBUG */
 
@@ -100,8 +102,18 @@ static void computePropTime(struct ptp_device *ptp, uint32_t port)
     uint64_t nsResponder;
     uint64_t nsRequester;
 
+#if 0
+    timestamp_difference(&ptp->ports[port].pdelayRespTxTimestamp, &ptp->ports[port].pdelayRespRxTimestamp, &difference);
+    timestamp_difference(&ptp->ports[port].pdelayReqRxTimestamp, &ptp->ports[port].pdelayReqTxTimestamp, &difference2);
+#else
+#if 0
     timestamp_difference(&ptp->ports[port].pdelayRespTxTimestamp, &ptp->ports[port].pdelayReqRxTimestamp, &difference);
     timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp, &ptp->ports[port].pdelayReqTxTimestamp, &difference2);
+#else
+    timestamp_difference(&ptp->ports[port].pdelayReqTxTimestamp, &ptp->ports[port].pdelayRespRxTimestamp, &difference);
+    timestamp_difference(&ptp->ports[port].pdelayReqRxTimestamp, &ptp->ports[port].pdelayRespTxTimestamp, &difference2);
+#endif
+#endif
 
     nsResponder = ((uint64_t)difference.secondsLower) * 1000000000ULL + (uint64_t)difference.nanoseconds;
     nsRequester = ((uint64_t)difference2.secondsLower) * 1000000000ULL + (uint64_t)difference2.nanoseconds;
@@ -208,6 +220,18 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
        * it for delay and rate calculation. (Trsp4 - our local clock) */
       get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET,
         ptp->ports[port].rcvdPdelayRespPtr, &ptp->ports[port].pdelayRespRxTimestamp);
+#ifdef CAL_ICS
+      {
+        PtpTime diff;
+#ifdef PATH_DELAY_DEBUG
+        printk("switch response diff: %d\r\n",ptp->ports[port].rcvdPdelayRespSwitchOffset);
+#endif
+        diff.secondsUpper=0;
+        diff.secondsLower=0;
+        diff.nanoseconds=ptp->ports[port].rcvdPdelayRespSwitchOffset;
+        timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&diff,&ptp->ports[port].pdelayRespRxTimestamp);
+      }
+#endif
       break;
 
     case MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER:
@@ -311,6 +335,32 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
       get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txRequestingPortId);
       rxSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
       txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
+#ifdef CAL_ICS
+      {
+        switch_timestamp_t switch_t1,switch_t2;
+        int32_t t1,t2;
+        if(port==0) {
+          block_read_avb_ptp(&switch_t1,0,0x08);
+          block_read_avb_ptp(&switch_t2,5,0x10);
+        } else {
+          block_read_avb_ptp(&switch_t1,1,0x08);
+          block_read_avb_ptp(&switch_t2,6,0x10);
+        }
+        if((txSequenceId==switch_t1.sequence_id) && (txSequenceId==switch_t1.sequence_id)) {
+          t1=(switch_t1.high<<16)|switch_t1.low;
+          t2=(switch_t2.high<<16)|switch_t2.low;
+          ptp->ports[port].rcvdPdelayRespSwitchOffset=(t2-t1)*8;
+          if((ptp->ports[port].rcvdPdelayRespSwitchOffset>10000)||(ptp->ports[port].rcvdPdelayRespSwitchOffset<200)) {
+            rxSequenceId=txSequenceId-10; /* force response to be skipped */
+          }
+        } else {
+          printk("missed switch response timestamp %04x:%04x instead of %04x\r\n",switch_t1.sequence_id,switch_t2.sequence_id,txSequenceId);
+          rxSequenceId=txSequenceId-10; /* force response to be skipped */
+          ptp->ports[port].rcvdPdelayRespSwitchOffset=-1;
+        }
+      }
+#endif
+
     }
     if (ptp->ports[port].rcvdPdelayRespFollowUp)
     {
@@ -378,7 +428,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           {
 #ifdef PATH_DELAY_DEBUG
             int i;
-            printk("Resetting %d: intervalTimer %d, reqInterval %d, rcvdPdelayResp %d, rcvdPdelayRespPtr %d, rxSequence %d, txSequence %d\n",
+            printk("Resetting %d: intervalTimer %d, reqInterval %d, rcvdPdelayResp %d, rcvdPdelayRespPtr %p, rxSequence %d, txSequence %d\n",
               port, ptp->ports[port].pdelayIntervalTimer, PDELAY_REQ_INTERVAL_TICKS(ptp, port), ptp->ports[port].rcvdPdelayResp,
               ptp->ports[port].rcvdPdelayRespPtr, rxSequenceId, txSequenceId);
             printk("rxRequestingPortID:");

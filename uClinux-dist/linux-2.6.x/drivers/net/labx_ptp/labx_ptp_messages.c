@@ -776,11 +776,43 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
    */
   get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
 
-  set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
+#ifdef CAL_ICS
+      {
+        PtpTime diff;
+        switch_timestamp_t switch_t1,switch_t2;
+        int32_t t1,t2;
+        if(port==0) {
+          block_read_avb_ptp(&switch_t1,0,0x08);
+          block_read_avb_ptp(&switch_t2,5,0x10);
+        } else {
+          block_read_avb_ptp(&switch_t1,1,0x08);
+          block_read_avb_ptp(&switch_t2,6,0x10);
+        }
+        if((pdelayReqSequenceId==switch_t1.sequence_id) && (pdelayReqSequenceId==switch_t1.sequence_id)) {
+          t1=(switch_t1.high<<16)|switch_t1.low;
+          t2=(switch_t2.high<<16)|switch_t2.low;
 
-  /* All dynamic fields have been updated, transmit the packet */
-  transmit_packet(ptp, port, txBuffer);
-  ptp->ports[port].stats.txPDelayResponseCount++;
+          diff.secondsUpper=0;
+          diff.secondsLower=0;
+          diff.nanoseconds=(t2-t1)*8;
+#ifdef PATH_DELAY_DEBUG
+          printk("switch request diff: %d\r\n",diff.nanoseconds);
+#endif
+          if((diff.nanoseconds>10000)||(diff.nanoseconds<200)) {
+            return;
+          }
+          timestamp_difference(&pdelayReqRxTimestamp,&diff,&pdelayReqRxTimestamp);
+#endif
+          set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
+          /* All dynamic fields have been updated, transmit the packet */
+          transmit_packet(ptp, port, txBuffer);
+          ptp->ports[port].stats.txPDelayResponseCount++;
+#ifdef CAL_ICS
+        } else {
+          printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1.sequence_id,switch_t2.sequence_id,pdelayReqSequenceId);
+        }
+      }
+#endif
 }
 
 /* Transmits a PDELAY_RESP_FUP message related to the last PDELAY_RESP message that was
