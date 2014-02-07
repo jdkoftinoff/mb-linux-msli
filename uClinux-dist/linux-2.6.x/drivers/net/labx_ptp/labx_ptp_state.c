@@ -265,6 +265,37 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     spin_unlock_irqrestore(&ptp->mutex, flags);
     preempt_enable();
 
+#ifdef CAL_ICS
+      {
+        PtpTime diff;
+        switch_timestamp_t switch_t1,switch_t2;
+        int32_t t1,t2;
+        if(port==0) {
+          block_read_avb_ptp(&switch_t1,0,0x08);
+          block_read_avb_ptp(&switch_t2,5,0x10);
+        } else {
+          block_read_avb_ptp(&switch_t1,1,0x08);
+          block_read_avb_ptp(&switch_t2,6,0x10);
+        }
+        if((ptp->ports[port].syncSequenceId==switch_t1.sequence_id) && (ptp->ports[port].syncSequenceId==switch_t1.sequence_id)) {
+          t1=(switch_t1.high<<16)|switch_t1.low;
+          t2=(switch_t2.high<<16)|switch_t2.low;
+          diff.secondsUpper=0;
+          diff.secondsLower=0;
+          diff.nanoseconds=(t2-t1)*8;
+          if((diff.nanoseconds>10000)||(diff.nanoseconds<200)) {
+            ptp->ports[port].syncSequenceIdValid = 0;
+          } else {
+            timestamp_difference(&ptp->ports[port].syncRxTimestampTemp,&diff,&ptp->ports[port].syncRxTimestampTemp);
+          }
+        } else {
+          ptp->ports[port].syncSequenceIdValid = 0;
+          printk("missed sync timestamp %04x:%04x instead of %04x\r\n",switch_t1.sequence_id,switch_t2.sequence_id,ptp->ports[port].syncSequenceId);
+        }
+      }
+#endif
+
+
     /* Forward the sync to any master ports if the sync is coming in on a slave port */
     if (ptp->ports[port].selectedRole == PTP_SLAVE) {
       PtpTime syncRxTimestamp;

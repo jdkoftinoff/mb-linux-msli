@@ -192,6 +192,13 @@ static int marvell_read_status(struct phy_device *phydev)
   unsigned int physicalControlReg = REG_READ(phydev_switch, MV_REG_PORT(internalPort), 0x01);
   unsigned int phySpeed = (portStatusReg >> 8) & 3;
 
+  if(REG_READ(phydev_switch, MV_REG_PORT(phydev->addr), 0x00)!=portStatusReg) {
+    return;
+  }
+  if(REG_READ(phydev_switch, MV_REG_PORT(internalPort), 0x01)!=physicalControlReg) {
+    return;
+  }
+
   if (phySpeed != (physicalControlReg & 3)) {
     /* Adjust the CPU port speed to match the external PHY speed */
     printk("Port Status %04X\n", (uint16_t)portStatusReg);
