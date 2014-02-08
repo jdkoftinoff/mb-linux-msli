@@ -220,7 +220,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
        * it for delay and rate calculation. (Trsp4 - our local clock) */
       get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET,
         ptp->ports[port].rcvdPdelayRespPtr, &ptp->ports[port].pdelayRespRxTimestamp);
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
         PtpTime diff;
 #ifdef PATH_DELAY_DEBUG
@@ -335,7 +335,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
       get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txRequestingPortId);
       rxSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
       txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
         switch_timestamp_t switch_t1,switch_t2;
         int32_t t1,t2;

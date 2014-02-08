@@ -11,8 +11,6 @@ include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 include $(ARCH_CONFIG)
 
-CFLAGS  += CAL_ICS
-
 LINUX	 = $(ROOTDIR)/$(LINUXDIR)/linux 
 LINUXBIN = $(IMAGEDIR)/linux.bin
 ROMFSIMG = $(IMAGEDIR)/romfs.img

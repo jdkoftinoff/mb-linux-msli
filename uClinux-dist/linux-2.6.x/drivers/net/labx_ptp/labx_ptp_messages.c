@@ -776,7 +776,7 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
    */
   get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET, requestRxBuffer, &pdelayReqRxTimestamp);
 
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
         PtpTime diff;
         switch_timestamp_t switch_t1,switch_t2;
@@ -807,7 +807,7 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
           /* All dynamic fields have been updated, transmit the packet */
           transmit_packet(ptp, port, txBuffer);
           ptp->ports[port].stats.txPDelayResponseCount++;
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
         } else {
           printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1.sequence_id,switch_t2.sequence_id,pdelayReqSequenceId);
         }

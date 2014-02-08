@@ -265,7 +265,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     spin_unlock_irqrestore(&ptp->mutex, flags);
     preempt_enable();
 
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
         PtpTime diff;
         switch_timestamp_t switch_t1,switch_t2;

@@ -819,7 +819,7 @@ static int ptp_probe(const char *name,
     /* TODO: anything to do if we can't register for events? */
   }
 
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
   write_avb_ptp(0xf,0,PTP_ETHER_TYPE);
   write_avb_ptp(0xf,1,(1<<3)|(1<<2)|(1<<0)); /* timestamp packets messageIDs 2 and 3 */
   write_avb_ptp(0xf,2,(0<<3)|(0<<2)|(0<<0)); /* put messageId 2 in arrival 1, messageId 3 in arrival 2 */

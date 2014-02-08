@@ -3,7 +3,6 @@
 #
 EXTRA_CFLAGS += -I$(TOPDIR)/drivers/xilinx_common
 EXTRA_CFLAGS += -I$(TOPDIR)/drivers/net/labx_avb
-EXTRA_CFLAGS += -DCAL_ICS
 
 # Include the CAL-specific drivers
 obj-y += CAL_ICS_setup.o

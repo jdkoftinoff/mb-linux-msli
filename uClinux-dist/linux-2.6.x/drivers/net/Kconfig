@@ -1981,6 +1981,14 @@ config LABX_PTP_NO_TASKLET
 	  This will make PTP more stable on systems with high interrupt load
 	  at the expense of higher interrupt latency for other interrupts.
 
+config LABX_PTP_MARVELL_TIMESTAMPS
+	bool "Enable Reading PTP timestamps from Marvell switch chip"
+	depends on LABX_PTP
+	help
+	  Enable this option for CAL_ICS.
+      It has a Marvell switch between the FPGA and the PHY.
+
+
 source "drivers/net/labx_avb/Kconfig"
 
 config ACENIC

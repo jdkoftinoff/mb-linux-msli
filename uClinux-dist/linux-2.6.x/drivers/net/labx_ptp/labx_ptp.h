@@ -26,8 +26,6 @@
 #ifndef _LABX_PTP_H_
 #define _LABX_PTP_H_
 
-//#define CAL_ICS
-
 #include <linux/if.h>
 #include <linux/cdev.h>
 #include <linux/highmem.h>
@@ -424,7 +422,7 @@ struct ptp_port {
   /* 802.1AS Peer-to-peer delay mechanism variables (11.2.15.1) */
   MDPdelayReq_State_t mdPdelayReq_State;
 
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
   int32_t rcvdPdelayRespSwitchOffset;
 #endif
   uint32_t pdelayIntervalTimer;
@@ -734,7 +732,7 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
 #define PTP_CLOCK_IDENTITY_CHARS 8
 #endif
 
-#ifdef CAL_ICS
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
 #define PTP_ETHER_TYPE 0x88f7
 /* CAL_ICS constants; ultimately these and the corresponding code
  * should migrate into board-specific init code.
@@ -911,6 +909,6 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
     time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
 }
 
-#endif /* CAL_ICS */
+#endif /* CONFIG_LABX_PTP_MARVELL_TIMESTAMPS */
 #endif /* _LABX_PTP_H_ */
 
