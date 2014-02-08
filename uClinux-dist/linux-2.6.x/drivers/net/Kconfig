@@ -1986,7 +1986,7 @@ config LABX_PTP_MARVELL_TIMESTAMPS
 	depends on LABX_PTP
 	help
 	  Enable this option for CAL_ICS.
-      It has a Marvell switch between the FPGA and the PHY.
+	  It has a Marvell switch between the FPGA and the PHY.
 
 
 source "drivers/net/labx_avb/Kconfig"
