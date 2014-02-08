@@ -337,26 +337,33 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
       txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
-        switch_timestamp_t switch_t1,switch_t2;
+        switch_timestamp_t switch_t1a,switch_t2a;
+        switch_timestamp_t switch_t1b,switch_t2b;
         int32_t t1,t2;
         if(port==0) {
-          block_read_avb_ptp(&switch_t1,0,0x08);
-          block_read_avb_ptp(&switch_t2,5,0x10);
+          block_read_avb_ptp(&switch_t1a,0,0x08);
+          block_read_avb_ptp(&switch_t2a,5,0x10);
+          block_read_avb_ptp(&switch_t1b,0,0x08);
+          block_read_avb_ptp(&switch_t2b,5,0x10);
         } else {
-          block_read_avb_ptp(&switch_t1,1,0x08);
-          block_read_avb_ptp(&switch_t2,6,0x10);
+          block_read_avb_ptp(&switch_t1a,1,0x08);
+          block_read_avb_ptp(&switch_t2a,6,0x10);
+          block_read_avb_ptp(&switch_t1b,1,0x08);
+          block_read_avb_ptp(&switch_t2b,6,0x10);
         }
-        if((txSequenceId==switch_t1.sequence_id) && (txSequenceId==switch_t1.sequence_id)) {
-          t1=(switch_t1.high<<16)|switch_t1.low;
-          t2=(switch_t2.high<<16)|switch_t2.low;
+        if((txSequenceId==switch_t1a.sequence_id) &&
+           (txSequenceId==switch_t2a.sequence_id) &&
+           (switch_t1a.low==switch_t1b.low) &&
+           (switch_t1a.high==switch_t1b.high) &&
+           (switch_t2a.low==switch_t2b.low) &&
+           (switch_t2a.high==switch_t2b.high)) {
+          t1=(switch_t1a.high<<16)|switch_t1a.low;
+          t2=(switch_t2a.high<<16)|switch_t2a.low;
+
           ptp->ports[port].rcvdPdelayRespSwitchOffset=(t2-t1)*8;
-          if((ptp->ports[port].rcvdPdelayRespSwitchOffset>10000)||(ptp->ports[port].rcvdPdelayRespSwitchOffset<200)) {
-            rxSequenceId=txSequenceId-10; /* force response to be skipped */
-          }
         } else {
-          printk("missed switch response timestamp %04x:%04x instead of %04x\r\n",switch_t1.sequence_id,switch_t2.sequence_id,txSequenceId);
+          printk("missed switch response timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,txSequenceId);
           rxSequenceId=txSequenceId-10; /* force response to be skipped */
-          ptp->ports[port].rcvdPdelayRespSwitchOffset=-1;
         }
       }
 #endif
