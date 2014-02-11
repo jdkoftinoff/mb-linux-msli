@@ -102,18 +102,8 @@ static void computePropTime(struct ptp_device *ptp, uint32_t port)
     uint64_t nsResponder;
     uint64_t nsRequester;
 
-#if 0
-    timestamp_difference(&ptp->ports[port].pdelayRespTxTimestamp, &ptp->ports[port].pdelayRespRxTimestamp, &difference);
-    timestamp_difference(&ptp->ports[port].pdelayReqRxTimestamp, &ptp->ports[port].pdelayReqTxTimestamp, &difference2);
-#else
-#if 0
     timestamp_difference(&ptp->ports[port].pdelayRespTxTimestamp, &ptp->ports[port].pdelayReqRxTimestamp, &difference);
     timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp, &ptp->ports[port].pdelayReqTxTimestamp, &difference2);
-#else
-    timestamp_difference(&ptp->ports[port].pdelayReqTxTimestamp, &ptp->ports[port].pdelayRespRxTimestamp, &difference);
-    timestamp_difference(&ptp->ports[port].pdelayReqRxTimestamp, &ptp->ports[port].pdelayRespTxTimestamp, &difference2);
-#endif
-#endif
 
     nsResponder = ((uint64_t)difference.secondsLower) * 1000000000ULL + (uint64_t)difference.nanoseconds;
     nsRequester = ((uint64_t)difference2.secondsLower) * 1000000000ULL + (uint64_t)difference2.nanoseconds;
