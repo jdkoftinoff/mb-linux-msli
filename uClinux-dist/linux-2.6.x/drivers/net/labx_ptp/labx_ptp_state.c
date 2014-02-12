@@ -260,6 +260,9 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     preempt_disable();
     spin_lock_irqsave(&ptp->mutex, flags);
     timestamp_copy(&ptp->ports[port].syncRxTimestampTemp, &correctedTimestamp);
+    if(((ptp->ports[port].syncSequenceId+1)&0xffff) != get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer)) {
+        printk("missed sync %d\r\n",get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer)-(ptp->ports[port].syncSequenceId+1));
+    }
     ptp->ports[port].syncSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer);
     ptp->ports[port].syncSequenceIdValid = 1;
     spin_unlock_irqrestore(&ptp->mutex, flags);

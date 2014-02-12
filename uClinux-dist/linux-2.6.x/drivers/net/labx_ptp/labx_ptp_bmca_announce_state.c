@@ -307,16 +307,15 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
           } else if (pPort->rcvdMsg && !pPort->updtInfo) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
           } else {
-            // TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-            int syncTimeout = (pPort->syncTimeoutCounter >= SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+            int syncTimeout = SYNC_INTERVAL_TIMED_OUT(ptp,port);
             int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
             if ((pPort->infoIs == InfoIs_Received) &&
                 (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
                 !pPort->updtInfo && !pPort->rcvdMsg) {
 
-              BMCA_DBG("Announce AGED: (announce %d >= %d || sync %d >= %d)\n",
+              BMCA_DBG("Announce AGED: (announce %d >= %d || sync %dms > %dms)\n",
                 pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
-                pPort->syncTimeoutCounter, SYNC_INTERVAL_TICKS(ptp, port) * pPort->syncReceiptTimeout * 2);
+                pPort->syncTimeoutCounter*PTP_TIMER_TICK_MS,SIGNED_SHIFT(1000*pPort->syncReceiptTimeout,pPort->currentLogSyncInterval));
 
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
 
