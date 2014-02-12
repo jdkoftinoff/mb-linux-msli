@@ -611,10 +611,20 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
 
 /* Transmits the next SYNC message in a sequence */
 void transmit_sync(struct ptp_device *ptp, uint32_t port) {
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  switch_timestamp_t switch_t1a,switch_t2a;
+  switch_timestamp_t switch_t1b,switch_t2b;
+  int32_t t1,t2;
+  uint16_t sequence_id;
+#endif
+
   PtpTime presentTime;
   int64_t correctionField;
   uint8_t *txBuffer;
 
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  sequence_id=ptp->ports[port].syncSequenceId;
+#endif
   /* Update the sequence ID */
   txBuffer = get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].syncSequenceId++);
@@ -631,6 +641,33 @@ void transmit_sync(struct ptp_device *ptp, uint32_t port) {
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txSyncCount++;
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  if(port==0) {
+    block_read_avb_ptp(&switch_t1a,5,0x08);
+    block_read_avb_ptp(&switch_t2a,0,0x10);
+    block_read_avb_ptp(&switch_t1b,5,0x08);
+    block_read_avb_ptp(&switch_t2b,0,0x10);
+  } else {
+    block_read_avb_ptp(&switch_t1a,6,0x08);
+    block_read_avb_ptp(&switch_t2a,1,0x10);
+    block_read_avb_ptp(&switch_t1b,6,0x08);
+    block_read_avb_ptp(&switch_t2b,1,0x10);
+  }
+  if((sequence_id==switch_t1a.sequence_id) &&
+     (sequence_id==switch_t2a.sequence_id) &&
+     (switch_t1a.low==switch_t1b.low) &&
+     (switch_t1a.high==switch_t1b.high) &&
+     (switch_t2a.low==switch_t2b.low) &&
+     (switch_t2a.high==switch_t2b.high)) {
+    t1=(switch_t1a.high<<16)|switch_t1a.low;
+    t2=(switch_t2a.high<<16)|switch_t2a.low;
+
+    ptp->ports[port].syncOffset.secondsUpper=0;
+    ptp->ports[port].syncOffset.secondsLower=0;
+    ptp->ports[port].syncOffset.nanoseconds=(t2-t1)*8;
+  }
+#endif
+
 }
 
 /* Transmits a FUP message related to the last SYNC message that was sent */
@@ -665,6 +702,9 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
      * will contain the value from the received follow-up, NOT the time we sent
      * the sync.
      */
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+    timestamp_sum(&ptp->ports[port].syncTxTimestamp,&ptp->ports[port].syncOffset,&ptp->ports[port].syncTxTimestamp);
+#endif
     set_timestamp(ptp, port, txFupBuffer, &ptp->ports[port].syncTxTimestamp);
 
     correctionField = 0;
@@ -737,8 +777,20 @@ void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * re
 
 /* Transmits the next PDELAY_REQ message in a sequence */
 void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  PtpTime diff;
+  switch_timestamp_t switch_t1a,switch_t2a;
+  switch_timestamp_t switch_t1b,switch_t2b;
+  int32_t t1,t2;
+  uint16_t sequence_id;
+#endif
+
   PtpTime presentTime;
   uint8_t *txBuffer;
+
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  sequence_id=ptp->ports[port].pdelayReqSequenceId;
+#endif
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
   /* Update the sequence ID (incremented in the pdelay state machine) */
@@ -751,12 +803,48 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txPDelayRequestCount++;
+
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  if(port==0) {
+    block_read_avb_ptp(&switch_t1a,5,0x08);
+    block_read_avb_ptp(&switch_t2a,0,0x10);
+    block_read_avb_ptp(&switch_t1b,5,0x08);
+    block_read_avb_ptp(&switch_t2b,0,0x10);
+  } else {
+    block_read_avb_ptp(&switch_t1a,6,0x08);
+    block_read_avb_ptp(&switch_t2a,1,0x10);
+    block_read_avb_ptp(&switch_t1b,6,0x08);
+    block_read_avb_ptp(&switch_t2b,1,0x10);
+  }
+  if((sequence_id==switch_t1a.sequence_id) &&
+     (sequence_id==switch_t2a.sequence_id) &&
+     (switch_t1a.low==switch_t1b.low) &&
+     (switch_t1a.high==switch_t1b.high) &&
+     (switch_t2a.low==switch_t2b.low) &&
+     (switch_t2a.high==switch_t2b.high)) {
+    t1=(switch_t1a.high<<16)|switch_t1a.low;
+    t2=(switch_t2a.high<<16)|switch_t2a.low;
+
+    ptp->ports[port].requestOffset.secondsUpper=0;
+    ptp->ports[port].requestOffset.secondsLower=0;
+    ptp->ports[port].requestOffset.nanoseconds=(t2-t1)*8;
+  }
+#endif
+
 }
 
 /* Transmits a PDELAY_RESP message in response to the PDELAY_REQ message received
  * into the passed Rx packet buffer
  */
 void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  PtpTime diff;
+  switch_timestamp_t switch_t1a,switch_t2a;
+  switch_timestamp_t switch_t1b,switch_t2b;
+  int32_t t1,t2;
+  uint16_t sequence_id;
+#endif
+
   PtpTime pdelayReqRxTimestamp;
   uint16_t pdelayReqSequenceId;
   uint8_t *txBuffer;
@@ -764,6 +852,10 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
   /* Get the source port identity address and sequence ID of the peer delay request */
   get_source_port_id(ptp, port, RECEIVED_PACKET, requestRxBuffer, ptp->ports[port].lastPeerRequestPortId);
   pdelayReqSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, requestRxBuffer);
+
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  sequence_id=pdelayReqSequenceId;
+#endif
 
   /* Update the sequence ID and requesting port identity */
   txBuffer = get_output_buffer(ptp, port, PTP_TX_PDELAY_RESP_BUFFER);
@@ -778,10 +870,6 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
-        PtpTime diff;
-        switch_timestamp_t switch_t1a,switch_t2a;
-        switch_timestamp_t switch_t1b,switch_t2b;
-        int32_t t1,t2;
         if(port==0) {
           block_read_avb_ptp(&switch_t1a,0,0x08);
           block_read_avb_ptp(&switch_t2a,5,0x10);
@@ -815,6 +903,30 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
           transmit_packet(ptp, port, txBuffer);
           ptp->ports[port].stats.txPDelayResponseCount++;
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+          if(port==0) {
+            block_read_avb_ptp(&switch_t1a,5,0x08);
+            block_read_avb_ptp(&switch_t2a,0,0x10);
+            block_read_avb_ptp(&switch_t1b,5,0x08);
+            block_read_avb_ptp(&switch_t2b,0,0x10);
+          } else {
+            block_read_avb_ptp(&switch_t1a,6,0x08);
+            block_read_avb_ptp(&switch_t2a,1,0x10);
+            block_read_avb_ptp(&switch_t1b,6,0x08);
+            block_read_avb_ptp(&switch_t2b,1,0x10);
+          }
+          if((sequence_id==switch_t1a.sequence_id) &&
+             (sequence_id==switch_t2a.sequence_id) &&
+             (switch_t1a.low==switch_t1b.low) &&
+             (switch_t1a.high==switch_t1b.high) &&
+             (switch_t2a.low==switch_t2b.low) &&
+             (switch_t2a.high==switch_t2b.high)) {
+            t1=(switch_t1a.high<<16)|switch_t1a.low;
+            t2=(switch_t2a.high<<16)|switch_t2a.low;
+
+            ptp->ports[port].responseOffset.secondsUpper=0;
+            ptp->ports[port].responseOffset.secondsLower=0;
+            ptp->ports[port].responseOffset.nanoseconds=(t2-t1)*8;
+          }
         } else {
           printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,pdelayReqSequenceId);
         }
@@ -848,6 +960,9 @@ void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
   get_local_hardware_timestamp(ptp, port, TRANSMITTED_PACKET, txRespBuffer,
                                &pdelayRespTxTimestamp);
 
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  timestamp_sum(&pdelayRespTxTimestamp,&ptp->ports[port].responseOffset,&pdelayRespTxTimestamp);
+#endif
   set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */

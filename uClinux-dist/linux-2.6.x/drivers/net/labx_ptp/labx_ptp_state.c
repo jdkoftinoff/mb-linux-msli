@@ -731,6 +731,9 @@ void labx_ptp_tx_state_task(unsigned long data) {
           uint8_t *txBuffer = get_output_buffer(ptp,i,PTP_TX_PDELAY_REQ_BUFFER);
           get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer ,
                                        &ptp->ports[i].pdelayReqTxTimestamp);
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+          timestamp_sum(&ptp->ports[i].pdelayReqTxTimestamp,&ptp->ports[i].requestOffset,&ptp->ports[i].pdelayReqTxTimestamp);
+#endif
 
           ptp->ports[i].rcvdMDTimestampReceive = TRUE;
           MDPdelayReq_StateMachine(ptp, i);

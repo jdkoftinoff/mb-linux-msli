@@ -458,6 +458,12 @@ struct ptp_port {
   PtpTime pdelayRespTxTimestampI; // pdelayRespEventEgressTimestamp (Trsp3)
   PtpTime pdelayRespRxTimestampI; // pdelayRespEventIngressTimestamp (Treq4)
 
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  PtpTime syncOffset;
+  PtpTime requestOffset;
+  PtpTime responseOffset;
+#endif
+
   /* pdelay response variables */
   uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
 
