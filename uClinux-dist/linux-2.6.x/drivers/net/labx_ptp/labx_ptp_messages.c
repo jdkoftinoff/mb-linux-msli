@@ -928,7 +928,9 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
             ptp->ports[port].responseOffset.nanoseconds=(t2-t1)*8;
           }
         } else {
+#ifdef DEBUG_MISSED_TIMESTAMP
           printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,pdelayReqSequenceId);
+#endif
         }
       }
 #endif

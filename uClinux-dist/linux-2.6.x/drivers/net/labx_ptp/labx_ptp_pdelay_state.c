@@ -352,7 +352,9 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
 
           ptp->ports[port].rcvdPdelayRespSwitchOffset=(t2-t1)*8;
         } else {
+#ifdef DEBUG_MISSED_TIMESTAMP
           printk("missed switch response timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,txSequenceId);
+#endif
           rxSequenceId=txSequenceId-10; /* force response to be skipped */
         }
       }

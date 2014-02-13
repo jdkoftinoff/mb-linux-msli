@@ -260,9 +260,11 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     preempt_disable();
     spin_lock_irqsave(&ptp->mutex, flags);
     timestamp_copy(&ptp->ports[port].syncRxTimestampTemp, &correctedTimestamp);
+#ifdef DEBUG_MISSED_TIMESTAMP
     if(((ptp->ports[port].syncSequenceId+1)&0xffff) != get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer)) {
-        printk("missed sync %d\r\n",get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer)-(ptp->ports[port].syncSequenceId+1));
+        printk("missed sync %d (%d)\r\n",ptp->ports[port].syncSequenceId,get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer)-(ptp->ports[port].syncSequenceId+1));
     }
+#endif
     ptp->ports[port].syncSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, rxBuffer);
     ptp->ports[port].syncSequenceIdValid = 1;
     spin_unlock_irqrestore(&ptp->mutex, flags);
@@ -299,7 +301,9 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
           timestamp_difference(&ptp->ports[port].syncRxTimestampTemp,&diff,&ptp->ports[port].syncRxTimestampTemp);
         } else {
           ptp->ports[port].syncSequenceIdValid = 0;
+#ifdef DEBUG_MISSED_TIMESTAMP
           printk("missed sync timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,ptp->ports[port].syncSequenceId);
+#endif
         }
       }
 #endif
