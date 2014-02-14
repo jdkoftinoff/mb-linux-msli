@@ -903,6 +903,10 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
           transmit_packet(ptp, port, txBuffer);
           ptp->ports[port].stats.txPDelayResponseCount++;
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+          if(ptp->ports[port].skippedResponseCount>=3) {
+            printk("skipped %d responses in a row\r\n",ptp->ports[port].skippedResponseCount);
+          }
+          ptp->ports[port].skippedResponseCount=0;
           if(port==0) {
             block_read_avb_ptp(&switch_t1a,5,0x08);
             block_read_avb_ptp(&switch_t2a,0,0x10);
@@ -926,8 +930,15 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
             ptp->ports[port].responseOffset.secondsUpper=0;
             ptp->ports[port].responseOffset.secondsLower=0;
             ptp->ports[port].responseOffset.nanoseconds=(t2-t1)*8;
+            if(ptp->ports[port].skippedFollowupCount>=3) {
+              printk("skipped %d followups in a row\r\n",ptp->ports[port].skippedFollowupCount);
+            }
+            ptp->ports[port].skippedFollowupCount=0;
+          } else {
+            ptp->ports[port].skippedFollowupCount++;
           }
         } else {
+          ptp->ports[port].skippedResponseCount++;
 #ifdef DEBUG_MISSED_TIMESTAMP
           printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,pdelayReqSequenceId);
 #endif

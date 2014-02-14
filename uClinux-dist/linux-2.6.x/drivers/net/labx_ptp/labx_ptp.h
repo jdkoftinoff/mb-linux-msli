@@ -464,6 +464,8 @@ struct ptp_port {
   PtpTime syncOffset;
   PtpTime requestOffset;
   PtpTime responseOffset;
+  int skippedResponseCount;
+  int skippedFollowupCount;
 #endif
 
   /* pdelay response variables */
