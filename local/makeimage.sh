@@ -48,10 +48,18 @@ echo "AVB device tree (${DMITRI_DGPIO_AVB_DTS})..."
 echo "Kernel..."
 gzip -9c ../uClinux-dist/linux-2.6.x/arch/microblaze/boot/linux.bin  > linux.bin.gz
 
-echo "Ramdisk..."
-genromfs -f romfs.bin -d ../uClinux-dist/romfs
-rm -f romfs.bin.gz
-gzip -9 romfs.bin
+#echo "Ramdisk..."
+#genromfs -f romfs.bin -d ../uClinux-dist/romfs
+#rm -f romfs.bin.gz
+#gzip -9 romfs.bin
+
+echo "rootfs image..."
+(
+    cd ../uClinux-dist/romfs
+    find . |cpio -o -H newc |gzip -9 > ../../local/romfs.bin.gz
+)
+
+
 
 ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 linux.bin.gz
 ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 logo-1.bin.gz
