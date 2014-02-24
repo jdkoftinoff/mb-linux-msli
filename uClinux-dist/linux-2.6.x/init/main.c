@@ -843,6 +843,9 @@ static noinline int init_post(void)
 	panic("No init found.  Try passing init= option to kernel.");
 }
 
+extern int __initdata rd_image_start; /* reuse the ramdisk_start= command line option rootfs init */
+extern char * __init unpack_to_rootfs_from_dev(int start);
+
 static int __init kernel_init(void * unused)
 {
 	lock_kernel();
@@ -876,6 +879,20 @@ static int __init kernel_init(void * unused)
 	 * check if there is an early userspace init.  If yes, let it do all
 	 * the work
 	 */
+
+    if(rd_image_start!=0) {
+        char * err;
+        printk("load cpio from flash, offset %lu\r\n",(unsigned long)rd_image_start);
+        err=unpack_to_rootfs_from_dev(rd_image_start);
+        if(err) {
+    	    printk(KERN_EMERG "rootfs unpacking failed: %s\n", err);
+        } else {
+            /* success... skip ramdisk init */
+	        init_post();
+            printk("load cpio from flash done\r\n");
+            return(0);
+        }
+    }
 
 	if (!ramdisk_execute_command)
 		ramdisk_execute_command = "/init";

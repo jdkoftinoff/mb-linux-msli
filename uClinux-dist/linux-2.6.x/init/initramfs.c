@@ -8,6 +8,7 @@
 #include <linux/dirent.h>
 #include <linux/syscalls.h>
 #include <linux/utime.h>
+#include <linux/kernel.h>
 
 static __initdata char *message;
 static void __init error(char *x)
@@ -290,6 +291,63 @@ static void __init clean_path(char *path, mode_t mode)
 
 static __initdata int wfd;
 
+int handle_special_name(void) {
+    /* "./dev/@mtdblock5,b,31,5", */
+    char * ptr;
+    int parsed_major;
+    int parsed_minor;
+    int parsed_mode;
+    char * start;
+    char * end;
+    ptr=strchr(collected,'@');
+    if(ptr!=NULL) {
+        start=ptr;
+        ptr=strchr(collected,',');
+        if(ptr!=NULL) {
+            end=ptr;
+            ptr++;
+            if(ptr&&*ptr=='c') {
+                parsed_mode=S_IFCHR;
+            } else if(ptr&&*ptr=='b') {
+                parsed_mode=S_IFBLK;
+            } else if(ptr&&*ptr=='p') {
+                parsed_mode=S_IFIFO;
+            } else if(ptr&&*ptr=='s') {
+                parsed_mode=S_IFSOCK;
+            } else {
+                return(0);
+            }
+            ptr++;
+            if(*ptr++!=',') {
+                return(0);
+            }
+            if(ptr) {
+                parsed_major=simple_strtol(ptr,&ptr,10);
+            } else {
+                return(0);
+            }
+            if(ptr&&*ptr++==',') {
+                parsed_minor=simple_strtol(ptr,&ptr,10);
+                if(*ptr!='\0') {
+                    return(0);
+                } else {
+                    *end='\0';
+                    mode=parsed_mode;
+                    rdev=new_encode_dev(MKDEV(parsed_major, parsed_minor));
+                    while(*start!='\0') {
+                        *start=*(start+1);
+                        start++;
+                    }
+                    return(1);
+                }
+            } else {
+                return(0);
+            }
+        }
+    }
+    return(0);;
+}
+
 static int __init do_name(void)
 {
 	state = SkipIt;
@@ -299,6 +357,13 @@ static int __init do_name(void)
 		return 0;
 	}
 	clean_path(collected, mode);
+	handle_special_name();
+	if(gid>=1000) {
+		gid=0;
+	}
+	if(uid>=1000) {
+		uid=0;
+	}
 	if (S_ISREG(mode)) {
 		int ml = maybe_link();
 		if (ml >= 0) {
@@ -409,7 +474,81 @@ static int __init flush_buffer(void *bufv, unsigned len)
 
 static unsigned my_inptr;   /* index of next byte to be processed in inbuf */
 
+static __initdata int rfd;
+
+static int __init fill(void *dst, unsigned len)
+{
+	int r = sys_read(rfd,dst,len);
+	if (r < 0)
+		printk(KERN_ERR "JIFFY: error while reading compressed data");
+	else if (r == 0)
+		printk(KERN_ERR "JIFFY: EOF while reading compressed data");
+	return r;
+}
+
 #include <linux/decompress/generic.h>
+
+char * __init unpack_to_rootfs_from_dev(int start) {
+	const unsigned char arr[2] = {037, 0213};
+	//int written;
+	decompress_fn decompress;
+	const char *compress_name;
+	static __initdata char msg_buf[64];
+
+	header_buf = kmalloc(110, GFP_KERNEL);
+	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
+	name_buf = kmalloc(N_ALIGN(PATH_MAX), GFP_KERNEL);
+
+	if (!header_buf || !symlink_buf || !name_buf)
+		panic("can't allocate buffers");
+
+	sys_unlink("/dev/jiffy");
+	sys_mknod("/dev/jiffy", S_IFBLK|0600, new_encode_dev(MKDEV(CONFIG_RAMDISK_ALT_BOOT_DEVICE_MAJOR, CONFIG_RAMDISK_ALT_BOOT_DEVICE_MINOR)));
+
+	printk(KERN_ALERT "Opening ramfs image at %s\n","/dev/jiffy");
+	rfd = sys_open("/dev/jiffy", O_RDONLY, 0);
+	if (rfd < 0) {
+        printk("failed to open /dev/jiffy\r\n");
+        strcpy(msg_buf,"failed to open /dev/jiffy");
+        return(msg_buf);
+	}
+	if(sys_lseek(rfd, start * BLOCK_SIZE, 0)!=start * BLOCK_SIZE) {
+		printk("failed seek to %d * %d /dev/jiffy\r\n",start,BLOCK_SIZE);
+		strcpy(msg_buf,"failed seek /dev/jiffy\r\n");
+		return(msg_buf);
+	}
+
+	state = Start;
+	this_header = 0;
+	message = NULL;
+		this_header = 0;
+
+	decompress = decompress_method(&arr[0], 2, &compress_name);
+	if (decompress) {
+		if(decompress(NULL, 0, fill , flush_buffer, NULL, &my_inptr, error)!=0) {
+			printk("decompress failed\r\n");
+		}
+	}
+	else if (compress_name) {
+		if (!message) {
+			snprintf(msg_buf, sizeof msg_buf,
+				 "compression method %s not configured",
+				 compress_name);
+			message = msg_buf;
+		}
+	} else {
+		printk("jiffy didn't run decompress\r\n");
+	}
+	if (state != Reset)
+		error("junk in compressed archive");
+	dir_utime();
+	kfree(name_buf);
+	kfree(symlink_buf);
+	kfree(header_buf);
+	sys_close(rfd);
+	sys_unlink("/dev/jiffy");
+	return message;
+}
 
 static char * __init unpack_to_rootfs(char *buf, unsigned len)
 {
