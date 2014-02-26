@@ -44,7 +44,7 @@
 		serial2 = &UART_DGPIO;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00 netconsole=3,eth0/eth0;3,eth1/eth0";
+		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00 lpj=122368 netconsole=3,eth0/eth0;3,eth1/eth0";
 		linux,stdout-path = "/plb@0/serial@83e00000";
 	} ;
 	cpus {
