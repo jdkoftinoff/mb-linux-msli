@@ -888,8 +888,8 @@ static int __init kernel_init(void * unused)
     	    printk(KERN_EMERG "rootfs unpacking failed: %s\n", err);
         } else {
             /* success... skip ramdisk init */
-	        init_post();
             printk("load cpio from flash done\r\n");
+	        init_post();
             return(0);
         }
     }
