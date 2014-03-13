@@ -79,7 +79,6 @@
 #  define TDM_MCLK_DIVIDER_BITS     (20)
 #define TDM_STREAM_MAP_REG          (0x03)
 #  define MAP_SWAP_BANK             (0x80000000)
-#  define MAP_CHANNEL_MASK          (0x00FF0000)
 #  define MAP_CHANNEL_SHIFT         (16)
 #  define MAP_STREAM_MASK           (0x0000003F)
 #define TDM_IRQ_MASK_REG            (0x009)
@@ -112,6 +111,10 @@
 #  define TDM_TX_SLAVE_MODE                  (0x800)
 #  define TDM_SAMPLE_DEPTH_24BIT             (0x0)
 #  define TDM_SAMPLE_DEPTH_16BIT             (0x1000)
+#  define TDM_PIN_LOOPBACK_DISABLED          (0x0)
+#  define TDM_PIN_LOOPBACK_ENABLED           (0x40000000)
+#  define TDM_LOOPBACK_DISABLED              (0x0)
+#  define TDM_LOOPBACK_ENABLED               (0x80000000)
 
 /* Sample rate constants */
 #  define SINGLE_SAMPLE_RATE (0x00)
@@ -130,13 +133,16 @@
 
 /* Structures for storing physical hardware attributes */
 struct labx_tdm_platform_data {
+  uint8_t num_transmitters;
+  uint8_t num_receivers;
   uint8_t lane_count;
   uint8_t num_streams;
   uint8_t slot_density;
   uint8_t burst_length;
   uint8_t burst_length_multiple;
   uint32_t mclk_ratio;
-  uint8_t has_loopback;
+  uint8_t has_pin_loopback;
+  uint8_t has_tdm_loopback;
   uint8_t slave_manager;
 #ifdef CONFIG_LABX_AUDIO_TDM_ANALYZER
   uint8_t analyzer;
@@ -147,6 +153,7 @@ struct labx_tdm_platform_data {
 typedef struct {
   u32 TdmSampleRate;
   u32 TdmSlotDensity;
+  u32 TdmChannelBits;
 } labx_tdm_operating_Config;
 
 struct audio_tdm {

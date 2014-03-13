@@ -18,9 +18,6 @@ ALTARCH=$(subst i386,x86,$(subst nommu,,$(ARCH)))
 #
 
 LINKHDRS = \
-	$(ROOTDIR)/lib/libtc/include/*.h,. \
-	$(ROOTDIR)/lib/microsupport/include/*.h,. \
-	$(ROOTDIR)/lib/avtp/include/*.h,. \
 	$(ROOTDIR)/lib/libxml2/include/libxml/*.h,libxml \
 	$(ROOTDIR)/lib/libxml2/build/include/libxml/*.h,libxml \
 	$(ROOTDIR)/lib/STLport/stlport/*,STLport \

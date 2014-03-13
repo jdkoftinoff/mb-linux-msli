@@ -23,6 +23,7 @@
  *
  */
 
+#include <linux/autoconf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
@@ -35,8 +36,6 @@
 #include <linux/labx_dma.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
-#include <linux/module.h>
-#include <linux/version.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -79,27 +78,18 @@ static int labx_dma_release_cdev(struct inode *inode, struct file *filp) {
   return(labx_dma_release(&dma_pdev->dma));
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
-static long labx_dma_ioctl_cdev(struct file *filp,
-                                unsigned int command, unsigned long arg) {
-#else
 static int labx_dma_ioctl_cdev(struct inode *inode,
                                struct file *filp,
                                unsigned int command, unsigned long arg) {
-#endif
 	struct labx_dma_pdev *dma_pdev = (struct labx_dma_pdev*)filp->private_data;
 
 	return labx_dma_ioctl(&dma_pdev->dma, command, arg);
 }
 
 static const struct file_operations labx_dma_fops = {
-	.open           = labx_dma_open_cdev,
-	.release        = labx_dma_release_cdev,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
-	.unlocked_ioctl = labx_dma_ioctl_cdev,
-#else
-	.ioctl          = labx_dma_ioctl_cdev,
-#endif
+	.open    = labx_dma_open_cdev,
+    .release = labx_dma_release_cdev,
+	.ioctl   = labx_dma_ioctl_cdev,
 };
 
 #ifdef CONFIG_OF

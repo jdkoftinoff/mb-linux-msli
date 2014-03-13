@@ -113,6 +113,8 @@ EXTRA_CFLAGS	+= -I$(TOPDIR)/drivers/xilinx_common
 
 obj-$(CONFIG_LABX_AUDIO_METERS) += labx_audio_meters.o
 
+obj-$(CONFIG_LABX_TCP_ACCEL)    += labx_tcpa.o
+
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
 obj-$(CONFIG_I2S_SWITCH)	+= i2s_switch.o

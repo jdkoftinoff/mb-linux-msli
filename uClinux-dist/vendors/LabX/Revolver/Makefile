@@ -11,7 +11,7 @@ SQFS_DEVTABLE = $(IMAGEDIR)/sqfs_devtab
 
 COMMON=$(VEND)/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)/
 
-ROMFS_DIRS = bin dev dev/flash etc home lib mnt mnt/apps mnt/config proc usr var
+ROMFS_DIRS = bin dev dev/flash etc home lib mnt mnt/apps mnt/config proc usr var www
 
 ROMFS_DIRS-$(CONFIG_SYSFS) += sys
 
@@ -54,6 +54,9 @@ romfs: $(SQFS_DEVTABLE)
 	$(ROMFSINST) $(COMMON)/etc/avahi-daemon.conf /etc/avahi.orig/avahi-daemon.conf
 	$(ROMFSINST) $(COMMON)/etc/avahi-autoipd.action /etc/avahi.orig/avahi-autoipd.action
 	$(ROMFSINST) $(COMMON)/etc/rc/avahi-autoipd-wrapper /bin/avahi-autoipd-wrapper
+	$(ROMFSINST) $(COMMON)/etc/rc/inithttpd /etc/init.d/inithttpd
+	$(ROMFSINST) -s /etc/init.d/inithttpd /etc/rc.d/S40inithttpd
+	$(ROMFSINST) $(COMMON)/www/gplv3.html /www/index.html
 
 	# Symbolic link for fstab into configurable area
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD \

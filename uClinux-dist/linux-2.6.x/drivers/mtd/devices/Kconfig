@@ -107,8 +107,15 @@ config M25PXX_USE_FAST_READ
 config  MTD_SPI_OTP
 	bool "Use OTP register support for SPI flash devices"
 	depends on MTD_M25P80
+	select HAVE_MTD_OTP
 	help
 	  Enables usage of values stored within OTP registers
+
+config MTD_BRIDGE
+	tristate "Lab X MTD Bridge"
+	help
+	  This is a driver which maps Flash behind a bridge to another processor
+	  which actually hosts non-volatile memory.
 
 config MTD_SLRAM
 	tristate "Uncached system RAM"

@@ -1,0 +1,22 @@
+#/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+echo "Setting up interface lo: "
+ifconfig lo up 127.0.0.1
+
+# Call a script located on the read-write Flash filesystem to
+# permit users to easily modify the persistent network settings
+echo "Calling platform-specific network script"
+/mnt/config/scripts/network_config
+
+mkdir /var/tmp/dhcpc
+mkdir /var/lib
+mkdir /var/tmp/avahi
+mkdir /var/tmp/avahi/services
+/bin/cp /etc/avahi.orig/avahi-daemon.conf /etc/avahi.orig/avahi-autoipd.action  /var/tmp/avahi
+/bin/cp /etc/avahi.orig/services/* /var/tmp/avahi/services/ > /dev/null 2>&1
+/bin/avahi-daemon >/dev/null 2>&1 &
+/bin/dhcpcd -t0 eth0 &
+/bin/avahi-autoipd-wrapper eth0 >/dev/null 2>&1 &
+/bin/inetd &

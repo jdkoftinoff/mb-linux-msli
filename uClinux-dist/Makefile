@@ -43,9 +43,15 @@ LIBTOOL  = jlibtool
 SCRIPTSDIR = $(ROOTDIR)/config/kconfig
 TFTPDIR    = /tftpboot
 BUILD_START_STRING ?= $(shell date "+%a, %d %b %Y %T %z")
-NON_SMP_BUILD := 1
-export HOST_NCPU := 1
-export SUBDIR_SMP_BUILD := -j1
+ifndef NON_SMP_BUILD
+HOST_NCPU ?= $(shell if [ -f /proc/cpuinfo ]; then n=`grep -c processor /proc/cpuinfo`; if [ $$n -gt 1 ];then expr $$n \* 2; else echo $$n; fi; else echo 1; fi)
+# currently a lot of packages cannot be "parallel" built. Uncomment the
+# following line to enable parallel subdir builds (ie., user/* and lib/*).
+SUBDIR_SMP_BUILD := -j1
+else
+HOST_NCPU := 1
+SUBDIR_SMP_BUILD := -j1
+endif
 
 LINUX_CONFIG  = $(ROOTDIR)/$(LINUXDIR)/.config
 CONFIG_CONFIG = $(ROOTDIR)/config/.config

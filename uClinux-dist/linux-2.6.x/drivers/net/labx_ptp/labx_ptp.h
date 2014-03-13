@@ -115,6 +115,11 @@
    (RX_PACKET_RANGE << ADDRESS_RANGE_SHIFT) |                           \
    ((whichBuffer & PTP_RX_BUFFER_MASK) << PTP_PACKET_BUFFER_SHIFT))
 
+/* PTP message transport enumeration */
+#define MSG_TRANSPORT_MASK   (0xF0)
+#  define TRANSPORT_PTP        (0x10)
+#  define TRANSPORT_NOT_PTP    (0xFF)
+
 /* PTP message type enumeration */
 #define MSG_TYPE_MASK        (0x0F)
 #  define MSG_SYNC             (0x00)
@@ -192,6 +197,7 @@
 #  define FLAG_UTC_OFF_VALID  (0x0004)
 #  define FLAG_LEAP_59        (0x0002)
 #  define FLAG_LEAP_61        (0x0001)
+#  define FLAG_NONE           (0x0000)
 
 /* Number of words comprising a hardware timestamp (transmit or receive) */
 #define HW_TIMESTAMP_WORDS  (3)
@@ -206,6 +212,7 @@
 #define CORRECTION_FIELD_OFFSET              ( 5 * BYTES_PER_WORD)
 #define SOURCE_PORT_ID_OFFSET                ( 8 * BYTES_PER_WORD)
 #define SEQUENCE_ID_OFFSET                   (11 * BYTES_PER_WORD)
+#define LOG_MSG_INTERVAL_OFFSET              (11 * BYTES_PER_WORD)
 #define TIMESTAMP_OFFSET                     (12 * BYTES_PER_WORD)
 #define UTC_OFFSET_OFFSET                    (14 * BYTES_PER_WORD)
 #define REQ_PORT_ID_OFFSET                   (14 * BYTES_PER_WORD)
@@ -214,7 +221,9 @@
 #define LINK_DELAY_INTERVAL_OFFSET           (17 * BYTES_PER_WORD)
 #define STEPS_REMOVED_OFFSET                 (18 * BYTES_PER_WORD)
 #define GM_TIME_BASE_INDICATOR_OFFSET        (18 * BYTES_PER_WORD)
+#define GM_PHASE_CHANGE_OFFSET               (18 * BYTES_PER_WORD)
 #define PATH_TRACE_OFFSET                    (20 * BYTES_PER_WORD)
+#define GM_FREQ_CHANGE_OFFSET                (21 * BYTES_PER_WORD)
 
 /* Port-width-specific offsets for timestamp words in the buffers;
  * the data alignment from the network side to the host interface
@@ -413,6 +422,7 @@ struct ptp_port {
   /* 802.1AS timeouts (10.6.3) */
   uint8_t syncReceiptTimeout;
   uint8_t announceReceiptTimeout;
+  uint32_t syncReceiptTimeoutTime;
 
   /* 802.1AS MD entity variables (11.2.12) */
   int8_t currentLogPdelayReqInterval;
@@ -441,6 +451,7 @@ struct ptp_port {
   /* AVnu_PTP-5 PICS */
   uint32_t pdelayResponses;
   uint32_t multiplePdelayResponses;
+  uint32_t multiplePdelayTimer;
 
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
@@ -495,6 +506,12 @@ struct ptp_port {
   PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; 
 };
 
+typedef struct {
+  int32_t  upper;
+  uint32_t middle;
+  uint32_t lower;
+} Integer96;
+
 /* Driver structure to maintain state for each device instance */
 #define NAME_MAX_SIZE  (256)
 struct ptp_device {
@@ -538,6 +555,8 @@ struct ptp_device {
   PtpClockIdentity   pathTrace[PTP_MAX_PATH_TRACE]; /* 10.3.8.21 */
 
   uint16_t lastGmTimeBaseIndicator;
+  Integer96 lastGmPhaseChange;
+  uint32_t lastGmFreqChange;
 
   /* RTC control loop constants */
   RtcIncrement    nominalIncrement;
@@ -622,6 +641,7 @@ typedef enum {
 /* From labx_ptp_messages.c */
 void init_tx_templates(struct ptp_device *ptp, uint32_t port);
 uint32_t get_message_type(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
+uint32_t get_transport_specific(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuffer);
 void get_rx_mac_address(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, uint8_t *macAddress);
 void get_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
 void set_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection bufferDirection, uint8_t *packetBuffer, uint8_t *sourcePortId);
@@ -654,6 +674,8 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
                    uint8_t * packetBuffer, PtpTime *timestamp);
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t *txBuffer, PtpTime *correctionField);
 uint16_t get_gm_time_base_indicator_field(uint8_t *rxBuffer);
+void get_gm_phase_change_field(uint8_t *rxBuffer, Integer96 *lastGmPhaseChange);
+uint16_t get_gm_freq_change_field(uint8_t *rxBuffer);
 uint32_t get_cumulative_scaled_rate_offset_field(uint8_t *rxBuffer);
 uint16_t get_port_number(const uint8_t *portNumber);
 void set_port_number(uint8_t *portNumber, uint16_t setValue);

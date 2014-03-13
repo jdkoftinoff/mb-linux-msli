@@ -42,7 +42,7 @@
 #define DRIVER_NAME "biamp_spi_mailbox"
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 235
+#define DRIVER_MAJOR 255
 
 /* Maximum number of packetizers and instance count */
 #define MAX_INSTANCES 1

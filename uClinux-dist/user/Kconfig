@@ -23,11 +23,6 @@ config USER_DMITRIPANELD
 	help
 	  Include the D-Mitri panel server.
 
-config USER_GSBD
-       bool "Galileo Serial Bus daemon - gsbd"
-       help
-         Include Galileo Serial Bus daemon.
-
 config USER_SCPINSTALL
 	bool "scp installer"
 	help

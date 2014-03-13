@@ -23,15 +23,13 @@
  *
  */
 
+#include <linux/autoconf.h>
 #include "labx_audio_depacketizer.h"
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 #include <linux/kthread.h>
-#include <linux/module.h>
-#include <linux/version.h>
 #include <xio.h>
 
 #ifdef CONFIG_OF
@@ -55,7 +53,7 @@
 #define ASSUMED_MAX_STREAM_SLOTS  32
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 232
+#define DRIVER_MAJOR 252
 
 /* Interface type string prefix which indicates a Dma_Coprocessor is
  * in use for the instance.  This could be one of the following:
@@ -842,21 +840,27 @@ static irqreturn_t labx_audio_depacketizer_interrupt(int irq, void *dev_id) {
   /* Detect the stream change and stream reset IRQs; either one should
    * simply trigger the netlink thread.
    */
-  if((maskedFlags & (STREAM_IRQ | SEQ_ERROR_IRQ)) != 0) {
+  if((maskedFlags & (STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ)) != 0) {
     /* Increment the status count */
     depacketizer->streamStatusGeneration++;
 
     /* If this was a sequence error IRQ, leave a flag in place */
     if((maskedFlags & SEQ_ERROR_IRQ) != 0) {
       depacketizer->streamSeqError = 1;
-      depacketizer->errorIndex = seqError;
+      depacketizer->errorIndex = seqError & 0xFFFF;
     }
 
-    /* Disarm both event interrupts while the status thread handles the present
+    /* If this was a DBS error IRQ, leave a flag in place */
+    if((maskedFlags & DBS_ERROR_IRQ) != 0) {
+      depacketizer->streamDBSError = 1;
+      depacketizer->dbsErrorIndex = (seqError >> 16) & 0xFFFF;
+    }
+
+    /* Disarm event interrupts while the status thread handles the present
      * event(s).  This permits the status thread to limit the rate at which events
      * are accepted and propagated up to userspace.
      */
-    irqMask &= ~(STREAM_IRQ | SEQ_ERROR_IRQ);
+    irqMask &= ~(STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
 
     /* Wake up all threads waiting for a stream status event */
@@ -898,7 +902,7 @@ static int netlink_thread(void *data)
     __set_current_state(TASK_RUNNING);
 
     streamStatusGeneration = depacketizer->streamStatusGeneration;
-
+#ifdef SOFTWARE_MUTE_ENABLED
     // Software based muting: If a stream's status has changed from Active to Inactive, then
     // zero the channel sample buffers associated with the stream.  For each of the 128 possible
     // streams, check for an Active to Inactive transition and clear the buffer if it has occurred.
@@ -931,7 +935,7 @@ static int netlink_thread(void *data)
         channelIndex += 32;
       }
     }
-
+#endif
     audio_depacketizer_stream_event(depacketizer);
 
     /* Before returning to waiting, optionally sleep a little bit and then
@@ -947,7 +951,7 @@ static int netlink_thread(void *data)
      */
     msleep(EVENT_THROTTLE_MSECS);
     irqMask = XIo_In32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG));
-    irqMask |= (STREAM_IRQ | SEQ_ERROR_IRQ);
+    irqMask |= (STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ);
     XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), irqMask);
   } while (!kthread_should_stop());
 
@@ -1025,19 +1029,11 @@ static int audio_depacketizer_release(struct inode *inode, struct file *filp)
 static uint32_t configWords[MAX_CONFIG_WORDS];
 
 /* I/O control operations for the driver */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
-static long audio_depacketizer_ioctl(struct file *filp,
-                                     unsigned int command, unsigned long arg)
-{
-  long returnValue = 0;
-#else
-static int audio_depacketizer_ioctl(struct inode *inode,
-                                    struct file *filp,
+static int audio_depacketizer_ioctl(struct inode *inode, struct file *filp,
                                     unsigned int command, unsigned long arg)
 {
-  int returnValue = 0;
-#endif
   struct audio_depacketizer *depacketizer = (struct audio_depacketizer*)filp->private_data;
+  int returnValue = 0;
 
   // Switch on the request
   switch(command) {
@@ -1273,14 +1269,10 @@ static int audio_depacketizer_ioctl(struct inode *inode,
 
 /* Character device file operations structure */
 static struct file_operations audio_depacketizer_fops = {
-  .open	          = audio_depacketizer_open,
-  .release        = audio_depacketizer_release,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
-  .unlocked_ioctl = audio_depacketizer_ioctl,
-#else
-  .ioctl          = audio_depacketizer_ioctl,
-#endif
-  .owner          = THIS_MODULE,
+  .open	   = audio_depacketizer_open,
+  .release = audio_depacketizer_release,
+  .ioctl   = audio_depacketizer_ioctl,
+  .owner   = THIS_MODULE,
 };
 
 /* Function containing the "meat" of the probe mechanism - this is used by
@@ -1522,8 +1514,10 @@ static int audio_depacketizer_probe(const char *name,
   depacketizer->streamStatusGeneration = 0;
   depacketizer->streamSeqError         = 0;
   depacketizer->errorIndex             = 0;
+  depacketizer->streamDBSError         = 0;
+  depacketizer->dbsErrorIndex          = 0;
   if(depacketizer->irq != NO_IRQ_SUPPLIED) {
-    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ));
+    XIo_Out32(REGISTER_ADDRESS(depacketizer, IRQ_MASK_REG), (SYNC_IRQ | STREAM_IRQ | SEQ_ERROR_IRQ | DBS_ERROR_IRQ));
   }
 
   /* Return success */

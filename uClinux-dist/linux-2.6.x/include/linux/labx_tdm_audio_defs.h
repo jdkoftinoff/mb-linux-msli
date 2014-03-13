@@ -41,6 +41,8 @@
 #  define SLAVE_MODE                     1
 #  define SAMPLE_DEPTH_24BIT             0
 #  define SAMPLE_DEPTH_16BIT             1
+#  define LOOPBACK_DISABLED              0
+#  define LOOPBACK_ENABLED               1
 
 /* Special definition to indicate "no stream assigned" to a TDM output */
 #define AVB_STREAM_NONE  (0xFFFFFFFF)
@@ -73,13 +75,16 @@ typedef struct {
 typedef struct {
   uint32_t versionMajor;
   uint32_t versionMinor;
+  uint32_t numTransmitters;
+  uint32_t numReceivers;
   uint32_t laneCount;
   uint32_t mclkRatio;
   uint32_t maxNumStreams;
   uint32_t maxSlotDensity;
   uint32_t minBurstLength;
   uint32_t maxBurstMultiple;
-  uint32_t hasLoopback;
+  uint32_t hasPinLoopback;
+  uint32_t hasTdmLoopback;
   uint32_t hasSlaveManager;
   uint32_t hasAnalyzer;
   uint32_t hasDynamicSampleRates;
@@ -99,6 +104,8 @@ typedef enum {
   TDM_TX_OWNER,
   TDM_RX_OWNER,
   MCLK_DIVIDER,
+  PIN_LOOPBACK,
+  TDM_LOOPBACK,
   NUM_BITMASK_ENTRIES,
 } AudioTdmBitMask;
 
@@ -116,6 +123,8 @@ typedef struct {
   uint32_t tdmTxOwner;
   uint32_t tdmRxOwner;
   uint32_t mclkDivider;
+  uint32_t pinLoopback;
+  uint32_t tdmLoopback;
   AudioTdmBitMask bitMask;
 } AudioTdmControl;
 
@@ -143,7 +152,9 @@ enum TdmErrno {
   EMCLKDNOTSUPPORTED,
   ESCMNOTIMPL,
   EBADBURSTLENMUL,
-  ETDMERRCNT = EBADBURSTLENMUL - LABX_TDM_AUDIO_ERRNO_BASE
+  EPINLOOPNOTIMPL,
+  ETDMLOOPNOTIMPL,
+  ETDMERRCNT = ETDMLOOPNOTIMPL - LABX_TDM_AUDIO_ERRNO_BASE
 };
 
 #ifndef __KERNEL__
@@ -160,7 +171,9 @@ const char* labxTdmAudioErrnoStrings[ETDMERRCNT] = {
   "Master clock divider brings master clock below nominal frequency",
   "Master clock divider value not supported",
   "Slave clock manager not implemented",
-  "Invalid burst length divider"
+  "Invalid burst length multiplier",
+  "Audio pin loopback not implemented",
+  "TDM loopback not implemented"
 };
 #else
 extern const char* labxTdmAudioErrnoStrings[ETDMERRCNT];

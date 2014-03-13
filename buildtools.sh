@@ -72,26 +72,9 @@ fi
 echo "Building Binutils / GCC4 / GDB toolchain (Xilinx tree)"
 (
 cd "$GCC4_DIR" \
-&& bash build_binutils.sh && bash build_gcc.sh && bash build_gdb.sh \
-&& bash build_elf2flt.sh && bash build_genromfs.sh
+&& bash build_binutils.sh && bash build_elf2flt.sh && bash build_gcc.sh && bash build_gdb.sh
 )||(
 echo "Build failed, see mb_gnu/build directory for logs"
-exit 1
-)
-
-echo "Building boot image maker"
-(cd mbbl-mkbootimage \
-&& make
-) || (
-echo "Build failed"
-exit 1
-)
-
-echo "Building MCS file converter"
-(cd mcsbin \
-&& make
-) || (
-echo "Build failed"
 exit 1
 )
 
@@ -138,6 +121,7 @@ echo "${PATH}" | tr ':' '\n' | grep -v "${CURRDIR}"
 echo -n "${CURRDIR}/tools/gcc4/bin"
 ) | tr '\n' ':'`
 
-echo "PATH=${NEWPATH}:${CURRDIR}/dtc:${CURRDIR}/mbbl-mkbootimage:${CURRDIR}/mcsbin" > prepare.sh
+echo "export PATH=${NEWPATH}" > prepare.sh
+echo "export MB_LINUX=$CURRDIR" >> prepare.sh
 
 echo "Run \". prepare.sh\" from this directory before cross-compiling for MicroBlaze"

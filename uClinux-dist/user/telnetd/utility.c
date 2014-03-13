@@ -62,6 +62,11 @@ char util_rcsid[] =
  * too full.
  */
 
+static void bcopy(const void *src, void *dest, size_t n) {
+  memmove(dest,src,n);
+}
+
+
 void
 ttloop(void)
 {
