@@ -182,23 +182,11 @@ void labx_ptp_timer_state_task(unsigned long data) {
     /* Regardless of whether we are a master or slave, increment the peer delay request
      * counter and see if it's time to send one to our link peer.
      */
-    ptp->ports[i].pdelayIntervalTimer += timerTicks;
+    ptp->ports[i].pdelayIntervalTimer++;
     MDPdelayReq_StateMachine(ptp, i);
 
     /* Update the PortAnnounceInformation state machine */
     PortAnnounceInformation_StateMachine(ptp, i);
-
-    /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
-       re-enable the port after five minutes */
-    if(ptp->ports[i].multiplePdelayTimer > 0) {
-      if(ptp->ports[i].multiplePdelayTimer >= timerTicks) {
-        ptp->ports[i].multiplePdelayTimer -= timerTicks;
-      }
-      else {
-        ptp->ports[i].multiplePdelayTimer = 0;
-      }
-      ptp->ports[i].portEnabled = TRUE;
-    }
   }
 
   /* Test to see if the master is new from the last time we checked; if so,
@@ -248,6 +236,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
   int i;
 
   ptp->ports[port].stats.rxSyncCount++;
+  ptp->ports[port].syncTimeoutCounter = 0;
 
   /* Only process this packet if we are a slave and it has come from the master
    * we're presently respecting.  If we're the master, spanning tree should prevent
@@ -259,9 +248,6 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     PtpTime tempTimestamp;
     PtpTime correctionField;
     PtpTime correctedTimestamp;
-
-    // [REMOVED for certifcation] TODO: Sync * 2 is a workaround for Titanium. Remove when Titanium stops dropping sync
-    ptp->ports[port].syncReceiptTimeoutTime = SYNC_INTERVAL_TICKS(ptp, port) * ptp->ports[port].syncReceiptTimeout;
 
     /* This is indeed a SYNC from the present master.  Capture the hardware timestamp
      * at which we received it, and hang on to its sequence ID for matching to the
@@ -386,8 +372,6 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
     PtpTime difference;
     PtpTime absDifference;
 
-    ptp->ports[port].syncTimeoutCounter = 0;
-
     /* Everything matches; obtain the preciseOriginTimestamp from the packet.
      * This is the time at which the master captured its transmit of the preceding
      * SYNC, which we also timestamped reception for.
@@ -425,8 +409,6 @@ static void process_rx_fup(struct ptp_device *ptp, uint32_t port, uint8_t *rxBuf
       labx_ptp_signal_gm_change(ptp);
 
       ptp->lastGmTimeBaseIndicator = get_gm_time_base_indicator_field(rxBuffer);
-      get_gm_phase_change_field(rxBuffer, &ptp->lastGmPhaseChange);
-      ptp->lastGmFreqChange = get_gm_freq_change_field(rxBuffer);
     }
 
     /* Compare the timestamps; if the one-way offset plus delay is greater than
@@ -632,7 +614,6 @@ void labx_ptp_rx_state_task(unsigned long data) {
 
 void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
 {
-  if(TRANSPORT_PTP == get_transport_specific(ptp, port, buffer)) {
        /* Determine which message to process */
       switch(get_message_type(ptp, port, buffer)) {
       case MSG_ANNOUNCE:
@@ -673,7 +654,6 @@ void process_rx_buffer(struct ptp_device *ptp, int port, uint8_t *buffer)
       default:
         break;
       } /* switch(messageType) */
-  } else printk("WARNING: Unrecognized transportSpecific rejected\n");
 }
 
 /* Tasklet function for PTP Tx packets */

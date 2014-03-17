@@ -37,7 +37,6 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
   {
     /* Capture the initial PDELAY response */
     ptp->ports[port].initPdelayRespReceived = TRUE;
-    ptp->ports[port].neighborRateRatioValid = FALSE;
     ptp->ports[port].pdelayRespTxTimestampI = ptp->ports[port].pdelayRespTxTimestamp;
     ptp->ports[port].pdelayRespRxTimestampI = ptp->ports[port].pdelayRespRxTimestamp;
   }
@@ -187,7 +186,6 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       } else if (ptp->ports[port].pdelayResponses > 1) {
         ptp->ports[port].multiplePdelayResponses++;
         if (ptp->ports[port].multiplePdelayResponses >= 3) {
-          ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS); 
           printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
           ptp->ports[port].portEnabled = FALSE;

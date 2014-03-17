@@ -48,7 +48,7 @@
 #define DRIVER_VERSION_MAX  0x12
 
 /* Major device number for the driver */
-#define DRIVER_MAJOR 253
+#define DRIVER_MAJOR 233
 
 /* Maximum number of packetizers and instance count */
 #define MAX_INSTANCES 64
