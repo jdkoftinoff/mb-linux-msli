@@ -1054,6 +1054,7 @@ void ack_grandmaster_change(struct ptp_device *ptp) {
 
 /* Initializes all of the state machines */
 void init_state_machines(struct ptp_device *ptp) {
+  struct net_device *ndev = NULL;
   int i;
 
   /* Initialize the timer state machine */
@@ -1077,8 +1078,12 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->currentLogSyncInterval = -3;
     pPort->initialLogSyncInterval = -3;
 
-    /* TODO: check the ethernet port for link-up here to determine if it should be enabled */
-    pPort->portEnabled = TRUE;
+    ndev = dev_get_by_name(&init_net, pPort->interfaceName);
+    if((ndev!=NULL) && netif_carrier_ok(ndev)) {
+      pPort->portEnabled = TRUE;
+    } else {
+      pPort->portEnabled = FALSE;
+    }
     pPort->pttPortEnabled = TRUE;
 
     pPort->currentLogAnnounceInterval = 0;

@@ -32,6 +32,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
+#include <linux/netdevice.h>
 #include <net/labx_ptp/labx_ptp_defs.h>
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
