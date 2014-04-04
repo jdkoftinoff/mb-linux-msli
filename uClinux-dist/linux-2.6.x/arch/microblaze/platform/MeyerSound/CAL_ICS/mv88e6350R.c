@@ -199,12 +199,12 @@ static int marvell_read_status(struct phy_device *phydev)
     return(0);
   }
 
-  if (phySpeed != (physicalControlReg & 3)) {
+//  if (phySpeed != (physicalControlReg & 3)) {
     /* Adjust the CPU port speed to match the external PHY speed */
-    printk("Port Status %04X\n", (uint16_t)portStatusReg);
-    REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0023) | 0x0010 | phySpeed); /* Link down, new speed */
-    REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0003) | 0x0030 | phySpeed); /* Link up */
-  }
+//    printk("Port Status %04X\n", (uint16_t)portStatusReg);
+//    REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0023) | 0x0010 | phySpeed); /* Link down, new speed */
+//    REG_WRITE(phydev_switch, MV_REG_PORT(internalPort), 0x01, (physicalControlReg & ~0x0003) | 0x0030 | phySpeed); /* Link up */
+//  }
 
   switch(phySpeed) {
     case 0: phydev->speed = SPEED_10; break;
@@ -513,6 +513,7 @@ static int mv88e6350R_probe(struct phy_device *pdev)
 {
   MV_U32 portIndex;
   MV_U16 saved_g1reg4;
+  MV_U16 tmp;
   struct mvEthSwitch *mvEthSwitch;
 	
   /* Create and populate a device structure */
@@ -548,6 +549,13 @@ static int mv88e6350R_probe(struct phy_device *pdev)
 
   /* Init vlan LAN0-3 <-> CPU port egiga0 */
   printk("CPU port is on 88E6350R port %d and %d\n", CAL_ICS_CPU_PORT_0, CAL_ICS_CPU_PORT_1);
+
+  printk("setting CPU port 0 PortEType to 0x9100\n");
+  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(CAL_ICS_CPU_PORT_0), 0xf, 0x9100);
+  printk("setting CPU port 0 framemode to 0x3\n");
+  tmp = REG_READ(mvEthSwitch->pdev, MV_REG_PORT(CAL_ICS_CPU_PORT_0), MV_SWITCH_PORT_CONTROL_REG);
+  tmp |= 0x3<<8;
+  REG_WRITE(mvEthSwitch->pdev, MV_REG_PORT(CAL_ICS_CPU_PORT_0), MV_SWITCH_PORT_CONTROL_REG, tmp);
 
   switchVlanInit(mvEthSwitch->pdev,
                  CAL_ICS_CPU_PORT_0,
@@ -608,7 +616,13 @@ static int mv88e6350R_probe(struct phy_device *pdev)
   /* Enable PHY Polling Unit (PPU) */
   saved_g1reg4 |= 0x4000;
   REG_WRITE(mvEthSwitch->pdev, MV_REG_GLOBAL,0x4,saved_g1reg4);
-	
+
+  tmp=REG_READ(mvEthSwitch->pdev, MV_REG_GLOBAL,0x1c);
+  printk("enabling RMU mode for port 5 (device number is 0x0%x)\n",(int)tmp&0xf);
+  tmp&=~(0x3<<12);
+  tmp|= (0x2<<12);
+  REG_WRITE(mvEthSwitch->pdev, MV_REG_GLOBAL,0x1c,tmp);
+ 
   (void)mv88e6350R_mdio_bus_init(&mvEthSwitch->pdev->dev);
   return 0;
 }

@@ -213,17 +213,163 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
         PtpTime diff;
-#ifdef PATH_DELAY_DEBUG
-        printk("switch response diff: %d\r\n",ptp->ports[port].rcvdPdelayRespSwitchOffset);
-#endif
-        diff.secondsUpper=0;
-        diff.secondsLower=0;
-        diff.nanoseconds=ptp->ports[port].rcvdPdelayRespSwitchOffset;
-        timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&diff,&ptp->ports[port].pdelayRespRxTimestamp);
+        PtpTime timeTest;
+        switch_timestamp_t *switch_t1;
+        switch_timestamp_t *switch_t2;
+        switch_timestamp_t switch_t1a,switch_t2a;
+        switch_timestamp_t switch_t1b,switch_t2b;
+        int32_t t1,t2;
+        uint16_t sequence_id;
+        int cnt1,cnt2;
+
+        sequence_id=get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
+        cnt1=0;
+        cnt2=0;
+        if(port==0) {
+          switch_timestamp(TIMESTAMP_AVB2_INCOMMING_RESPONSE,&switch_t1, &switch_t2,sequence_id);
+          if(switch_t1==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t1a,0,0x08);
+                block_read_avb_ptp(&switch_t1b,0,0x08);
+                cnt1++;
+              } while(
+                    (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+                    (switch_t1a.low!=switch_t1b.low)||
+                    (switch_t1a.high!=switch_t1b.high));
+          } else {
+              memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+          }
+          if(switch_t2==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t2a,5,0x10);
+                block_read_avb_ptp(&switch_t2b,5,0x10);
+                cnt2++;
+              } while(
+                    (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+                    (switch_t2a.low!=switch_t2b.low)||
+                    (switch_t2a.high!=switch_t2b.high));
+          } else {
+              memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+          }
+        } else {
+          switch_timestamp(TIMESTAMP_AVB1_INCOMMING_RESPONSE,&switch_t1, &switch_t2,sequence_id);
+          if(switch_t1==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t1a,1,0x08);
+                block_read_avb_ptp(&switch_t1b,1,0x08);
+                cnt1++;
+              } while(
+                    (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+                    (switch_t1a.low!=switch_t1b.low)||
+                    (switch_t1a.high!=switch_t1b.high));
+          } else {
+              memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+          }
+          if(switch_t2==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t2a,6,0x10);
+                block_read_avb_ptp(&switch_t2b,6,0x10);
+                cnt2++;
+              } while(
+                    (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+                    (switch_t2a.low!=switch_t2b.low)||
+                    (switch_t2a.high!=switch_t2b.high));
+          } else {
+              memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+          }
+        }
+        if((cnt1!=0)||(cnt2!=0)) {
+            DEBUG_TIMESTAMP_PRINTF("A retry %d,%d\r\n",cnt1,cnt2);
+        }
+        if((sequence_id==switch_t1a.sequence_id) &&
+           (sequence_id==switch_t2a.sequence_id)) {
+          t1=(switch_t1a.high<<16)|switch_t1a.low;
+          t2=(switch_t2a.high<<16)|switch_t2a.low;
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t2*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t2*8ULL)%1000000000ULL;
+          timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&diff,&ptp->switchDelta);
+          ptp->t2_prev=t2;
+
+          diff.secondsUpper=0;
+          diff.secondsLower=0;
+          diff.nanoseconds=(t2-t1)*8;
+          if((uint32_t)t2<(uint32_t)t1) {
+            WARN_TIMESTAMP_PRINTF("A t2 wrapped %04x\r\n",diff.nanoseconds); 
+          }
+          timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&diff,&timeTest);
+          if((uint32_t)t2<(uint32_t)t1) {
+            WARN_TIMESTAMP_PRINTF("A t1 wrapped around, delta not valid A\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_difference(&ptp->switchDelta,&diff,&ptp->switchDelta);
+            ptp->t2_prev=t1;
+          }
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t1*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t1*8ULL)%1000000000ULL;
+          timestamp_sum(&ptp->switchDelta,&diff,&ptp->ports[port].pdelayRespRxTimestamp);
+
+          timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&timeTest,&diff);
+          if((diff.secondsUpper!=0x00000000) ||
+             (diff.secondsLower!=0x00000000) ||
+             ((diff.nanoseconds&0xffffff00)!=0x00000000)) {
+                if((diff.secondsUpper!=0xffffffff) ||
+                   (diff.secondsLower!=0xffffffff) ||
+                   ((diff.nanoseconds&0xffffff00)!=0xffffff00)) {
+                        ERROR_TIMESTAMP_PRINTF("A    !!!     bad math %08x%08x.%08x\r\n",diff.secondsUpper,diff.secondsLower,diff.nanoseconds);
+                }
+          }
+          if(ptp->ports[port].recoveringA==1) {
+                DEBUG_TIMESTAMP_PRINTF("A recovered rx response ts:%08x%08x.%08x\r\n",ptp->ports[port].pdelayRespRxTimestamp.secondsUpper,ptp->ports[port].pdelayRespRxTimestamp.secondsLower,ptp->ports[port].pdelayRespRxTimestamp.nanoseconds);
+                ptp->ports[port].recoveringA=0;
+          }
+        } else if(sequence_id==switch_t1a.sequence_id) {
+          t1=(switch_t1a.high<<16)|switch_t1a.low;
+          if(((uint32_t)t1<0x70000000) &&
+             ((uint32_t)ptp->t2_prev>0x90000000)) {
+            WARN_TIMESTAMP_PRINTF("A t1 wrapped around\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_sum(&ptp->switchDelta,&diff,&ptp->switchDelta);
+          }
+          if(((uint32_t)ptp->t2_prev<0x70000000) &&
+             ((uint32_t)t1>0x90000000)) {
+            WARN_TIMESTAMP_PRINTF("A t2 wrapped around\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_difference(&ptp->switchDelta,&diff,&ptp->switchDelta);
+          }
+
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t1*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t1*8ULL)%1000000000ULL;
+          timestamp_sum(&ptp->switchDelta,&diff,&ptp->ports[port].pdelayRespRxTimestamp);
+          DEBUG_TIMESTAMP_PRINTF("A recovered rx response %d t1:%08x, t2:%08x, delta:%08x%08x.%08x\r\n",port,(uint32_t)t1,(uint32_t)ptp->t2_prev,ptp->switchDelta.secondsUpper,ptp->switchDelta.secondsLower,ptp->switchDelta.nanoseconds);
+          ptp->ports[port].recoveringA=1;
+        } else {
+          ptp->ports[port].recoveringA=1;
+          DEBUG_TIMESTAMP_PRINTF("A missed rx response %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,sequence_id);
+          ptp->ports[port].mdPdelayReq_State = MDPdelayReq_RESET;
+          ptp->ports[port].initPdelayRespReceived = FALSE;
+          ptp->ports[port].rcvdPdelayResp = FALSE;
+          ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;
+          if (ptp->ports[port].lostResponses <= ptp->ports[port].allowedLostResponses)
+          {
+            ptp->ports[port].lostResponses++;
+          }
+          else
+          {
+            ptp->ports[port].isMeasuringDelay = FALSE;
+            ptp->ports[port].asCapable = FALSE;
+          }
+        }
       }
 #endif
       break;
-
     case MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER:
       ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;
  
@@ -325,41 +471,6 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
       get_source_port_id(ptp, port, TRANSMITTED_PACKET, txBuffer, txRequestingPortId);
       rxSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr);
       txSequenceId = get_sequence_id(ptp, port, TRANSMITTED_PACKET, txBuffer);
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-      {
-        switch_timestamp_t switch_t1a,switch_t2a;
-        switch_timestamp_t switch_t1b,switch_t2b;
-        int32_t t1,t2;
-        if(port==0) {
-          block_read_avb_ptp(&switch_t1a,0,0x08);
-          block_read_avb_ptp(&switch_t2a,5,0x10);
-          block_read_avb_ptp(&switch_t1b,0,0x08);
-          block_read_avb_ptp(&switch_t2b,5,0x10);
-        } else {
-          block_read_avb_ptp(&switch_t1a,1,0x08);
-          block_read_avb_ptp(&switch_t2a,6,0x10);
-          block_read_avb_ptp(&switch_t1b,1,0x08);
-          block_read_avb_ptp(&switch_t2b,6,0x10);
-        }
-        if((txSequenceId==switch_t1a.sequence_id) &&
-           (txSequenceId==switch_t2a.sequence_id) &&
-           (switch_t1a.low==switch_t1b.low) &&
-           (switch_t1a.high==switch_t1b.high) &&
-           (switch_t2a.low==switch_t2b.low) &&
-           (switch_t2a.high==switch_t2b.high)) {
-          t1=(switch_t1a.high<<16)|switch_t1a.low;
-          t2=(switch_t2a.high<<16)|switch_t2a.low;
-
-          ptp->ports[port].rcvdPdelayRespSwitchOffset=(t2-t1)*8;
-        } else {
-#ifdef DEBUG_MISSED_TIMESTAMP
-          printk("missed switch response timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,txSequenceId);
-#endif
-          rxSequenceId=txSequenceId-10; /* force response to be skipped */
-        }
-      }
-#endif
-
     }
     if (ptp->ports[port].rcvdPdelayRespFollowUp)
     {

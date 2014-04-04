@@ -611,20 +611,10 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
 
 /* Transmits the next SYNC message in a sequence */
 void transmit_sync(struct ptp_device *ptp, uint32_t port) {
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  switch_timestamp_t switch_t1a,switch_t2a;
-  switch_timestamp_t switch_t1b,switch_t2b;
-  int32_t t1,t2;
-  uint16_t sequence_id;
-#endif
-
   PtpTime presentTime;
   int64_t correctionField;
   uint8_t *txBuffer;
 
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  sequence_id=ptp->ports[port].syncSequenceId;
-#endif
   /* Update the sequence ID */
   txBuffer = get_output_buffer(ptp,port,PTP_TX_SYNC_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].syncSequenceId++);
@@ -641,33 +631,6 @@ void transmit_sync(struct ptp_device *ptp, uint32_t port) {
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txSyncCount++;
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  if(port==0) {
-    block_read_avb_ptp(&switch_t1a,5,0x08);
-    block_read_avb_ptp(&switch_t2a,0,0x10);
-    block_read_avb_ptp(&switch_t1b,5,0x08);
-    block_read_avb_ptp(&switch_t2b,0,0x10);
-  } else {
-    block_read_avb_ptp(&switch_t1a,6,0x08);
-    block_read_avb_ptp(&switch_t2a,1,0x10);
-    block_read_avb_ptp(&switch_t1b,6,0x08);
-    block_read_avb_ptp(&switch_t2b,1,0x10);
-  }
-  if((sequence_id==switch_t1a.sequence_id) &&
-     (sequence_id==switch_t2a.sequence_id) &&
-     (switch_t1a.low==switch_t1b.low) &&
-     (switch_t1a.high==switch_t1b.high) &&
-     (switch_t2a.low==switch_t2b.low) &&
-     (switch_t2a.high==switch_t2b.high)) {
-    t1=(switch_t1a.high<<16)|switch_t1a.low;
-    t2=(switch_t2a.high<<16)|switch_t2a.low;
-
-    ptp->ports[port].syncOffset.secondsUpper=0;
-    ptp->ports[port].syncOffset.secondsLower=0;
-    ptp->ports[port].syncOffset.nanoseconds=(t2-t1)*8;
-  }
-#endif
-
 }
 
 /* Transmits a FUP message related to the last SYNC message that was sent */
@@ -702,9 +665,6 @@ void transmit_fup(struct ptp_device *ptp, uint32_t port) {
      * will contain the value from the received follow-up, NOT the time we sent
      * the sync.
      */
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-    timestamp_sum(&ptp->ports[port].syncTxTimestamp,&ptp->ports[port].syncOffset,&ptp->ports[port].syncTxTimestamp);
-#endif
     set_timestamp(ptp, port, txFupBuffer, &ptp->ports[port].syncTxTimestamp);
 
     correctionField = 0;
@@ -777,20 +737,8 @@ void transmit_delay_response(struct ptp_device *ptp, uint32_t port, uint8_t * re
 
 /* Transmits the next PDELAY_REQ message in a sequence */
 void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  PtpTime diff;
-  switch_timestamp_t switch_t1a,switch_t2a;
-  switch_timestamp_t switch_t1b,switch_t2b;
-  int32_t t1,t2;
-  uint16_t sequence_id;
-#endif
-
   PtpTime presentTime;
   uint8_t *txBuffer;
-
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  sequence_id=ptp->ports[port].pdelayReqSequenceId;
-#endif
 
   txBuffer = get_output_buffer(ptp,port,PTP_TX_PDELAY_REQ_BUFFER);
   /* Update the sequence ID (incremented in the pdelay state machine) */
@@ -803,34 +751,6 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txPDelayRequestCount++;
-
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  if(port==0) {
-    block_read_avb_ptp(&switch_t1a,5,0x08);
-    block_read_avb_ptp(&switch_t2a,0,0x10);
-    block_read_avb_ptp(&switch_t1b,5,0x08);
-    block_read_avb_ptp(&switch_t2b,0,0x10);
-  } else {
-    block_read_avb_ptp(&switch_t1a,6,0x08);
-    block_read_avb_ptp(&switch_t2a,1,0x10);
-    block_read_avb_ptp(&switch_t1b,6,0x08);
-    block_read_avb_ptp(&switch_t2b,1,0x10);
-  }
-  if((sequence_id==switch_t1a.sequence_id) &&
-     (sequence_id==switch_t2a.sequence_id) &&
-     (switch_t1a.low==switch_t1b.low) &&
-     (switch_t1a.high==switch_t1b.high) &&
-     (switch_t2a.low==switch_t2b.low) &&
-     (switch_t2a.high==switch_t2b.high)) {
-    t1=(switch_t1a.high<<16)|switch_t1a.low;
-    t2=(switch_t2a.high<<16)|switch_t2a.low;
-
-    ptp->ports[port].requestOffset.secondsUpper=0;
-    ptp->ports[port].requestOffset.secondsLower=0;
-    ptp->ports[port].requestOffset.nanoseconds=(t2-t1)*8;
-  }
-#endif
-
 }
 
 /* Transmits a PDELAY_RESP message in response to the PDELAY_REQ message received
@@ -839,10 +759,14 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
 void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * requestRxBuffer) {
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
   PtpTime diff;
+  PtpTime timeTest;
+  switch_timestamp_t *switch_t1;
+  switch_timestamp_t *switch_t2;
   switch_timestamp_t switch_t1a,switch_t2a;
   switch_timestamp_t switch_t1b,switch_t2b;
   int32_t t1,t2;
   uint16_t sequence_id;
+  int cnt1,cnt2;
 #endif
 
   PtpTime pdelayReqRxTimestamp;
@@ -852,10 +776,6 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
   /* Get the source port identity address and sequence ID of the peer delay request */
   get_source_port_id(ptp, port, RECEIVED_PACKET, requestRxBuffer, ptp->ports[port].lastPeerRequestPortId);
   pdelayReqSequenceId = get_sequence_id(ptp, port, RECEIVED_PACKET, requestRxBuffer);
-
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  sequence_id=pdelayReqSequenceId;
-#endif
 
   /* Update the sequence ID and requesting port identity */
   txBuffer = get_output_buffer(ptp, port, PTP_TX_PDELAY_RESP_BUFFER);
@@ -870,78 +790,158 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
       {
+        sequence_id=pdelayReqSequenceId;
+        cnt1=0;
+        cnt2=0;
         if(port==0) {
-          block_read_avb_ptp(&switch_t1a,0,0x08);
-          block_read_avb_ptp(&switch_t2a,5,0x10);
-          block_read_avb_ptp(&switch_t1b,0,0x08);
-          block_read_avb_ptp(&switch_t2b,5,0x10);
+          switch_timestamp(TIMESTAMP_AVB2_INCOMMING_REQUEST,&switch_t1, &switch_t2,sequence_id);
+          if(switch_t1==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t1a,0,0x08);
+                block_read_avb_ptp(&switch_t1b,0,0x08);
+                cnt1++;
+              } while(
+                    (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+                    (switch_t1a.low!=switch_t1b.low)||
+                    (switch_t1a.high!=switch_t1b.high));
+          } else {
+              memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+          }
+          if(switch_t2==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t2a,5,0x10);
+                block_read_avb_ptp(&switch_t2b,5,0x10);
+                cnt2++;
+              } while(
+                    (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+                    (switch_t2a.low!=switch_t2b.low)||
+                    (switch_t2a.high!=switch_t2b.high));
+          } else {
+              memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+          }
         } else {
-          block_read_avb_ptp(&switch_t1a,1,0x08);
-          block_read_avb_ptp(&switch_t2a,6,0x10);
-          block_read_avb_ptp(&switch_t1b,1,0x08);
-          block_read_avb_ptp(&switch_t2b,6,0x10);
+          switch_timestamp(TIMESTAMP_AVB1_INCOMMING_REQUEST,&switch_t1, &switch_t2,sequence_id);
+          if(switch_t1==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t1a,1,0x08);
+                block_read_avb_ptp(&switch_t1b,1,0x08);
+                cnt1++;
+              } while(
+                    (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+                    (switch_t1a.low!=switch_t1b.low)||
+                    (switch_t1a.high!=switch_t1b.high));
+          } else {
+              memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+          }
+          if(switch_t2==NULL) {
+              do {
+                block_read_avb_ptp(&switch_t2a,6,0x10);
+                block_read_avb_ptp(&switch_t2b,6,0x10);
+                cnt2++;
+              } while(
+                    (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+                    (switch_t2a.low!=switch_t2b.low)||
+                    (switch_t2a.high!=switch_t2b.high));
+          } else {
+              memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+          }
         }
-        if((pdelayReqSequenceId==switch_t1a.sequence_id) &&
-           (pdelayReqSequenceId==switch_t2a.sequence_id) &&
-           (switch_t1a.low==switch_t1b.low) &&
-           (switch_t1a.high==switch_t1b.high) &&
-           (switch_t2a.low==switch_t2b.low) &&
-           (switch_t2a.high==switch_t2b.high)) {
+        if((cnt1!=0)||(cnt2!=0)) {
+            DEBUG_TIMESTAMP_PRINTF("C retry%d,%d\r\n",cnt1,cnt2);
+        }
+        if((sequence_id==switch_t1a.sequence_id) &&
+           (sequence_id==switch_t2a.sequence_id)) {
           t1=(switch_t1a.high<<16)|switch_t1a.low;
           t2=(switch_t2a.high<<16)|switch_t2a.low;
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t2*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t2*8ULL)%1000000000ULL;
+          timestamp_difference(&pdelayReqRxTimestamp,&diff,&ptp->switchDelta);
+          ptp->t2_prev=t2;
 
           diff.secondsUpper=0;
           diff.secondsLower=0;
           diff.nanoseconds=(t2-t1)*8;
-#ifdef PATH_DELAY_DEBUG
-          printk("switch request diff: %d\r\n",diff.nanoseconds);
-#endif
-          timestamp_difference(&pdelayReqRxTimestamp,&diff,&pdelayReqRxTimestamp);
+          if((uint32_t)t2<(uint32_t)t1) {
+            WARN_TIMESTAMP_PRINTF("C t2 wrapped %04x\r\n",diff.nanoseconds); 
+          }
+          timestamp_difference(&pdelayReqRxTimestamp,&diff,&timeTest);
+          if((uint32_t)t2<(uint32_t)t1) {
+            WARN_TIMESTAMP_PRINTF("C t1 wrapped around\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_difference(&ptp->switchDelta,&diff,&ptp->switchDelta);
+            ptp->t2_prev=t1;
+          }
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t1*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t1*8ULL)%1000000000ULL;
+          timestamp_sum(&ptp->switchDelta,&diff,&pdelayReqRxTimestamp);
+
+          timestamp_difference(&pdelayReqRxTimestamp,&timeTest,&diff);
+          if((diff.secondsUpper!=0x00000000) ||
+             (diff.secondsLower!=0x00000000) ||
+             ((diff.nanoseconds&0xffffff00)!=0x00000000)) {
+                if((diff.secondsUpper!=0xffffffff) ||
+                   (diff.secondsLower!=0xffffffff) ||
+                   ((diff.nanoseconds&0xffffff00)!=0xffffff00)) {
+                        ERROR_TIMESTAMP_PRINTF("C    !!!     bad math %08x%08x.%08x\r\n",diff.secondsUpper,diff.secondsLower,diff.nanoseconds);
+                }
+          }
+          if(ptp->ports[port].recoveringC==1) {
+                DEBUG_TIMESTAMP_PRINTF("C recovered rx request, ts:%08x%08x.%08x\r\n",pdelayReqRxTimestamp.secondsUpper,pdelayReqRxTimestamp.secondsLower,pdelayReqRxTimestamp.nanoseconds);
+                ptp->ports[port].recoveringC=0;
+          }
 #endif
           set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
           /* All dynamic fields have been updated, transmit the packet */
           transmit_packet(ptp, port, txBuffer);
           ptp->ports[port].stats.txPDelayResponseCount++;
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-          if(ptp->ports[port].skippedResponseCount>=3) {
-            printk("skipped %d responses in a row\r\n",ptp->ports[port].skippedResponseCount);
+          if(ptp->ports[port].skippedResponseCount>=2) {
+            ERROR_TIMESTAMP_PRINTF("C skipped %d tx responses in a row\r\n",ptp->ports[port].skippedResponseCount);
           }
           ptp->ports[port].skippedResponseCount=0;
-          if(port==0) {
-            block_read_avb_ptp(&switch_t1a,5,0x08);
-            block_read_avb_ptp(&switch_t2a,0,0x10);
-            block_read_avb_ptp(&switch_t1b,5,0x08);
-            block_read_avb_ptp(&switch_t2b,0,0x10);
-          } else {
-            block_read_avb_ptp(&switch_t1a,6,0x08);
-            block_read_avb_ptp(&switch_t2a,1,0x10);
-            block_read_avb_ptp(&switch_t1b,6,0x08);
-            block_read_avb_ptp(&switch_t2b,1,0x10);
+        } else if(sequence_id==switch_t1a.sequence_id) {
+          t1=(switch_t1a.high<<16)|switch_t1a.low;
+          if(((uint32_t)t1<0x70000000) &&
+             ((uint32_t)ptp->t2_prev>0x90000000)) {
+            WARN_TIMESTAMP_PRINTF("C t1 wrapped around\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_sum(&ptp->switchDelta,&diff,&ptp->switchDelta);
           }
-          if((sequence_id==switch_t1a.sequence_id) &&
-             (sequence_id==switch_t2a.sequence_id) &&
-             (switch_t1a.low==switch_t1b.low) &&
-             (switch_t1a.high==switch_t1b.high) &&
-             (switch_t2a.low==switch_t2b.low) &&
-             (switch_t2a.high==switch_t2b.high)) {
-            t1=(switch_t1a.high<<16)|switch_t1a.low;
-            t2=(switch_t2a.high<<16)|switch_t2a.low;
+          if(((uint32_t)ptp->t2_prev<0x70000000) &&
+             ((uint32_t)t1>0x90000000)) {
+            WARN_TIMESTAMP_PRINTF("C t2 wrapped around\r\n");
+            diff.secondsUpper=0;
+            diff.secondsLower=34;
+            diff.nanoseconds=359738368;
+            timestamp_difference(&ptp->switchDelta,&diff,&ptp->switchDelta);
+          }
+          diff.secondsUpper=0;
+          diff.secondsLower=((uint32_t)t1*8ULL)/1000000000ULL;
+          diff.nanoseconds=((uint32_t)t1*8ULL)%1000000000ULL;
+          timestamp_sum(&ptp->switchDelta,&diff,&pdelayReqRxTimestamp);
+          DEBUG_TIMESTAMP_PRINTF("C recovered rx request %d t1:%08x, t2:%08x, delta:%08x%08x.%08x\r\n",port,(uint32_t)t1,(uint32_t)ptp->t2_prev,ptp->switchDelta.secondsUpper,ptp->switchDelta.secondsLower,ptp->switchDelta.nanoseconds);
+          ptp->ports[port].recoveringC=1;
 
-            ptp->ports[port].responseOffset.secondsUpper=0;
-            ptp->ports[port].responseOffset.secondsLower=0;
-            ptp->ports[port].responseOffset.nanoseconds=(t2-t1)*8;
-            if(ptp->ports[port].skippedFollowupCount>=3) {
-              printk("skipped %d followups in a row\r\n",ptp->ports[port].skippedFollowupCount);
-            }
-            ptp->ports[port].skippedFollowupCount=0;
-          } else {
-            ptp->ports[port].skippedFollowupCount++;
+          set_timestamp(ptp, port, txBuffer, &pdelayReqRxTimestamp);
+          /* All dynamic fields have been updated, transmit the packet */
+          transmit_packet(ptp, port, txBuffer);
+          ptp->ports[port].stats.txPDelayResponseCount++;
+
+          if(ptp->ports[port].skippedResponseCount>=2) {
+            ERROR_TIMESTAMP_PRINTF("C skipped %d tx responses in a row\r\n",ptp->ports[port].skippedResponseCount);
           }
+          ptp->ports[port].skippedResponseCount=0;
         } else {
+          ptp->ports[port].recoveringC=1;
           ptp->ports[port].skippedResponseCount++;
-#ifdef DEBUG_MISSED_TIMESTAMP
-          printk("missed request switch timestamp %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,pdelayReqSequenceId);
-#endif
+          DEBUG_TIMESTAMP_PRINTF("C missed rx request %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,sequence_id);
+          ptp->ports[port].pdelayIntervalTimer += PDELAY_REQ_INTERVAL_TICKS(ptp, port)/4;
         }
       }
 #endif
@@ -951,6 +951,17 @@ void transmit_pdelay_response(struct ptp_device *ptp, uint32_t port, uint8_t * r
  * sent
  */
 void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  PtpTime diff;
+  switch_timestamp_t *switch_t1;
+  switch_timestamp_t *switch_t2;
+  switch_timestamp_t switch_t1a,switch_t2a;
+  switch_timestamp_t switch_t1b,switch_t2b;
+  int32_t t1,t2;
+  uint16_t sequence_id;
+  int cnt1,cnt2;
+#endif
+
   PtpTime pdelayRespTxTimestamp;
   uint8_t *txFupBuffer;
   uint8_t *txRespBuffer;
@@ -974,8 +985,87 @@ void transmit_pdelay_response_fup(struct ptp_device *ptp, uint32_t port) {
                                &pdelayRespTxTimestamp);
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  timestamp_sum(&pdelayRespTxTimestamp,&ptp->ports[port].responseOffset,&pdelayRespTxTimestamp);
+  sequence_id=get_sequence_id(ptp, port, TRANSMITTED_PACKET, txRespBuffer);
+  cnt1=0;
+  cnt2=0;
+  if(port==0) {
+    switch_timestamp(TIMESTAMP_AVB2_OUTGOING_RESPONSE,&switch_t1, &switch_t2,sequence_id);
+    if(switch_t1==NULL) {
+        do {
+          block_read_avb_ptp(&switch_t1a,5,0x08);
+          block_read_avb_ptp(&switch_t1b,5,0x08);
+          cnt1++;
+        } while(
+              (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+              (switch_t1a.low!=switch_t1b.low)||
+              (switch_t1a.high!=switch_t1b.high));
+    } else {
+        memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+    }
+    if(switch_t2==NULL) {
+        do {
+          block_read_avb_ptp(&switch_t2a,0,0x10);
+          block_read_avb_ptp(&switch_t2b,0,0x10);
+          cnt2++;
+        } while(
+              (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+              (switch_t2a.low!=switch_t2b.low)||
+              (switch_t2a.high!=switch_t2b.high));
+    } else {
+        memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+    }
+  } else {
+    switch_timestamp(TIMESTAMP_AVB1_OUTGOING_RESPONSE,&switch_t1, &switch_t2,sequence_id);
+    if(switch_t1==NULL) {
+        do {
+          block_read_avb_ptp(&switch_t1a,6,0x08);
+          block_read_avb_ptp(&switch_t1b,6,0x08);
+          cnt1++;
+        } while(
+              (switch_t1a.sequence_id!=switch_t1b.sequence_id)||
+              (switch_t1a.low!=switch_t1b.low)||
+              (switch_t1a.high!=switch_t1b.high));
+    } else {
+        memcpy(&switch_t1a,switch_t1,sizeof(switch_timestamp_t));
+    }
+    if(switch_t2==NULL) {
+        do {
+          block_read_avb_ptp(&switch_t2a,1,0x10);
+          block_read_avb_ptp(&switch_t2b,1,0x10);
+          cnt2++;
+        } while(
+              (switch_t2a.sequence_id!=switch_t2b.sequence_id)||
+              (switch_t2a.low!=switch_t2b.low)||
+              (switch_t2a.high!=switch_t2b.high));
+    } else {
+        memcpy(&switch_t2a,switch_t2,sizeof(switch_timestamp_t));
+    }
+  }
+  if((cnt1!=0)||(cnt2!=0)) {
+      DEBUG_TIMESTAMP_PRINTF("H retry%d,%d\r\n",cnt1,cnt2);
+  }
+  if((sequence_id==switch_t1a.sequence_id) &&
+     (sequence_id==switch_t2a.sequence_id)) {
+    t1=(switch_t1a.high<<16)|switch_t1a.low;
+    t2=(switch_t2a.high<<16)|switch_t2a.low;
+    diff.secondsUpper=0;
+    diff.secondsLower=0;
+    diff.nanoseconds=(t2-t1)*8;
+    if((uint32_t)t2<(uint32_t)t1) {
+      WARN_TIMESTAMP_PRINTF("H t2 wrapped %04x\r\n",diff.nanoseconds); 
+    }
+    if(ptp->ports[port].skippedFollowupCount>=2) {
+      ERROR_TIMESTAMP_PRINTF("H skipped %d response followups in a row\r\n",ptp->ports[port].skippedFollowupCount);
+    }
+    ptp->ports[port].skippedFollowupCount=0;
+  } else {
+    ptp->ports[port].skippedFollowupCount++;
+    DEBUG_TIMESTAMP_PRINTF("H missed tx response %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,sequence_id);
+    return;
+  }
+  timestamp_sum(&pdelayRespTxTimestamp,&diff,&pdelayRespTxTimestamp);
 #endif
+
   set_timestamp(ptp, port, txFupBuffer, &pdelayRespTxTimestamp);
 
   /* All dynamic fields have been updated, transmit the packet */

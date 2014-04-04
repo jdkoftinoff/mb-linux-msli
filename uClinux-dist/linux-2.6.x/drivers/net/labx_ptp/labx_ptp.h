@@ -34,6 +34,192 @@
 #include <linux/types.h>
 #include <net/labx_ptp/labx_ptp_defs.h>
 
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+#define POLL_MARVELL_TIMESTAMPS() switch_timestamp_poll()
+#define WAIT_MARVELL_TIMESTAMPS() switch_timestamp_wait()
+#else
+#define POLL_MARVELL_TIMESTAMPS()
+#define WAIT_MARVELL_TIMESTAMPS()
+#endif
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+
+#define ETH_BASEADDR 0x82040000
+
+enum TimeStampPair {
+    TIMESTAMP_AVB2_INCOMMING_SYNC,
+    TIMESTAMP_AVB2_OUTGOING_SYNC,
+    TIMESTAMP_AVB2_INCOMMING_REQUEST,
+    TIMESTAMP_AVB2_OUTGOING_REQUEST,
+    TIMESTAMP_AVB2_INCOMMING_RESPONSE,
+    TIMESTAMP_AVB2_OUTGOING_RESPONSE,
+    TIMESTAMP_AVB1_INCOMMING_SYNC,
+    TIMESTAMP_AVB1_OUTGOING_SYNC,
+    TIMESTAMP_AVB1_INCOMMING_REQUEST,
+    TIMESTAMP_AVB1_OUTGOING_REQUEST,
+    TIMESTAMP_AVB1_INCOMMING_RESPONSE,
+    TIMESTAMP_AVB1_OUTGOING_RESPONSE,
+};
+
+enum TimeStamp {
+    TIMESTAMP_AVB2_OUTGOING_SYNC_T1,
+    TIMESTAMP_AVB2_OUTGOING_DELAY_T1,
+    TIMESTAMP_AVB2_OUTGOING_T2,
+    TIMESTAMP_AVB2_INCOMMING_SYNC_T1,
+    TIMESTAMP_AVB2_INCOMMING_DELAY_T1,
+    TIMESTAMP_AVB2_INCOMMING_T2,
+    TIMESTAMP_AVB1_OUTGOING_SYNC_T1,
+    TIMESTAMP_AVB1_OUTGOING_DELAY_T1,
+    TIMESTAMP_AVB1_OUTGOING_T2,
+    TIMESTAMP_AVB1_INCOMMING_SYNC_T1,
+    TIMESTAMP_AVB1_INCOMMING_DELAY_T1,
+    TIMESTAMP_AVB1_INCOMMING_T2,
+};
+
+typedef struct {
+    uint16_t flags;
+    uint16_t low;
+    uint16_t high;
+    uint16_t sequence_id;
+    enum TimeStamp type;
+} switch_timestamp_t;
+
+void switch_timestamp_init(void);
+void switch_timestamp_poll(void);
+void switch_timestamp_wait(void);
+void switch_timestamp(enum TimeStampPair type,switch_timestamp_t ** t1, switch_timestamp_t ** t2,uint16_t sequence_id);
+
+#define XPAR_XPS_GPIO_0_BASEADDR 0x820F0000
+#define LABX_MDIO_ETH_BASEADDR 0x82050000
+#define MDIO_CONTROL_REG      (0x00000000)
+#  define PHY_MDIO_BUSY       (0x80000000)
+#  define PHY_REG_ADDR_MASK   (0x01F)
+#  define PHY_ADDR_MASK       (0x01F)
+#  define PHY_ADDR_SHIFT      (5)
+#  define PHY_MDIO_READ       (0x0400)
+#  define PHY_MDIO_WRITE      (0x0000)
+#define MDIO_DATA_REG         (0x00000004)
+
+#define LABX_MAC_REGS_BASE    (0x00001000)
+#define MAC_MDIO_CONFIG_REG   (LABX_MAC_REGS_BASE + 0x0014)
+#define LABX_ETHERNET_MDIO_DIV  (0x28)
+#  define MDIO_DIVISOR_MASK  (0x0000003F)
+#  define MDIO_ENABLED       (0x00000040)
+
+
+/* Performs a register write to a PHY */
+static inline void mdio_write(int phy_addr, int reg_addr, int phy_data) {
+  unsigned int addr;
+
+  /* Write the data first, then the control register */
+  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_DATA_REG);
+  *((volatile unsigned int *) addr) = phy_data;
+  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_CONTROL_REG);
+  *((volatile unsigned int *) addr) = 
+    (PHY_MDIO_WRITE | ((phy_addr & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+     (reg_addr & PHY_REG_ADDR_MASK));
+  while(*((volatile unsigned int *) addr) & PHY_MDIO_BUSY);
+}
+
+/* Performs a register read from a PHY */
+static inline unsigned int mdio_read(int phy_addr, int reg_addr) {
+  unsigned int addr;
+  unsigned int readValue;
+
+  /* Write to the MDIO control register to initiate the read */
+  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_CONTROL_REG);
+  *((volatile unsigned int *) addr) = 
+    (PHY_MDIO_READ | ((phy_addr & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
+     (reg_addr & PHY_REG_ADDR_MASK));
+  while(*((volatile unsigned int *) addr) & PHY_MDIO_BUSY);
+  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_DATA_REG);
+  readValue = *((volatile unsigned int *) addr);
+  return(readValue);
+}
+
+/* CAL_ICS constants; ultimately these and the corresponding code
+ * should migrate into board-specific init code.
+ */
+#define REG_PORT(p) (0x10 + (p))
+#define REG_GLOBAL 0x1b
+#define REG_GLOBAL2 0x1c
+
+#define AVB_COMMAND_REG 0x16
+#define AVB_DATA_REG 0x17
+#define AVB_COMMAND_WRITE 0x3
+#define AVB_COMMAND_READ 0x4
+#define AVB_COMMAND_BLOCK_READ 0x6
+#define AVB_BLOCK_PTP 0
+#define AVB_BLOCK_POLICY 1
+#define AVB_BLOCK_QAV 2
+#define AVB_COMMAND_READ_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_READ<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
+#define AVB_COMMAND_BLOCK_READ_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_BLOCK_READ<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
+#define AVB_COMMAND_WRITE_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
+#define AVB_COMMAND_WRITE_POLICY(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_POLICY<<5)|ADDRESS)
+#define AVB_COMMAND_WRITE_QAV(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_QAV<<5)|ADDRESS)
+
+static inline uint16_t read_avb_ptp(int port,int reg) {
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_READ_PTP(port,reg));
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    return(mdio_read(REG_GLOBAL2,AVB_DATA_REG));
+}
+
+static inline void write_avb_ptp(int port,int reg,int value) {
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_PTP(port,reg));
+}
+
+static inline void write_avb_policy(int port,int reg,int value) {
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_POLICY(port,reg));
+}
+
+static inline void write_avb_qav(int port,int reg,int value) {
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_QAV(port,reg));
+}
+
+static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg) {
+    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
+    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_BLOCK_READ_PTP(port,reg));
+    time->flags=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
+    time->low=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
+    time->high=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
+    time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
+}
+
+#define DEBUG_TIMESTAMPS
+#define WARN_TIMESTAMPS
+#define ERROR_TIMESTAMPS
+
+
+#ifdef DEBUG_TIMESTAMPS
+#define DEBUG_TIMESTAMP_PRINTF(FMT,...) printk(FMT, ## __VA_ARGS__)
+#else
+#define DEBUG_TIMESTAMP_PRINTF(FMT,...)
+#endif
+
+#ifdef WARN_TIMESTAMPS
+#define WARN_TIMESTAMP_PRINTF(FMT,...) printk(FMT, ## __VA_ARGS__)
+#else
+#define WARN_TIMESTAMP_PRINTF(FMT,...)
+#endif
+
+#ifdef ERROR_TIMESTAMPS
+#define ERROR_TIMESTAMP_PRINTF(FMT,...) printk(FMT, ## __VA_ARGS__)
+#else
+#define ERROR_TIMESTAMP_PRINTF(FMT,...)
+#endif
+
+#endif /* CONFIG_LABX_PTP_MARVELL_TIMESTAMPS */
+
+
 /* Name of the driver for use by all the modules */
 #define DRIVER_NAME "labx_ptp"
 
@@ -424,9 +610,6 @@ struct ptp_port {
   /* 802.1AS Peer-to-peer delay mechanism variables (11.2.15.1) */
   MDPdelayReq_State_t mdPdelayReq_State;
 
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  int32_t rcvdPdelayRespSwitchOffset;
-#endif
   uint32_t pdelayIntervalTimer;
   uint32_t rcvdPdelayResp;
   uint8_t *rcvdPdelayRespPtr;
@@ -461,11 +644,11 @@ struct ptp_port {
   PtpTime pdelayRespRxTimestampI; // pdelayRespEventIngressTimestamp (Treq4)
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-  PtpTime syncOffset;
-  PtpTime requestOffset;
-  PtpTime responseOffset;
   int skippedResponseCount;
   int skippedFollowupCount;
+  int recoveringA;
+  int recoveringC;
+  int recoveringE;
 #endif
 
   /* pdelay response variables */
@@ -607,6 +790,10 @@ struct ptp_device {
 
   /* Number of timer ticks that have passed since the last time the tasklet ran */
   uint32_t timerTicks;
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+  uint32_t t2_prev;
+  PtpTime switchDelta;
+#endif
 };
 
 /* Enumerated type identifying a packet buffer direction; outgoing or incoming, 
@@ -742,183 +929,5 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
 #define PTP_CLOCK_IDENTITY_CHARS 8
 #endif
 
-#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
-#define PTP_ETHER_TYPE 0x88f7
-/* CAL_ICS constants; ultimately these and the corresponding code
- * should migrate into board-specific init code.
- */
-#define REG_PORT(p)		(0x10 + (p))
-#define REG_GLOBAL		0x1b
-#define REG_GLOBAL2		0x1c
-
-/* 88E6350R ports assigned to the two CPU ports */
-#define CAL_ICS_CPU_PORT_0 (5)
-#define CAL_ICS_CPU_PORT_1 (6)
-
-/* Register constant definitions for the 88E6350R LinkStreet switch */
-#define PHYS_CTRL_REG  (1)
-#  define RGMII_MODE_RXCLK_DELAY   (0x8000)
-#  define RGMII_MODE_GTXCLK_DELAY  (0x4000)
-#  define FLOW_CTRL_FORCE_DISABLED (0x0040)
-#  define FLOW_CTRL_FORCE_ENABLED  (0x00C0)
-#  define FORCE_LINK_DOWN          (0x0010)
-#  define FORCE_LINK_UP            (0x0030)
-#  define FORCE_DUPLEX_HALF        (0x0004)
-#  define FORCE_DUPLEX_FULL        (0x000C)
-#  define FORCE_SPEED_10           (0x0000)
-#  define FORCE_SPEED_100          (0x0001)
-#  define FORCE_SPEED_1000         (0x0002)
-#  define SPEED_AUTO_DETECT        (0x0003)
-
-/* Register settings assigned to the CPU port:
- * Link forced up, 1 Gbps full-duplex
- * Using RGMII delay on switch IND input data
- * Using RGMII delay on switch OUTD output data
- */
- 
-#define CAL_ICS_CPU_PORT_0_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         /*RGMII_MODE_GTXCLK_DELAY |*/ \
-                                         FORCE_LINK_UP           | \
-                                         FORCE_DUPLEX_FULL       | \
-                                         FORCE_SPEED_1000)
-
-
-
-/* Register settings assigned to the SFP port:
- * Link forced up, 1 Gbps full-duplex
- * Using RGMII delay on switch IND input data
- * Using RGMII delay on switch OUTD output data
- */
- 
-#define CAL_ICS_CPU_PORT_1_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
-                                         /*RGMII_MODE_GTXCLK_DELAY |*/ \
-                                         FORCE_LINK_UP           | \
-                                         FORCE_DUPLEX_FULL       | \
-                                         FORCE_SPEED_1000)
-
-
-/* Bit-mask of enabled ports  */
-#define CAL_ICS_ENABLED_PORTS ((1 << 6) | (1 << 5) | (1 << 1) | (1 << 0))
-
-/* Number of copper 1000Base-TX ports for CAL_ICS */
-#define CAL_ICS_COPPER_PORTS (2)
-
-/* E6350R-related */
-#define MV_E6350R_MAX_PORTS_NUM					7
-
-#define XPAR_XPS_GPIO_0_BASEADDR 0x820F0000
-#define LABX_MDIO_ETH_BASEADDR 0x82050000
-#define MDIO_CONTROL_REG      (0x00000000)
-#  define PHY_MDIO_BUSY       (0x80000000)
-#  define PHY_REG_ADDR_MASK   (0x01F)
-#  define PHY_ADDR_MASK       (0x01F)
-#  define PHY_ADDR_SHIFT      (5)
-#  define PHY_MDIO_READ       (0x0400)
-#  define PHY_MDIO_WRITE      (0x0000)
-#define MDIO_DATA_REG         (0x00000004)
-
-#define LABX_MAC_REGS_BASE    (0x00001000)
-#define MAC_MDIO_CONFIG_REG   (LABX_MAC_REGS_BASE + 0x0014)
-#define LABX_ETHERNET_MDIO_DIV  (0x28)
-#  define MDIO_DIVISOR_MASK  (0x0000003F)
-#  define MDIO_ENABLED       (0x00000040)
-
-
-/* Performs a register write to a PHY */
-static inline void mdio_write(int phy_addr, int reg_addr, int phy_data) {
-  unsigned int addr;
-
-  /* Write the data first, then the control register */
-  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_DATA_REG);
-  *((volatile unsigned int *) addr) = phy_data;
-  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_CONTROL_REG);
-  *((volatile unsigned int *) addr) = 
-    (PHY_MDIO_WRITE | ((phy_addr & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
-     (reg_addr & PHY_REG_ADDR_MASK));
-  while(*((volatile unsigned int *) addr) & PHY_MDIO_BUSY);
-}
-
-/* Performs a register read from a PHY */
-static inline unsigned int mdio_read(int phy_addr, int reg_addr) {
-  unsigned int addr;
-  unsigned int readValue;
-
-  /* Write to the MDIO control register to initiate the read */
-  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_CONTROL_REG);
-  *((volatile unsigned int *) addr) = 
-    (PHY_MDIO_READ | ((phy_addr & PHY_ADDR_MASK) << PHY_ADDR_SHIFT) |
-     (reg_addr & PHY_REG_ADDR_MASK));
-  while(*((volatile unsigned int *) addr) & PHY_MDIO_BUSY);
-  addr = (LABX_MDIO_ETH_BASEADDR + MDIO_DATA_REG);
-  readValue = *((volatile unsigned int *) addr);
-  return(readValue);
-}
-
-/* CAL_ICS constants; ultimately these and the corresponding code
- * should migrate into board-specific init code.
- */
-#define REG_PORT(p) (0x10 + (p))
-#define REG_GLOBAL 0x1b
-#define REG_GLOBAL2 0x1c
-
-#define AVB_COMMAND_REG 0x16
-#define AVB_DATA_REG 0x17
-#define AVB_COMMAND_WRITE 0x3
-#define AVB_COMMAND_READ 0x4
-#define AVB_COMMAND_BLOCK_READ 0x6
-#define AVB_BLOCK_PTP 0
-#define AVB_BLOCK_POLICY 1
-#define AVB_BLOCK_QAV 2
-#define AVB_COMMAND_READ_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_READ<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
-#define AVB_COMMAND_BLOCK_READ_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_BLOCK_READ<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
-#define AVB_COMMAND_WRITE_PTP(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_PTP<<5)|ADDRESS)
-#define AVB_COMMAND_WRITE_POLICY(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_POLICY<<5)|ADDRESS)
-#define AVB_COMMAND_WRITE_QAV(PORT,ADDRESS) ((1<<15)|(AVB_COMMAND_WRITE<<12)|(PORT<<8)|(AVB_BLOCK_QAV<<5)|ADDRESS)
-
-static inline uint16_t read_avb_ptp(int port,int reg) {
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_READ_PTP(port,reg));
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    return(mdio_read(REG_GLOBAL2,AVB_DATA_REG));
-}
-
-static inline void write_avb_ptp(int port,int reg,int value) {
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_PTP(port,reg));
-}
-
-static inline void write_avb_policy(int port,int reg,int value) {
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_POLICY(port,reg));
-}
-
-static inline void write_avb_qav(int port,int reg,int value) {
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_DATA_REG,value);
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_WRITE_QAV(port,reg));
-}
-
-typedef struct {
-    uint16_t flags;
-    uint16_t low;
-    uint16_t high;
-    uint16_t sequence_id;
-} switch_timestamp_t;
-
-static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg) {
-    while(mdio_read(REG_GLOBAL2,AVB_COMMAND_REG)&(1<<15));
-    mdio_write(REG_GLOBAL2,AVB_COMMAND_REG,AVB_COMMAND_BLOCK_READ_PTP(port,reg));
-    time->flags=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
-    time->low=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
-    time->high=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
-    time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
-}
-
-#endif /* CONFIG_LABX_PTP_MARVELL_TIMESTAMPS */
 #endif /* _LABX_PTP_H_ */
 

@@ -40,6 +40,7 @@ static irqreturn_t labx_ptp_interrupt(int irq, void *dev_id)
   unsigned long flags;
   int i;
 
+  WAIT_MARVELL_TIMESTAMPS();
   for (i=0; i<ptp->numPorts; i++) {
     /* Read the interrupt flags and immediately clear them */
     maskedFlags = ioread32(REGISTER_ADDRESS(ptp, i, PTP_IRQ_FLAGS_REG));
@@ -180,6 +181,7 @@ void ptp_process_rx(struct ptp_device *ptp, int port)
     /* Process all messages received since the last time we ran */
     newRxBuffer = (ioread32(REGISTER_ADDRESS(ptp, port, PTP_RX_REG)) & PTP_RX_BUFFER_MASK);
     while(ptp->ports[port].lastRxBuffer != newRxBuffer) {
+      POLL_MARVELL_TIMESTAMPS();
       /* Advance the last buffer circularly around the available Rx buffers */
       ptp->ports[port].lastRxBuffer = ((ptp->ports[port].lastRxBuffer + 1) & PTP_RX_BUFFER_MASK);
 
@@ -283,6 +285,7 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer) 
    * exists is if we attempt to send two packets from the same buffer simultaneously.
    */
   iowrite32(((1<<i) | PTP_TX_ENABLE), REGISTER_ADDRESS(ptp, port, PTP_TX_REG));
+  POLL_MARVELL_TIMESTAMPS();
 }
 
 
