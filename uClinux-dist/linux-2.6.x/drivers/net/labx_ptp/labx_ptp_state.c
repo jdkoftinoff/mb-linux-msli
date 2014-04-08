@@ -25,6 +25,7 @@
  */
 
 #include "labx_ptp.h"
+#include <linux/of_platform.h>
 
 /* Define these to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
@@ -1054,6 +1055,9 @@ void ack_grandmaster_change(struct ptp_device *ptp) {
 
 /* Initializes all of the state machines */
 void init_state_machines(struct ptp_device *ptp) {
+#ifdef CONFIG_OF
+  struct of_device* interfaceDev;
+#endif
   struct net_device *ndev = NULL;
   int i;
 
@@ -1078,7 +1082,12 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->currentLogSyncInterval = -3;
     pPort->initialLogSyncInterval = -3;
 
+#ifdef CONFIG_OF
+    interfaceDev = of_find_device_by_node(pPort->interfaceNode);
+    ndev = platform_get_drvdata(to_platform_device(&interfaceDev->dev));
+#else
     ndev = dev_get_by_name(&init_net, pPort->interfaceName);
+#endif
     if((ndev!=NULL) && netif_carrier_ok(ndev)) {
       pPort->portEnabled = TRUE;
     } else {

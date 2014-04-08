@@ -23,7 +23,6 @@
  *
  */
 
-
 #include <linux/list.h>
 #include <linux/netdevice.h>
 #include <linux/phy.h>
@@ -215,6 +214,15 @@ static int marvell_read_status(struct phy_device *phydev)
 
   phydev->duplex = (portStatusReg >> 10) ? DUPLEX_FULL : DUPLEX_HALF;
   phydev->link = (portStatusReg >> 11) & 1;
+  if(phydev->link&1) {
+    if(!netif_carrier_ok(phydev->attached_dev)) {
+      netif_carrier_on(phydev->attached_dev);
+    }
+  } else {
+    if(netif_carrier_ok(phydev->attached_dev)) {
+      netif_carrier_off(phydev->attached_dev);
+    }
+  }
 
   return 0;
 }
