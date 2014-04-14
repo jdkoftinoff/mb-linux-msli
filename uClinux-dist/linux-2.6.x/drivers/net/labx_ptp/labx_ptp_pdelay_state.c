@@ -37,6 +37,7 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
   {
     /* Capture the initial PDELAY response */
     ptp->ports[port].initPdelayRespReceived = TRUE;
+    ptp->ports[port].neighborRateRatioValid = FALSE;
     ptp->ports[port].pdelayRespTxTimestampI = ptp->ports[port].pdelayRespTxTimestamp;
     ptp->ports[port].pdelayRespRxTimestampI = ptp->ports[port].pdelayRespRxTimestamp;
   }
@@ -58,7 +59,7 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
     ptp->ports[port].pdelayRespTxTimestampI = ptp->ports[port].pdelayRespTxTimestamp;
     ptp->ports[port].pdelayRespRxTimestampI = ptp->ports[port].pdelayRespRxTimestamp;
 
-    /* The raw differences have been computed; sanity-check the peer delay timestamps; if the 
+    /* The raw differences have been computed; sanity-check the peer delay timestamps; if the
      * initial Tx or Rx timestamp is later than the present one, the initial ones are bogus and
      * must be replaced.
      */
@@ -186,6 +187,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       } else if (ptp->ports[port].pdelayResponses > 1) {
         ptp->ports[port].multiplePdelayResponses++;
         if (ptp->ports[port].multiplePdelayResponses >= 3) {
+          ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
           printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
           ptp->ports[port].portEnabled = FALSE;
@@ -206,7 +208,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       get_timestamp(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr,
         &ptp->ports[port].pdelayReqRxTimestamp);
 
-      /* Capture the hardware timestamp at which we received this packet, and hang on to 
+      /* Capture the hardware timestamp at which we received this packet, and hang on to
        * it for delay and rate calculation. (Trsp4 - our local clock) */
       get_local_hardware_timestamp(ptp, port, RECEIVED_PACKET,
         ptp->ports[port].rcvdPdelayRespPtr, &ptp->ports[port].pdelayRespRxTimestamp);
@@ -295,7 +297,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
           diff.secondsLower=0;
           diff.nanoseconds=(t2-t1)*8;
           if((uint32_t)t2<(uint32_t)t1) {
-            WARN_TIMESTAMP_PRINTF("A t2 wrapped %04x\r\n",diff.nanoseconds); 
+            WARN_TIMESTAMP_PRINTF("A t2 wrapped %04x\r\n",diff.nanoseconds);
           }
           timestamp_difference(&ptp->ports[port].pdelayRespRxTimestamp,&diff,&timeTest);
           if((uint32_t)t2<(uint32_t)t1) {
@@ -372,7 +374,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       break;
     case MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER:
       ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;
- 
+
       /* Obtain the follow up timestamp for delay and rate calculation.
        * (Trsp3 - responder local clock) */
       get_timestamp(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespFollowUpPtr,
@@ -388,7 +390,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       }
       ptp->ports[port].lostResponses = 0;
       ptp->ports[port].isMeasuringDelay = TRUE;
-  
+
       get_source_port_id(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespPtr, rxSourcePortId);
 
 #ifdef PATH_DELAY_DEBUG
@@ -423,7 +425,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
         ptp->ports[port].asCapable = FALSE;
       }
       break;
-  } 
+  }
 }
 
 /* 802.1AS MDPdelayReq state machine (11.2.15.3) transitions */
@@ -548,7 +550,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
             for (i=0; i<PORT_ID_BYTES; i++) printk("%02X", txRequestingPortId[i]);
             printk("\n");
 #endif
- 
+
             /* Timeout or a non-matching response was received */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
           }

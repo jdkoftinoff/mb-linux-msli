@@ -55,11 +55,10 @@
 static uint32_t instanceCount;
 
 /* Default MAC address to use prior to an ioctl() setting it from userspace.
- * This is a Xilinx address since Lab X doesn't have a MAC address range
- * allocated... yet. ;)
+ * Locally Administered, zero value. This should never be sent.
  */
 static uint8_t DEFAULT_SOURCE_MAC[MAC_ADDRESS_BYTES] = {
-  0x00, 0x0A, 0x35, 0x00, 0x22, 0xFF
+  0x02, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 /* Default PTP properties; where applicable, defaults from IEEE P802.1AS are used */
@@ -121,7 +120,7 @@ static int ptp_device_event(struct notifier_block *nb, unsigned long event, void
   struct ptp_device *ptp = container_of(nb, struct ptp_device, notifier);
   int on;
   int i;
- 
+
   if (event != NETDEV_CHANGE) return NOTIFY_DONE; /* Only interrested in carrier changes */
 
   on = netif_carrier_ok(dev);
@@ -204,7 +203,7 @@ void ptp_start_service(struct ptp_device *ptp) {
 }
 
 static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
- 
+
   struct ptp_port *pPort = &ptp->ports[port];
 
   memcpy(&dataSet->clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
@@ -236,7 +235,7 @@ static void PopulateDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortData
 }
 
 static void SetFromDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataSet *dataSet) {
- 
+
   struct ptp_port *pPort = &ptp->ports[port];
 
   if (dataSet->setMask & PTP_SET_PORT_ENABLED) {
@@ -252,7 +251,7 @@ static void SetFromDataSet(struct ptp_device *ptp, uint32_t port, PtpAsPortDataS
   }
 
   if (dataSet->setMask & PTP_SET_CURRENT_LOG_SYNC_INTERVAL) {
-    pPort->currentLogSyncInterval = dataSet->currentLogSyncInterval; 
+    pPort->currentLogSyncInterval = dataSet->currentLogSyncInterval;
   }
 
   if (dataSet->setMask & PTP_SET_CURRENT_LOG_PDELAY_REQ_INTERVAL) {
@@ -548,7 +547,7 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
 
   case IOC_PTP_GET_PATH_TRACE:
     {
-      
+
       uint32_t copyResult;
       PtpPathTrace pathTrace = {};
 
@@ -628,7 +627,7 @@ static int ptp_probe(const char *name,
     goto free;
   }
 
-  ptp->virtualAddress = 
+  ptp->virtualAddress =
     (void*) ioremap_nocache(ptp->physicalAddress, ptp->addressRangeSize);
   if(!ptp->virtualAddress) {
     returnValue = -ENOMEM;
@@ -640,7 +639,7 @@ static int ptp_probe(const char *name,
   versionMajor = ((versionWord >> REVISION_FIELD_BITS) & REVISION_FIELD_MASK);
   versionMinor = (versionWord & REVISION_FIELD_MASK);
   versionCompare = ((versionMajor << REVISION_FIELD_BITS) | versionMinor);
-  if((versionCompare < DRIVER_VERSION_MIN) | 
+  if((versionCompare < DRIVER_VERSION_MIN) |
      (versionCompare > DRIVER_VERSION_MAX)) {
     printk(KERN_INFO "%s: Found incompatible hardware version %d.%d at 0x%08X\n",
            ptp->name, versionMajor, versionMinor, (uint32_t)ptp->physicalAddress);
@@ -674,7 +673,7 @@ static int ptp_probe(const char *name,
   }
 
   /* Announce the device */
-  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d, Width %d bits\n", 
+  printk(KERN_INFO "%s: Found Lab X PTP hardware %d.%d at 0x%08X, IRQ %d, Ports %d, Width %d bits\n",
          ptp->name,
          versionMajor,
          versionMinor,
@@ -779,13 +778,13 @@ static int ptp_probe(const char *name,
            ptp->name, platformData->nominalIncrement.mantissa,
            LABX_PTP_RTC_INC_MIN, LABX_PTP_RTC_INC_MAX);
     goto unmap;
-  }    
+  }
   if((platformData->nominalIncrement.fraction & ~RTC_FRACTION_MASK) != 0) {
     returnValue = -EINVAL;
     printk(KERN_ERR "%s: Nominal RTC increment fraction (0x%08X) has > %d significant bits\n",
            ptp->name, platformData->nominalIncrement.fraction, LABX_PTP_RTC_FRACTION_BITS);
     goto unmap;
-  }    
+  }
   ptp->nominalIncrement.mantissa = platformData->nominalIncrement.mantissa;
   ptp->nominalIncrement.fraction = platformData->nominalIncrement.fraction;
 
@@ -861,13 +860,13 @@ static int ptp_probe(const char *name,
 static int ptp_remove(struct platform_device *pdev);
 
 static u32 get_u32(struct of_device *ofdev, const char *s) {
-	u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
-	if(p) {
-		return *p;
-	} else {
-		dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to 0.\n", s);
-		return 0;
-	}
+        u32 *p = (u32 *)of_get_property(ofdev->node, s, NULL);
+        if(p) {
+                return *p;
+        } else {
+                dev_warn(&ofdev->dev, "Parameter %s not found, defaulting to 0.\n", s);
+                return 0;
+        }
 }
 
 static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_device_id *match)
@@ -885,8 +884,8 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
   /* Obtain the resources for this instance */
   rc = of_address_to_resource(ofdev->node, 0, addressRange);
   if (rc) {
-	  dev_warn(&ofdev->dev,"invalid address\n");
-	  return rc;
+          dev_warn(&ofdev->dev,"invalid address\n");
+          return rc;
   }
 
   /* Get IRQ for the device */
@@ -942,29 +941,29 @@ static int __devinit ptp_of_probe(struct of_device *ofdev, const struct of_devic
 
 static int __devexit ptp_of_remove(struct of_device *dev)
 {
-	struct platform_device *pdev = to_platform_device(&dev->dev);
-	ptp_remove(pdev);
-	return(0);
+        struct platform_device *pdev = to_platform_device(&dev->dev);
+        ptp_remove(pdev);
+        return(0);
 }
 
 static struct of_device_id ptp_of_match[] = {
-	{ .compatible = "xlnx,labx-ptp-1.00.a", },
-	{ .compatible = "xlnx,labx-ptp-1.01.a", },
-	{ .compatible = "xlnx,labx-ptp-1.02.a", },
-	{ .compatible = "xlnx,labx-ptp-1.03.a", },
-	{ .compatible = "xlnx,labx-ptp-1.04.a", },
-	{ .compatible = "xlnx,labx-ptp-1.05.a", },
-	{ .compatible = "xlnx,labx-ptp-1.06.a", },
-	{ /* end of list */ },
+        { .compatible = "xlnx,labx-ptp-1.00.a", },
+        { .compatible = "xlnx,labx-ptp-1.01.a", },
+        { .compatible = "xlnx,labx-ptp-1.02.a", },
+        { .compatible = "xlnx,labx-ptp-1.03.a", },
+        { .compatible = "xlnx,labx-ptp-1.04.a", },
+        { .compatible = "xlnx,labx-ptp-1.05.a", },
+        { .compatible = "xlnx,labx-ptp-1.06.a", },
+        { /* end of list */ },
 };
 
 MODULE_DEVICE_TABLE(of, ptp_of_match);
 
 static struct of_platform_driver of_ptp_driver = {
-	.name		= DRIVER_NAME,
-	.match_table	= ptp_of_match,
-	.probe		= ptp_of_probe,
-	.remove		= __devexit_p(ptp_of_remove),
+        .name		= DRIVER_NAME,
+        .match_table	= ptp_of_match,
+        .probe		= ptp_of_probe,
+        .remove		= __devexit_p(ptp_of_remove),
 };
 #endif // CONFIG_OF
 
@@ -1061,7 +1060,7 @@ static int __init ptp_driver_init(void)
 
   /* Allocate a range of major / minor device numbers for use */
   instanceCount = 0;
-  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) { 
+  if((returnValue = register_chrdev_region(MKDEV(DRIVER_MAJOR, 0),MAX_INSTANCES, DRIVER_NAME)) < 0) {
     printk(KERN_INFO DRIVER_NAME ": Failed to allocate character device range\n");
   }
 
@@ -1116,7 +1115,7 @@ static void __exit ptp_driver_exit(void)
  * Using RGMII delay on switch IND input data
  * Using RGMII delay on switch OUTD output data
  */
- 
+
 #define CAL_ICS_CPU_PORT_0_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
                                          /*RGMII_MODE_GTXCLK_DELAY |*/ \
                                          FORCE_LINK_UP           | \
@@ -1130,7 +1129,7 @@ static void __exit ptp_driver_exit(void)
  * Using RGMII delay on switch IND input data
  * Using RGMII delay on switch OUTD output data
  */
- 
+
 #define CAL_ICS_CPU_PORT_1_PHYS_CTRL (RGMII_MODE_RXCLK_DELAY  | \
                                          /*RGMII_MODE_GTXCLK_DELAY |*/ \
                                          FORCE_LINK_UP           | \
@@ -1310,8 +1309,8 @@ static int eth_recv_fifo(void) {
 #define NUM_SRL16E_CONFIG_WORDS 8
 #define NUM_SRL16E_INSTANCES    12
 
-/* Busy loops until the match unit configuration logic is idle.  The hardware goes 
- * idle very quickly and deterministically after a configuration word is written, 
+/* Busy loops until the match unit configuration logic is idle.  The hardware goes
+ * idle very quickly and deterministically after a configuration word is written,
  * so this should not consume very much time at all.
  */
 static void wait_match_config(void) {
@@ -1392,7 +1391,7 @@ static void set_matcher_loading_mode(LoadingMode loadingMode) {
 static void clear_selected_matchers(void) {
   unsigned int addr;
   uint32_t wordIndex;
-  
+
   /* Ensure the unit(s) disable as the first word is load to prevent erronous
    * matches as the units become partially-cleared
    */
@@ -1422,7 +1421,7 @@ static void load_unified_matcher(const uint8_t matchMac[6]) {
   int32_t lutIndex;
   uint32_t configWord = 0x00000000;
   uint32_t matchChunk;
-  
+
   /* All local writes will be to the MAC filter load register */
   addr = (ETH_BASEADDR + MAC_LOAD_REG);
 
@@ -1464,7 +1463,7 @@ static void configure_mac_filter(int unitNum, const uint8_t mac[6], int mode) {
   } else {
     /* Set the loading mode to disable as we load the first word */
     set_matcher_loading_mode(LOADING_MORE_WORDS);
-      
+
     /* Calculate matching truth tables for the LUTs and load them */
     load_unified_matcher(mac);
   }
@@ -1625,7 +1624,7 @@ static void switch_frame_rx(uint8_t * data,int len) {
     switch_timestamp_t timestamps[12];
     static switch_timestamp_t prev_timestamps[12];
     int timestamps_index;
-    
+
     timestamps_index=0;
 
     /* process T1s first */
