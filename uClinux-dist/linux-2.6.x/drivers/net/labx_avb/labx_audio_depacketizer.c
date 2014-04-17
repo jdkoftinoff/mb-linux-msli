@@ -787,7 +787,7 @@ static void get_clock_recovery_info(struct audio_depacketizer *depacketizer,
   clockRecoveryInfo->dac_lock_count=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, LOCK_COUNT_REG));
   clockRecoveryInfo->dac_control=XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, clockDomain, DAC_CONTROL_REG));
 
-  if(clockRecoveryInfo->dac_lock_count & 0x80000000) {
+  if(clockRecoveryInfo->dac_lock_count & (1<<24)) {
     clockRecoveryInfo->dac_locked=true;
   } else {
     clockRecoveryInfo->dac_locked=false;
@@ -1257,6 +1257,29 @@ static int audio_depacketizer_ioctl(struct inode *inode,
     }
     break;
 
+    case IOC_SET_DAC_OFFSET:
+    {
+      ClockDomainDacOffset cddo;
+
+      if(copy_from_user(&cddo, (void __user*)arg, sizeof(cddo)) != 0) {
+        return(-EFAULT);
+      }
+
+      XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, cddo.clockDomain, DAC_OFFSET_REG), cddo.offset);
+    }
+    break;
+
+    case IOC_SET_DAC_COEFF:
+    {
+      ClockDomainDacCoeff cddc;
+
+      if(copy_from_user(&cddc, (void __user*)arg, sizeof(cddc)) != 0) {
+        return(-EFAULT);
+      }
+
+      XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, cddc.clockDomain, DAC_P_COEFF_REG), cddc.coeff);
+    }
+    break;
 
   default:
 #ifdef CONFIG_LABX_AUDIO_DEPACKETIZER_DMA

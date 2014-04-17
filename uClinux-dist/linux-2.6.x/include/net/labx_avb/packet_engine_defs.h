@@ -539,10 +539,24 @@ typedef struct {
   uint32_t dac_unlock_count;
   uint32_t dac_control;
 } ClockRecoveryInfo;
-#define IOC_GET_CLOCK_RECOVERY    _IOW(ENGINE_IOC_CHAR,                \
+#define IOC_GET_CLOCK_RECOVERY    _IOR(ENGINE_IOC_CHAR,                \
                                        (ENGINE_IOC_CLIENT_START + 11), \
-                                       ClockDomainIncrement)
+                                       ClockRecoveryInfo)
 
+typedef struct {
+  uint32_t clockDomain;
+  uint32_t offset;
+} ClockDomainDacOffset;
+#define IOC_SET_DAC_OFFSET        _IOW(ENGINE_IOC_CHAR,                \
+                                       (ENGINE_IOC_CLIENT_START + 12), \
+                                       ClockDomainDacOffset)
+typedef struct {
+  uint32_t clockDomain;
+  uint32_t coeff;
+} ClockDomainDacCoeff;
+#define IOC_SET_DAC_COEFF         _IOW(ENGINE_IOC_CHAR,                \
+                                       (ENGINE_IOC_CLIENT_START + 13), \
+                                       ClockDomainDacCoeff)
 
 /* Type definitions and macros for depacketizer microcode */
 
