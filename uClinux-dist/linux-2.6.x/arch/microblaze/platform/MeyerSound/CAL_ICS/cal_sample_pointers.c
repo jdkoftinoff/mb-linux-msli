@@ -67,6 +67,10 @@ static void reset_sample_pointers(struct sample_pointers *sample_pointers) {
   /* set all the offset to be 1 */
   for (reg = 0x14; reg < 0x26; reg++) 
     XIo_Out32(REGISTER_ADDRESS(sample_pointers, reg), 1);
+
+  XIo_Out32(REGISTER_ADDRESS(sample_pointers, 8), 0); /* AVB1 -> AES_CHANNEL_1 */
+  XIo_Out32(REGISTER_ADDRESS(sample_pointers, 9), 2); /* AVB3 -> AES_CHANNEL_2 */
+
   /* set the soft mute reg to 0, i.e., no mute */
   XIo_Out32(REGISTER_ADDRESS(sample_pointers, MUTE_CTRL_REG), 0);
   /* set the routing from the 3 ADC channels to the 3 Scarf channels */  
