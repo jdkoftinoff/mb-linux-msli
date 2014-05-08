@@ -737,6 +737,11 @@ static void get_clock_recovery_info(struct audio_depacketizer *depacketizer,
   } else {
     clockRecoveryInfo->selected_client=false;
   }
+  if(controlValue&MC_CONTROL_LOCKED) {
+    clockRecoveryInfo->locked=true;
+  } else {
+    clockRecoveryInfo->locked=false;
+  }
   if(controlValue&MC_CONTROL_SYNC_EXTERNAL) {
     clockDomainSettings->enabled=DOMAIN_SYNC;
     clockRecoveryInfo->external_sync=true;
@@ -1278,6 +1283,13 @@ static int audio_depacketizer_ioctl(struct inode *inode,
       }
 
       XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, cddc.clockDomain, DAC_P_COEFF_REG), cddc.coeff);
+    }
+    break;
+    case IOC_ARM_LOCK_MONITOR:
+    {
+        XIo_Out32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, 0, MC_CONTROL_REG),
+            (XIo_In32(CLOCK_DOMAIN_REGISTER_ADDRESS(depacketizer, 0, MC_CONTROL_REG)) & (MC_CONTROL_SAMPLE_EDGE_RISING|MC_CONTROL_SYNC_EXTERNAL))
+                |MC_CONTROL_LOCKED);
     }
     break;
 

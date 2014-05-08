@@ -521,6 +521,8 @@ typedef struct {
                                        (ENGINE_IOC_CLIENT_START + 10), \
                                        ClockDomainIncrement)
 
+#define IOC_ARM_LOCK_MONITOR       _IO(ENGINE_IOC_CHAR, ENGINE_IOC_CLIENT_START + 11)
+
 typedef struct {
   ClockDomainSettings clockDomainSettings;
   uint32_t clockDomain;
@@ -528,6 +530,7 @@ typedef struct {
   uint32_t matchUnit;
   bool has_coast_host_rtc;
   bool coasting;
+  bool locked;
   bool external_sync;
   bool nudge_enabled;
   bool rtc_increment_force;
