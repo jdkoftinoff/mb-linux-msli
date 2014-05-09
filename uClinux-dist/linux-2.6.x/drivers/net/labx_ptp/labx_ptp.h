@@ -732,7 +732,7 @@ struct ptp_device {
   /* RTC control loop persistent values */
   int64_t  integral;
   int64_t  zeroCrossingIntegral;
-  int32_t  derivative;
+  int64_t  derivative;
   int32_t  previousOffset;
   uint32_t prevBaseRtcIncrement;
   uint32_t prevAppliedRtcIncrement;
