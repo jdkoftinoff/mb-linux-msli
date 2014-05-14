@@ -794,6 +794,7 @@ struct ptp_device {
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
   uint32_t t2_prev;
   PtpTime switchDelta;
+  PtpTime switchDelta2;
 #endif
 };
 
