@@ -901,17 +901,6 @@ void labx_ptp_tx_state_task(unsigned long data) {
         case PTP_TX_SYNC_BUFFER: {
           txBuffer = get_output_buffer(ptp, i, PTP_TX_SYNC_BUFFER);
 
-          if (localMaster) {
-            /* A sync message was just transmitted; send a followup message containing the
-             * hardware-timestamped transmit time of the SYNC.
-             */
-            get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, &ptp->ports[i].syncTxTimestamp);
-            transmit_fup(ptp, i);
-          } else {
-            /* Save the sync transmit time to calculate residency time once the follow-up comes in. */
-            get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer,
-                                         &ptp->ports[i].syncTxTimestamp);
-            ptp->ports[i].syncTxLocalTimestampValid = TRUE;
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
             sequence_id=get_sequence_id(ptp, i, TRANSMITTED_PACKET, txBuffer);
             cnt1=0;
@@ -972,6 +961,38 @@ void labx_ptp_tx_state_task(unsigned long data) {
             if((cnt1!=0)||(cnt2!=0)) {
                 DEBUG_TIMESTAMP_PRINTF("G retry%d,%d\r\n",cnt1,cnt2);
             }
+#endif
+          if (localMaster) {
+            /* A sync message was just transmitted; send a followup message containing the
+             * hardware-timestamped transmit time of the SYNC.
+             */
+            get_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer, &ptp->ports[i].syncTxTimestamp);
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
+            if((sequence_id==switch_t1a.sequence_id) &&
+               (sequence_id==switch_t2a.sequence_id)) {
+              t1=(switch_t1a.high<<16)|switch_t1a.low;
+              t2=(switch_t2a.high<<16)|switch_t2a.low;
+
+              diff.secondsUpper=0;
+              diff.secondsLower=0;
+              diff.nanoseconds=(t2-t1)*8;
+              if((uint32_t)t2<(uint32_t)t1) {
+                WARN_TIMESTAMP_PRINTF("GG t2 wrapped %04x\r\n",diff.nanoseconds); 
+              }
+              timestamp_sum(&ptp->ports[i].syncTxTimestamp,&diff,&ptp->ports[i].syncTxTimestamp);
+              transmit_fup(ptp, i);
+            } else {
+              ERROR_TIMESTAMP_PRINTF("GG missed tx sync %04x:%04x instead of %04x\r\n",switch_t1a.sequence_id,switch_t2a.sequence_id,sequence_id);
+            }
+#else
+            transmit_fup(ptp, i);
+#endif
+          } else {
+            /* Save the sync transmit time to calculate residency time once the follow-up comes in. */
+            get_local_hardware_timestamp(ptp, i, TRANSMITTED_PACKET, txBuffer,
+                                         &ptp->ports[i].syncTxTimestamp);
+            ptp->ports[i].syncTxLocalTimestampValid = TRUE;
+#ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
             if((sequence_id==switch_t1a.sequence_id) &&
                (sequence_id==switch_t2a.sequence_id)) {
               t1=(switch_t1a.high<<16)|switch_t1a.low;
