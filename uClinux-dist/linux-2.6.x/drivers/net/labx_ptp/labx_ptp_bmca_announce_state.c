@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
-#define BMCA_DEBUG 1
+#define BMCA_DEBUG 2
 
 #if BMCA_DEBUG == 2
 #define BMCA_DBG(fmt, args...) printk(fmt, ##args)
@@ -119,7 +119,7 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
 
   BMCA_DBG_2("QA: SR %d\n", stepsRemoved);
 
-  if (stepsRemoved > 255) {
+  if (stepsRemoved >= 255) {
     return FALSE;
   }
 
@@ -207,6 +207,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
       pPort->infoIs                 = InfoIs_Disabled;
       pPort->reselect               = TRUE;
       pPort->selected               = FALSE;
+      pPort->syncReceiptTimeoutTime = 0xffffffff;
       memset(&pPort->portPriority, 0xFF, sizeof(PtpPriorityVector));
       break;
 
@@ -222,6 +223,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
       pPort->updtInfo         = FALSE;
       pPort->infoIs           = InfoIs_Mine;
       pPort->newInfo          = TRUE;
+      pPort->syncReceiptTimeoutTime = 0xffffffff;
       break;
 
     case PortAnnounceInformation_SUPERIOR_MASTER_PORT:
@@ -307,7 +309,7 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
           } else if (pPort->rcvdMsg && !pPort->updtInfo) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
           } else {
-            int syncTimeout = SYNC_INTERVAL_TIMED_OUT(ptp,port);
+            int syncTimeout = (pPort->syncTimeoutCounter >= pPort->syncReceiptTimeoutTime);
             int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
             if ((pPort->infoIs == InfoIs_Received) &&
                 (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
@@ -315,7 +317,7 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
 
               BMCA_DBG("Announce AGED: (announce %d >= %d || sync %dms > %dms)\n",
                 pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
-                pPort->syncTimeoutCounter*PTP_TIMER_TICK_MS,SIGNED_SHIFT(1000*pPort->syncReceiptTimeout,pPort->currentLogSyncInterval));
+                pPort->syncTimeoutCounter, pPort->syncReceiptTimeoutTime);
 
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
 
@@ -460,6 +462,23 @@ static void updtRolesTree(struct ptp_device *ptp)
           pPort->selectedRole = PTP_PASSIVE;
           pPort->updtInfo = FALSE;
         }
+    }
+
+    /* Update GM fields when transitioning to PTP_MASTER */
+    if(prevRole != PTP_MASTER && pPort->selectedRole == PTP_MASTER) {
+      ptp->lastGmTimeBaseIndicator++;
+      ptp->lastGmPhaseChange.upper = 0;
+      ptp->lastGmPhaseChange.middle = 0;
+      ptp->lastGmPhaseChange.lower = 0;
+      if(ptp->masterRateRatioValid) {
+        uint64_t result = (ptp->nominalIncrement.mantissa << RTC_MANTISSA_SHIFT) | (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
+        result = result << 33;
+        result = result / ptp->masterRateRatio;
+        result = result - (1ull << 32);
+        ptp->lastGmFreqChange = (uint32_t)(result >> 9);
+      } else {
+        ptp->lastGmFreqChange = 0;
+      }
     }
 
 #if BMCA_DEBUG

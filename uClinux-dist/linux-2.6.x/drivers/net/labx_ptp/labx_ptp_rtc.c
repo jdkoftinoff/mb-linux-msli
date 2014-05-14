@@ -142,7 +142,7 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
 static uint32_t servoCount = 0;
 #endif
 
-/* Calculate the rate ratio from the master. Note that we reuse the neighbor rate ratio 
+/* Calculate the rate ratio from the master. Note that we reuse the neighbor rate ratio
    fields from PDELAY but it is really the master we are talking to here. */
 static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
 {
@@ -165,7 +165,7 @@ static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
     timestamp_difference(&ptp->ports[port].delayReqTxLocalTimestamp, &ptp->ports[port].pdelayRespTxTimestampI, &difference2);
     timestamp_difference(&ptp->ports[port].delayReqRxTimestamp, &ptp->ports[port].pdelayRespRxTimestampI, &difference);
 
-    /* The raw differences have been computed; sanity-check the peer delay timestamps; if the 
+    /* The raw differences have been computed; sanity-check the peer delay timestamps; if the
      * initial Tx or Rx timestamp is later than the present one, the initial ones are bogus and
      * must be replaced.
      */
@@ -187,7 +187,7 @@ static void computeDelayRateRatio(struct ptp_device *ptp, uint32_t port)
         rateRatio = (nsResponder << shift) / (nsRequester >> (31-shift));
         if (((uint32_t)rateRatio < RATE_RATIO_MAX) && ((uint32_t)rateRatio > RATE_RATIO_MIN)) {
           ptp->ports[port].neighborRateRatio = (uint32_t)rateRatio;
- 
+
           ptp->ports[port].neighborRateRatioValid = TRUE;
 
           /* Master rate is the same for E2E mode */
@@ -224,7 +224,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      */
     if(ptp->ports[port].syncTimestampsValid && ptp->ports[port].delayReqTimestampsValid) {
       PtpTime difference2;
-    
+
       computeDelayRateRatio(ptp, port);
 
       /* The core of the algorithm is the calculation of the slave's offset from the
@@ -240,7 +240,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
        */
       timestamp_difference(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncTxTimestamp, &difference);
       timestamp_difference(&ptp->ports[port].delayReqTxTimestamp, &ptp->ports[port].delayReqRxTimestamp, &difference2);
-      
+
       /* The fact that this is called at all implies there's a < 1 sec slaveOffset; deal
        * strictly with nanoseconds now that the seconds have been normalized.
        */
@@ -272,7 +272,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
      * calculated (and should be pretty small.)
      */
     timestamp_difference(&ptp->ports[port].syncRxTimestamp, &ptp->ports[port].syncTxTimestamp, &difference);
-      
+
     /* The fact that this is called at all implies there's a < 1 sec slaveOffset; deal
      * strictly with nanoseconds now that the seconds have been normalized.
      */
@@ -335,7 +335,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       newRtcIncrement <<= RTC_MANTISSA_SHIFT;
       newRtcIncrement |= (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
     }
-    
+
     /* Operate in two distinct modes; a high-gain, purely-proportional control loop
      * when we're far from the master, and a more complete set of controls once we've
      * narrowed in
@@ -404,7 +404,7 @@ void rtc_update_servo(struct ptp_device *ptp, uint32_t port) {
       /* Accumulate the derivitave coefficient's contribution */
       coefficient = (int64_t) ptp->coefficients.D;
       ptp->derivative += (slaveOffset - ptp->previousOffset); /* TODO: Scale based on the time between syncs? */
-      accumulator += ((coefficient * (int64_t)ptp->derivative) >> COEFF_PRODUCT_SHIFT);
+      accumulator += ((coefficient * ptp->derivative) >> COEFF_PRODUCT_SHIFT);
       ptp->previousOffset = slaveOffset;
 
     }
