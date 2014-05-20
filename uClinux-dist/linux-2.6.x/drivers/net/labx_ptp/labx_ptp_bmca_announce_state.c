@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
-#define BMCA_DEBUG 1
+#define BMCA_DEBUG 2
 
 #if BMCA_DEBUG == 2
 #define BMCA_DBG(fmt, args...) printk(fmt, ##args)
