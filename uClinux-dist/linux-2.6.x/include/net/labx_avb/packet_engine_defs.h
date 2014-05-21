@@ -488,10 +488,10 @@ typedef struct {
                                         (ENGINE_IOC_CLIENT_START + 5), \
                                         DepacketizerCaps)
 
+#  define STREAM_STATUS_WORDS  4
 #define IOC_GET_STREAM_STATUS      _IOR(ENGINE_IOC_CHAR,               \
                                         (ENGINE_IOC_CLIENT_START + 6), \
-                                        uint32_t*)
-#  define STREAM_STATUS_WORDS  4
+                                        uint32_t[STREAM_STATUS_WORDS])
 
 /* Declarative controls for setting the RTC associated with the depacketizer as
  * being either stable or unstable.  When unstable, media clock recovery "coasts",
@@ -542,7 +542,7 @@ typedef struct {
   uint32_t dac_unlock_count;
   uint32_t dac_control;
 } ClockRecoveryInfo;
-#define IOC_GET_CLOCK_RECOVERY    _IOR(ENGINE_IOC_CHAR,                \
+#define IOC_GET_CLOCK_RECOVERY    _IOWR(ENGINE_IOC_CHAR,                \
                                        (ENGINE_IOC_CLIENT_START + 11), \
                                        ClockRecoveryInfo)
 
