@@ -569,9 +569,6 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
                (rxSequenceId == txSequenceId)))
           {
             /* Timeout or another response was received while waiting for the follow-up */
-#ifdef PATH_DELAY_DEBUG
-            printk("PDELAY: Pdelay response follow up rejected (1)");
-#endif
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
@@ -588,10 +585,6 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           {
             /* Request interval timer expired */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_SEND_PDELAY_REQ);
-#ifdef PATH_DELAY_DEBUG
-            printk("PDELAY: Interval timer expired");
-#endif
-
           }
           break;
       }
