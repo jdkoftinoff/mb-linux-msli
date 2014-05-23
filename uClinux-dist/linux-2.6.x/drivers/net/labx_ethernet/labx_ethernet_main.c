@@ -1309,8 +1309,23 @@ labx_ethtool_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *ed)
  * status reporting. ETH_GSTRING_LEN is defined in ethtool.h
  */
 #define RX_CRC_ERRS_INDEX  (0)
+#define RX_FRAMES_INDEX (1)
+#define TX_FRAMES_INDEX (2)
+#define RX_DROPPED_INDEX (3)
+#define TX_DROPPED_INDEX (4)
+#define RX_ERRORS_INDEX (5)
+#define TX_ERRORS_INDEX (6)
+#define TX_FIFO_ERRORS_INDEX (7)
+
 static char labx_ethernet_gstrings_stats[][ETH_GSTRING_LEN] = {
   "RxCrcErrors",
+  "RxFrames",
+  "TxFrames",
+  "RxDropped",
+  "TxDropped",
+  "RxErrors",
+  "TxErrors",
+  "TxFifoErrors",
 };
 
 #define LABX_ETHERNET_STATS_LEN ARRAY_SIZE(labx_ethernet_gstrings_stats)
@@ -1409,6 +1424,13 @@ static void labx_ethtool_get_stats(struct net_device *dev,
   if(InstancePtr->versionReg >= RX_CRC_ERRS_MIN_VERSION) {
     data[RX_CRC_ERRS_INDEX] = labx_eth_ReadReg(InstancePtr->Config.BaseAddress, BAD_PACKET_REG);
   } else data[RX_CRC_ERRS_INDEX] = 0ULL;
+  data[RX_FRAMES_INDEX] = lp->ndev->stats.rx_packets;
+  data[TX_FRAMES_INDEX] = lp->ndev->stats.tx_packets;
+  data[RX_DROPPED_INDEX] = lp->ndev->stats.rx_dropped;
+  data[TX_DROPPED_INDEX] = lp->ndev->stats.tx_dropped;
+  data[RX_ERRORS_INDEX] = lp->ndev->stats.rx_errors;
+  data[TX_ERRORS_INDEX] = lp->ndev->stats.tx_errors;
+  data[TX_FIFO_ERRORS_INDEX] = lp->ndev->stats.tx_fifo_errors;
 }
 
 /* ethtool operations structure */
