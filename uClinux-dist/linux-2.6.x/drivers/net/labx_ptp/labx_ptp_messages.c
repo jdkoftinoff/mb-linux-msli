@@ -747,15 +747,6 @@ void transmit_sync(struct ptp_device *ptp, uint32_t port) {
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].syncSequenceId++);
   set_log_message_interval(ptp, port, txBuffer, ptp->ports[port].currentLogSyncInterval);
 
-  /* Update the origin timestamp with the present state of the RTC */
-  get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, txBuffer, &presentTime);
-  if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
-    /* Update the origin timestamp with the present state of the RTC */
-    get_rtc_time(ptp, &presentTime);
-    set_timestamp(ptp, port, txBuffer, &presentTime);
-  }
-
   /* Update the correction field. This is always zero. */
   correctionField = (int64_t) 0;
   correctionField <<= CORRECTION_FRACTION_BITS;
