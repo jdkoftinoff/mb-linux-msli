@@ -726,9 +726,6 @@ void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   txBuffer = get_output_buffer(ptp, port, PTP_TX_ANNOUNCE_BUFFER);
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].announceSequenceId++);
 
-  /* Update the origin timestamp with the present state of the RTC */
-  get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, txBuffer, &presentTime);
   set_log_message_interval(ptp, port, txBuffer, ptp->ports[port].currentLogAnnounceInterval);
 
   /* All dynamic fields have been updated, transmit the packet */
