@@ -241,7 +241,7 @@ static void init_fup_template(struct ptp_device *ptp, uint32_t port) {
   txBuffer = get_output_buffer(ptp, port, PTP_TX_FUP_BUFFER);
   init_ptp_header(ptp, port, txBuffer, &wordOffset, MSG_FUP,
                   PTP_FUP_LENGTH + TLV_HEADER_LENGTH + FOLLOW_UP_INFORMATION_TLV_LENGTH,
-                  (uint16_t) FLAG_TWO_STEP);
+                  (uint16_t) FLAG_PTP_TIMESCALE);
 
   write_packet(txBuffer, &wordOffset, 0x00000000);
   write_packet(txBuffer, &wordOffset, 0x00000000);
