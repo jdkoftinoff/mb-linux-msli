@@ -873,10 +873,6 @@ void transmit_pdelay_request(struct ptp_device *ptp, uint32_t port) {
   /* Update the sequence ID (incremented in the pdelay state machine) */
   set_sequence_id(ptp, port, txBuffer, ptp->ports[port].pdelayReqSequenceId);
 
-  /* Update the origin timestamp with the present state of the RTC */
-  get_rtc_time(ptp, &presentTime);
-  set_timestamp(ptp, port, txBuffer, &presentTime);
-
   /* All dynamic fields have been updated, transmit the packet */
   transmit_packet(ptp, port, txBuffer);
   ptp->ports[port].stats.txPDelayRequestCount++;
