@@ -150,6 +150,38 @@ int8_t qualifyAnnounce(struct ptp_device *ptp, uint32_t port) {
   if (ptp->ports[port].selectedRole == PTP_SLAVE || ptp->ports[port].selectedRole == PTP_PASSIVE ) {
     memcpy(ptp->ports[port].pathTrace, pathTrace, sizeof(PtpClockIdentity)*pathTraceLength);
     ptp->ports[port].pathTraceLength = pathTraceLength;
+    for (i=0; i<ptp->numPorts; i++) {
+      if((i!=port) && (ptp->ports[i].selectedRole == PTP_MASTER)) { /* if the other port is master */
+        memcpy(ptp->ports[i].pathTrace, ptp->ports[port].pathTrace, sizeof(PtpClockIdentity)*ptp->ports[port].pathTraceLength);
+        ptp->ports[i].pathTraceLength = ptp->ports[port].pathTraceLength;
+        if (ptp->ports[i].pathTraceLength < PTP_MAX_PATH_TRACE) {
+          /* Add ourselves at the end if there's room. */
+          memcpy(ptp->ports[i].pathTrace + pathTraceLength, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity));
+          ptp->ports[i].pathTraceLength++;
+        }
+      }
+    }
+  } else {
+    /* copy the path trace from the slave port */
+    for (i=0; i<ptp->numPorts; i++) {
+      if((i!=port) && (ptp->ports[i].selectedRole == PTP_SLAVE)) { /* if the other port is slave */
+        memcpy(ptp->ports[port].pathTrace, ptp->ports[i].pathTrace, sizeof(PtpClockIdentity)*ptp->ports[i].pathTraceLength);
+        ptp->ports[port].pathTraceLength = ptp->ports[i].pathTraceLength;
+        if (ptp->ports[port].pathTraceLength < PTP_MAX_PATH_TRACE) {
+          /* Add ourselves at the end if there's room. */
+          memcpy(ptp->ports[port].pathTrace + pathTraceLength, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity));
+          ptp->ports[port].pathTraceLength++;
+        }
+        break;
+      }
+    }
+    /* if there were no slaves, clear path traces */
+    if(i==ptp->numPorts) {
+      for (i=0; i<ptp->numPorts; i++) {
+        memcpy(ptp->ports[i].pathTrace, ptp->systemPriority.sourcePortIdentity.clockIdentity, sizeof(PtpClockIdentity));
+        ptp->ports[i].pathTraceLength=1;
+      }
+    }
   }
 
   return TRUE;
