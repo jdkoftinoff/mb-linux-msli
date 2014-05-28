@@ -65,8 +65,17 @@ void set_rtc_time_adjusted(struct ptp_device *ptp, PtpTime *time, PtpTime *entry
 
 /* Updates lock detection metrics */
 void update_rtc_lock_detect(struct ptp_device *ptp) {
+  int i;
   int32_t lockRangeSigned    = (int32_t) ptp->properties.lockRangeNsec;
   int32_t unlockThreshSigned = (int32_t) ptp->properties.unlockThreshNsec;
+
+  for (i=0; i<ptp->numPorts; i++) { /* check if at least one port is enabled */
+      if( (ptp->ports[i].portEnabled == TRUE) &&
+          (ptp->ports[i].pttPortEnabled == TRUE) &&
+          (ptp->ports[i].asCapable == TRUE) ) {
+            break;
+      }
+  }
 
   /* Determine whether we are looking for transition to lock or unlock.
    * In either case, we use valid slave offsets to determine whether we're
@@ -75,8 +84,9 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
   if(ptp->rtcLockState == PTP_RTC_UNLOCKED) {
     /* RTC is unlocked, try to acquire lock.  If we don't have a valid RTC
      * offset, we can't move forward in attempting to lock, and should reset.
+     * Also, leave unlocked if no ports are enabled and asCapable.
      */
-    if(ptp->rtcLastOffsetValid == PTP_RTC_OFFSET_VALID) {
+    if((ptp->rtcLastOffsetValid == PTP_RTC_OFFSET_VALID) && (i!=ptp->numPorts)) {
 
       /* See if the offset lies within our lock range and, if so, whether it has
        * been so for long enough.
@@ -92,6 +102,10 @@ void update_rtc_lock_detect(struct ptp_device *ptp) {
       } else ptp->rtcLockCounter = 0;
     } else ptp->rtcLockCounter = 0;
   } else {
+    if(i==ptp->numPorts) { /* force unlocked state if no ports are enabled */
+      ptp->rtcLockState   = PTP_RTC_UNLOCKED;
+      ptp->rtcLockCounter = 0;
+    }
     /* RTC is already locked, see if we need to become unlocked.  If the last
      * offset is valid, we can proceed to examining its value.
      * TODO: Should we check to make sure we aren't getting an ongoing burst of
