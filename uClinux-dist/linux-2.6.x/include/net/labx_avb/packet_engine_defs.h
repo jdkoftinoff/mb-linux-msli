@@ -521,8 +521,6 @@ typedef struct {
                                        (ENGINE_IOC_CLIENT_START + 10), \
                                        ClockDomainIncrement)
 
-#define IOC_ARM_LOCK_MONITOR       _IO(ENGINE_IOC_CHAR, ENGINE_IOC_CLIENT_START + 11)
-
 typedef struct {
   ClockDomainSettings clockDomainSettings;
   uint32_t clockDomain;
@@ -560,6 +558,8 @@ typedef struct {
 #define IOC_SET_DAC_COEFF         _IOW(ENGINE_IOC_CHAR,                \
                                        (ENGINE_IOC_CLIENT_START + 13), \
                                        ClockDomainDacCoeff)
+
+#define IOC_ARM_LOCK_MONITOR       _IO(ENGINE_IOC_CHAR, ENGINE_IOC_CLIENT_START + 14)
 
 /* Type definitions and macros for depacketizer microcode */
 
