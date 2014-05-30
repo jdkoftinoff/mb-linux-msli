@@ -414,9 +414,9 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute masterPriority vectors and assign port roles*/
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-#if BMCA_DEBUG
+
     uint32_t prevRole = pPort->selectedRole;
-#endif
+
 
     /* masterPriority */
     memcpy(&pPort->masterPriority, ptp->gmPriority, sizeof(PtpPriorityVector));
