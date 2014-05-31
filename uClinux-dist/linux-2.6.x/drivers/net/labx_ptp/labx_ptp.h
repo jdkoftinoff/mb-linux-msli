@@ -35,6 +35,15 @@
 #include <linux/netdevice.h>
 #include <net/labx_ptp/labx_ptp_defs.h>
 
+#define PATH_DELAY_DEBUG
+#define DEBUG_TIMESTAMPS
+#define WARN_TIMESTAMPS
+#define ERROR_TIMESTAMPS
+
+// Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
+#define BMCA_DEBUG 2
+
+
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
 #define POLL_MARVELL_TIMESTAMPS() switch_timestamp_poll()
 #define WAIT_MARVELL_TIMESTAMPS() switch_timestamp_wait()
@@ -194,10 +203,6 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
     time->high=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
     time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
 }
-
-//#define DEBUG_TIMESTAMPS
-//#define WARN_TIMESTAMPS
-#define ERROR_TIMESTAMPS
 
 
 #ifdef DEBUG_TIMESTAMPS
@@ -947,7 +952,6 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
 #endif
 
 
-//#define PATH_DELAY_DEBUG
 
 #ifdef PATH_DELAY_DEBUG
 #define PTP_CLOCK_IDENTITY_CHARS 8
