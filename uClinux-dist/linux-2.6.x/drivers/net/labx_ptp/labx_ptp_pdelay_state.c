@@ -529,6 +529,10 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           {
             /* We didn't see a timestamp for some reason (this can happen on startup sometimes) */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+#ifdef PATH_DELAY_DEBUG
+            printk("ptp: We didn't see a timestamp for some reason\n", port);
+#endif
+
           }
           break;
 
@@ -570,6 +574,9 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           {
             /* Timeout or another response was received while waiting for the follow-up */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+#ifdef PATH_DELAY_DEBUG
+            printk("ptp: Timeout or another response was received while waiting for the follow-up: %d %d\n",(ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port),(ptp->ports[port].rcvdPdelayResp);
+#endif
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
                    (rxFUPSequenceId == txFUPSequenceId) &&
