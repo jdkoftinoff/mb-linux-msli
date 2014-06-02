@@ -93,7 +93,7 @@ void labx_ptp_timer_state_task(unsigned long data) {
 
         /* If we are the grandmaster send sync messages as long as it is after an announce. If we are not,
            we will forward sync/fup messages when we receive them from the GM. */
-        if (localMaster && ptp->ports[i]->firstAnnounceSent==TRUE) {
+        if (localMaster && ptp->ports[i].firstAnnounceSent==TRUE) {
           /* Set the source port ID back to this node when we are the GM */
           memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
           ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
