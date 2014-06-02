@@ -464,6 +464,8 @@ static void updtRolesTree(struct ptp_device *ptp)
 
     /* Update GM fields when transitioning to PTP_MASTER */
     if(prevRole != PTP_MASTER && pPort->selectedRole == PTP_MASTER) {
+      /* Clear the firstAnnounceSent field so that we do not transmit a SYNC until after our first announce is sent */
+      pPort->firstAnnounceSent=FALSE;
       ptp->lastGmTimeBaseIndicator++;
       ptp->lastGmPhaseChange.upper = 0;
       ptp->lastGmPhaseChange.middle = 0;
@@ -477,6 +479,10 @@ static void updtRolesTree(struct ptp_device *ptp)
       } else {
         ptp->lastGmFreqChange = 0;
       }
+    }
+    /* clear firstAnnounceSent if we transition away from PTP_MASTER so that we do not send SYNC until after we transition back and send an Announce */
+    if( pPort->selectedRole != PTP_MASTER ) {
+        pPort->firstAnnounceSent=FALSE;
     }
 
 #if BMCA_DEBUG

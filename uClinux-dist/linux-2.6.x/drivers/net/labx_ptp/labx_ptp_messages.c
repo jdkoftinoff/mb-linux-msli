@@ -718,6 +718,10 @@ void print_packet_buffer(struct ptp_device *ptp,
 void transmit_announce(struct ptp_device *ptp, uint32_t port) {
   PtpTime presentTime;
   uint8_t *txBuffer;
+  struct ptp_port *pPort = &ptp->ports[port];
+
+  /* Note that we actually sent an announce so this will un-gate the sending of SYNC */
+  pPort->firstAnnounceSent=TRUE;
 
   /* Update with the current GM info and path vector */
   init_announce_template(ptp, port, ptp->gmPriority);

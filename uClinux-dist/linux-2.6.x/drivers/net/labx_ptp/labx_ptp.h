@@ -674,6 +674,9 @@ struct ptp_port {
   /* sync/fup response variables */
   uint8_t syncSourcePortId[PORT_ID_BYTES];
 
+  /* Keep track of the number of announces actually sent since the last time we transitioned to master role */
+  int firstAnnounceSent;
+
   /* Timer state space */
   uint32_t announceCounter;
   uint16_t announceSequenceId;

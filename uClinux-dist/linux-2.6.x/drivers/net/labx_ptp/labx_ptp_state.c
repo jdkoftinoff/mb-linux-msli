@@ -91,9 +91,9 @@ void labx_ptp_timer_state_task(unsigned long data) {
       if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
         ptp->ports[i].syncCounter = 0;
 
-        /* If we are the grandmaster send sync messages. If we are not,
+        /* If we are the grandmaster send sync messages as long as it is after an announce. If we are not,
            we will forward sync/fup messages when we receive them from the GM. */
-        if (localMaster) {
+        if (localMaster && ptp->ports[i]->firstAnnounceSent==TRUE) {
           /* Set the source port ID back to this node when we are the GM */
           memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
           ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
@@ -521,12 +521,15 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
         linkDelay.secondsLower = 0;
         linkDelay.nanoseconds = ptp->ports[port].neighborPropDelay;
         for (i=0; i<ptp->numPorts; i++) {
-          if (ptp->ports[i].selectedRole == PTP_MASTER) {
+          if (ptp->ports[i].selectedRole == PTP_MASTER ) {
             // Save the received time (with link delay) for later calculation of residency time
             timestamp_difference(&syncRxTimestamp, &linkDelay, &ptp->ports[i].syncRxTimestamp);
             get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, &ptp->ports[i].syncSourcePortId[0]);
             ptp->ports[i].syncSequenceId = ptp->ports[port].syncSequenceId;
-            transmit_sync(ptp, i);
+            /* actually send the sync only if an announce has been sent */
+            if( ptp->ports[port]->firstAnnounceSent ) {
+                transmit_sync(ptp, i);
+            }
           }
         }
       }
@@ -1191,6 +1194,7 @@ void init_state_machines(struct ptp_device *ptp) {
   for(i=0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
 
+    pPort->firstAnnounceSent   = FALSE;
     pPort->announceCounter     = 0;
     pPort->announceSequenceId  = 0x0000;
     pPort->syncCounter         = 0;
