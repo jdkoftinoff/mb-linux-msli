@@ -37,7 +37,7 @@ static void computePdelayRateRatio(struct ptp_device *ptp, uint32_t port)
   {
     /* Capture the initial PDELAY response */
     ptp->ports[port].initPdelayRespReceived = TRUE;
-    ptp->ports[port].neighborRateRatioValid = FALSE;
+    ptp->ports[port].neighborRateRatioValid = ptp->ports[port].isMeasuringDelay;
     ptp->ports[port].pdelayRespTxTimestampI = ptp->ports[port].pdelayRespTxTimestamp;
     ptp->ports[port].pdelayRespRxTimestampI = ptp->ports[port].pdelayRespRxTimestamp;
   }
