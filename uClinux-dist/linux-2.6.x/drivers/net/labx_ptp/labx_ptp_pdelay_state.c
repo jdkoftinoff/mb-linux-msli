@@ -162,6 +162,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       break;
 
     case MDPdelayReq_RESET:
+      ptp->ports[port].mdPdelayReq_LastTime = 0;
       ptp->ports[port].initPdelayRespReceived = FALSE;
       ptp->ports[port].rcvdPdelayResp = FALSE;
       ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;

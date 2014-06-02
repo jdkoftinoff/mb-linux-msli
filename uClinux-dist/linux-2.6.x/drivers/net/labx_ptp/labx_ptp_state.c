@@ -184,6 +184,7 @@ void labx_ptp_timer_state_task(unsigned long data) {
      * counter and see if it's time to send one to our link peer.
      */
     ptp->ports[i].pdelayIntervalTimer += timerTicks;
+    ptp->ports[i].mdPdelayReq_LastTime += timerTicks;
 
     MDPdelayReq_StateMachine(ptp, i);
 
@@ -769,7 +770,12 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t
    */
   get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, (uint8_t*)&rxIdentity);
   if (0 != compare_clock_identity(rxIdentity.clockIdentity, ptp->systemPriority.rootSystemIdentity.clockIdentity)) {
-    transmit_pdelay_response(ptp, port, rxBuffer);
+      /* ignore any pdelay request that happens faster that 800 ms since the last one. Allow first pdelay requests in. */
+      if( ptp->ports[port].mdPdelayReq_LastTime >= (800 / PTP_TIMER_TICK_MS) || ptp->ports[port].mdPdelayReq_LastTime==0) {  
+          ptp->ports[port].mdPdelayReq_LastTime = PTP_TIMER_TICK_MS; /* Make sure next pdelay request is skipped unless it comes in later */
+          transmit_pdelay_response(ptp, port, rxBuffer);
+      }
+    }
   } else {
     uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
     printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
@@ -1227,6 +1233,7 @@ void init_state_machines(struct ptp_device *ptp) {
 
     /* peer delay request state machine initialization */
     pPort->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
+    pPort->mdPdelayReq_LastTime = 0;
     pPort->allowedLostResponses = 3;
     /* Recommended value in 802.1AS/COR1 is 800ns for copper. Add 400ns to allow
        use of the nTap and still come up as asCapable. */

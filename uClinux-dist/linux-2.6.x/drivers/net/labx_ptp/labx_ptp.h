@@ -626,6 +626,7 @@ struct ptp_port {
   /* 802.1AS Peer-to-peer delay mechanism variables (11.2.15.1) */
   MDPdelayReq_State_t mdPdelayReq_State;
 
+  uint32_t mdPdelayReq_LastTime;
   uint32_t pdelayIntervalTimer;
   uint32_t rcvdPdelayResp;
   uint8_t *rcvdPdelayRespPtr;
