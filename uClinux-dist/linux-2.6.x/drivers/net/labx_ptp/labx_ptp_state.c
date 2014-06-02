@@ -528,7 +528,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
             get_source_port_id(ptp, port, RECEIVED_PACKET, rxBuffer, &ptp->ports[i].syncSourcePortId[0]);
             ptp->ports[i].syncSequenceId = ptp->ports[port].syncSequenceId;
             /* actually send the sync only if an announce has been sent */
-            if( ptp->ports[port]->firstAnnounceSent ) {
+            if( ptp->ports[port].firstAnnounceSent ) {
                 transmit_sync(ptp, i);
             }
           }
@@ -775,8 +775,7 @@ static void process_rx_pdelay_req(struct ptp_device *ptp, uint32_t port, uint8_t
           ptp->ports[port].mdPdelayReq_LastTime = PTP_TIMER_TICK_MS; /* Make sure next pdelay request is skipped unless it comes in later */
           transmit_pdelay_response(ptp, port, rxBuffer);
       }
-    }
-  } else {
+   } else {
     uint16_t rxPortNumber = get_port_number(rxIdentity.portNumber);
     printk("Disabling AS on ports %d and %d due to receipt of our own pdelay.\n", port+1, rxPortNumber);
     ptp->ports[port].portEnabled = FALSE;
