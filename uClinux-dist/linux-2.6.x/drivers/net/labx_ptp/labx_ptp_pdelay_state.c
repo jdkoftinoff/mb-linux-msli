@@ -543,12 +543,16 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
             printk("Resetting %d: intervalTimer %d, reqInterval %d, rcvdPdelayResp %d, rcvdPdelayRespPtr %p, rxSequence %d, txSequence %d\n",
               port, ptp->ports[port].pdelayIntervalTimer, PDELAY_REQ_INTERVAL_TICKS(ptp, port), ptp->ports[port].rcvdPdelayResp,
               ptp->ports[port].rcvdPdelayRespPtr, rxSequenceId, txSequenceId);
-            printk("rxRequestingPortID:");
-            for (i=0; i<PORT_ID_BYTES; i++) printk("%02X", rxRequestingPortId[i]);
-            printk("\n");
-            printk("txRequestingPortID:");
-            for (i=0; i<PORT_ID_BYTES; i++) printk("%02X", txRequestingPortId[i]);
-            printk("\n");
+            printk("rxRequestingPortID: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n", 
+                   rxRequestingPortId[0], rxRequestingPortId[1], 
+                   rxRequestingPortId[2], rxRequestingPortId[3], 
+                   rxRequestingPortId[4], rxRequestingPortId[5], 
+                   rxRequestingPortId[6], rxRequestingPortId[7] );
+            printk("txRequestingPortID: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n", 
+                   txRequestingPortId[0], txRequestingPortId[1], 
+                   txRequestingPortId[2], txRequestingPortId[3], 
+                   txRequestingPortId[4], txRequestingPortId[5], 
+                   txRequestingPortId[6], txRequestingPortId[7] );
 #endif
 
             /* Timeout or a non-matching response was received */
