@@ -186,7 +186,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
         ptp->ports[port].multiplePdelayResponses = 0;
       } else if (ptp->ports[port].pdelayResponses > 1) {
         ptp->ports[port].multiplePdelayResponses++;
-        if (ptp->ports[port].multiplePdelayResponses >= 3) {
+        if (ptp->ports[port].multiplePdelayResponses >= 2) {
           ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
           printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
