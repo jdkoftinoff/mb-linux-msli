@@ -180,7 +180,8 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
     case MDPdelayReq_SEND_PDELAY_REQ:
       ptp->ports[port].pdelayReqSequenceId++;
       transmit_pdelay_request(ptp, port);
-      ptp->ports[port].pdelayIntervalTimer = 0; // currentTime ("now" is zero ticks)
+      /* toggle between N ticks and N+1 ticks for pdelay request so it averages to the half way point */
+      ptp->ports[port].pdelayIntervalTimer = (ptp->ports[port].pdelayReqSequenceId&1); // currentTime ("now" is zero ticks)
 
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
       if (ptp->ports[port].pdelayResponses == 1) {
