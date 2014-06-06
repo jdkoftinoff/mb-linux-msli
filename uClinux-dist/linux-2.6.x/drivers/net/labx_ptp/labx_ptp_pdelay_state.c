@@ -111,6 +111,7 @@ static void computePropTime(struct ptp_device *ptp, uint32_t port)
 
     ptp->ports[port].neighborPropDelay = (((((uint64_t)ptp->ports[port].neighborRateRatio) * nsRequester) >> 31) - nsResponder) >> 1;
 
+    ptp->ports[port].neighborPropDelay += 48;
 #ifdef PATH_DELAY_DEBUG
     printk("Responder delta: %08X%08X.%08X (%llu ns)\n", difference.secondsUpper,
       difference.secondsLower, difference.nanoseconds, nsResponder);
