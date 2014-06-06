@@ -190,18 +190,18 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
         ptp->ports[port].pdelayResponses = 0;
       } else if (ptp->ports[port].pdelayResponses ==2 ) {
 #ifdef PATH_DELAY_DEBUG
-          printk("Seeing two pdelay responses (%d %d).\n",
+          printk("AS Port %d Seeing two pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
       }
-      else if (ptp->ports[port].pdelayResponses > 2) {
+      else
+      if (ptp->ports[port].pdelayResponses > 2) {
           ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
 #ifdef PATH_DELAY_DEBUG
           printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
           ptp->ports[port].portEnabled = FALSE;
-        }
       }
       break;
 
