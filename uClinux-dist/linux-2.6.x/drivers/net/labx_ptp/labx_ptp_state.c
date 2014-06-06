@@ -199,7 +199,7 @@ void labx_ptp_timer_state_task(unsigned long data) {
       else {
         ptp->ports[i].multiplePdelayTimer = 0;
         ptp->ports[i].portEnabled = TRUE;
-        printk("Re-enabled ptp on port %d after 5 minutes\n", i+1, rxPortNumber);
+        printk("Re-enabled ptp on port %d after 5 minutes\n", i+1);
       }
     }
   }
