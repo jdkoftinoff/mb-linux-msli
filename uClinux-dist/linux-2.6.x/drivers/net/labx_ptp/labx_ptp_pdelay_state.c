@@ -382,12 +382,6 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       get_timestamp(ptp, port, RECEIVED_PACKET, ptp->ports[port].rcvdPdelayRespFollowUpPtr,
         &ptp->ports[port].pdelayRespTxTimestamp);
 
-      /* Hack lower seconds count if test equipment has broken seconds timestamping */
-      if(ptp->ports[port].pdelayRespRxTimestamp.secondsLower+1 == ptp->ports[port].pdelayReqRxTimestamp )
-      {
-        ptp->ports[port].pdelayRespRxTimestamp.secondsLower++;
-      }
-
       if (ptp->ports[port].computeNeighborRateRatio)
       {
         computePdelayRateRatio(ptp, port);
