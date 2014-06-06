@@ -184,16 +184,22 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
       if (ptp->ports[port].pdelayResponses == 1) {
         ptp->ports[port].multiplePdelayResponses = 0;
-      } else if (ptp->ports[port].pdelayResponses > 1) {
-        ptp->ports[port].multiplePdelayResponses++;
-        if (ptp->ports[port].multiplePdelayResponses >= 2) {
-          ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
-          printk("Disabling AS on port %d due to multiple pdelay responses (%d %d).\n",
+        ptp->ports[port].pdelayResponses = 0;
+      } else if (ptp->ports[port].pdelayResponses ==2 ) {
+#ifdef PATH_DELAY_DEBUG
+          printk("Seeing two pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+#endif
+      }
+      else if (ptp->ports[port].pdelayResponses > 2) {
+          ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
+#ifdef PATH_DELAY_DEBUG
+          printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
+            port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+#endif
           ptp->ports[port].portEnabled = FALSE;
         }
       }
-      ptp->ports[port].pdelayResponses = 0;
       break;
 
     case MDPdelayReq_WAITING_FOR_PDELAY_RESP:
@@ -537,14 +543,23 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           break;
 
         case MDPdelayReq_WAITING_FOR_PDELAY_RESP:
-          if ((ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port)) ||
-              (ptp->ports[port].rcvdPdelayResp &&
+          if ((ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port)))
+          {
+#ifdef PATH_DELAY_DEBUG
+            int i;
+            printk("AS: Timeout - Resetting %d, %d, %d\n",
+              port, ptp->ports[port].pdelayIntervalTimer, PDELAY_REQ_INTERVAL_TICKS(ptp, port) );
+#endif
+
+            /* Timeout */
+            MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+          } else if ((ptp->ports[port].rcvdPdelayResp &&
                ((compare_port_ids(rxRequestingPortId, txRequestingPortId) != 0) ||
                 (rxSequenceId != txSequenceId))))
           {
 #ifdef PATH_DELAY_DEBUG
             int i;
-            printk("Resetting %d: intervalTimer %d, reqInterval %d, rcvdPdelayResp %d, rcvdPdelayRespPtr %p, rxSequence %d, txSequence %d\n",
+            printk("No Match: Resetting %d: intervalTimer %d, reqInterval %d, rcvdPdelayResp %d, rcvdPdelayRespPtr %p, rxSequence %d, txSequence %d\n",
               port, ptp->ports[port].pdelayIntervalTimer, PDELAY_REQ_INTERVAL_TICKS(ptp, port), ptp->ports[port].rcvdPdelayResp,
               ptp->ports[port].rcvdPdelayRespPtr, rxSequenceId, txSequenceId);
             printk("rxRequestingPortID: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n", 
@@ -559,13 +574,14 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
                    txRequestingPortId[6], txRequestingPortId[7] );
 #endif
 
-            /* Timeout or a non-matching response was received */
-            MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+            /* Non-matching response was received */
+            ptp->ports[port].pdelayResponses++;
           }
           else if (ptp->ports[port].rcvdPdelayResp &&
                    (rxSequenceId == txSequenceId) &&
                    (compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0))
           {
+            ptp->ports[port].pdelayResponses++;
             /* A matching response was received */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP);
           }
