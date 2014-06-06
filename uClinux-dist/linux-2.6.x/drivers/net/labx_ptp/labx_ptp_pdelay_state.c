@@ -383,7 +383,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
         &ptp->ports[port].pdelayRespTxTimestamp);
 
       /* Hack lower seconds count if test equipment has broken seconds timestamping */
-      if(ptp->ports[port].pdelayRespRxTimestamp.secondsLower+1 == ptp->ports[port].pdelayReqRxTimestamp )
+      if(ptp->ports[port].pdelayRespRxTimestamp.secondsLower+1 == ptp->ports[port].pdelayReqRxTimestamp.secondsLower )
       {
         ptp->ports[port].pdelayRespRxTimestamp.secondsLower++;
       }
