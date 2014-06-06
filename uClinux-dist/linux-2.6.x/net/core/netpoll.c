@@ -320,7 +320,7 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	struct sk_buff *skb;
 	struct ethhdr *eth;
 	int log_level=0;
-	static const uint8_t dst[6] = { 0x91, 0xe0, 0xf0, 0x01, 0x00, 0x00 };
+	static const uint8_t dst[6] = { 0x91, 0xe0, 0xf0, 0x01, 0x00, 0x01 };
 
 
 	skb = find_skb(np,NET_IP_ALIGN+ETH_HLEN+sizeof(frame_template_17221)+len,NET_IP_ALIGN+ETH_HLEN+sizeof(frame_template_17221));
