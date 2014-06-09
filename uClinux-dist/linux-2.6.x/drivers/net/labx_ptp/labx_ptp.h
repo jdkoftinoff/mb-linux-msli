@@ -947,7 +947,7 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
 #endif
 
 
-//#define PATH_DELAY_DEBUG
+#define PATH_DELAY_DEBUG
 
 #ifdef PATH_DELAY_DEBUG
 #define PTP_CLOCK_IDENTITY_CHARS 8
