@@ -182,10 +182,14 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].pdelayIntervalTimer = 0; // currentTime ("now" is zero ticks)
 
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
-      if (ptp->ports[port].pdelayResponses == 1) {
+      if (ptp->ports[port].pdelayResponses == 0 || ptp->ports[port].pdelayResponses == 1) {
+        /* got no responses or only 1 response since last send time time so clear state and count */
         ptp->ports[port].multiplePdelayResponses = 0;
         ptp->ports[port].pdelayResponses = 0;
       } else if (ptp->ports[port].pdelayResponses ==2 ) {
+          /* got 2 responses since last send, this is acceptable */
+          ptp->ports[port].multiplePdelayResponses = 0;
+          ptp->ports[port].pdelayResponses = 0;
 #ifdef PATH_DELAY_DEBUG
           printk("AS Port %d Seeing two pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
@@ -198,6 +202,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
           printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
+          ptp->ports[port].pdelayResponses = 0;
           ptp->ports[port].portEnabled = FALSE;
       }
       break;
@@ -573,21 +578,18 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
                    txRequestingPortId[4], txRequestingPortId[5], 
                    txRequestingPortId[6], txRequestingPortId[7] );
 #endif
-
-            /* Non-matching response was received */
-            ptp->ports[port].pdelayResponses++;
           }
           else if (ptp->ports[port].rcvdPdelayResp &&
                    (rxSequenceId == txSequenceId) &&
                    (compare_port_ids(rxRequestingPortId, txRequestingPortId) == 0))
           {
-            ptp->ports[port].pdelayResponses++;
             /* A matching response was received */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP);
           }
           break;
 
         case MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP:
+
           if ((ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port)) ||
               (ptp->ports[port].rcvdPdelayResp &&
                (rxSequenceId == txSequenceId)))
