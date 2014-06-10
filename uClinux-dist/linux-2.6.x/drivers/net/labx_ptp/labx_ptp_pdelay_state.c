@@ -169,7 +169,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       {
         ptp->ports[port].lostResponses++;
 #ifdef PATH_DELAY_DEBUG
-        printk("lostResponses=%d",ptp-ports[port].lostResponses);
+        printk("lostResponses=%d",ptp->ports[port].lostResponses);
 #endif
       }
       else
