@@ -176,6 +176,11 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       {
         ptp->ports[port].isMeasuringDelay = FALSE;
         ptp->ports[port].asCapable = FALSE;
+        /* Force neighborPropDelay to out of threshold to avoid accidentally going back to asCapable too soon */
+        ptp->ports[port].neighborPropDelay = ptp->ports[port].neighborPropDelayThresh+1;
+#ifdef PATH_DELAY_DEBUG
+        printk("Too many lost response lostResponses=%d",ptp->ports[port].lostResponses);
+#endif
       }
       break;
 
@@ -413,13 +418,14 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
         printk("AS CHECK: pd %d, pdt %d, pidc %d, nrrv %d\n", ptp->ports[port].neighborPropDelay,
           ptp->ports[port].neighborPropDelayThresh, compare_clock_identity(rxSourcePortId, ptp->properties.grandmasterIdentity),
           ptp->ports[port].neighborRateRatioValid);
-
+/*
         printk("AS CHECK: rxSourcePortID:");
         for (i=0; i<PORT_ID_BYTES; i++) printk("%02X", rxSourcePortId[i]);
         printk("\n");
         printk("AS CHECK: thisClock:     ");
         for (i=0; i<PTP_CLOCK_IDENTITY_CHARS; i++) printk("%02X", ptp->properties.grandmasterIdentity[i]);
         printk("\n");
+*/
       }
 #endif
 
@@ -428,6 +434,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
           (compare_clock_identity(rxSourcePortId, ptp->properties.grandmasterIdentity) != 0) &&
           ptp->ports[port].neighborRateRatioValid)
       {
+        printk("pDelay good, vrr, set asCapable=TRUE\n");
         ptp->ports[port].asCapable = TRUE;
       }
       else
@@ -592,16 +599,30 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           break;
 
         case MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP:
+          if(ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port) ) {
+              /* Timeout while waiting for the follow-up */
+              MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
 
-          if ((ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port)) ||
-              (ptp->ports[port].rcvdPdelayResp &&
+  #ifdef PATH_DELAY_DEBUG
+              printk("ptp: Timeout while waiting for the follow-up: \n" );
+  #endif
+          }
+          else if ((ptp->ports[port].rcvdPdelayResp &&
                (rxSequenceId == txSequenceId)))
           {
-            /* Timeout or another response was received while waiting for the follow-up */
+            /* Another response was received while waiting for the follow-up */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+
 #ifdef PATH_DELAY_DEBUG
-            printk("ptp: Timeout or another response was received while waiting for the follow-up: %d %d\n",(ptp->ports[port].pdelayIntervalTimer >= PDELAY_REQ_INTERVAL_TICKS(ptp, port),(ptp->ports[port].rcvdPdelayResp) ));
+            printk("ptp: Another response was received while waiting for the follow-up\n" );
 #endif
+            ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
+  #ifdef PATH_DELAY_DEBUG
+            printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
+              port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+  #endif
+            ptp->ports[port].pdelayResponses = 0;
+            ptp->ports[port].portEnabled = FALSE;
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
                    (rxFUPSequenceId == txFUPSequenceId) &&
