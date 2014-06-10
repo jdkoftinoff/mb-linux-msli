@@ -309,15 +309,15 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
           } else if (pPort->rcvdMsg && !pPort->updtInfo) {
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
           } else {
-            int syncTimeout = (pPort->syncTimeoutCounter >= pPort->syncReceiptTimeoutTime);
-            int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
+            int syncTimeout = SYNC_INTERVAL_TIMED_OUT(ptp,port);
+            int announceTimeout = ANNOUNCE_INTERVAL_TIMED_OUT(ptp,port);
             if ((pPort->infoIs == InfoIs_Received) &&
                 (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
                 !pPort->updtInfo && !pPort->rcvdMsg) {
 
-              BMCA_DBG("Announce AGED: (announce %d >= %d || sync %dms > %dms)\n",
-                pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
-                pPort->syncTimeoutCounter, pPort->syncReceiptTimeoutTime);
+              BMCA_DBG("Announce AGED: (announce %dms > %dms || sync %dms > %dms)\n",
+                pPort->announceTimeoutCounter*PTP_TIMER_TICK_MS, (ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout) * PTP_TIMER_TICK_MS,
+                pPort->syncTimeoutCounter*PTP_TIMER_TICK_MS, pPort->syncReceiptTimeoutTime*PTP_TIMER_TICK_MS);
 
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);
 

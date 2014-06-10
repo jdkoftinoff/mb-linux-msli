@@ -479,8 +479,11 @@ typedef enum { PortRoleSelection_INIT_BRIDGE, PortRoleSelection_ROLE_SELECTION
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogAnnounceInterval))
 #define SYNC_INTERVAL_TICKS(ptp, port)       \
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogSyncInterval))
-#define SYNC_INTERVAL_TIMED_OUT(ptp, port)       \
-  (((ptp)->ports[(port)].syncTimeoutCounter*PTP_TIMER_TICK_MS)>(SIGNED_SHIFT(1000*(ptp)->ports[(port)].syncReceiptTimeout,((ptp)->ports[(port)].currentLogSyncInterval))))
+#define ANNOUNCE_INTERVAL_TIMED_OUT(ptp,port) \
+  ((pPort->announceTimeoutCounter*PTP_TIMER_TICK_MS) > SIGNED_SHIFT(1000*(ptp)->ports[(port)].announceReceiptTimeout,((ptp)->ports[(port)].currentLogAnnounceInterval)))
+#define SYNC_INTERVAL_TIMED_OUT(ptp, port) \
+  /* temporarily allow up to +50% */ \
+  (((ptp)->ports[(port)].syncTimeoutCounter*PTP_TIMER_TICK_MS) > (((SIGNED_SHIFT(1000*(ptp)->ports[(port)].syncReceiptTimeout,((ptp)->ports[(port)].currentLogSyncInterval)))*3)/2))
 #define PDELAY_REQ_INTERVAL_TICKS(ptp, port) \
   SIGNED_SHIFT((1000/PTP_TIMER_TICK_MS), ((ptp)->ports[(port)].currentLogPdelayReqInterval))
 
