@@ -165,7 +165,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].initPdelayRespReceived = FALSE;
       ptp->ports[port].rcvdPdelayResp = FALSE;
       ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;
-      if (ptp->ports[port].lostResponses <= ptp->ports[port].allowedLostResponses)
+      if (ptp->ports[port].lostResponses < ptp->ports[port].allowedLostResponses)
       {
         ptp->ports[port].lostResponses++;
 #ifdef PATH_DELAY_DEBUG
