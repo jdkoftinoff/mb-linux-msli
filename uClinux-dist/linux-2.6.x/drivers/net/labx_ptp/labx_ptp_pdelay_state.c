@@ -456,6 +456,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
     return;
   }
 
+
 //  printk("PTP IDX %d, PE %d, PTTE %d, PDIT %d, PDRI %d\n", port, ptp->ports[port].portEnabled,
 //    ptp->ports[port].pttPortEnabled, ptp->ports[port].pdelayIntervalTimer, PDELAY_REQ_INTERVAL_TICKS(ptp, port));
 
@@ -479,6 +480,11 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
     uint32_t txFUPSequenceId = 0;
     MDPdelayReq_State_t prevState;
     uint8_t *txBuffer;
+
+    /* Do not send anything if we are in AVnu PICS-5 delay */
+    if( ptp->ports[port].multiplePdelayTimer>0 ) {
+        return;
+    }
 
     memset(rxRequestingPortId, 0, PORT_ID_BYTES);
     memset(txRequestingPortId, 0, PORT_ID_BYTES);
