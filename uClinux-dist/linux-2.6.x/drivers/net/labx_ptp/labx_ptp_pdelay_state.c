@@ -211,7 +211,6 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
           ptp->ports[port].pdelayResponses = 0;
-          ptp->ports[port].portEnabled = FALSE;
       }
       break;
 
@@ -622,7 +621,6 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
               port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
   #endif
             ptp->ports[port].pdelayResponses = 0;
-            ptp->ports[port].portEnabled = FALSE;
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
                    (rxFUPSequenceId == txFUPSequenceId) &&
