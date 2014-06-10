@@ -61,107 +61,128 @@ void labx_ptp_timer_state_task(unsigned long data) {
   spin_unlock_irqrestore(&ptp->mutex, flags);
   preempt_enable();
 
+  for (i=0; i<ptp->numPorts; i++)
+  {
+    /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
+       re-enable the port after five minutes */
+    if(ptp->ports[i].multiplePdelayTimer > 0) {
+      if(ptp->ports[i].multiplePdelayTimer >= timerTicks) {
+        ptp->ports[i].multiplePdelayTimer -= timerTicks;
+      }
+      else {
+        ptp->ports[i].multiplePdelayTimer = 0;
+        printk("Re-enabled ptp on port %d after 5 minutes\n", i+1);
+      }
+    }
+  }
+
   /* Update port roles whenever any port is flagged for reselect */
   for (i=0; i<ptp->numPorts; i++) {
-    reselect |= ptp->ports[i].reselect;
+      if(ptp->ports[i].multiplePdelayTimer == 0) {
+          reselect |= ptp->ports[i].reselect;
+      }
   }
   if (reselect) {
     PortRoleSelection_StateMachine(ptp);
   }
 
   for (i=0; i<ptp->numPorts; i++) {
-    if (ptp->ports[i].selectedRole == PTP_SLAVE) {
-      localMaster = false;
-      break;
-    }
+      if(ptp->ports[i].multiplePdelayTimer == 0) {
+          if (ptp->ports[i].selectedRole == PTP_SLAVE) {
+              localMaster = false;
+              break;
+          }
+      }
   }
 
   for (i=0; i<ptp->numPorts; i++) {
-    switch(ptp->ports[i].selectedRole) {
-    case PTP_MASTER:
-      /* Send ANNOUNCE and SYNC messages at their rate for a master port */
-      ptp->ports[i].announceCounter += timerTicks;
-      if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
-        ptp->ports[i].announceCounter = 0;
-        ptp->ports[i].newInfo = FALSE;
-        transmit_announce(ptp, i);
-      }
+    if(ptp->ports[i].multiplePdelayTimer == 0) {
+        switch(ptp->ports[i].selectedRole) {
+        case PTP_MASTER:
+            /* Send ANNOUNCE and SYNC messages at their rate for a master port */
+            ptp->ports[i].announceCounter += timerTicks;
+            if(ptp->ports[i].announceCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, i)) {
+                ptp->ports[i].announceCounter = 0;
+                ptp->ports[i].newInfo = FALSE;
+                transmit_announce(ptp, i);
+            }
 
-      ptp->ports[i].syncCounter += timerTicks;
-      if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
-        ptp->ports[i].syncCounter = 0;
+            ptp->ports[i].syncCounter += timerTicks;
+            if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
+                ptp->ports[i].syncCounter = 0;
 
-        /* If we are the grandmaster send sync messages. If we are not,
-           we will forward sync/fup messages when we receive them from the GM. */
-        if (localMaster) {
-          /* Set the source port ID back to this node when we are the GM */
-          memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
-          ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
-          ptp->ports[i].syncSourcePortId[9] = (i+1);
+                /* If we are the grandmaster send sync messages. If we are not,
+                 we will forward sync/fup messages when we receive them from the GM. */
+                if (localMaster) {
+                    /* Set the source port ID back to this node when we are the GM */
+                    memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
+                    ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
+                    ptp->ports[i].syncSourcePortId[9] = (i+1);
 
-          transmit_sync(ptp, i);
-          if (ptp->rtcChangesAllowed) {
-            /* Periodically update the RTC to get update listeners to
+                    transmit_sync(ptp, i);
+                    if (ptp->rtcChangesAllowed) {
+                        /* Periodically update the RTC to get update listeners to
                notice (IE when they are not coasting) */
-            set_rtc_increment(ptp, &ptp->nominalIncrement);
-          }
-        }
-      }
-      break;
+                        set_rtc_increment(ptp, &ptp->nominalIncrement);
+                    }
+                }
+            }
+            break;
 
-    case PTP_SLAVE:
-    {
+        case PTP_SLAVE:
+        {
 #ifdef DEBUG_INCREMENT
-      uint32_t timeoutTicks = 8;
+            uint32_t timeoutTicks = 8;
 #endif
 
-      /* Increment and test the announce receipt timeout counter */
-      preempt_disable();
-      spin_lock_irqsave(&ptp->mutex, flags);
-      ptp->ports[i].announceTimeoutCounter += timerTicks;
-      ptp->ports[i].syncTimeoutCounter += timerTicks;
-      spin_unlock_irqrestore(&ptp->mutex, flags);
-      preempt_enable();
+            /* Increment and test the announce receipt timeout counter */
+            preempt_disable();
+            spin_lock_irqsave(&ptp->mutex, flags);
+            ptp->ports[i].announceTimeoutCounter += timerTicks;
+            ptp->ports[i].syncTimeoutCounter += timerTicks;
+            spin_unlock_irqrestore(&ptp->mutex, flags);
+            preempt_enable();
 
 #ifdef DEBUG_INCREMENT
-      /* Periodically print out the increment we're using */
-      if(++ptp->slaveDebugCounter >= timeoutTicks) {
-        ptp->slaveDebugCounter = 0;
+            /* Periodically print out the increment we're using */
+            if(++ptp->slaveDebugCounter >= timeoutTicks) {
+                ptp->slaveDebugCounter = 0;
 
-        printk("PTP increment: 0x%08X\n",ptp_get_increment());
-      }
+                printk("PTP increment: 0x%08X\n",ptp_get_increment());
+            }
 #endif
 
-      /* Transmit an ANNOUNCE immediately to speed things along if we've switched our
-       * port to the master state.
-       */
-      if(ptp->ports[i].selectedRole == PTP_MASTER) {
-        printk("PTP master (port %d)\n", i);
-        for (i=0; i<ptp->numPorts; i++) {
-          ptp->ports[i].announceCounter    = 0;
-          ptp->ports[i].announceSequenceId = 0x0000;
-          transmit_announce(ptp, i);
+            /* Transmit an ANNOUNCE immediately to speed things along if we've switched our
+            * port to the master state.
+            */
+            if(ptp->ports[i].selectedRole == PTP_MASTER) {
+                printk("PTP master (port %d)\n", i);
+                for (i=0; i<ptp->numPorts; i++) {
+                    ptp->ports[i].announceCounter    = 0;
+                    ptp->ports[i].announceSequenceId = 0x0000;
+                    transmit_announce(ptp, i);
+                }
+            } else {
+                /* Still a slave; determine whether we are using the end-to-end or peer-to-peer
+                 * delay mechanism
+                 */
+                if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
+                    /* Increment the delay request counter and see if it's time to
+                    * send one to the master.
+                    */
+                    if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS)) {
+                        ptp->ports[i].delayReqCounter = 0;
+                        transmit_delay_request(ptp, i);
+                    }
+                }
+            } /* if(still a slave) */
         }
-      } else {
-        /* Still a slave; determine whether we are using the end-to-end or peer-to-peer
-         * delay mechanism
-         */
-        if(ptp->properties.delayMechanism == PTP_DELAY_MECHANISM_E2E) {
-          /* Increment the delay request counter and see if it's time to
-           * send one to the master.
-           */
-          if(++ptp->ports[i].delayReqCounter >= (DELAY_REQ_INTERVAL / PTP_TIMER_TICK_MS)) {
-            ptp->ports[i].delayReqCounter = 0;
-            transmit_delay_request(ptp, i);
-          }
-        }
-      } /* if(still a slave) */
-    }
-    break;
+            break;
 
-    default:
-      /* "Passive"; do nothing */
-      break;
+        default:
+            /* "Passive"; do nothing */
+            break;
+        }
     }
   }
 
@@ -178,29 +199,19 @@ void labx_ptp_timer_state_task(unsigned long data) {
 
   for (i=0; i<ptp->numPorts; i++)
   {
-    LinkDelaySyncIntervalSetting_StateMachine(ptp, i);
+    if(ptp->ports[i].multiplePdelayTimer == 0) {
 
-    /* Regardless of whether we are a master or slave, increment the peer delay request
-     * counter and see if it's time to send one to our link peer.
-     */
-    ptp->ports[i].pdelayIntervalTimer += timerTicks;
+        LinkDelaySyncIntervalSetting_StateMachine(ptp, i);
 
-    MDPdelayReq_StateMachine(ptp, i);
+        /* Regardless of whether we are a master or slave, increment the peer delay request
+         * counter and see if it's time to send one to our link peer.
+         */
+        ptp->ports[i].pdelayIntervalTimer += timerTicks;
 
-    /* Update the PortAnnounceInformation state machine */
-    PortAnnounceInformation_StateMachine(ptp, i);
+        MDPdelayReq_StateMachine(ptp, i);
 
-    /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
-       re-enable the port after five minutes */
-    if(ptp->ports[i].multiplePdelayTimer > 0) {
-      if(ptp->ports[i].multiplePdelayTimer >= timerTicks) {
-        ptp->ports[i].multiplePdelayTimer -= timerTicks;
-      }
-      else {
-        ptp->ports[i].multiplePdelayTimer = 0;
-        ptp->ports[i].portEnabled = TRUE;
-        printk("Re-enabled ptp on port %d after 5 minutes\n", i+1);
-      }
+        /* Update the PortAnnounceInformation state machine */
+        PortAnnounceInformation_StateMachine(ptp, i);
     }
   }
 
