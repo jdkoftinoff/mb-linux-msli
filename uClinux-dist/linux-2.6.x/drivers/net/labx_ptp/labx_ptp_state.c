@@ -1238,7 +1238,7 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->allowedLostResponses = 3;
     /* Recommended value in 802.1AS/COR1 is 800ns for copper. Add 400ns to allow
        use of the nTap and still come up as asCapable. */
-    pPort->neighborPropDelayThresh = 1200;
+    pPort->neighborPropDelayThresh = 800;
 
     /* PortAnnounceInformation state machine initializetion */
     pPort->portAnnounceInformation_State = PortAnnounceInformation_BEGIN;
