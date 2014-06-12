@@ -470,11 +470,10 @@ static void updtRolesTree(struct ptp_device *ptp)
       ptp->lastGmPhaseChange.middle = 0;
       ptp->lastGmPhaseChange.lower = 0;
       if(ptp->masterRateRatioValid) {
-        uint64_t result = (ptp->nominalIncrement.mantissa << RTC_MANTISSA_SHIFT) | (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
-        result = result << 33;
-        result = result / ptp->masterRateRatio;
-        result = result - (1ull << 32);
-        ptp->lastGmFreqChange = (uint32_t)(result << 9);
+         uint64_t result = 1ull << 63;
+         result /= ptp->masterRateRatio;
+         result -= (1ull << 32);
+         ptp->lastGmFreqChange = (uint32_t)(result << 9);
       } else {
         ptp->lastGmFreqChange = 0;
       }
