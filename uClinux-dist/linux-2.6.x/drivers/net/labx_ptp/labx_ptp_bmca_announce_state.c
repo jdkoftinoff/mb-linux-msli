@@ -474,7 +474,7 @@ static void updtRolesTree(struct ptp_device *ptp)
         result = result << 33;
         result = result / ptp->masterRateRatio;
         result = result - (1ull << 32);
-        ptp->lastGmFreqChange = (uint32_t)(result >> 9);
+        ptp->lastGmFreqChange = (uint32_t)(result << 9);
       } else {
         ptp->lastGmFreqChange = 0;
       }
