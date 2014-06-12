@@ -158,13 +158,13 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
       ptp->ports[port].pdelayResponses = 0;
-      ptp->ports[port].multiplePdelayResponses = 0;
       break;
 
     case MDPdelayReq_RESET:
       ptp->ports[port].initPdelayRespReceived = FALSE;
       ptp->ports[port].rcvdPdelayResp = FALSE;
       ptp->ports[port].rcvdPdelayRespFollowUp = FALSE;
+      ptp->ports[port].multiplePdelayResponses = 0;
       if (ptp->ports[port].lostResponses < ptp->ports[port].allowedLostResponses)
       {
         ptp->ports[port].lostResponses++;
@@ -190,27 +190,30 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
       ptp->ports[port].pdelayIntervalTimer = 0; // currentTime ("now" is zero ticks)
 
       /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS */
-      if (ptp->ports[port].pdelayResponses == 0 || ptp->ports[port].pdelayResponses == 1) {
-        /* got no responses or only 1 response since last send time time so clear state and count */
-        ptp->ports[port].multiplePdelayResponses = 0;
-        ptp->ports[port].pdelayResponses = 0;
-      } else if (ptp->ports[port].pdelayResponses ==2 ) {
-          /* got 2 responses since last send, this is acceptable */
+
+      /* We got here and only saw one response, so clear the multiplePdelayResponses counter for AVnu gPTP PICS-5 */
+      if( ptp->ports[port].pdelayResponses == 1 ) {
+
           ptp->ports[port].multiplePdelayResponses = 0;
-          ptp->ports[port].pdelayResponses = 0;
-#ifdef PATH_DELAY_DEBUG
-          printk("AS Port %d Seeing two pdelay responses (%d %d).\n",
-            port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
-#endif
       }
       else
-      if (ptp->ports[port].pdelayResponses > 2) {
-          ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
+      if (ptp->ports[port].pdelayResponses >= 2 ) {
+          /* got 2 or more responses since last send, this is not good */
+          ptp->ports[port].multiplePdelayResponses++;
 #ifdef PATH_DELAY_DEBUG
-          printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
+          printk("AS Port %d extra pdelay response (%d %d).\n",
             port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
-          ptp->ports[port].pdelayResponses = 0;
+          if( ptp->ports[port].multiplePdelayResponses >= 3 ) {
+              /* this exchange happened 3 times in a row */
+              ptp->ports[port].multiplePdelayTimer = ((5 * 60 * 1000) / PTP_TIMER_TICK_MS);
+#ifdef PATH_DELAY_DEBUG
+              printk("Disabling AS for 5 min on port %d due to multiple pdelay responses (%d %d).\n",
+                port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
+#endif
+              ptp->ports[port].multiplePdelayResponses=0;
+              ptp->ports[port].multiplePdelayResponses = 0;
+          }
       }
       break;
 
@@ -616,7 +619,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
                (rxSequenceId == txSequenceId)))
           {
             /* Another response was received while waiting for the follow-up */
-            MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);
+            MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_RESET);            
 
 #ifdef PATH_DELAY_DEBUG
             printk("ptp: Another response was received while waiting for the follow-up\n" );
