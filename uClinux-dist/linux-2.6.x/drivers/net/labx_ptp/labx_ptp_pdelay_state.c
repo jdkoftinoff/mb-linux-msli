@@ -193,7 +193,7 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
 
       /* We got here and only saw one response, so clear the multiplePdelayResponses counter for AVnu gPTP PICS-5 */
       if( ptp->ports[port].pdelayResponses == 1 ) {
-
+          ptp->ports[port].pDelayResponses = 0;
           ptp->ports[port].multiplePdelayResponses = 0;
       }
       else
@@ -212,7 +212,6 @@ static void MDPdelayReq_StateMachine_SetState(struct ptp_device *ptp, uint32_t p
                 port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
 #endif
               ptp->ports[port].multiplePdelayResponses=0;
-              ptp->ports[port].multiplePdelayResponses = 0;
           }
       }
       break;
@@ -630,6 +629,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
               port+1, ptp->ports[port].pdelayResponses, ptp->ports[port].multiplePdelayResponses);
   #endif
             ptp->ports[port].pdelayResponses = 0;
+            ptp->ports[port].multiplePdelayResponses = 0;
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
                    (rxFUPSequenceId == txFUPSequenceId) &&
