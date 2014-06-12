@@ -630,8 +630,7 @@ void MDPdelayReq_StateMachine(struct ptp_device *ptp, uint32_t port)
           }
           else if (ptp->ports[port].rcvdPdelayRespFollowUp &&
                    (rxFUPSequenceId == txFUPSequenceId) &&
-                   (compare_port_ids(rxFUPRequestingPortId, txFUPRequestingPortId) == 0) &&
-                   (compare_port_ids(rxFUPRequestingPortId, rxRequestingPortId)==0))
+                   (compare_port_ids(rxFUPRequestingPortId, txFUPRequestingPortId) == 0))
           {
             /* Matching follow-up received */
             MDPdelayReq_StateMachine_SetState(ptp, port, MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER);
