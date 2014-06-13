@@ -451,7 +451,8 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
 /* 802.1AS MDPdelayReq state machine states */
 typedef enum { MDPdelayReq_NOT_ENABLED, MDPdelayReq_INITIAL_SEND_PDELAY_REQ,
   MDPdelayReq_RESET, MDPdelayReq_SEND_PDELAY_REQ, MDPdelayReq_WAITING_FOR_PDELAY_RESP,
-  MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP, MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER
+  MDPdelayReq_WAITING_FOR_PDELAY_RESP_FOLLOW_UP, MDPdelayReq_WAITING_FOR_PDELAY_INTERVAL_TIMER,
+  MDPdelayReq_LOST_RESPONSE
 } MDPdelayReq_State_t;
 
 /* 802.1AS LinkDelaySyncIntervalSettings state machine states */
@@ -636,6 +637,7 @@ struct ptp_port {
   uint32_t pdelayResponses;
   uint32_t multiplePdelayResponses;
   uint32_t multiplePdelayTimer;
+  uint32_t prevPdelayReqSequenceId;
 
   /* 802.1AS LinkDelaySyncIntervalSetting variables (11.2.17.1) */
   LinkDelaySyncIntervalSetting_State_t linkDelaySyncIntervalSetting_State;
@@ -665,6 +667,7 @@ struct ptp_port {
 
   /* pdelay response variables */
   uint8_t lastPeerRequestPortId[PORT_ID_BYTES];
+  uint8_t lastRxRespSourcePortId[PORT_ID_BYTES];
 
   /* sync/fup response variables */
   uint8_t syncSourcePortId[PORT_ID_BYTES];

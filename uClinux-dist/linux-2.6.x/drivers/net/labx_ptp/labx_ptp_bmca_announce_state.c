@@ -203,6 +203,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
     case PortAnnounceInformation_BEGIN:
     case PortAnnounceInformation_DISABLED:
       pPort->rcvdMsg                = FALSE;
+      pPort->announceCounter        = 0;
       pPort->announceTimeoutCounter = 0;
       pPort->infoIs                 = InfoIs_Disabled;
       pPort->reselect               = TRUE;
@@ -451,7 +452,8 @@ static void updtRolesTree(struct ptp_device *ptp)
         if (ptp->gmPriority == &pPort->gmPathPriority) {
           pPort->selectedRole = PTP_SLAVE;
           pPort->updtInfo = FALSE;
-        } else if (REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) {
+        } else if ((REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) ||
+                   (ptp->gmPriority == &ptp->systemPriority)) {
           pPort->selectedRole = PTP_MASTER;
           pPort->pathTraceLength = 1;
           memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));

@@ -106,26 +106,28 @@ void labx_ptp_timer_state_task(unsigned long data) {
                 ptp->ports[i].newInfo = FALSE;
                 transmit_announce(ptp, i);
             }
-
-            ptp->ports[i].syncCounter += timerTicks;
-            if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
+            if (ptp->gmPresent)
+            {
+              ptp->ports[i].syncCounter += timerTicks;
+              if(ptp->ports[i].syncCounter >= SYNC_INTERVAL_TICKS(ptp, i)) {
                 ptp->ports[i].syncCounter = 0;
-
+ 
                 /* If we are the grandmaster send sync messages. If we are not,
-                 we will forward sync/fup messages when we receive them from the GM. */
+                   we will forward sync/fup messages when we receive them from the GM. */
                 if (localMaster) {
-                    /* Set the source port ID back to this node when we are the GM */
-                    memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
-                    ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
-                    ptp->ports[i].syncSourcePortId[9] = (i+1);
-
-                    transmit_sync(ptp, i);
-                    if (ptp->rtcChangesAllowed) {
-                        /* Periodically update the RTC to get update listeners to
-               notice (IE when they are not coasting) */
-                        set_rtc_increment(ptp, &ptp->nominalIncrement);
-                    }
+                  /* Set the source port ID back to this node when we are the GM */
+                  memcpy(&ptp->ports[i].syncSourcePortId[0], &ptp->properties.grandmasterIdentity[0], 8);
+                  ptp->ports[i].syncSourcePortId[8] = (i+1) >> 8;
+                  ptp->ports[i].syncSourcePortId[9] = (i+1);
+ 
+                  transmit_sync(ptp, i);
+                  if (ptp->rtcChangesAllowed) {
+                    /* Periodically update the RTC to get update listeners to
+                       notice (IE when they are not coasting) */
+                    set_rtc_increment(ptp, &ptp->nominalIncrement);
+                  }
                 }
+              }
             }
             break;
 
@@ -202,6 +204,20 @@ void labx_ptp_timer_state_task(unsigned long data) {
     if(ptp->ports[i].multiplePdelayTimer == 0) {
 
         LinkDelaySyncIntervalSetting_StateMachine(ptp, i);
+        /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
+           re-enable the port after five minutes */
+        if (ptp->ports[i].multiplePdelayTimer > 0)
+        {
+          if (ptp->ports[i].multiplePdelayTimer > timerTicks)
+          {
+            ptp->ports[i].multiplePdelayTimer -= timerTicks;
+          }
+          else
+          {
+            ptp->ports[i].multiplePdelayTimer = 0;
+            ptp->ports[i].portEnabled = TRUE;
+          }
+        }
 
         /* Regardless of whether we are a master or slave, increment the peer delay request
          * counter and see if it's time to send one to our link peer.
@@ -1232,6 +1248,8 @@ void init_state_machines(struct ptp_device *ptp) {
 
     pPort->syncReceiptTimeout = 3;
     pPort->announceReceiptTimeout = 3;
+
+    pPort->multiplePdelayTimer = 0;
 
     /* peer delay request state machine initialization */
     pPort->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
