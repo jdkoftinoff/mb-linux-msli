@@ -273,7 +273,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     PtpTime correctionField;
     PtpTime correctedTimestamp;
 
-    ptp->ports[port].syncReceiptTimeoutTime = SYNC_INTERVAL_TICKS(ptp, port) * ptp->ports[port].syncReceiptTimeout;
+    ptp->ports[port].syncReceiptTimeoutTime = MAX_SYNC_INTERVAL_TICKS(ptp,port);
 
     /* This is indeed a SYNC from the present master.  Capture the hardware timestamp
      * at which we received it, and hang on to its sequence ID for matching to the
