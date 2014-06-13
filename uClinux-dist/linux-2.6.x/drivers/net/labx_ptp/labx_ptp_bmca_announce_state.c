@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
-#define BMCA_DEBUG 1
+#define BMCA_DEBUG 2
 
 #if BMCA_DEBUG == 2
 #define BMCA_DBG(fmt, args...) printk(fmt, ##args)
@@ -203,6 +203,7 @@ static void PortAnnounceInformation_StateMachine_SetState(struct ptp_device *ptp
     case PortAnnounceInformation_BEGIN:
     case PortAnnounceInformation_DISABLED:
       pPort->rcvdMsg                = FALSE;
+      pPort->announceCounter        = 0;
       pPort->announceTimeoutCounter = 0;
       pPort->infoIs                 = InfoIs_Disabled;
       pPort->reselect               = TRUE;
@@ -414,9 +415,7 @@ static void updtRolesTree(struct ptp_device *ptp)
   /* Compute masterPriority vectors and assign port roles*/
   for (i = 0; i<ptp->numPorts; i++) {
     struct ptp_port *pPort = &ptp->ports[i];
-#if BMCA_DEBUG
     uint32_t prevRole = pPort->selectedRole;
-#endif
 
     /* masterPriority */
     memcpy(&pPort->masterPriority, ptp->gmPriority, sizeof(PtpPriorityVector));
@@ -453,7 +452,8 @@ static void updtRolesTree(struct ptp_device *ptp)
         if (ptp->gmPriority == &pPort->gmPathPriority) {
           pPort->selectedRole = PTP_SLAVE;
           pPort->updtInfo = FALSE;
-        } else if (REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) {
+        } else if ((REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) ||
+                   (ptp->gmPriority == &ptp->systemPriority)) {
           pPort->selectedRole = PTP_MASTER;
           pPort->pathTraceLength = 1;
           memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
@@ -466,21 +466,20 @@ static void updtRolesTree(struct ptp_device *ptp)
 
     /* Update GM fields when transitioning to PTP_MASTER */
     if(prevRole != PTP_MASTER && pPort->selectedRole == PTP_MASTER) {
-      ptp->lastGmTimeBaseIndicator++;
+      ptp->lastGmTimeBaseIndicator++; 
+
       ptp->lastGmPhaseChange.upper = 0;
       ptp->lastGmPhaseChange.middle = 0;
       ptp->lastGmPhaseChange.lower = 0;
       if(ptp->masterRateRatioValid) {
-        uint64_t result = (ptp->nominalIncrement.mantissa << RTC_MANTISSA_SHIFT) | (ptp->nominalIncrement.fraction & RTC_FRACTION_MASK);
-        result = result << 33;
-        result = result / ptp->masterRateRatio;
-        result = result - (1ull << 32);
-        ptp->lastGmFreqChange = (uint32_t)(result >> 9);
+         uint64_t result = 1ull << 63;
+         result /= ptp->masterRateRatio;
+         result -= (1ull << 32);
+         ptp->lastGmFreqChange = (uint32_t)(result << 9);
       } else {
         ptp->lastGmFreqChange = 0;
       }
     }
-
 #if BMCA_DEBUG
     if (pPort->selectedRole != prevRole) {
       printk("Port %d Role changed %s => %s\n", i, roleString(prevRole), roleString(pPort->selectedRole));
