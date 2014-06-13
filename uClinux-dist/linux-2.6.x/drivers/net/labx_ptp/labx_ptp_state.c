@@ -71,7 +71,10 @@ void labx_ptp_timer_state_task(unsigned long data) {
       }
       else {
         ptp->ports[i].multiplePdelayTimer = 0;
+      }
+      if(ptp->ports[i].multiplePdelayTimer==0) {
         printk("Re-enabled ptp on port %d after 5 minutes\n", i+1);
+        ptp->ports[i].portEnabled = TRUE;
       }
     }
   }
@@ -204,20 +207,6 @@ void labx_ptp_timer_state_task(unsigned long data) {
     if(ptp->ports[i].multiplePdelayTimer == 0) {
 
         LinkDelaySyncIntervalSetting_StateMachine(ptp, i);
-        /* Track consecutive multiple pdelay responses for AVnu_PTP-5 PICS,
-           re-enable the port after five minutes */
-        if (ptp->ports[i].multiplePdelayTimer > 0)
-        {
-          if (ptp->ports[i].multiplePdelayTimer > timerTicks)
-          {
-            ptp->ports[i].multiplePdelayTimer -= timerTicks;
-          }
-          else
-          {
-            ptp->ports[i].multiplePdelayTimer = 0;
-            ptp->ports[i].portEnabled = TRUE;
-          }
-        }
 
         /* Regardless of whether we are a master or slave, increment the peer delay request
          * counter and see if it's time to send one to our link peer.
