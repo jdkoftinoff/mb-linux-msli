@@ -64,20 +64,20 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
     /* Peer-to-peer (802.1AS) */
     write_packet(txBuffer, wordOffset, 0x0180C200);
     packetWord = 0x000E0000;
-    packetWord |= (portProperties->sourceMacAddress[0] << 8);
+    packetWord |= (((uint32_t)portProperties->sourceMacAddress[0]) << 8);
     packetWord |= portProperties->sourceMacAddress[1];
     write_packet(txBuffer, wordOffset, packetWord);
   } else {
     /* End-to-end (legacy PTP 2.0) */
     write_packet(txBuffer, wordOffset, 0x011B1900);
     packetWord = 0x00000000;
-    packetWord |= (portProperties->sourceMacAddress[0] << 8);
+    packetWord |= (((uint32_t)portProperties->sourceMacAddress[0]) << 8);
     packetWord |= portProperties->sourceMacAddress[1];
     write_packet(txBuffer, wordOffset, packetWord);
   }
-  packetWord = (portProperties->sourceMacAddress[2] << 24);
-  packetWord |= (portProperties->sourceMacAddress[3] << 16);
-  packetWord |= (portProperties->sourceMacAddress[4] << 8);
+  packetWord = (((uint32_t)portProperties->sourceMacAddress[2]) << 24);
+  packetWord |= (((uint32_t)portProperties->sourceMacAddress[3]) << 16);
+  packetWord |= (((uint32_t)portProperties->sourceMacAddress[4]) << 8);
   packetWord |= portProperties->sourceMacAddress[5];
   write_packet(txBuffer, wordOffset, packetWord);
 
@@ -90,11 +90,11 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
 
   /* Message length, domain number, and reserved field */
   packetWord = ((messageLength & MSG_LENGTH_MASK) << 16);
-  packetWord |= ((ptp->properties.domainNumber & DOMAIN_NUM_MASK) << 8);
+  packetWord |= ((((uint32_t)ptp->properties.domainNumber) & DOMAIN_NUM_MASK) << 8);
   write_packet(txBuffer, wordOffset, packetWord);
 
   /* Assign the passed flags into the flag field, clear the correction field */
-  packetWord = (headerFlags << 16);
+  packetWord = (((uint32_t)headerFlags) << 16);
   write_packet(txBuffer, wordOffset, packetWord);
 
   /* Clear out the flag field, correction field, four reserved bytes,
@@ -105,16 +105,16 @@ static void init_ptp_header(struct ptp_device *ptp, uint32_t port, uint8_t *txBu
    */
   write_packet(txBuffer, wordOffset, 0x00000000);
   write_packet(txBuffer, wordOffset, 0x00000000);
-  packetWord = (ptp->properties.grandmasterIdentity[0] << 8);
+  packetWord = (((uint32_t)ptp->properties.grandmasterIdentity[0]) << 8);
   packetWord |= ptp->properties.grandmasterIdentity[1];
   write_packet(txBuffer, wordOffset, packetWord);
-  packetWord = (ptp->properties.grandmasterIdentity[2] << 24);
-  packetWord |= (ptp->properties.grandmasterIdentity[3] << 16);
-  packetWord |= (ptp->properties.grandmasterIdentity[4] << 8);
+  packetWord = (((uint32_t)ptp->properties.grandmasterIdentity[2]) << 24);
+  packetWord |= (((uint32_t)ptp->properties.grandmasterIdentity[3]) << 16);
+  packetWord |= (((uint32_t)ptp->properties.grandmasterIdentity[4]) << 8);
   packetWord |= ptp->properties.grandmasterIdentity[5];
   write_packet(txBuffer, wordOffset, packetWord);
-  packetWord = (ptp->properties.grandmasterIdentity[6] << 24);
-  packetWord |= (ptp->properties.grandmasterIdentity[7] << 16);
+  packetWord = (((uint32_t)ptp->properties.grandmasterIdentity[6]) << 24);
+  packetWord |= (((uint32_t)ptp->properties.grandmasterIdentity[7]) << 16);
   packetWord |= port + 1;
   write_packet(txBuffer, wordOffset, packetWord);
 
@@ -175,43 +175,43 @@ static void init_announce_template(struct ptp_device *ptp, uint32_t port, PtpPri
   write_packet(txBuffer, &wordOffset, packetWord);
 
   /* Clear reserved, and set the grandmaster properties. */
-  packetWord = (identity->priority1 << 16);
-  packetWord |= (identity->clockClass << 8);
+  packetWord = (((uint32_t)identity->priority1) << 16);
+  packetWord |= (((uint32_t)identity->clockClass) << 8);
   packetWord |= identity->clockAccuracy;
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord =  (identity->offsetScaledLogVariance[0] << 24);
-  packetWord |= (identity->offsetScaledLogVariance[1] << 16);
-  packetWord |= (identity->priority2 << 8);
+  packetWord =  (((uint32_t)identity->offsetScaledLogVariance[0]) << 24);
+  packetWord |= (((uint32_t)identity->offsetScaledLogVariance[1]) << 16);
+  packetWord |= (((uint32_t)identity->priority2) << 8);
   packetWord |= identity->clockIdentity[0];
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = ((identity->clockIdentity[1] << 24) |
-                (identity->clockIdentity[2] << 16) |
-                (identity->clockIdentity[3] << 8)  |
+  packetWord = ((((uint32_t)identity->clockIdentity[1]) << 24) |
+                (((uint32_t)identity->clockIdentity[2]) << 16) |
+                (((uint32_t)identity->clockIdentity[3]) << 8)  |
                  identity->clockIdentity[4]);
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = ((identity->clockIdentity[5] << 24) |
-                (identity->clockIdentity[6] << 16) |
-                (identity->clockIdentity[7] << 8) |
+  packetWord = ((((uint32_t)identity->clockIdentity[5]) << 24) |
+                (((uint32_t)identity->clockIdentity[6]) << 16) |
+                (((uint32_t)identity->clockIdentity[7]) << 8) |
                 (ptp->masterStepsRemoved >> 8));
   write_packet(txBuffer, &wordOffset, packetWord);
-  packetWord = (ptp->masterStepsRemoved << 24) |
-               (ptp->properties.timeSource << 16) |
+  packetWord = (((uint32_t)ptp->masterStepsRemoved) << 24) |
+               (((uint32_t)ptp->properties.timeSource) << 16) |
                PATH_TRACE_TLV_TYPE;
   write_packet(txBuffer, &wordOffset, packetWord);
 
   /* Add the path trace TLV info. */
   packetWord = (PATH_TRACE_TLV_LENGTH(ptp->pathTraceLength) << 16);
   for (i=0; i<ptp->pathTraceLength; i++) {
-    packetWord |= (ptp->pathTrace[i][0] << 8) |
+    packetWord |= ((uint32_t)ptp->pathTrace[i][0] << 8) |
                    ptp->pathTrace[i][1];
     write_packet(txBuffer, &wordOffset, packetWord);
-    packetWord = (ptp->pathTrace[i][2] << 24) |
-                 (ptp->pathTrace[i][3] << 16) |
-                 (ptp->pathTrace[i][4] << 8) |
+    packetWord = (((uint32_t)ptp->pathTrace[i][2]) << 24) |
+                 (((uint32_t)ptp->pathTrace[i][3]) << 16) |
+                 (((uint32_t)ptp->pathTrace[i][4]) << 8) |
                   ptp->pathTrace[i][5];
     write_packet(txBuffer, &wordOffset, packetWord);
-    packetWord = (ptp->pathTrace[i][6] << 24) |
-                 (ptp->pathTrace[i][7] << 16);
+    packetWord = (((uint32_t)ptp->pathTrace[i][6]) << 24) |
+                 (((uint32_t)ptp->pathTrace[i][7]) << 16);
   }
   write_packet(txBuffer, &wordOffset, packetWord);
 }
@@ -391,7 +391,7 @@ static void set_sequence_id(struct ptp_device *ptp, uint32_t port, uint8_t * txB
   wordOffset = SEQUENCE_ID_OFFSET;
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0x0000FFFF;
-  packetWord |= (sequenceId << 16);
+  packetWord |= (((uint32_t)sequenceId) << 16);
   wordOffset = SEQUENCE_ID_OFFSET;
   write_packet(bufferBase, &wordOffset, packetWord);
 }
@@ -463,7 +463,7 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
   correctionField->secondsLower = 0;
   wordOffset = CORRECTION_FIELD_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  rawField = ((int64_t) (packetWord & 0x0000FFFF) << 48);
+  rawField = (((int64_t) (packetWord & 0x0000FFFF)) << 48);
   packetWord = read_packet(rxBuffer, &wordOffset);
   rawField |= (((int64_t) packetWord) << 16);
   packetWord = read_packet(rxBuffer, &wordOffset);
@@ -490,7 +490,7 @@ static void set_gm_time_base_indicator(struct ptp_device *ptp, uint8_t * txBuffe
   wordOffset = GM_TIME_BASE_INDICATOR_OFFSET;
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0x0000FFFF;
-  packetWord |= ((uint32_t) ptp->lastGmTimeBaseIndicator << 16);
+  packetWord |= (((uint32_t) ptp->lastGmTimeBaseIndicator) << 16);
   wordOffset -= BYTES_PER_WORD;
   write_packet(bufferBase, &wordOffset, packetWord);
 }
@@ -592,7 +592,7 @@ void set_cumulative_scaled_rate_offset_field(struct ptp_device *ptp, uint8_t *tx
 
 uint16_t get_port_number(const uint8_t *portNumber) {
   /* Fetch the big-endian packed value */
-  return((uint16_t) ((portNumber[0] << 8) | portNumber[1]));
+  return((uint16_t) ((((uint16_t)portNumber[0]) << 8) | portNumber[1]));
 }
 
 void set_port_number(uint8_t *portNumber, uint16_t setValue) {
@@ -602,7 +602,7 @@ void set_port_number(uint8_t *portNumber, uint16_t setValue) {
 
 uint16_t get_steps_removed(const uint8_t *stepsRemoved) {
   /* Fetch the big-endian packed value */
-  return((uint16_t) ((stepsRemoved[0] << 8) | stepsRemoved[1]));
+  return((uint16_t) ((((uint16_t)stepsRemoved[0]) << 8) | stepsRemoved[1]));
 }
 
 void set_steps_removed(uint8_t *stepsRemoved, uint16_t setValue) {
@@ -612,7 +612,7 @@ void set_steps_removed(uint8_t *stepsRemoved, uint16_t setValue) {
 
 uint16_t get_offset_scaled_log_variance(const uint8_t *offsetScaledLogVariance) {
   /* Fetch the big-endian packed value */
-  return((uint16_t) ((offsetScaledLogVariance[0] << 8) | offsetScaledLogVariance[1]));
+  return((uint16_t) ((((uint16_t)offsetScaledLogVariance[0]) << 8) | offsetScaledLogVariance[1]));
 }
 
 void set_offset_scaled_log_variance(uint8_t *offsetScaledLogVariance, uint16_t setValue) {
@@ -684,14 +684,14 @@ static void set_requesting_port_id(struct ptp_device *ptp,
   wordOffset = REQ_PORT_ID_OFFSET;
   packetWord = read_packet(bufferBase, &wordOffset);
   packetWord &= 0xFFFF0000;
-  packetWord |= ((requestPortId[0] << 8) | requestPortId[1]);
+  packetWord |= ((((uint32_t)requestPortId[0]) << 8) | requestPortId[1]);
   wordOffset -= BYTES_PER_WORD;
   write_packet(bufferBase, &wordOffset, packetWord);
-  packetWord = ((requestPortId[2] << 24) | (requestPortId[3] << 16) |
-                (requestPortId[4] << 8) | requestPortId[5]);
+  packetWord = ((((uint32_t) requestPortId[2]) << 24) | (((uint32_t) requestPortId[3]) << 16) |
+                (((uint32_t) requestPortId[4]) << 8) | requestPortId[5]);
   write_packet(bufferBase, &wordOffset, packetWord);
-  packetWord = ((requestPortId[6] << 24) | (requestPortId[7] << 16) |
-                (requestPortId[8] << 8) | requestPortId[9]);
+  packetWord = ((((uint32_t) requestPortId[6]) << 24) | (((uint32_t) requestPortId[7]) << 16) |
+                (((uint32_t) requestPortId[8]) << 8) | requestPortId[9]);
   write_packet(bufferBase, &wordOffset, packetWord);
 }
 
@@ -1391,17 +1391,17 @@ void set_source_port_id(struct ptp_device *ptp, uint32_t port, PacketDirection b
   packetWord = read_packet(bufferBase, &wordOffset);
   wordOffset = SOURCE_PORT_ID_OFFSET;
   packetWord &= 0xFFFF0000;
-  packetWord |= (sourcePortId[0] << 8);
+  packetWord |= (((uint32_t) sourcePortId[0]) << 8);
   packetWord |= sourcePortId[1];
   write_packet(bufferBase, &wordOffset, packetWord);
-  packetWord = (sourcePortId[2] << 24);
-  packetWord |= (sourcePortId[3] << 16);
-  packetWord |= (sourcePortId[4] << 8);
+  packetWord = (((uint32_t) sourcePortId[2]) << 24);
+  packetWord |= (((uint32_t) sourcePortId[3]) << 16);
+  packetWord |= (((uint32_t) sourcePortId[4]) << 8);
   packetWord |= sourcePortId[5];
   write_packet(bufferBase, &wordOffset, packetWord);
-  packetWord = (sourcePortId[6] << 24);
-  packetWord |= (sourcePortId[7] << 16);
-  packetWord |= (sourcePortId[8] << 8);
+  packetWord = (((uint32_t) sourcePortId[6]) << 24);
+  packetWord |= (((uint32_t) sourcePortId[7]) << 16);
+  packetWord |= (((uint32_t) sourcePortId[8]) << 8);
   packetWord |= sourcePortId[9];
   write_packet(bufferBase, &wordOffset, packetWord);
 }
