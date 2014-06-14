@@ -195,9 +195,9 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
     time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
 }
 
-#define DEBUG_TIMESTAMPS
-#define WARN_TIMESTAMPS
-#define ERROR_TIMESTAMPS
+//#define DEBUG_TIMESTAMPS
+//#define WARN_TIMESTAMPS
+//#define ERROR_TIMESTAMPS
 
 
 #ifdef DEBUG_TIMESTAMPS
@@ -950,7 +950,7 @@ void transmit_packet(struct ptp_device *ptp, uint32_t port, uint8_t * txBuffer);
 #endif
 
 
-#define PATH_DELAY_DEBUG
+//#define PATH_DELAY_DEBUG
 
 #ifdef PATH_DELAY_DEBUG
 #define PTP_CLOCK_IDENTITY_CHARS 8
