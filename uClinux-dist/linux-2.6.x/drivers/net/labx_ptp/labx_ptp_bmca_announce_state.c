@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
-#define BMCA_DEBUG 1
+#define BMCA_DEBUG 0
 
 #if BMCA_DEBUG == 2
 #define BMCA_DBG(fmt, args...) printk(fmt, ##args)
@@ -466,7 +466,7 @@ static void updtRolesTree(struct ptp_device *ptp)
 
     /* Update GM fields when transitioning to PTP_MASTER */
     if(prevRole != PTP_MASTER && pPort->selectedRole == PTP_MASTER) {
-      ptp->lastGmTimeBaseIndicator++; 
+      ptp->lastGmTimeBaseIndicator++;
 
       ptp->lastGmPhaseChange.upper = 0;
       ptp->lastGmPhaseChange.middle = 0;

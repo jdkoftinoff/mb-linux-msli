@@ -197,9 +197,9 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
     time->sequence_id=mdio_read(REG_GLOBAL2,AVB_DATA_REG);
 }
 
-#define DEBUG_TIMESTAMPS
-#define WARN_TIMESTAMPS
-#define ERROR_TIMESTAMPS
+//#define DEBUG_TIMESTAMPS
+//#define WARN_TIMESTAMPS
+//#define ERROR_TIMESTAMPS
 
 
 #ifdef DEBUG_TIMESTAMPS
