@@ -25,7 +25,9 @@
  */
 
 #include "labx_ptp.h"
+#ifndef BARE_METAL_PTP
 #include <linux/of_platform.h>
+#endif
 
 /* Define these to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
@@ -1219,6 +1221,7 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->currentLogSyncInterval = -3;
     pPort->initialLogSyncInterval = -3;
 
+#ifndef BARE_METAL_PTP
 #ifdef CONFIG_OF
     interfaceDev = of_find_device_by_node(pPort->interfaceNode);
     ndev = platform_get_drvdata(to_platform_device(&interfaceDev->dev));
@@ -1230,6 +1233,9 @@ void init_state_machines(struct ptp_device *ptp) {
     } else {
       pPort->portEnabled = FALSE;
     }
+#else
+    pPort->portEnabled = TRUE;
+#endif
     pPort->pttPortEnabled = TRUE;
 
     pPort->currentLogAnnounceInterval = 0;

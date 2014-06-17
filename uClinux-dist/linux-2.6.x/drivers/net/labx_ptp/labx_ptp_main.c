@@ -559,8 +559,6 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       if(pathTrace.index >= ptp->numPorts) return (-EINVAL);
 
       /* Copy the pathTrace into the userspace argument */
-      //pathTrace.pathTraceLength = ptp->ports[pathTrace.index].pathTraceLength;
-      //memcpy(&pathTrace.pathTrace,ptp->ports[pathTrace.index].pathTrace,sizeof(PtpClockIdentity)*pathTrace.pathTraceLength);
       pathTrace.pathTraceLength = ptp->pathTraceLength;
       memcpy(&pathTrace.pathTrace,ptp->pathTrace,sizeof(PtpClockIdentity)*pathTrace.pathTraceLength);
       copyResult = copy_to_user((void __user*)arg,&pathTrace,sizeof(PtpPathTrace));

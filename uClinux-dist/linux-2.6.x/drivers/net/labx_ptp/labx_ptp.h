@@ -32,7 +32,9 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/types.h>
+#ifndef BARE_METAL_PTP
 #include <linux/netdevice.h>
+#endif
 #include <net/labx_ptp/labx_ptp_defs.h>
 
 #ifdef CONFIG_LABX_PTP_MARVELL_TIMESTAMPS
@@ -828,6 +830,12 @@ struct ptp_device {
   uint32_t t2_prev;
   PtpTime switchDelta;
   PtpTime switchDelta2;
+#endif
+#ifdef BARE_METAL_PTP
+  /************************/
+  /* BARE METAL ADDITIONS */
+  /************************/
+  uint32_t eventFlags;
 #endif
 };
 
