@@ -1699,6 +1699,10 @@ static int xtenet_setup(struct device *dev,
     (labx_eth_GetOptions(&(lp->Emac)) & XTE_FCS_STRIP_OPTION) != 0;
 #endif
 
+  if(pdata->avb_only==1) {
+    labx_eth_SetOptions(&(lp->Emac),labx_eth_GetOptions(&(lp->Emac)) | XTE_AVB_ONLY_OPTION);
+  }
+
   rc = register_netdev(ndev);
   if (rc) {
     dev_err(dev,
@@ -1914,6 +1918,14 @@ static int __devinit xtenet_of_probe(struct of_device *ofdev, const struct of_de
     memcpy(pdata_struct.mac_addr, mac_address, 6);
   } else {
     dev_warn(&ofdev->dev, "No MAC address found.\n");
+  }
+
+  pdata_struct.avb_only=0;
+  if (1 == get_u32(ofdev, "xlnx,avb-only")) {
+    pdata_struct.avb_only=1;
+    printk("avb-only enabled by device tree\r\n");
+  } else {
+    printk("avb-only disabled by device tree\r\n");
   }
 		
   rc = xtenet_setup(&ofdev->dev, r_mem, r_irq, pdata);

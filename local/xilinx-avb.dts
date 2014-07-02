@@ -44,7 +44,7 @@
 		serial2 = &UART_DGPIO;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00 lpj=122368 netconsole=3,eth0/eth0;3,eth1/eth0";
+		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 ipv6.disable=0 BUTTONS=0x00 lpj=122368 netconsole=3,eth0/eth0;3,eth1/eth0";
 		linux,stdout-path = "/plb@0/serial@83e00000";
 	} ;
 	cpus {
@@ -337,6 +337,7 @@
 			xlnx,phy-type = <0x1>;
 			xlnx,rxcsum = <0x0>;
 			xlnx,txcsum = <0x0>;
+			xlnx,avb-only = <0x0>;
 		} ;
 		labx_ethernet_1: ethernet@80070000 {
 			compatible = "xlnx,labx-ethernet-1.03.a";
@@ -352,6 +353,7 @@
 			xlnx,phy-type = <0x1>;
 			xlnx,rxcsum = <0x0>;
 			xlnx,txcsum = <0x0>;
+			xlnx,avb-only = <0x0>;
 		} ;
 		labx_local_audio_0: labx-local-audio@80060000 {
 			compatible = "xlnx,labx-local-audio-1.01.a";

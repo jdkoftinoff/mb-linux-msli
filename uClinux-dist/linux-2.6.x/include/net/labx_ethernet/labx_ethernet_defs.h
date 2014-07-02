@@ -116,6 +116,7 @@ struct labx_eth_platform_data {
   int mdio_phy_irqs[PHY_MAX_ADDR];
 
   void *rx_ring_ptr;		/* Pointer to RxRing buffer */
+  uint8_t avb_only;
 };
 
 /**
