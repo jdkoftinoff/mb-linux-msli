@@ -23,6 +23,40 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
+#ifdef BARE_METAL_PTP
+
+/* System headers */
+#include "labx_ptp.h"
+#include "ptp_access.h"
+
+int ptp_events_tx_heartbeat(struct ptp_device *ptp) {
+  ptp->eventFlags |= EVENT_FLAG_HEARTBEAT;
+  return 0;
+}
+
+int ptp_events_tx_gm_change(struct ptp_device *ptp) {
+  ptp->eventFlags |= EVENT_FLAG_GM_CHANGE;
+  return 0;
+}
+
+int ptp_events_tx_rtc_change(struct ptp_device *ptp) {
+  ptp->eventFlags |= EVENT_FLAG_RTC_CHANGE;
+  return 0;
+}
+
+int ptp_events_tx_rtc_increment_change(struct ptp_device *ptp) {
+  ptp->eventFlags |= EVENT_FLAG_RTC_INCREMENT_CHANGE;
+  return 0;
+}
+
+int register_ptp_netlink(void) {
+  return 0;
+}
+
+void unregister_ptp_netlink(void) {
+}
+
+#else
 
 /* System headers */
 #include <net/genetlink.h>
@@ -395,3 +429,4 @@ void unregister_ptp_netlink(void) {
   genl_unregister_ops(&ptp_events_genl_family, &ptp_events_gnl_ops_heartbeat);
   genl_unregister_family(&ptp_events_genl_family);
 }
+#endif

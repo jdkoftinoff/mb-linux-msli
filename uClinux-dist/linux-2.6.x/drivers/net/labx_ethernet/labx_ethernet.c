@@ -610,6 +610,13 @@ static void ConfigureMacFilter(XLlTemac *InstancePtr, int unitNum, const u8 mac[
 	select_matchers(InstancePtr, SELECT_NONE, 0);
 }
 
+static uint8_t avb_mac_list[][6] = {
+        { 0x91,0xe0,0xf0,0x01,0x00,0x00 }, /* 1722.1 */
+        { 0x91,0xe0,0xf0,0x00,0xff,0x00 }, /* MAAP */
+        { 0x01,0x80,0xc2,0x00,0x00,0x21 }, /* MRP-MVRP */
+        { 0x01,0x80,0xc2,0x00,0x00,0x0e }  /* MRP-MSRP,PTP */
+};
+
 void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 {
 	int i;
@@ -627,7 +634,7 @@ void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 	ConfigureMacFilter(InstancePtr, 0, InstancePtr->Config.MacAddress, MAC_MATCH_ALL);
 
 	/* Allow broadcasts if configured to do so */
-	if (InstancePtr->Options & XTE_BROADCAST_OPTION) {
+	if ((InstancePtr->Options & XTE_BROADCAST_OPTION)&&((InstancePtr->Options & XTE_AVB_ONLY_OPTION)==0)) {
 		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_ALL);
 	} else {
 		ConfigureMacFilter(InstancePtr, 1, MAC_BROADCAST, MAC_MATCH_NONE);
@@ -636,11 +643,26 @@ void labx_eth_UpdateMacFilters(XLlTemac *InstancePtr)
 	/* Allow multicasts if configured to do so */
 	if (InstancePtr->Options & XTE_MULTICAST_OPTION) {
 		struct dev_mc_list *dmi = InstancePtr->dev->mc_list;
-                int i;
+                int i,j,mc_index;
 
-                for (i=2; (i<(InstancePtr->dev->mc_count+2)) && (i<InstancePtr->MacMatchUnits); i++) {
-			ConfigureMacFilter(InstancePtr, i, dmi->da_addr, MAC_MATCH_ALL);
+                i=2;
+                mc_index=0;
+                while((mc_index<InstancePtr->dev->mc_count) && (i<InstancePtr->MacMatchUnits)) {
+                        if(InstancePtr->Options&XTE_AVB_ONLY_OPTION) {
+                                for(j=0;j<(sizeof(avb_mac_list)/sizeof(avb_mac_list[0]));j++) {
+                                        if(memcmp(dmi->da_addr,avb_mac_list[j],sizeof(avb_mac_list[0]))==0) {
+			                        ConfigureMacFilter(InstancePtr, i++, dmi->da_addr, MAC_MATCH_ALL);
+                                                break;
+                                        }
+                                }
+                        } else {
+			        ConfigureMacFilter(InstancePtr, i++, dmi->da_addr, MAC_MATCH_ALL);
+                        }
                         dmi = dmi->next;
+                        mc_index++;
+                }
+                while(i<InstancePtr->MacMatchUnits) {
+			ConfigureMacFilter(InstancePtr, i++, MAC_BROADCAST, MAC_MATCH_NONE);
                 }
 
 	} else {

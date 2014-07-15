@@ -27,7 +27,7 @@
 #include "labx_ptp.h"
 
 // Set this to: 0 = no debug, 1 = BMCA debug messages, 2 = extra debug messages
-#define BMCA_DEBUG 0
+#define BMCA_DEBUG 1
 
 #if BMCA_DEBUG == 2
 #define BMCA_DBG(fmt, args...) printk(fmt, ##args)
@@ -311,13 +311,13 @@ void PortAnnounceInformation_StateMachine(struct ptp_device *ptp, uint32_t port)
             PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_RECEIVE);
           } else {
             int syncTimeout = (pPort->syncTimeoutCounter >= pPort->syncReceiptTimeoutTime);
-            int announceTimeout = (pPort->announceTimeoutCounter >= ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout);
+            int announceTimeout = (pPort->announceTimeoutCounter > MAX_ANNOUNCE_INTERVAL_TICKS(ptp,port));
             if ((pPort->infoIs == InfoIs_Received) &&
                 (announceTimeout || (syncTimeout && ptp->gmPresent)) &&
                 !pPort->updtInfo && !pPort->rcvdMsg) {
 
-              BMCA_DBG("Announce AGED: (announce %d >= %d || sync %dms > %dms)\n",
-                pPort->announceTimeoutCounter, ANNOUNCE_INTERVAL_TICKS(ptp, port) * pPort->announceReceiptTimeout,
+              BMCA_DBG("Announce AGED: (announce 10ms ticks %d > %d || sync 10ms ticks %d > %d)\n",
+                pPort->announceTimeoutCounter, MAX_ANNOUNCE_INTERVAL_TICKS(ptp,port),
                 pPort->syncTimeoutCounter, pPort->syncReceiptTimeoutTime);
 
               PortAnnounceInformation_StateMachine_SetState(ptp, port, PortAnnounceInformation_AGED);

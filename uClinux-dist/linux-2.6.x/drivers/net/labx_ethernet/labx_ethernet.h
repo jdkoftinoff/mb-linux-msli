@@ -343,6 +343,11 @@ extern "C" {
  *   Table (MAT).
  *   This driver sets this option to disabled (cleared) by default. */
 
+#define XTE_AVB_ONLY_OPTION          0x00000800
+/**< XTE_AVB_ONLY_OPTION limits the MAT to AVB protocols
+ *   This driver sets this option to disabled (cleared) by default. */
+
+
 #define XTE_DEFAULT_OPTIONS                     \
     (XTE_FLOW_CONTROL_OPTION |                  \
      XTE_BROADCAST_OPTION |                     \

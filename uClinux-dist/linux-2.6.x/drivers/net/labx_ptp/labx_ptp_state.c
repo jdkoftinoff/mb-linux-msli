@@ -25,7 +25,9 @@
  */
 
 #include "labx_ptp.h"
+#ifndef BARE_METAL_PTP
 #include <linux/of_platform.h>
+#endif
 
 /* Define these to get some extra debug on sync/follow-up messages */
 /* #define SYNC_DEBUG */
@@ -290,7 +292,7 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
     PtpTime correctionField;
     PtpTime correctedTimestamp;
 
-    ptp->ports[port].syncReceiptTimeoutTime = SYNC_INTERVAL_TICKS(ptp, port) * ptp->ports[port].syncReceiptTimeout;
+    ptp->ports[port].syncReceiptTimeoutTime = MAX_SYNC_INTERVAL_TICKS(ptp,port);
 
     /* This is indeed a SYNC from the present master.  Capture the hardware timestamp
      * at which we received it, and hang on to its sequence ID for matching to the
@@ -1219,6 +1221,7 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->currentLogSyncInterval = -3;
     pPort->initialLogSyncInterval = -3;
 
+#ifndef BARE_METAL_PTP
 #ifdef CONFIG_OF
     interfaceDev = of_find_device_by_node(pPort->interfaceNode);
     ndev = platform_get_drvdata(to_platform_device(&interfaceDev->dev));
@@ -1230,6 +1233,9 @@ void init_state_machines(struct ptp_device *ptp) {
     } else {
       pPort->portEnabled = FALSE;
     }
+#else
+    pPort->portEnabled = TRUE;
+#endif
     pPort->pttPortEnabled = TRUE;
 
     pPort->currentLogAnnounceInterval = 0;

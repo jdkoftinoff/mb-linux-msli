@@ -44,7 +44,7 @@
 		serial2 = &UART_DGPIO;
 	} ;
 	chosen {
-		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 BUTTONS=0x00 lpj=122368 netconsole=3,eth0/eth0;3,eth1/eth0";
+		bootargs = "console=ttyUL0 root=/dev/ram0 load_ramdisk=1 ramdisk_start=4096 prompt_ramdisk=0 ipv6.disable=0 BUTTONS=0x00 lpj=122368 netconsole=3,eth0/eth0;3,eth1/eth0";
 		linux,stdout-path = "/plb@0/serial@83e00000";
 	} ;
 	cpus {
@@ -250,21 +250,6 @@
 			xlnx,xcl3-linesize = <0x4>;
 			xlnx,xcl3-writexfer = <0x1>;
 		} ;
-		RS232_Atmel: serial@84040000 {
-			clock-frequency = <125000000>;
-			compatible = "xlnx,xps-uartlite-1.02.a", "xlnx,xps-uartlite-1.00.a";
-			current-speed = <62500>;
-			device_type = "serial";
-			interrupt-parent = <&xps_intc_0>;
-			interrupts = < 8 0 >;
-			port-number = <1>;
-			reg = < 0x84040000 0x10000 >;
-			xlnx,baudrate = <0xf424>;
-			xlnx,data-bits = <0x8>;
-			xlnx,family = "virtex5";
-			xlnx,odd-parity = <0x1>;
-			xlnx,use-parity = <0x0>;
-		} ;
 		labx_audio_depacketizer_0: labx-audio-depacketizer@80020000 {
 			compatible = "xlnx,labx-audio-depacketizer-1.06.a";
 			interrupt-parent = <&xps_intc_0>;
@@ -352,6 +337,7 @@
 			xlnx,phy-type = <0x1>;
 			xlnx,rxcsum = <0x0>;
 			xlnx,txcsum = <0x0>;
+			xlnx,avb-only = <0x0>;
 		} ;
 		labx_ethernet_1: ethernet@80070000 {
 			compatible = "xlnx,labx-ethernet-1.03.a";
@@ -367,6 +353,7 @@
 			xlnx,phy-type = <0x1>;
 			xlnx,rxcsum = <0x0>;
 			xlnx,txcsum = <0x0>;
+			xlnx,avb-only = <0x0>;
 		} ;
 		labx_local_audio_0: labx-local-audio@80060000 {
 			compatible = "xlnx,labx-local-audio-1.01.a";
@@ -530,6 +517,22 @@
 			xlnx,has-external-rclk = <0x0>;
 			xlnx,has-external-xin = <0x0>;
 			xlnx,is-a-16550 = <0x1>;
+		} ;
+
+		RS232_Atmel: serial@84040000 {
+			clock-frequency = <125000000>;
+			compatible = "xlnx,xps-uartlite-1.02.a", "xlnx,xps-uartlite-1.00.a";
+			current-speed = <62500>;
+			device_type = "serial";
+			interrupt-parent = <&xps_intc_0>;
+			interrupts = < 8 0 >;
+			port-number = <1>;
+			reg = < 0x84040000 0x10000 >;
+			xlnx,baudrate = <0xf424>;
+			xlnx,data-bits = <0x8>;
+			xlnx,family = "virtex5";
+			xlnx,odd-parity = <0x1>;
+			xlnx,use-parity = <0x0>;
 		} ;
 
 		dgpio_0: smpte-decoder@84060000 {
