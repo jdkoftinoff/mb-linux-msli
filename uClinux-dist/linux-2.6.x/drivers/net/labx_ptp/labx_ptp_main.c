@@ -336,8 +336,8 @@ static int ptp_device_ioctl(struct inode *inode, struct file *filp,
       memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
       set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
       memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-      set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
-      set_port_number(ptp->systemPriority.portNumber, 0);
+      set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 1);
+      set_port_number(ptp->systemPriority.portNumber, 1);
 
       spin_unlock_irqrestore(&ptp->mutex, flags);
       preempt_enable();
@@ -754,8 +754,8 @@ static int ptp_probe(const char *name,
   memcpy(ptp->systemPriority.rootSystemIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
   set_steps_removed(ptp->systemPriority.stepsRemoved, 0);
   memcpy(ptp->systemPriority.sourcePortIdentity.clockIdentity, ptp->properties.grandmasterIdentity, sizeof(PtpClockIdentity));
-  set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 0);
-  set_port_number(ptp->systemPriority.portNumber, 0);
+  set_port_number(ptp->systemPriority.sourcePortIdentity.portNumber, 1);
+  set_port_number(ptp->systemPriority.portNumber, 1);
 
   ptp->pathTraceLength = 1;
   memcpy(&ptp->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
