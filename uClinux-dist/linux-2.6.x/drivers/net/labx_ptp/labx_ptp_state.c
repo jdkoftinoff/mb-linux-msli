@@ -1178,7 +1178,6 @@ void labx_ptp_tx_state_task(unsigned long data) {
 void ack_grandmaster_change(struct ptp_device *ptp) {
   unsigned long flags;
 
-  printk("GM ACK\n");
   /* Re-enable the changing of RTC parameters */
   preempt_disable();
   spin_lock_irqsave(&ptp->mutex, flags);
