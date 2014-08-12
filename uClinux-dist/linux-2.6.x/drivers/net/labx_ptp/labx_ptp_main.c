@@ -601,9 +601,7 @@ static int ptp_probe(const char *name,
   int i;
   int actualPortCount=1;
 
-#if 0 // Only use one ptp port even if hardware has more
   actualPortCount = platformData->numPorts;
-#endif
 
   /* Create and populate a device structure */
   ptp = (struct ptp_device*) kmalloc(sizeof(struct ptp_device), GFP_KERNEL);
