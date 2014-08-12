@@ -235,8 +235,8 @@ static inline void block_read_avb_ptp(switch_timestamp_t * time,int port,int reg
 #define PORT_RANGE_SHIFT    (13)
 
 /* Bytes per packet buffer */
-#define PTP_MAX_PACKET_BYTES     (256)
-#define PTP_PACKET_BUFFER_SHIFT  (8)
+#define PTP_MAX_PACKET_BYTES     (128)
+#define PTP_PACKET_BUFFER_SHIFT  (7)
 
 /* Packets per ring (these must be a power of 2) */
 #define PTP_TX_BUFFER_COUNT      (8)
