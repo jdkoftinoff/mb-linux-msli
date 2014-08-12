@@ -55,3 +55,6 @@ do
     /bin/sh $i
   fi
 done
+if [ -x /var/tmp/persist/rc.local ]; then
+  /bin/sh /var/tmp/persist/rc.local
+fi
