@@ -29,7 +29,9 @@
 #include <linux/types.h>
 
 /* Bytes per MAC address */
+#ifndef MAC_ADDRESS_BYTES
 #define MAC_ADDRESS_BYTES  (6)
+#endif
 
 /* PTP data types and constant definitions */
 typedef struct {
