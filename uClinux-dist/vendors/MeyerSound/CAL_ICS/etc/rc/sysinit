@@ -55,3 +55,12 @@ do
     /bin/sh $i
   fi
 done
+if [ "$BUTTONS" = "0x00" ]; then
+  if [ "$DISABLE_ETH1" = "1" ]; then
+    ifconfig eth1 down
+  fi
+  if [ -x /var/tmp/persist/rc.local ]; then
+    /bin/sh /var/tmp/persist/rc.local
+  fi
+fi
+
