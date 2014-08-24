@@ -1,7 +1,11 @@
 #!/bin/bash -e
 
 if [ -z "${DMITRI_IO_MAINT_DOWNLOAD_BIT}" ]; then
-  DMITRI_IO_AVB_DOWNLOAD_BIT="${HOME}/labx-ip/IO_Link/FPGA/Synthesis/IO_Link_top.bit"
+  DMITRI_IO_MAINT_DOWNLOAD_BIT="${HOME}/dmitri_io_0/implementation/download.bit"
+fi
+
+if [ -z "${DMITRI_IO_GNET_DOWNLOAD_BIT}" ]; then
+  DMITRI_IO_GNET_DOWNLOAD_BIT="${HOME}/dmitri_io_1_GNET/mblaze/implementation/download.bit"
 fi
 
 if [ -z "${DMITRI_IO_AVB_DOWNLOAD_BIT}" ]; then
@@ -16,12 +20,12 @@ if [ -z "${DMITRI_IO_MAINT_DTS}" ]; then
   DMITRI_IO_MAINT_DTS="xilinx.dts"
 fi
 
-if [ -z "${DMITRI_IO_AVB_DTS}" ]; then
-  DMITRI_IO_AVB_DTS="xilinx-avb.dts"
+if [ -z "${DMITRI_IO_GNET_DTS}" ]; then
+  DMITRI_IO_GNET_DTS="xilinx-gnet.dts"
 fi
 
-if [ -z "${DMITRI_IO_AVB_MAINT_DTS}" ]; then
-  DMITRI_IO_AVB_DTS="xilinx-avb-maint.dts"
+if [ -z "${DMITRI_IO_AVB_DTS}" ]; then
+  DMITRI_IO_AVB_DTS="xilinx-avb.dts"
 fi
 
 if [ -z "${DMITRI_DGPIO_AVB_DTS}" ]; then
@@ -34,6 +38,8 @@ fi
 
 echo "Maintenance device tree (${DMITRI_IO_MAINT_DTS})..."
 ../dtc/dtc -f -o dt-maint.dtb -O dtb "${DMITRI_IO_MAINT_DTS}" 2>/dev/null
+echo "GNET device tree (${DMITRI_IO_GNET_DTS})..."
+../dtc/dtc -f -o dt-gnet.dtb -O dtb "${DMITRI_IO_GNET_DTS}" 2>/dev/null
 echo "AVB device tree (${DMITRI_IO_AVB_DTS})..."
 ../dtc/dtc -f -o dt-avb.dtb -O dtb "${DMITRI_IO_AVB_DTS}" 2>/dev/null
 echo "AVB device tree (${DMITRI_DGPIO_AVB_DTS})..."
@@ -86,6 +92,31 @@ else
     echo " FPGA bitstream file"
     echo " ${DMITRI_IO_MAINT_DOWNLOAD_BIT} is not found."
     echo " To build firmware-maint.tar.gz, please generate this file from XPS"
+    echo " and re-run $0"
+    echo "***********************************************************************"
+fi
+
+if [ -f "${DMITRI_IO_GNET_DOWNLOAD_BIT}" -a -f "${MBBL_ELF}" ]
+    then
+    ../../mbbl/mbbl-mkbootimage/pad-file -x -b 256 -s 32 "${DMITRI_IO_GNET_DOWNLOAD_BIT}"
+    ../../mbbl/mbbl-mkbootimage/pad-file -b 256 -s 8 "${MBBL_ELF}"
+    echo "GNET tar file..."
+    if [ -d update ]
+	then
+	rm -rf update
+    fi
+    mkdir -p update
+    cp "${DMITRI_IO_GNET_DOWNLOAD_BIT}" update/download.bit
+    cp "${MBBL_ELF}" update/mbbl.elf
+    cp dt-gnet.dtb update/dt.dtb
+    cp linux.bin.gz logo-1.bin.gz 8x12-font.bin.gz 16x24-font.bin.gz romfs.bin.gz  identity.txt update
+    tar czf firmware-gnet.tar.gz update
+    echo "done: Output file at $PWD/firmware-gnet.tar.gz"
+else
+    echo "***********************************************************************"
+    echo " FPGA bitstream file"
+    echo " ${DMITRI_IO_GNET_DOWNLOAD_BIT} or ${MBBL_ELF} is not found."
+    echo " To build firmware-gnet.tar.gz, please generate file(s) from XPS"
     echo " and re-run $0"
     echo "***********************************************************************"
 fi
