@@ -294,8 +294,10 @@ static void xgpio_save_regs(struct of_mm_gpio_chip *mm_gc)
 
 	out_be32(mm_gc->regs + XGPIO_DATA_OFFSET, chip->gpio_state);
 	out_be32(mm_gc->regs + XGPIO_TRI_OFFSET, chip->gpio_dir);
-	out_be32(mm_gc->regs + XGPIO2_DATA_OFFSET, chip->gpio2_state);
-	out_be32(mm_gc->regs + XGPIO2_TRI_OFFSET, chip->gpio2_dir);
+	if (chip->isdual) {
+	    out_be32(mm_gc->regs + XGPIO2_DATA_OFFSET, chip->gpio2_state);
+	    out_be32(mm_gc->regs + XGPIO2_TRI_OFFSET, chip->gpio2_dir);
+	}
 }
 
 /**
