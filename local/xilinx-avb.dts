@@ -419,21 +419,23 @@
 			#size-cells = <1>;
 			compatible = "xlnx,mpmc-6.04.a";
 		} ;
+
 		xps_gpio_0: gpio@81400000 {
 			compatible = "xlnx,xps-gpio-2.00.a", "xlnx,xps-gpio-1.00.a";
 			reg = < 0x81400000 0x10000 >;
 			xlnx,all-inputs = <0x0>;
 			xlnx,all-inputs-2 = <0x0>;
-			xlnx,dout-default = <0x0>;
+			xlnx,dout-default = <0x80>;
 			xlnx,dout-default-2 = <0x0>;
 			xlnx,family = "virtex5";
 			xlnx,gpio-width = <0x10>;
 			xlnx,gpio2-width = <0x20>;
 			xlnx,interrupt-present = <0x0>;
 			xlnx,is-dual = <0x0>;
-			xlnx,tri-default = <0xffffffff>;
+			xlnx,tri-default = <0x00000000>;
 			xlnx,tri-default-2 = <0xffffffff>;
 		} ;
+
 		xps_iic_0: i2c@81600000 {
 			compatible = "xlnx,xps-iic-2.03.a", "xlnx,xps-iic-2.00.a";
 			interrupt-parent = <&xps_intc_0>;
