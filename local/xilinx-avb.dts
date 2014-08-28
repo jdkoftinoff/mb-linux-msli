@@ -429,7 +429,7 @@
 			xlnx,dout-default-2 = <0x0>;
 			xlnx,family = "virtex5";
 			xlnx,gpio-width = <0x10>;
-			xlnx,gpio2-width = <0x20>;
+			xlnx,gpio2-width = <0x0>;
 			xlnx,interrupt-present = <0x0>;
 			xlnx,is-dual = <0x0>;
 			xlnx,tri-default = <0x00000000>;
