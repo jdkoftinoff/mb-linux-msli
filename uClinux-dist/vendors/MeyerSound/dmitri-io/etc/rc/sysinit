@@ -49,17 +49,16 @@ if [ -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
   echo in  > "/sys/class/gpio/gpio${OLEDBUTTONDEV}/direction"
 fi
 if [ -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
-  echo out > "/sys/class/gpio/gpio${OLEDDATADEV}/direction"
+  echo low > "/sys/class/gpio/gpio${OLEDDATADEV}/direction"
 fi
 if [ -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
-  echo high > "/sys/class/gpio/gpio${OLEDPOWERDEV}/direction"
+  echo low > "/sys/class/gpio/gpio${OLEDPOWERDEV}/direction"
 fi
 if [ -d "/sys/class/gpio/gpio${GNETOUTDEV}" ]; then
   echo out > "/sys/class/gpio/gpio${GNETOUTDEV}/direction"
 fi
-echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
+echo -en "\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
 echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
-echo -en "\x27\x5e\x00\x0c\x00\x00\x2f" > /dev/spidev0
 
 echo "Mounting var: "
 mount -t ramfs none /var
