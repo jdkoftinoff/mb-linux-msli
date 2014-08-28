@@ -230,136 +230,10 @@ done:
 	return nblocks;
 }
 
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-typedef enum {
-  PROGRESS_COLOR_GREEN,
-  PROGRESS_COLOR_RED,
-  PROGRESS_COLOR_YELLOW
-} progress_color_t;
-
-static unsigned char bar_offsets[]=
-  {1,4,6,9,11,17,19,30,32,38,40,46,48,54,56,62};
-
-int __init rd_display_progress(int fd, int n,progress_color_t color)
-{
-  unsigned char command[]={
-    /* 0     1     2 */
-    0x2e, 0x26, 0x01, 
-    /* 2     3     4     5     6 */
-    0x22, 0x00, 0x00, 0x00, 0x00,
-    /* 7     8     9    10    11    12 */
-    0x00,  0x3f, 0x00, 0x00, 0x3f, 0x00,
-   /* 13   14 */
-    0x26, 0x01, 
-   /* 15    16    17    18    19    20    21 */
-    0x23, 0x00, 0x10, 0x0f, 0x27, 0x18, 0x0d
-  };
-
-  unsigned char error_command[]={
-    0x2e, 0x26, 0x01, 
-    0x22, 0x10, 0x00, 0x4f, 0x0b,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-  };
-
-  unsigned char scroll_command[]={
-    0x27, 0x5e, 0x00, 0x0c, 0x00, 0x00, 0x2f
-  };
-  
-  if(n<1) n=1;
-  else if(n>8) n=8;
-
-  command[4]=16+bar_offsets[n*2-2];
-  command[5]=38;
-  command[6]=16+bar_offsets[n*2-1];
-  command[7]=43;
-  
-#if 0	
-  command[8]=0xe0; /*b*/
-  command[9]=0xe0; /*g*/
-  command[10]=0xe0; /*r*/
-  command[11]=0x40; /*b*/
-  command[12]=0xf0; /*g*/
-  command[13]=0x40; /*r*/
-#endif
-
-  if(color != PROGRESS_COLOR_GREEN)
-    {
-      sys_write(fd,error_command,sizeof(error_command));
-      /* show error message */
-      command[17]=0x10;
-      command[18]=0x30;
-      command[19]=0x4f;
-      command[20]=0x3b;
-      command[21]=0x10;
-      command[22]=0x00;
-    }
-  else
-    {
-      /* update percentage */
-      switch(n)
-	{
-	case 4:
-	  /* "5" is drawn there, for "50%" */
-	  command[18]=0x10;
-	  command[20]=0x27;
-	  break;
-	case 5:
-	  /* "6" is drawn there, for "60%" */
-	  command[18]=0x28;
-	  command[20]=0x3f;
-	  break;
-	}
-    }
-  
-  switch(color)
-    {
-    case PROGRESS_COLOR_RED:
-      command[8]=0x00; /*b*/
-      command[9]=0x00; /*g*/
-      command[10]=0x3e; /*r*/
-      command[11]=0x00; /*b*/
-      command[12]=0x00; /*g*/
-      command[13]=0x3e; /*r*/
-      break;
-
-    case PROGRESS_COLOR_YELLOW:
-      command[8]=0x00; /*b*/
-      command[9]=0x3f; /*g*/
-      command[10]=0x3e; /*r*/
-      command[11]=0x00; /*b*/
-      command[12]=0x3f; /*g*/
-      command[13]=0x3e; /*r*/
-      break;
-
-    default:
-      break;
-    }
-  
-  sys_write(fd,command,sizeof(command));
-  
-  if(color==PROGRESS_COLOR_GREEN)
-    {
-      sys_write(fd,scroll_command,sizeof(scroll_command));
-    }
-
-
-  return 0;
-}
-#endif
-
-int __init rd_create_char_dev(char *name, dev_t dev)
-{
-  sys_unlink(name);
-  return sys_mknod(name, S_IFCHR|0600, new_encode_dev(dev));
-}
-
 int __init rd_load_image(char *from)
 {
 	int res = 0;
 	int in_fd, out_fd;
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	int progress_fd;
-#endif
 	unsigned long rd_blocks, devblocks;
 	int nblocks, i, disk;
 	char *buf = NULL;
@@ -369,30 +243,16 @@ int __init rd_load_image(char *from)
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 #endif
 
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	/* device to display progress indicator or messages */
-        rd_create_char_dev("/dev/progress",
-			   MKDEV(CONFIG_RAMDISK_PROGRESS_DEVICE_MAJOR,
-				 CONFIG_RAMDISK_PROGRESS_DEVICE_MINOR));
-	progress_fd=sys_open("/dev/progress",O_WRONLY,0);
-#endif
 	out_fd = sys_open("/dev/ram", O_RDWR, 0);
 	if (out_fd < 0)
 		goto out;
 
-	printk(KERN_ALERT "Opening ramdisk image at %s\n",from);
+	printk(KERN_ALERT "jiffy Opening ramdisk image at %s\n",from);
 	in_fd = rd_open(from, O_RDONLY, 0);
 	if (in_fd < 0 && rd_failed) {
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	  rd_display_progress(progress_fd,4,PROGRESS_COLOR_RED);
-#endif
 	  printk(KERN_ALERT "No ramdisk image\n");
 		goto noclose_input;
 	}
-
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	rd_display_progress(progress_fd,4,PROGRESS_COLOR_GREEN);
-#endif
 
 	nblocks = identify_ramdisk_image(in_fd, in_fd>=0?rd_image_start:0, &decompressor);
 	if (nblocks < 0)
@@ -401,9 +261,6 @@ int __init rd_load_image(char *from)
 	if (nblocks == 0) {
 		if (crd_load(in_fd, out_fd, decompressor) == 0)
 			goto successful_load;
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-		rd_display_progress(progress_fd,5,PROGRESS_COLOR_RED);
-#endif
 		goto done;
 	}
 
@@ -485,19 +342,12 @@ int __init rd_load_image(char *from)
 
 successful_load:
 	res = 1;
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	rd_display_progress(progress_fd,5,PROGRESS_COLOR_GREEN);
-#endif
 done:
 	rd_close(in_fd);
 noclose_input:
 	sys_close(out_fd);
 out:
 	kfree(buf);
-#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
-	if(progress_fd>=0) sys_close(progress_fd);
-	sys_unlink("/dev/progress");
-#endif
 	sys_unlink("/dev/ram");
 	return res;
 }
