@@ -1711,6 +1711,7 @@ static int xtenet_setup(struct device *dev,
     goto error;	/* rc is already set here... */
   }
 
+  netif_carrier_off(ndev);
   /* Setup MDIO IRQ handling */
   if (NULL != r_irq) {
     ndev->irq = r_irq->start;
