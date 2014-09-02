@@ -139,7 +139,7 @@ endif
 
 ifdef CONFIG_SPI_SPIDEV
 DEVICES +=	\
-	spidev0,c,153,0
+	spidev_oled,c,153,0
 endif
 
 # Add the AVB packet engine device nodes

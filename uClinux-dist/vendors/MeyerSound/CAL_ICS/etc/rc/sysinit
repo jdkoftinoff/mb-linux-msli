@@ -15,20 +15,42 @@ export BUTTONS
 #echo "Locking flash:"
 #/bin/mtd-lock -l -d /dev/mtd0
 
-#echo "Configuring devices: "
-#echo -e "234\n249\n250\n251\n245\n255\n254" > /sys/class/gpio/export
-#echo out > /sys/class/gpio/gpio234/direction
-#echo in > /sys/class/gpio/gpio249/direction
-#echo out > /sys/class/gpio/gpio250/direction
-#echo out > /sys/class/gpio/gpio251/direction
-#echo out > /sys/class/gpio/gpio245/direction
-#echo 1 > /sys/class/gpio/gpio245/value
-#echo out > /sys/class/gpio/gpio255/direction
-#echo out > /sys/class/gpio/gpio254/direction
+echo "Configuring devices: "
 
+OLEDBUTTONDEV="249"
+OLEDDATADEV="250"
+OLEDPOWERDEV="251"
 
-#echo -en "\x2e\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
-#echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
+if [ ! -z "${OLEDBUTTONDEV}" ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+    echo -e "${OLEDBUTTONDEV}"  > /sys/class/gpio/export
+  fi
+fi
+if [ ! -z $OLEDDATADEV ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+    echo -e "${OLEDDATADEV}"  > /sys/class/gpio/export
+  fi
+fi
+if [ ! -z $OLEDPOWERDEV ]; then
+  if [ ! -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+    echo -e "${OLEDPOWERDEV}"  > /sys/class/gpio/export
+  fi
+fi
+
+# Output side forced high, then used as an input (OLED Button)
+if [ -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+  echo high > "/sys/class/gpio/gpio${OLEDBUTTONDEV}/direction"
+  echo in  > "/sys/class/gpio/gpio${OLEDBUTTONDEV}/direction"
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+  echo low > "/sys/class/gpio/gpio${OLEDDATADEV}/direction"
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+  echo low > "/sys/class/gpio/gpio${OLEDPOWERDEV}/direction"
+fi
+
+echo -en "\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev_oled
+echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev_oled
 #echo -en "\x27\x5e\x00\x0c\x00\x00\x2f" > /dev/spidev0
 
 echo "Mounting var: "
@@ -38,6 +60,17 @@ echo "Populating /var: "
 mkdir /var/run
 mkdir /var/tmp
 chmod 1777 /var/tmp
+mkdir /var/devices
+mkdir /var/devices/gpio
+if [ -d "/sys/class/gpio/gpio${OLEDBUTTONDEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDBUTTONDEV}/value" /var/devices/gpio/oled_in
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDDATADEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDDATADEV}/value" /var/devices/gpio/oled_out
+fi
+if [ -d "/sys/class/gpio/gpio${OLEDPOWERDEV}" ]; then
+  ln -s "/sys/class/gpio/gpio${OLEDPOWERDEV}/value" /var/devices/gpio/oled_power
+fi
 
 if tr ' ' '\\n' < /proc/cmdline |grep "root=/dev/ram0" > /dev/null 2>&1 ; then
     echo "Restoring persistent settings:"
