@@ -211,11 +211,6 @@ romfs:
 	mkdir -p $(ROMFSDIR)/dev/pts
 	mkdir -p $(ROMFSDIR)/etc/dmitripaneld
 
-	mkdir -p $(ROMFSDIR)/dev/gpio
-	$(ROMFSINST) -s /var/devices/gpio/oled_in /dev/gpio/oled_in
-	$(ROMFSINST) -s /var/devices/gpio/oled_out /dev/gpio/oled_out
-	$(ROMFSINST) -s /var/devices/gpio/gnet_out /dev/gpio/gnet_out
-
 	$(ROMFSINST) -s /dev/ttyUL2 /dev/ttyMIDI
 	$(ROMFSINST) -s /dev/ttyUL3 /dev/ttyGNET
 	$(ROMFSINST) -s /var/tmp/dhcpc /etc/dhcpc
