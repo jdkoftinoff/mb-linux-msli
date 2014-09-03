@@ -21,7 +21,7 @@ if [ -z "${DMITRI_IO_AVB_DTS}" ]; then
 fi
 
 if [ -z "${DMITRI_IO_AVB_MAINT_DTS}" ]; then
-  DMITRI_IO_AVB_DTS="xilinx-avb-maint.dts"
+  DMITRI_IO_AVB_MAINT_DTS="xilinx.dts"
 fi
 
 if [ -z "${DMITRI_DGPIO_AVB_DTS}" ]; then
