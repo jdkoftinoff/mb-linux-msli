@@ -419,6 +419,7 @@
 			#size-cells = <1>;
 			compatible = "xlnx,mpmc-6.04.a";
 		} ;
+
 		xps_gpio_0: gpio@81400000 {
 			compatible = "xlnx,xps-gpio-2.00.a", "xlnx,xps-gpio-1.00.a";
 			reg = < 0x81400000 0x10000 >;
@@ -434,6 +435,7 @@
 			xlnx,tri-default = <0x00000000>;
 			xlnx,tri-default-2 = <0xffffffff>;
 		} ;
+
 		xps_iic_0: i2c@81600000 {
 			compatible = "xlnx,xps-iic-2.03.a", "xlnx,xps-iic-2.00.a";
 			interrupt-parent = <&xps_intc_0>;
