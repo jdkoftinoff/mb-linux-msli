@@ -57,8 +57,8 @@ fi
 if [ -d "/sys/class/gpio/gpio${GNETOUTDEV}" ]; then
   echo out > "/sys/class/gpio/gpio${GNETOUTDEV}/direction"
 fi
-echo -en "\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev0
-echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev0
+echo -en "\x26\x01\x22\x38\x26\x3e\x2b\x00\x3f\x00\x00\x3f\x00" >/dev/spidev_oled
+echo -en "\x26\x01\x23\x50\x28\x5f\x3f\x18\x0d" > /dev/spidev_oled
 
 echo "Mounting var: "
 mount -t ramfs none /var
