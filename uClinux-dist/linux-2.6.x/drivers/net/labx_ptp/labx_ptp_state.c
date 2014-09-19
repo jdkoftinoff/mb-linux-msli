@@ -1247,7 +1247,7 @@ void init_state_machines(struct ptp_device *ptp) {
 
     /* peer delay request state machine initialization */
     pPort->mdPdelayReq_State    = MDPdelayReq_NOT_ENABLED;
-    pPort->allowedLostResponses = 3;
+    pPort->allowedLostResponses = 30;
     /* Recommended value in 802.1AS/COR1 is 800ns for copper. Add 400ns to allow
        use of the nTap and still come up as asCapable. */
     pPort->neighborPropDelayThresh = 800;
