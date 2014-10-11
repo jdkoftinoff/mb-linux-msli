@@ -38,7 +38,7 @@
 #define DELAY_REQ_INTERVAL        (1000)
 
 /* Maximum error, in nanoseconds, tolerated before the time is reset */
-#define RESET_THRESHOLD_NS  (100000)
+#define RESET_THRESHOLD_NS  (500000)
 
 /* Function Prototypes */
 uint8_t * get_output_buffer(struct ptp_device *ptp,uint32_t port,uint32_t bufType);
