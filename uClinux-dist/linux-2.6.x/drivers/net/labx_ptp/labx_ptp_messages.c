@@ -452,6 +452,7 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
 }
 
 
+#define ONE_BILLION  (0x3B9ACA00)
 /* Gets the correction field from the passed Rx packet buffer */
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpTime *correctionField) {
   uint32_t wordOffset;
@@ -469,6 +470,10 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
   packetWord = read_packet(rxBuffer, &wordOffset);
   rawField |= (int64_t) ((packetWord & 0xFFFF0000) >> 16);
   correctionField->nanoseconds = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
+  while(correctionField->nanoseconds>=ONE_BILLION) {
+    correctionField->secondsLower++;
+    correctionField->nanoseconds=correctionField->nanoseconds-ONE_BILLION;
+  }
 }
 
 
