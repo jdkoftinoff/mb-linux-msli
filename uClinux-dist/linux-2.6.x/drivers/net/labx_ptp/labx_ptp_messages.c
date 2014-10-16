@@ -470,7 +470,7 @@ void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuf
   rawField |= (((int64_t) packetWord) << 16);
   packetWord = read_packet(rxBuffer, &wordOffset);
   rawField |= (int64_t) ((packetWord & 0xFFFF0000) >> 16);
-  correction = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS)
+  correction = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
   correctionField->secondsLower = correction/ONE_BILLION;
   correctionField->nanoseconds = correction-(correctionField->secondsLower*ONE_BILLION);
 }
