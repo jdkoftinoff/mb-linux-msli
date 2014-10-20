@@ -451,28 +451,65 @@ void get_timestamp(struct ptp_device *ptp, uint32_t port, PacketDirection buffer
   timestamp->nanoseconds |= ((packetWord >> 16) & 0x0000FFFF);
 }
 
+#if 0
+(define (test-correction val upper lower nano)
+  (let* ((val-mask (truncate (/ (bitwise-and val #x0000ffffffffffffffff0000) #x10000)))
+         (total-nano (truncate (/ val-mask #x10000)))
+         (total-seconds (truncate (/ total-nano 1000000000)))
+         (upper-good (truncate (/ total-seconds #x100000000)))
+         (lower-good (bitwise-and total-seconds #xffffffff))
+         (nano-good (- total-nano (* total-seconds 1000000000))))
+    (if (or (not (= upper upper-good))
+            (not (= lower lower-good))
+            (not (= nano nano-good)))
+      (begin
+        (display "bad ") (newline)
+        (display upper-good) (display " != ") (display upper) (newline)
+        (display lower-good) (display " != ") (display lower) (newline)
+        (display nano-good) (display " != ") (display nano) (newline))
+      (begin (display "good") (newline)))))
 
-#define ONE_BILLION  (0x3B9ACA00)
+void test_get_correction(uint32_t nano) {
+    PtpTime correctionField;
+    uint8_t arr[CORRECTION_FIELD_OFFSET+(3*4)];
+    uint32_t rand1,rand2,rand3;
+    static uint32_t prev;
+
+    if(nano<prev) {
+        get_random_bytes(&rand1,sizeof(rand1));
+        get_random_bytes(&rand2,sizeof(rand2));
+        get_random_bytes(&rand3,sizeof(rand3));
+        *((uint32_t *)&arr[CORRECTION_FIELD_OFFSET+(0*4)])=rand1;
+        *((uint32_t *)&arr[CORRECTION_FIELD_OFFSET+(1*4)])=rand2;
+        *((uint32_t *)&arr[CORRECTION_FIELD_OFFSET+(2*4)])=rand3;
+        get_correction_field(NULL,0,&arr[0],&correctionField);
+        printk("(test-correction #x%08x%08x%08x %d %d)\r\n",rand1,rand2,rand3,
+            correctionField.secondsUpper,
+            correctionField.secondsLower,
+            correctionField.nanoseconds);
+    }
+    prev=nano;
+}
+#endif
+
+#define ONE_BILLION  (0x3B9ACA00ULL)
 /* Gets the correction field from the passed Rx packet buffer */
 void get_correction_field(struct ptp_device *ptp, uint32_t port, uint8_t * rxBuffer, PtpTime *correctionField) {
   uint32_t wordOffset;
   uint32_t packetWord;
-  int64_t rawField;
-  uint32_t correction;
+  uint64_t rawField;
 
-  /* Presume we are dealing with less than a second of correction */
   correctionField->secondsUpper = 0;
-  correctionField->secondsLower = 0;
   wordOffset = CORRECTION_FIELD_OFFSET;
   packetWord = read_packet(rxBuffer, &wordOffset);
-  rawField = (((int64_t) (packetWord & 0x0000FFFF)) << 48);
+  rawField = (((uint64_t) (packetWord & 0x0000FFFF)) << 48);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  rawField |= (((int64_t) packetWord) << 16);
+  rawField |= (((uint64_t) packetWord) << 16);
   packetWord = read_packet(rxBuffer, &wordOffset);
-  rawField |= (int64_t) ((packetWord & 0xFFFF0000) >> 16);
-  correction = (uint32_t) (rawField >> CORRECTION_FRACTION_BITS);
-  correctionField->secondsLower = correction/ONE_BILLION;
-  correctionField->nanoseconds = correction-(correctionField->secondsLower*ONE_BILLION);
+  rawField |= (uint64_t) ((packetWord & 0xFFFF0000) >> 16);
+  rawField >>= CORRECTION_FRACTION_BITS;
+  correctionField->secondsLower = rawField/ONE_BILLION;
+  correctionField->nanoseconds = rawField-(correctionField->secondsLower*ONE_BILLION);
 }
 
 
