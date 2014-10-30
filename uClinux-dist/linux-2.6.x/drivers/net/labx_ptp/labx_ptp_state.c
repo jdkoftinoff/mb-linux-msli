@@ -1240,8 +1240,8 @@ void init_state_machines(struct ptp_device *ptp) {
     pPort->currentLogAnnounceInterval = 0;
     pPort->initialLogAnnounceInterval = 0;
 
-    pPort->syncReceiptTimeout = 3;
-    pPort->announceReceiptTimeout = 3;
+    pPort->syncReceiptTimeout = 30;
+    pPort->announceReceiptTimeout = 30;
 
     pPort->multiplePdelayTimer = 0;
 

@@ -599,21 +599,24 @@ static int ptp_probe(const char *name,
   int byteIndex;
   PtpClockQuality *quality;
   int i;
+  int actualPortCount=1;
+
+  actualPortCount = platformData->numPorts;
 
   /* Create and populate a device structure */
   ptp = (struct ptp_device*) kmalloc(sizeof(struct ptp_device), GFP_KERNEL);
   if(!ptp) return(-ENOMEM);
   memset(ptp, 0, sizeof(struct ptp_device));
 
-  ptp->ports = (struct ptp_port*) kmalloc(sizeof(struct ptp_port)*platformData->numPorts, GFP_KERNEL);
+  ptp->ports = (struct ptp_port*) kmalloc(sizeof(struct ptp_port)*actualPortCount, GFP_KERNEL);
   if(!ptp->ports) {
     returnValue = -ENOMEM;
     goto free_ptp;
   }
-  memset(ptp->ports, 0, sizeof(struct ptp_port)*platformData->numPorts);
+  memset(ptp->ports, 0, sizeof(struct ptp_port)*actualPortCount);
 
   /* Assign basic port configuration information */
-  ptp->numPorts  = platformData->numPorts;
+  ptp->numPorts  = actualPortCount;
   ptp->portWidth = platformData->portWidth;
 
   /* Request and map the device's I/O memory region into uncacheable space */

@@ -486,14 +486,147 @@ static int __init fill(void *dst, unsigned len)
 	return r;
 }
 
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+typedef enum {
+  PROGRESS_COLOR_GREEN,
+  PROGRESS_COLOR_RED,
+  PROGRESS_COLOR_YELLOW
+} progress_color_t;
+
+static unsigned char bar_offsets[]=
+  {1,4,6,9,11,17,19,30,32,38,40,46,48,54,56,62};
+
+static int __init rd_display_progress(int fd, int n,progress_color_t color)
+{
+  unsigned char command[]={
+    /* 0     1     2 */
+    0x2e, 0x26, 0x01,
+    /* 2     3     4     5     6 */
+    0x22, 0x00, 0x00, 0x00, 0x00,
+    /* 7     8     9    10    11    12 */
+    0x00,  0x3f, 0x00, 0x00, 0x3f, 0x00,
+   /* 13   14 */
+    0x26, 0x01,
+   /* 15    16    17    18    19    20    21 */
+    0x23, 0x00, 0x10, 0x0f, 0x27, 0x18, 0x0d
+  };
+
+  unsigned char error_command[]={
+    0x2e, 0x26, 0x01,
+    0x22, 0x10, 0x00, 0x4f, 0x0b,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+
+  unsigned char scroll_command[]={
+    0x27, 0x5e, 0x00, 0x0c, 0x00, 0x00, 0x2f
+  };
+
+  if(n<1) n=1;
+  else if(n>8) n=8;
+
+  command[4]=16+bar_offsets[n*2-2];
+  command[5]=38;
+  command[6]=16+bar_offsets[n*2-1];
+  command[7]=43;
+
+#if 0
+  command[8]=0xe0; /*b*/
+  command[9]=0xe0; /*g*/
+  command[10]=0xe0; /*r*/
+  command[11]=0x40; /*b*/
+  command[12]=0xf0; /*g*/
+  command[13]=0x40; /*r*/
+#endif
+
+  if(color != PROGRESS_COLOR_GREEN)
+    {
+      sys_write(fd,error_command,sizeof(error_command));
+      /* show error message */
+      command[17]=0x10;
+      command[18]=0x30;
+      command[19]=0x4f;
+      command[20]=0x3b;
+      command[21]=0x10;
+      command[22]=0x00;
+    }
+  else
+    {
+      /* update percentage */
+      switch(n)
+	{
+	case 4:
+	  /* "5" is drawn there, for "50%" */
+	  command[18]=0x10;
+	  command[20]=0x27;
+	  break;
+	case 5:
+	  /* "6" is drawn there, for "60%" */
+	  command[18]=0x28;
+	  command[20]=0x3f;
+	  break;
+	}
+    }
+
+  switch(color)
+    {
+    case PROGRESS_COLOR_RED:
+      command[8]=0x00; /*b*/
+      command[9]=0x00; /*g*/
+      command[10]=0x3e; /*r*/
+      command[11]=0x00; /*b*/
+      command[12]=0x00; /*g*/
+      command[13]=0x3e; /*r*/
+      break;
+
+    case PROGRESS_COLOR_YELLOW:
+      command[8]=0x00; /*b*/
+      command[9]=0x3f; /*g*/
+      command[10]=0x3e; /*r*/
+      command[11]=0x00; /*b*/
+      command[12]=0x3f; /*g*/
+      command[13]=0x3e; /*r*/
+      break;
+
+    default:
+      break;
+    }
+
+  sys_write(fd,command,sizeof(command));
+
+//  if(color==PROGRESS_COLOR_GREEN)
+//    {
+//      sys_write(fd,scroll_command,sizeof(scroll_command));
+//    }
+  return 0;
+}
+
+static int __init rd_create_char_dev(char *name, dev_t dev)
+{
+  sys_unlink(name);
+  return sys_mknod(name, S_IFCHR|0600, new_encode_dev(dev));
+}
+#endif
+
 #include <linux/decompress/generic.h>
 
 char * __init unpack_to_rootfs_from_dev(int start) {
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+	int progress_fd;
+#endif
+
 	const unsigned char arr[2] = {037, 0213};
 	//int written;
 	decompress_fn decompress;
 	const char *compress_name;
 	static __initdata char msg_buf[64];
+
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+	/* device to display progress indicator or messages */
+	rd_create_char_dev("/dev/progress",
+				MKDEV(CONFIG_RAMDISK_PROGRESS_DEVICE_MAJOR,
+				CONFIG_RAMDISK_PROGRESS_DEVICE_MINOR));
+	progress_fd=sys_open("/dev/progress",O_WRONLY,0);
+#endif
 
 	header_buf = kmalloc(110, GFP_KERNEL);
 	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
@@ -508,10 +641,18 @@ char * __init unpack_to_rootfs_from_dev(int start) {
 	printk(KERN_ALERT "Opening ramfs image at %s\n","/dev/jiffy");
 	rfd = sys_open("/dev/jiffy", O_RDONLY, 0);
 	if (rfd < 0) {
-        printk("failed to open /dev/jiffy\r\n");
-        strcpy(msg_buf,"failed to open /dev/jiffy");
-        return(msg_buf);
+		printk("failed to open /dev/jiffy\r\n");
+		strcpy(msg_buf,"failed to open /dev/jiffy");
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+		rd_display_progress(progress_fd,4,PROGRESS_COLOR_RED);
+#endif
+		return(msg_buf);
 	}
+
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+	rd_display_progress(progress_fd,4,PROGRESS_COLOR_GREEN);
+#endif
+
 	if(sys_lseek(rfd, start * BLOCK_SIZE, 0)!=start * BLOCK_SIZE) {
 		printk("failed seek to %d * %d /dev/jiffy\r\n",start,BLOCK_SIZE);
 		strcpy(msg_buf,"failed seek /dev/jiffy\r\n");
@@ -527,20 +668,37 @@ char * __init unpack_to_rootfs_from_dev(int start) {
 	if (decompress) {
 		if(decompress(NULL, 0, fill , flush_buffer, NULL, &my_inptr, error)!=0) {
 			printk("decompress failed\r\n");
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+			rd_display_progress(progress_fd,5,PROGRESS_COLOR_RED);
+#endif
 		}
 	}
 	else if (compress_name) {
 		if (!message) {
 			snprintf(msg_buf, sizeof msg_buf,
-				 "compression method %s not configured",
-				 compress_name);
+				"compression method %s not configured",
+				compress_name);
 			message = msg_buf;
 		}
 	} else {
 		printk("jiffy didn't run decompress\r\n");
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+		rd_display_progress(progress_fd,5,PROGRESS_COLOR_RED);
+#endif
 	}
 	if (state != Reset)
 		error("junk in compressed archive");
+
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+	rd_display_progress(progress_fd,5,PROGRESS_COLOR_GREEN);
+#endif
+
+#ifdef CONFIG_RAMDISK_DISPLAY_PROGRESS
+    if(progress_fd>=0) {
+        sys_close(progress_fd);
+    }
+    sys_unlink("/dev/progress");
+#endif
 	dir_utime();
 	kfree(name_buf);
 	kfree(symlink_buf);
