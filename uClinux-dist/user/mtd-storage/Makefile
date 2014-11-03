@@ -19,7 +19,7 @@ CFLAGS = -Wall -g -Os -Wpointer-arith -Wcast-qual
 
 FLTFLAGS += -s 65536
 
-all: env mtd-storage persistenced
+all: env mtd-storage
 
 env:
 	env > env
