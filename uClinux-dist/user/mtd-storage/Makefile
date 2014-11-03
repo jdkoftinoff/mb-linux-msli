@@ -26,7 +26,6 @@ env:
 
 romfs:
 	$(ROMFSINST) /bin/mtd-storage
-	$(ROMFSINST) /bin/persistenced
 	$(ROMFSINST) /bin/persistent-save
 	$(ROMFSINST) /bin/persistent-format
 
@@ -83,11 +82,6 @@ mtd-storage: mtd-storage.o crc32.o
 	@$(VECHO) LD "mtd-storage"
 	$(CC) $(LDFLAGS) -o $@ $^
 
-persistenced: persistenced.o crc32.o
-	@$(VECHO) LD "persistenced"
-	$(CC) $(LDFLAGS) -o $@ $^
-
-
 clean:
 	@$(VECHO) CLEAN "(mtd-storage)"
-	$(RM) mtd-storage mtd-storage.gdb persistenced persistenced.gdb $(STD_CLEANFILES)
+	$(RM) mtd-storage mtd-storage.gdb $(STD_CLEANFILES)

@@ -76,12 +76,10 @@ if tr ' ' '\\n' < /proc/cmdline |grep "root=/dev/ram0" > /dev/null 2>&1 ; then
     echo "Restoring persistent settings:"
     mkdir /var/tmp/persist
     touch /var/tmp/persist/environment
-    /bin/persistenced &
-    # wait for /var/tmp/persist-loaded file to be created
-    while test ! -f /var/tmp/persist-loaded; do echo 'waiting for /var/tmp/persist'; sleep 1; done
-    if [ "$BUTTONS" = "0x00" ]; then
-       . /var/tmp/persist/environment
-    fi
+    /bin/mtd-storage -I /dev/mtd0 -s 0x800000 -e 0xffffff var/tmp/persist
+  if [ "$BUTTONS" = "0x00" ]; then
+    . /var/tmp/persist/environment
+  fi
 fi
 echo "Running system startup scripts:"
 for i in /etc/rc.d/S*

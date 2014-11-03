@@ -1,4 +1,3 @@
 #!/bin/sh
-/bin/killall -USR2 persistenced
-#cd /
-#mtd-storage -o /dev/mtd0 -F -s 0x800000 -e 0xffffff
+cd /
+mtd-storage -o /dev/mtd0 -F -s 0x800000 -e 0xffffff
