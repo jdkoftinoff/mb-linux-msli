@@ -1942,23 +1942,23 @@ sig_atomic_t persistenced_sigusr1_last_count=0;
 volatile sig_atomic_t persistenced_sigusr2_received_count=0;
 sig_atomic_t persistenced_sigusr2_last_count=0;
 
-void persistenced_sigusr1(int sig)
+void persistenced_sigusr1(int)
 {
     ++persistenced_sigusr1_received_count;
     signal(SIGUSR1,persistenced_sigusr1);
 }
 
-void persistenced_sigusr2(int sig)
+void persistenced_sigusr2(int)
 {
     ++persistenced_sigusr2_received_count;
     signal(SIGUSR2,persistenced_sigusr2);
 }
 
-void do_persistent_load( char *argv0,  char **env)
+void do_persistent_load()
 {
     // a request to do a persistent-load
-    char *new_args[] = {
-        argv0,
+    const char new_args[] = {
+        argv[0],
         "-I",
         "/dev/mtd0",
         "-s",
@@ -1969,9 +1969,9 @@ void do_persistent_load( char *argv0,  char **env)
         0
     };
     int new_argc=8;
-    original_main( new_argc, new_args, env );
+    original_main( new_argc, new_argv, env );
     
-    int persist_loaded_fd = creat("/var/tmp/persist-loaded",O_RDWR);
+    int persist_loaded_fd = creat("/var/tmp/persist-loaded",O_RDRW);
     if( persist_loaded_fd>=0 )
     {
         close(persist_loaded_fd);
@@ -1982,11 +1982,11 @@ void do_persistent_load( char *argv0,  char **env)
     }
 }
 
-void do_persistent_save(char *argv0, char **env)
+void do_persistent_save()
 {
     // a request to do a persistent-save
-    char *new_args[] = {
-        argv0,
+    const char new_args[] = {
+        argv[0],
         "-o",
         "/dev/mtd0",
         "-f",
@@ -1998,14 +1998,14 @@ void do_persistent_save(char *argv0, char **env)
         0
     };
     int new_argc=9;
-    original_main( new_argc, new_args, env );
+    original_main( new_argc, new_argv, env );
 }
 
-void do_persistent_format(char *argv0, char **env)
+void do_persistent_format()
 {
     // a request to do a persistent-format
-    char *new_args[] = {
-        argv0,
+    const char new_args[] = {
+        argv[0],
         "-o",
         "/dev/mtd0",
         "-F",
@@ -2016,7 +2016,7 @@ void do_persistent_format(char *argv0, char **env)
         0
     };
     int new_argc=8;
-    original_main( new_argc, new_args, env );
+    original_main( new_argc, new_argv, env );
 }
 
 
@@ -2034,7 +2034,7 @@ int main(int argc, char **argv, char **env )
 
         chdir("/");
 
-        do_persistent_load(argv[0],env);
+        do_persistent_load();
 
         while(1)
         {
@@ -2042,12 +2042,12 @@ int main(int argc, char **argv, char **env )
             if( persistenced_sigusr1_last_count != persistenced_sigusr1_received_count )
             {
                 persistenced_sigusr1_last_count = persistenced_sigusr1_received_count;
-                do_persistent_save(argv[0],env);
+                do_persistent_save();
             }
             if( persistenced_sigusr2_last_count != persistenced_sigusr2_received_count )
             {
                 persistenced_sigusr2_last_count = persistenced_sigusr2_received_count;
-                do_persistent_format(argv[0],env);
+                do_persistent_format();
             }
         }
     }
