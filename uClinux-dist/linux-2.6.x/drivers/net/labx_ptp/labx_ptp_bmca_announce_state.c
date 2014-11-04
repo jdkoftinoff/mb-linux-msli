@@ -454,11 +454,16 @@ static void updtRolesTree(struct ptp_device *ptp)
           pPort->updtInfo = FALSE;
         } else if ((REPLACE_PRESENT_MASTER == bmca_comparison(&pPort->portPriority, &pPort->masterPriority)) ||
                    (ptp->gmPriority == &ptp->systemPriority)) {
+#ifdef CONFIG_LABX_PTP_DISABLE_TIME_RELAY
+          pPort->selectedRole = PTP_PASSIVE;
+#else
           pPort->selectedRole = PTP_MASTER;
+#endif
           pPort->pathTraceLength = 1;
           memcpy(pPort->pathTrace[0], ptp->systemPriority.rootSystemIdentity.clockIdentity, sizeof(PtpClockIdentity));
           pPort->updtInfo = TRUE;
-        } else {
+        }
+        else {
           pPort->selectedRole = PTP_PASSIVE;
           pPort->updtInfo = FALSE;
         }

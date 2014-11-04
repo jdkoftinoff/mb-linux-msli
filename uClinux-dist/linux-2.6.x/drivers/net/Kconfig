@@ -1988,6 +1988,12 @@ config LABX_PTP_MARVELL_TIMESTAMPS
 	  Enable this option for CAL_ICS.
 	  It has a Marvell switch between the FPGA and the PHY.
 
+config LABX_PTP_DISABLE_TIME_RELAY
+       bool "Disable time relay functionality with multiple 802.1AS ports"
+       default n
+       depends on LABX_PTP
+       help
+         Enable this option to disable bridging time between ethernet ports
 
 source "drivers/net/labx_avb/Kconfig"
 
