@@ -453,7 +453,6 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
       }
 #endif
     /* Forward the sync to any master ports if the sync is coming in on a slave port */
-#ifndef CONFIG_LABX_PTP_DISABLE_TIME_RELAY
     if (ptp->ports[port].selectedRole == PTP_SLAVE) {
       PtpTime syncRxTimestamp;
       PtpTime linkDelay;
@@ -551,8 +550,6 @@ static void process_rx_sync(struct ptp_device *ptp, uint32_t port, uint8_t *rxBu
         }
       }
     }
-#endif
-
   }
 }
 
@@ -916,6 +913,7 @@ void labx_ptp_tx_state_task(unsigned long data) {
       break;
     }
   }
+
   for(i=0; i<ptp->numPorts; i++) {
     /* A packet has been transmitted; examine the pending flags to to see which one(s).
      * Lock the mutex to avoid a race condition with the Tx IRQ.
