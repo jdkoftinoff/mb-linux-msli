@@ -24,22 +24,16 @@
   GPIO bit: input reads button, output 0 resets OLED,
   output 1 enables normal operation
 */
-/*#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/sys/class/gpio/gpio247/value"*/
-//#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/dev/gpio/oled_in"
-
 //SMART_SWITCH_CONTACT
-#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/sys/class/gpio/gpio249/value"
+#define OLED_BUTTON_DEVICE_GPIO_RESET_INPUT "/var/devices/gpio/oled_in"
 //SMART_SWITCH_RSTn
-#define OLED_BUTTON_DEVICE_GPIO_RESET_OUTPUT "/sys/class/gpio/gpio251/value"
+#define OLED_BUTTON_DEVICE_GPIO_RESET_OUTPUT "/var/devices/gpio/oled_power"
 
 
 /* GPIO bit: output 0 switches to command mode, 1 switches to data mode */
-/*#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/sys/class/gpio/gpio246/value"*/
-//#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/dev/gpio/oled_out"
+#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/var/devices/gpio/oled_out"
 
 //SMART_SWITCH_D_C
-#define OLED_BUTTON_DEVICE_GPIO_DATA_COMMAND "/sys/class/gpio/gpio250/value"
-
 
 /* kernel command line */
 #define PROC_CMDLINE "/proc/cmdline"
