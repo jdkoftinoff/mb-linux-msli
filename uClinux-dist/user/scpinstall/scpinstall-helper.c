@@ -190,27 +190,32 @@ int main(int argc,char **argv,char **env)
 		  exec_argv[i++]=cal_amcu_ver;
 		}
 	    }
-
+          exec_argv[i++]="-v";
 	  exec_argv[i]=NULL;
 
-	  write_log_message(log_file,"Updating MCUs",2);
+	  write_log_message(log_file,"Updating MCUs with verbose",2);
 
 	  pid=vfork();
 	  if(pid<0)
 	    {
+              write_log_message(log_file,"Error running vfork",2);
 	      unlink(LOG_FILENAME);
 	      unlink(LOCK_FILENAME);
 	      return 1;
 	    }
 	  if(pid==0)
 	    {
-	      execve(exec_argv[0],exec_argv,env);
+	      if( execve(exec_argv[0],exec_argv,env)<0 )
+              {
+                write_log_message(log_file,"Error running execve",2);
+              }
 	      _exit(1);
 	    }
 	  if(waitpid(pid,&status,0)!=pid)
 	    {
 	      unlink(LOG_FILENAME);
 	      unlink(LOCK_FILENAME);
+              write_log_message(log_file,"Finished MCUs",2);
 	      return 1;
 	    }
 	  if(cal_dmcu_found)
