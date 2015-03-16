@@ -166,7 +166,7 @@ int main(int argc,char **argv,char **env)
 	}
       if(cal_dmcu_found||cal_amcu_found)
 	{
-	  exec_argv[0]="/bin/avr-install";
+	  exec_argv[0]="/usr/bin/avr-install";
 	  exec_argv[1]="-h";
 	  exec_argv[2]="127.0.0.1";
 	  i=3;
